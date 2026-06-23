@@ -1,0 +1,7 @@
+2.0.0
+
+Changelog:
+- 2.0.0: Initial merge engine. Merges 7 source files (peng2019, peng2020, hu2019,
+  yan2020, chen2023, hoang2023, zhang2024) into unified KB with consensus scoring
+  (gold/high/medium/low) and cross-source conflict detection.
+- 1.0.0: (unreleased) Individual source files only, no merge engine.
