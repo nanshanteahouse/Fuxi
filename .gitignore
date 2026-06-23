@@ -1,0 +1,85 @@
+# ═══════════════════════════════════════════════════════════════════════
+# Fuxi (伏羲) — .gitignore
+# ═══════════════════════════════════════════════════════════════════════
+
+# ── Python ──────────────────────────────────────────────────────────
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+*.egg
+
+# ── Virtual environment ─────────────────────────────────────────────
+.venv/
+.venv
+venv/
+env/
+
+# ── Environment secrets ─────────────────────────────────────────────
+.env
+
+# ── IDE / Editor ────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── OS ──────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Logs ────────────────────────────────────────────────────────────
+logs/
+**/logs/
+*.log
+
+# ── Pipeline outputs ────────────────────────────────────────────────
+results/
+**/results/
+outputs/
+
+# ── Cache ───────────────────────────────────────────────────────────
+cache/
+**/cache/
+
+# ── Analysis artifacts ──────────────────────────────────────────────
+*.h5ad
+*.h5
+
+# ── Raw data archives (should live in $FUXI_DATA_ROOT, not in repo) ─
+*.tar
+*.tar.gz
+*.tsv.gz
+*.csv.gz
+*.mtx.gz
+*.mtx
+
+# ── Temporary / backup ──────────────────────────────────────────────
+*.tmp
+*.bak
+*.zip
+
+# ── Stray version-tag directories (e.g. =0.10.0 from path mishaps) ──
+=*.*.*
+
+# ── Test artifacts ──────────────────────────────────────────────────
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# ── Tools ───────────────────────────────────────────────────────────
+.omo/
+.opencode/
+.claude/
+.sisyphus/
+.codegraph/
+
+# ── Internal notes (feature ideas, audits, research, suggestions) ──
+notes/
+
+# ── User workspace (project configs, batch scripts, reports) ──
+projects/
