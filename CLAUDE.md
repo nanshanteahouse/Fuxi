@@ -149,3 +149,17 @@ Because this repo has no `pyproject.toml` or `setup.py`, step scripts cannot do 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 ```
 This means `from core.utils import ...` works from any step script. The `annotation_standardizer.py` also patches `sys.path` to avoid name collisions with a local `utils/` package.
+
+### Modifying Scripts for a Dataset
+
+Core step scripts (`rna/steps/*.py`, `atac/steps/*.py`) **must not be edited in place**. When a dataset exposes a bug or requires a one-off adaptation:
+
+1. Copy the script into the project directory: `projects/{modality}/{GSE_ID}/`
+2. Modify the copy — the original under `rna/steps/` or `atac/steps/` stays untouched
+3. Run the copy directly instead of through `run_pipeline.py`
+4. After the run completes, write a note to `notes/suggestions/{GSE_ID}.md` describing:
+   - What broke and why
+   - What the workaround was
+   - Whether the root cause should be fixed in the core script
+
+This keeps core scripts reference-stable and builds a searchable record of edge cases that inform future pipeline improvements. See the existing `notes/suggestions/` directory for examples.
