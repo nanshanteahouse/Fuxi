@@ -410,6 +410,7 @@ def unified_annotate(adata, CFG, logger):
     decisions, fusion_quality = fuse_all_clusters(
         all_scores, all_rules, kb=kb, all_marker_dfs=marker_df,
         return_quality=True,
+        low_quality_clusters=low_quality_clusters,
     )
     logger.info("Evidence fusion: %d clusters processed", len(decisions))
 
@@ -447,14 +448,17 @@ def unified_annotate(adata, CFG, logger):
             f"Developmental stages: {stages_present}" if stages_present else ""
         )
 
+        # Unconstrained annotations require build_annotation_prompt import here
         from core.ai_prompts import build_annotation_prompt
         from core.ai_caller import ai_query
 
+        unconstrained = getattr(CFG.ai, 'unconstrained_annotation', False)
         sys_prompt, user_prompt = build_annotation_prompt(
             adata, tissue, species, precomputed_rank=True,
             extra_context=extra_context,
             compact=n_clusters > 20,
             kb_candidates=kb_candidates,
+            unconstrained=unconstrained,
         )
 
         try:
@@ -472,6 +476,7 @@ def unified_annotate(adata, CFG, logger):
                     all_scores, all_rules, kb=kb,
                     all_marker_dfs=marker_df,
                     ai_results=ai_results,
+                    low_quality_clusters=low_quality_clusters,
                 )
                 decision_map = dict(zip(decision_clusters, decisions))
         except Exception as exc:
@@ -543,6 +548,9 @@ def unified_annotate(adata, CFG, logger):
             'n_markers_found': v.n_markers_found,
             'ai_agreed': v.ai_agreed,
             'ai_suggested': v.ai_suggested,
+            'diagnostic_category': v.diagnostic.category if v.diagnostic else None,
+            'diagnostic_detail': v.diagnostic.detail if v.diagnostic else None,
+            'top_competitors': v.diagnostic.top_competitors if v.diagnostic else [],
         }) for k, v in decision_map.items()}
     )
 
@@ -561,6 +569,7 @@ def unified_annotate(adata, CFG, logger):
             'ai_agreed': d.ai_agreed,
             'ai_suggested': d.ai_suggested,
             'reasoning': d.explanation,
+            'diagnostic_category': d.diagnostic.category if d.diagnostic else '',
         })
     ann_df = pd.DataFrame(ann_records)
     ann_csv = os.path.join(CFG.table_dir, 'cell_type_annotations.csv')
@@ -810,7 +819,12 @@ def main():
         ann_result = unified_annotate(adata, CFG, log)
         if ann_result is not None:
             if std is not None:
-                validation_results = std.validate(adata)
+                validation_results = std.validate(
+                    adata,
+                    top_n=CFG.marker_validation_n_top_genes,
+                    min_overlap=CFG.marker_validation_min_overlap,
+                    marginal_threshold=CFG.marker_validation_marginal_threshold,
+                )
                 log.info("Marker validation: %d/%d PASS",
                          sum(1 for r in validation_results if r['status'] == 'PASS'),
                          len(validation_results))
@@ -825,7 +839,12 @@ def main():
         ann_result = ai_annotate(adata, CFG, log, std=std)
         if ann_result is not None:
             if std is not None:
-                validation_results = std.validate(adata)
+                validation_results = std.validate(
+                    adata,
+                    top_n=CFG.marker_validation_n_top_genes,
+                    min_overlap=CFG.marker_validation_min_overlap,
+                    marginal_threshold=CFG.marker_validation_marginal_threshold,
+                )
                 log.info("Marker validation: %d/%d PASS",
                          sum(1 for r in validation_results if r['status'] == 'PASS'),
                          len(validation_results))
@@ -839,7 +858,12 @@ def main():
     # ── Score_genes \u6a21\u5f0f (\u6240\u6709\u8def\u5f84\u56de\u9000) ─────────────────────────────────
     score_genes_mode(adata, CFG, log)
     if std is not None:
-        validation_results = std.validate(adata)
+        validation_results = std.validate(
+            adata,
+            top_n=CFG.marker_validation_n_top_genes,
+            min_overlap=CFG.marker_validation_min_overlap,
+            marginal_threshold=CFG.marker_validation_marginal_threshold,
+        )
         log.info("Marker validation: %d/%d PASS",
                  sum(1 for r in validation_results if r['status'] == 'PASS'),
                  len(validation_results))

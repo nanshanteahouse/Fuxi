@@ -18,6 +18,24 @@ from typing import NamedTuple, Optional
 import pandas as pd
 
 
+class DiagnosticInfo(NamedTuple):
+    """Diagnostic context for Uncertain/Unknown clusters (v3.1.0+).
+
+    Attributes
+    ----------
+    category : str
+        One of ``'no_kb_match'`` | ``'low_quality_data'`` | ``'ambiguous'`` |
+        ``'weak_signal'`` | ``'true_unknown'``.
+    top_competitors : list
+        Top-3 ``(cell_type, score)`` competitors, if any.
+    detail : str
+        Human-readable diagnostic detail.
+    """
+    category: str
+    top_competitors: list
+    detail: str
+
+
 class FusionDecision(NamedTuple):
     """Final annotation decision for one cluster.
 
@@ -42,6 +60,9 @@ class FusionDecision(NamedTuple):
     alternative_rules : list
         Other expert rules that also matched this cluster (if expert_rule
         was the winning method).  Empty list otherwise.
+    diagnostic : DiagnosticInfo or None
+        Diagnostic context for Unknown/Uncertain clusters (v3.1.0+).
+        ``None`` for all non-Unknown decisions.
     """
     cell_type: str
     confidence: str
@@ -52,6 +73,7 @@ class FusionDecision(NamedTuple):
     ai_suggested: str
     explanation: str
     alternative_rules: list
+    diagnostic: Optional[DiagnosticInfo] = None
 
 
 # Decision priority tiers — evaluated in order.
@@ -148,6 +170,86 @@ def _explain(
     return " ".join(parts)
 
 
+def _build_diagnostic_summary(decisions: list) -> dict:
+    """Build a diagnostic category count summary from fusion decisions."""
+    summary = {}
+    for d in decisions:
+        if d.diagnostic and d.diagnostic.category:
+            cat = d.diagnostic.category
+            summary[cat] = summary.get(cat, 0) + 1
+    return summary
+
+
+def _classify_unknown(
+    marker_scores: dict,
+    low_quality_reason: str = "",
+) -> DiagnosticInfo:
+    """Classify an Unknown/Uncertain decision into a diagnostic category.
+
+    Parameters
+    ----------
+    marker_scores : dict
+        ``{type_key: Score or float}`` from marker scoring.
+    low_quality_reason : str
+        Non-empty if the cluster was flagged by
+        :func:`~utils.marker_scoring.detect_low_quality_cluster`.
+
+    Returns
+    -------
+    DiagnosticInfo
+    """
+    scored = [(k, _resolve_score(marker_scores, k))
+              for k in marker_scores]
+    scored.sort(key=lambda x: -x[1][0])
+
+    top3 = [(t, round(s, 4)) for t, (s, _) in scored[:3] if s > 0]
+
+    if low_quality_reason:
+        return DiagnosticInfo(
+            category='low_quality_data',
+            top_competitors=top3,
+            detail=(
+                f"Cluster flagged as low-quality: {low_quality_reason}"
+            ),
+        )
+
+    if scored and scored[0][1][0] >= 0.25:
+        ambiguous_candidates = [(t, round(s, 4))
+                                for t, (s, _) in scored if s >= 0.25]
+        if len(ambiguous_candidates) >= 2:
+            names = ", ".join(t for t, _ in ambiguous_candidates[:5])
+            return DiagnosticInfo(
+                category='ambiguous',
+                top_competitors=top3,
+                detail=(
+                    f"Multiple cell types with score >= 0.25: {names}"
+                ),
+            )
+
+    if scored and 0 < scored[0][1][0] < 0.25:
+        return DiagnosticInfo(
+            category='weak_signal',
+            top_competitors=top3,
+            detail=(
+                f"Best score {scored[0][1][0]:.4f} below 0.25 threshold "
+                f"(best type: {scored[0][0]})"
+            ),
+        )
+
+    if not any(s > 0 for _, (s, _) in scored):
+        return DiagnosticInfo(
+            category='no_kb_match',
+            top_competitors=[],
+            detail="No KB cell type had any marker overlap with this cluster.",
+        )
+
+    return DiagnosticInfo(
+        category='true_unknown',
+        top_competitors=top3,
+        detail="Could not determine cell type by any method.",
+    )
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  Public API
 # ═══════════════════════════════════════════════════════════════════════
@@ -160,6 +262,7 @@ def fuse_evidence(
     cluster_markers: Optional[pd.DataFrame] = None,
     ai_suggestion: Optional[str] = None,
     alternative_rules: Optional[list] = None,
+    low_quality_reason: str = "",
 ) -> 'FusionDecision':
     """Combine marker scores, expert rules, and AI into one decision.
 
@@ -179,6 +282,9 @@ def fuse_evidence(
     alternative_rules : list or None
         Other expert rules that also matched (from
         :func:`apply_expert_rules`' second return element).
+    low_quality_reason : str
+        Non-empty if the cluster was flagged by
+        :func:`~utils.marker_scoring.detect_low_quality_cluster` (v3.1.0+).
 
     Returns
     -------
@@ -188,19 +294,41 @@ def fuse_evidence(
     if expert_rule_result is not None:
         rule_score, rule_n = _resolve_score(marker_scores, expert_rule_result)
         ai_agreed = (ai_suggestion == expert_rule_result) if ai_suggestion else False
+
+        # Quality gate (v3.1.0+): if Fisher scoring completely disagrees
+        # with the expert rule (zero KB marker overlap), downgrade confidence
+        # from 'rule' to 'low'.  This prevents noise-triggered rules (e.g.
+        # a gene buried at rank 4000 in relaxed mode) from outranking well-
+        # scored Fisher matches in downstream analysis.
+        if rule_score < 0.25 and rule_n == 0:
+            conf = 'low'
+            warning_note = (
+                f"Expert rule matched '{expert_rule_result}' but independent "
+                f"marker scoring found zero KB marker overlap (score={rule_score:.3f}, "
+                f"n_markers=0). Downgrading confidence from 'rule' to 'low'."
+            )
+        else:
+            conf = 'rule'
+            warning_note = ""
+
+        explanation_parts = []
+        if warning_note:
+            explanation_parts.append(warning_note)
+        explanation_parts.append(_explain(
+            expert_rule_result, 'expert_rule', rule_score, rule_n,
+            expert_rule_result, ai_suggestion, ai_agreed,
+            alternative_rules=alternative_rules,
+        ))
+
         return FusionDecision(
             cell_type=expert_rule_result,
-            confidence='rule',
+            confidence=conf,
             score=rule_score,
             method='expert_rule',
             n_markers_found=rule_n,
             ai_agreed=ai_agreed,
             ai_suggested=ai_suggestion or '',
-            explanation=_explain(
-                expert_rule_result, 'expert_rule', rule_score, rule_n,
-                expert_rule_result, ai_suggestion, ai_agreed,
-                alternative_rules=alternative_rules,
-            ),
+            explanation=" | ".join(explanation_parts),
             alternative_rules=alternative_rules or [],
         )
 
@@ -216,6 +344,11 @@ def fuse_evidence(
             ai_suggested=ai_suggestion or '',
             explanation="No marker scores available for this cluster.",
             alternative_rules=[],
+            diagnostic=DiagnosticInfo(
+                category='true_unknown',
+                top_competitors=[],
+                detail="No marker scores calculated — empty or missing data.",
+            ),
         )
 
     # ── Find the best-scoring cell type ─────────────────────────────────
@@ -230,6 +363,9 @@ def fuse_evidence(
             continue
 
         if tier_name == 'unknown':
+            diagnostic = _classify_unknown(
+                marker_scores, low_quality_reason=low_quality_reason,
+            )
             return FusionDecision(
                 cell_type='Unknown',
                 confidence='unknown',
@@ -243,6 +379,7 @@ def fuse_evidence(
                     best_type, ai_suggestion, False,
                 ),
                 alternative_rules=alternative_rules or [],
+                diagnostic=diagnostic,
             )
 
         # Tiers 1–3: marker-scoring-based decisions
@@ -281,6 +418,7 @@ def fuse_all_clusters(
     all_marker_dfs: Optional[pd.DataFrame] = None,
     ai_results: Optional[dict] = None,
     return_quality: bool = False,
+    low_quality_clusters: Optional[dict] = None,
 ) -> list | tuple[list, dict]:
     """Process all clusters and return a list of :class:`FusionDecision`.
 
@@ -299,6 +437,9 @@ def fuse_all_clusters(
     return_quality : bool
         When ``True``, also return a quality metadata dict
         ``{annotated_by_rule, unknown, ambiguity, ai_agreed}``.
+    low_quality_clusters : dict or None
+        ``{cluster_id: reason_str}`` from
+        :func:`~utils.marker_scoring.detect_low_quality_cluster` (v3.1.0+).
 
     Returns
     -------
@@ -308,6 +449,8 @@ def fuse_all_clusters(
     """
     if ai_results is None:
         ai_results = {}
+    if low_quality_clusters is None:
+        low_quality_clusters = {}
 
     decisions: list = []
     clusters = sorted(
@@ -334,6 +477,7 @@ def fuse_all_clusters(
             cluster_markers=cl_markers,
             ai_suggestion=ai_results.get(cl),
             alternative_rules=alt_rules,
+            low_quality_reason=low_quality_clusters.get(str(cl), ""),
         )
         decisions.append(decision)
 
@@ -353,6 +497,7 @@ def fuse_all_clusters(
             ),
             "ai_agreed": sum(1 for d in decisions if d.ai_agreed),
             "total": len(decisions),
+            "diagnostic_summary": _build_diagnostic_summary(decisions),
         }
         return decisions, quality
     return decisions

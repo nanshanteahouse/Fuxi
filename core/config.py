@@ -47,6 +47,12 @@ class AIConfig:
     ai_interpretation: bool = True
     ai_cache_responses: bool = True
 
+    # Unconstrained annotation mode (v3.1.0+).
+    # When True, AI is NOT constrained to KB candidates and can freely
+    # suggest cell types.  Useful for audit mode (KB blind-spot detection)
+    # or novel tissue types.  Default False (backward compatible).
+    unconstrained_annotation: bool = False
+
 
 @dataclass
 class Config:
@@ -247,6 +253,25 @@ class Config:
     expert_rule_top_n: int = 0
     expert_rule_pval_cutoff: float = 0.0
 
+    # Marker validation thresholds (v3.1.0+).
+    # Controls how StandardOntology.validate() cross-checks assigned cell types
+    # against KB markers using top DE genes.
+    #   marker_validation_n_top_genes (int):
+    #       Number of top DE genes per cluster to compare.  Default 15.
+    #   marker_validation_min_overlap (float):
+    #       Minimum overlap ratio (found/KB_total) for PASS status.
+    #       Default 0.5 (backward compatible).
+    #   marker_validation_marginal_threshold (float):
+    #       Threshold for MARGINAL tier (PASS > MARGINAL > LOW > FAIL).
+    #       Default 0.25.  Set to 0 to disable MARGINAL tier.
+    #   marker_validation_pass_rate_min (float):
+    #       Minimum PASS cell-rate for trajectory quality gate (Step 08).
+    #       Also used by Steps 07/09 for quality warnings.  Default 0.1.
+    marker_validation_n_top_genes: int = 15
+    marker_validation_min_overlap: float = 0.5
+    marker_validation_marginal_threshold: float = 0.25
+    marker_validation_pass_rate_min: float = 0.1
+
     # ═══════════════════════════════════════════════════════════════════
     #  RNA: 差异表达分析
     # ═══════════════════════════════════════════════════════════════════
@@ -255,6 +280,10 @@ class Config:
     de_pval_cutoff: float = 0.05
     de_logfc_cutoff: float = 0.25
     de_stage_pairwise: bool = True
+    # When True and marker_validation pass_rate < threshold, Step 07
+    # automatically uses leiden-based grouping instead of cell_type labels.
+    # Default False: only warns, user decides.  (v3.1.0+)
+    de_auto_switch_on_low_quality: bool = False
 
     # ═══════════════════════════════════════════════════════════════════
     #  ATAC: 差异分析

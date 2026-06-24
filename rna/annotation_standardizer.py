@@ -371,7 +371,9 @@ class StandardOntology:
     # ── Marker cross-validation ──────────────────────────────────────
 
     def validate(
-        self, adata: Any, top_n: int = 15
+        self, adata: Any, top_n: int | None = None,
+        min_overlap: float | None = None,
+        marginal_threshold: float | None = None,
     ) -> list[dict[str, Any]]:
         """Marker cross-validation per cluster using KB markers.
 
@@ -386,8 +388,18 @@ class StandardOntology:
         adata : AnnData
             Annotated data matrix.  Must have ``.obs['leiden']`` and either
             ``.obs['cell_type_std']`` or ``.obs['cell_type']``.
-        top_n : int
-            Number of top marker genes to consider per cluster (default: 15).
+        top_n : int or None
+            Number of top marker genes to consider per cluster.
+            If None, reads from ``CFG.marker_validation_n_top_genes``
+            (default: 15).
+        min_overlap : float or None
+            Minimum overlap ratio for PASS status.
+            If None, reads from ``CFG.marker_validation_min_overlap``
+            (default: 0.5).
+        marginal_threshold : float or None
+            Threshold for MARGINAL tier (PASS > MARGINAL > LOW > FAIL).
+            If None, reads from ``CFG.marker_validation_marginal_threshold``
+            (default: 0.25).  Set to 0 to disable MARGINAL tier.
 
         Returns
         -------
@@ -397,10 +409,30 @@ class StandardOntology:
               - ``assigned_type`` — cell type assigned to this cluster
               - ``markers_found`` — number of KB markers found in top *top_n*
               - ``markers_total`` — total KB markers for this cell type
-              - ``status`` — ``"PASS"`` (≥0.5), ``"LOW"`` (>0.0),
+              - ``status`` — ``"PASS"`` (≥min_overlap), ``"MARGINAL"``
+                (≥marginal_threshold), ``"LOW"`` (>0.0),
                 ``"FAIL"`` (0.0), or ``"NO_ONTOLOGY"`` (no KB markers)
               - ``score`` — overlap ratio (0.0 – 1.0)
         """
+        # Resolve thresholds: explicit args > CFG > built-in defaults
+        try:
+            from core.config import CFG
+            _top_n = (
+                top_n if top_n is not None
+                else getattr(CFG, 'marker_validation_n_top_genes', 15)
+            )
+            _min_overlap = (
+                min_overlap if min_overlap is not None
+                else getattr(CFG, 'marker_validation_min_overlap', 0.5)
+            )
+            _marginal = (
+                marginal_threshold if marginal_threshold is not None
+                else getattr(CFG, 'marker_validation_marginal_threshold', 0.25)
+            )
+        except (ImportError, AttributeError):
+            _top_n = top_n if top_n is not None else 15
+            _min_overlap = min_overlap if min_overlap is not None else 0.5
+            _marginal = marginal_threshold if marginal_threshold is not None else 0.25
         # Ensure rank_genes_groups is available
         if "rank_genes_groups" not in adata.uns:
             sc.tl.rank_genes_groups(
@@ -440,7 +472,7 @@ class StandardOntology:
                 )
                 top_genes = [
                     g
-                    for g in marker_df.head(top_n)["names"].tolist()
+                    for g in marker_df.head(_top_n)["names"].tolist()
                     if g
                 ]
             except (KeyError, ValueError):
@@ -469,8 +501,10 @@ class StandardOntology:
             overlap = top_set & kb_set
             score = len(overlap) / len(kb_set) if kb_set else 0.0
 
-            if score >= 0.5:
+            if score >= _min_overlap:
                 status = "PASS"
+            elif _marginal > 0 and score >= _marginal:
+                status = "MARGINAL"
             elif score > 0.0:
                 status = "LOW"
             else:

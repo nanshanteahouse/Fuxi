@@ -225,7 +225,8 @@ def main():
     if 'marker_validation' in adata.obs and adata.n_obs > 0:
         pass_cells = (adata.obs['marker_validation'] == 'PASS').sum()
         pass_rate = pass_cells / adata.n_obs
-        if pass_rate < 0.1:
+        pass_rate_min = getattr(CFG, 'marker_validation_pass_rate_min', 0.1)
+        if pass_rate < pass_rate_min:
             if getattr(CFG, 'interactive', False):
                 print(
                     f"\n⚠  Annotation validation PASS rate = "
@@ -252,10 +253,10 @@ def main():
                     )
             else:
                 log.warning(
-                    "marker_validation PASS rate %.1f%% (<10%%) — "
+                    "marker_validation PASS rate %.1f%% (<%.0f%%) — "
                     "cell_type labels are unreliable, falling back to "
                     "leiden clusters",
-                    pass_rate * 100,
+                    pass_rate * 100, pass_rate_min * 100,
                 )
                 adata.obs['cell_type'] = adata.obs['leiden'].astype(str)
 

@@ -222,6 +222,23 @@ def main():
     adata = sc.read(input_h5ad)
     log.info("Loaded: %s — %d cells", input_h5ad, adata.n_obs)
 
+    # Quality awareness (v3.1.0+): check marker_validation PASS rate
+    _pass_rate = None
+    if 'marker_validation' in adata.obs and adata.n_obs > 0:
+        _pass_cells = (adata.obs['marker_validation'] == 'PASS').sum()
+        _pass_rate = _pass_cells / adata.n_obs
+        log.info("marker_validation PASS rate: %.1f%%", _pass_rate * 100)
+        _pass_rate_min = getattr(CFG, 'marker_validation_pass_rate_min', 0.1)
+        if _pass_rate < _pass_rate_min:
+            log.warning(
+                "⚠  marker_validation PASS rate %.1f%% (<%.0f%%) — "
+                "DE genes are computed on potentially unreliable cell_type "
+                "labels. Results should be interpreted with caution.",
+                _pass_rate * 100, _pass_rate_min * 100,
+            )
+    else:
+        log.info("No marker_validation column — skipping quality check.")
+
     # 自动检测注释层级列
     annotation_cols = []
     for col in ['cell_type_sub', 'cell_type', 'leiden']:

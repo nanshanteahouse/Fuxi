@@ -30,6 +30,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 from core.utils import setup_logger, resolve_config
 import numpy as np
 import pandas as pd
+import scanpy as sc  # for loading annotated h5ad (quality check)
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 
@@ -525,6 +526,33 @@ def main():
     marker_df = read_marker_csv(CFG.table_dir, log)
     log.info("Gene set libraries: %s", CFG.enrichment_gene_sets)
     log.info("Method: %s", CFG.enrichment_method)
+
+    # Quality awareness (v3.1.0+): check marker_validation from annotated h5ad
+    try:
+        _annotated_path = os.path.join(CFG.h5ad_dir, '05_annotated.h5ad')
+        _quality_path = os.path.join(CFG.table_dir, '05_annotation_quality.json')
+        _pass_rate = None
+        if os.path.exists(_quality_path):
+            import json as _json
+            with open(_quality_path, 'r') as _f:
+                _q = _json.load(_f)
+            _pass_rate = _q.get('pass_rate')
+        if _pass_rate is None and os.path.exists(_annotated_path):
+            _a = sc.read(_annotated_path)
+            if 'marker_validation' in _a.obs and _a.n_obs > 0:
+                _pass_cells = (_a.obs['marker_validation'] == 'PASS').sum()
+                _pass_rate = _pass_cells / _a.n_obs
+        if _pass_rate is not None:
+            _pass_rate_min = getattr(CFG, 'marker_validation_pass_rate_min', 0.1)
+            if _pass_rate < _pass_rate_min:
+                log.warning(
+                    "⚠  marker_validation PASS rate %.1f%% (<%.0f%%) — "
+                    "enrichment analysis is based on potentially unreliable "
+                    "cell_type labels. Results should be interpreted with caution.",
+                    _pass_rate * 100, _pass_rate_min * 100,
+                )
+    except Exception:
+        pass  # Non-critical — enrichment proceeds regardless
 
     # ── 按基因集库循环 ──
     ora_results = {}
