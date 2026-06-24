@@ -72,14 +72,18 @@ def main():
 
     # ── Scrublet ──
     log.info("Scrublet doublet detection...")
-    snap.pp.scrublet(peak_data, features=None, random_state=CFG.random_seed)
-    peak_data.obs['predicted_doublet'] = peak_data.obs['doublet_probability'] > 0.5
-    n_dbl = peak_data.obs['predicted_doublet'].sum()
-    log.info("  Doublets: %d (%.1f%%)", int(n_dbl),
-             100 * n_dbl / max(peak_data.n_obs, 1))
+    try:
+        snap.pp.scrublet(peak_data, features=None, random_state=CFG.random_seed)
+        peak_data.obs['predicted_doublet'] = peak_data.obs['doublet_probability'] > 0.5
+        n_dbl = peak_data.obs['predicted_doublet'].sum()
+        log.info("  Doublets: %d (%.1f%%)", int(n_dbl),
+                 100 * n_dbl / max(peak_data.n_obs, 1))
+    except Exception as e:
+        log.warning("Scrublet failed (likely OOM), marking all cells as non-doublets: %s", e)
+        peak_data.obs['predicted_doublet'] = False
 
     validate_adata(peak_data, stage_name="01_qc", logger=log)
-    safe_write(peak_data, CFG.filtered_h5ad, cfg=CFG)
+    safe_write(peak_data, CFG.filtered_h5ad, cfg=CFG, compression_override=None)
     log.info("Step 01 complete (%.1fs)", time.time() - t0)
 
 

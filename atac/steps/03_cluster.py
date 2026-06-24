@@ -112,7 +112,7 @@ def main():
         # Keep only the best UMAP in obsm
         data.uns['cluster_params'] = best
 
-    safe_write(data, CFG.clustered_h5ad, cfg=CFG)
+    safe_write(data, CFG.clustered_h5ad, cfg=CFG, compression_override=None)
     log.info("Step 03 complete, took %.1fs", time.time() - t0)
 
 

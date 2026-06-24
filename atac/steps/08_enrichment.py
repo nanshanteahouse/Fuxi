@@ -10,7 +10,7 @@ Input:  marker_peaks.csv (from step 05)
 Output: enrichment_results.csv
 """
 
-import sys, os, time, argparse, gc
+import sys, os, time, argparse, gc, bisect
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 from core.utils import setup_logger, resolve_config, safe_plot
 import pandas as pd
@@ -18,16 +18,31 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def peak_to_gene(peak_df, genome="hg38"):
-    """Map peak coordinates to nearest gene symbols using pybedtools.
-    Falls back to using peak names directly if mapping is unavailable.
+def peak_to_gene(peak_df, genome="hg38", gene_bed=None, max_distance=100000):
+    """Map peak coordinates to nearest gene symbols.
+
+    Tries in order:
+      1. pybedtools with genome-specific gene BED
+      2. Pure-Python nearest-TSS using a configured gene annotation BED
+      3. Returns empty list on failure (caller skips enrichment)
+
+    Parameters:
+        peak_df: DataFrame whose first column contains peak names (chr:start-end)
+        genome: reference genome (used for pybedtools gene BED lookup)
+        gene_bed: path to gene TSS annotation BED (chr, start, end, gene_name, strand)
+        max_distance: maximum TSS distance (bp) to associate a peak with a gene
+
+    Returns:
+        list of gene symbols (one per peak, empty string for unmapped)
     """
+    if peak_df.empty:
+        return []
+
+    peaks = peak_df.iloc[:, 0].astype(str)
+
+    # ── Strategy 1: pybedtools ────────────────────────────────────────
     try:
         import pybedtools
-        # Build a BED from the first column (assumed chr:start-end format)
-        if peak_df.empty:
-            return []
-        peaks = peak_df.iloc[:, 0].astype(str)
         bed_lines = []
         for p in peaks:
             p = p.replace(':', '\t').replace('-', '\t')
@@ -35,20 +50,77 @@ def peak_to_gene(peak_df, genome="hg38"):
         if not bed_lines:
             return peaks.tolist()
         bed = pybedtools.BedTool('\n'.join(bed_lines), from_string=True)
-        nearest = bed.closest(
-            pybedtools.BedTool(os.path.join(pybedtools.helpers.get_tempdir(),
-                                            f"{genome}_genes.bed")),
-            d=True)
+        gb = os.path.join(pybedtools.helpers.get_tempdir(), f"{genome}_genes.bed")
+        nearest = bed.closest(pybedtools.BedTool(gb), d=True)
         genes = []
         for interval in nearest:
-            name = str(interval).split('\t')[-2] if len(str(interval).split('\t')) > 1 else str(interval)
+            parts = str(interval).split('\t')
+            name = parts[-2] if len(parts) > 4 else str(interval)
             if name.startswith('chr'):
                 name = interval.name if hasattr(interval, 'name') else name
-            genes.append(name)
-        return genes
+            if name and not name.startswith('chr'):
+                genes.append(name)
+        if genes and len(genes) == len(peaks):
+            return genes
     except Exception:
-        # Fallback: return peak names directly (caller should handle this)
-        return peak_df.iloc[:, 0].astype(str).tolist()
+        pass
+
+    # ── Strategy 2: Pure-Python nearest-TSS ───────────────────────────
+    if gene_bed and os.path.exists(gene_bed):
+        try:
+            # Parse gene BED: chrom, start, end, gene_name, [score, strand]
+            gene_coords = {}
+            with open(gene_bed) as f:
+                for line in f:
+                    parts = line.strip().split('\t')
+                    if len(parts) < 4:
+                        continue
+                    chrom = parts[0]
+                    # TSS: start for + strand, end for - strand
+                    strand = parts[5] if len(parts) > 5 else '+'
+                    tss = int(parts[1]) if strand != '-' else int(parts[2])
+                    name = parts[3]
+                    gene_coords.setdefault(chrom, []).append((tss, name))
+
+            # Sort each chromosome's genes by TSS for bisect
+            for chrom in gene_coords:
+                gene_coords[chrom].sort(key=lambda x: x[0])
+
+            genes = []
+            for p in peaks:
+                try:
+                    chrom, rest = p.split(':', 1) if ':' in p else (p, '')
+                    mid = int(rest.split('-')[0]) if rest else 0
+                except (ValueError, IndexError):
+                    genes.append('')
+                    continue
+
+                if chrom not in gene_coords:
+                    genes.append('')
+                    continue
+
+                tss_list = gene_coords[chrom]
+                tss_positions = [t[0] for t in tss_list]
+                idx = bisect.bisect_left(tss_positions, mid)
+
+                best = (float('inf'), '')
+                if idx < len(tss_list):
+                    d = abs(tss_list[idx][0] - mid)
+                    if d < best[0]:
+                        best = (d, tss_list[idx][1])
+                if idx > 0:
+                    d = abs(tss_list[idx - 1][0] - mid)
+                    if d < best[0]:
+                        best = (d, tss_list[idx - 1][1])
+
+                genes.append(best[1] if best[0] <= max_distance else '')
+
+            return genes
+        except Exception:
+            pass
+
+    # ── Strategy 3: Cannot map ────────────────────────────────────────
+    return []
 
 
 def main():
@@ -77,22 +149,24 @@ def main():
     for grp in (markers_df[group_col].unique() if group_col else ['all']):
         if group_col:
             sub = markers_df[markers_df[group_col] == grp]
-            genes = peak_to_gene(sub, genome=CFG.genome)
+            genes = peak_to_gene(sub, genome=CFG.genome,
+                                 gene_bed=getattr(CFG, 'gene_annotation_bed', ''),
+                                 max_distance=CFG.peak_gene_distance)
         else:
-            genes = peak_to_gene(markers_df, genome=CFG.genome)
+            genes = peak_to_gene(markers_df, genome=CFG.genome,
+                                 gene_bed=getattr(CFG, 'gene_annotation_bed', ''),
+                                 max_distance=CFG.peak_gene_distance)
 
-        # Deduplicate and filter — strip invalid names
-        # peak_to_gene returns peak names (chr:start-end) as fallback — filter them
-        genes_clean = []
-        for g in genes:
-            if isinstance(g, str) and g and len(g) > 2:
-                if not g.startswith('chr'):
-                    genes_clean.append(g)
-        genes = genes_clean
+        # Deduplicate and filter — strip empty/invalid names
+        genes_clean = [g for g in genes if isinstance(g, str) and g and len(g) > 2]
 
-        if len(genes) < 5:
-            log.info("Enrichment: %s — too few genes (%d), skipping", str(grp), len(genes))
+        if len(genes_clean) < 5:
+            if len(genes_clean) == 0 and genes:
+                log.warning("Enrichment: %s — no genes mapped (check pybedtools or gene_annotation_bed config)", str(grp))
+            else:
+                log.info("Enrichment: %s — too few genes (%d), skipping", str(grp), len(genes_clean))
             continue
+        genes = genes_clean
         log.info("Enrichment: %s (%d unique genes)", str(grp), len(genes))
         try:
             enr = gp.enrichr(

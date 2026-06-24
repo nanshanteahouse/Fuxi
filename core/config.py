@@ -78,7 +78,7 @@ class Config:
     #  数据输入格式（通用）
     # ═══════════════════════════════════════════════════════════════════
     # RNA: '10X_mtx' | 'csv_matrix' | 'h5ad' | '10X_h5'
-    # ATAC: '10x_fragments' | 'h5ad'
+    # ATAC: '10x_fragments' | 'h5ad' | '10x_peak_h5'
     data_format: str = "10X_mtx"
 
     # ── RNA: 10X MTX 格式 ──
@@ -327,6 +327,7 @@ class Config:
     enrichment_max_size: int = 500
     enrichment_permutations: int = 1000
     peak_gene_distance: int = 100000    # ATAC: peak-to-gene 映射距离
+    gene_annotation_bed: str = ""       # ATAC: gene TSS BED (chr,start,end,gene_name,strand)
 
     # ═══════════════════════════════════════════════════════════════════
     #  RNA: 降采样 (Step 01)

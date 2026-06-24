@@ -15,6 +15,8 @@ import sys, os, time, argparse, gc
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 from core.utils import setup_logger, resolve_config, safe_write, validate_adata
 import snapatac2 as snap
+import numpy as np
+import scipy.sparse as sp
 
 
 def main():
@@ -47,6 +49,11 @@ def main():
     # ── Feature selection (out-of-core, works on backed data) ──
     snap.pp.select_features(data, n_features=CFG.n_features)
 
+    # ── Ensure float64 for SnapATAC2 spectral (Rust backend requires it) ──
+    if sp.issparse(data.X) and data.X.dtype != np.float64:
+        data.X = data.X.astype(np.float64, copy=False)
+        log.info("X converted to float64 for spectral embedding")
+
     # ── Spectral embedding (matrix-free Lanczos) ──
     # Use sample_size for large datasets to enable Nyström approximation
     spectral_kwargs = dict(
@@ -63,7 +70,7 @@ def main():
     snap.pp.knn(data, n_neighbors=CFG.n_neighbors)
 
     validate_adata(data, stage_name="02_process", logger=log)
-    safe_write(data, CFG.processed_h5ad, cfg=CFG)
+    safe_write(data, CFG.processed_h5ad, cfg=CFG, compression_override=None)
     gc.collect()
     log.info("Step 02 complete, took %.1fs", time.time() - t0)
 

@@ -114,6 +114,30 @@ def main():
             import scanpy as sc
             data = sc.read(h5ad_path)
         log.info("Loaded h5ad: %d cells", data.n_obs)
+
+    elif CFG.data_format == "10x_peak_h5":
+        h5_path = os.path.abspath(CFG.input_h5ad)
+        if not os.path.exists(h5_path):
+            log.error("10x peak h5 not found: %s", h5_path)
+            sys.exit(1)
+        try:
+            import scanpy as sc
+            data = sc.read_10x_h5(h5_path)
+            # 10x peak h5 stores features in 'gene_ids' column — rename for clarity
+            if 'gene_ids' in data.var.columns:
+                data.var_names = data.var['gene_ids'].astype(str)
+            # Ensure feature names are peak-like (chr:start-end)
+            # 10x ATAC uses 'interval' or 'feature_type' column if available
+            if 'feature_types' in data.var.columns and 'Peaks' in data.var['feature_types'].values:
+                log.info("Detected 10x ATAC peak matrix: %d cells, %d peaks",
+                         data.n_obs, data.n_vars)
+            else:
+                log.info("Loaded 10x h5: %d cells, %d features", data.n_obs, data.n_vars)
+        except Exception as e:
+            log.error("Failed to read 10x peak h5 (%s). "
+                      "Try converting to h5ad format first with: "
+                      "import scanpy as sc; sc.read_10x_h5(path).write('out.h5ad')", e)
+            sys.exit(1)
     else:
         log.error("Unknown data_format: %s", CFG.data_format)
         sys.exit(1)

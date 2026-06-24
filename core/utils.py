@@ -120,7 +120,8 @@ def wsl_to_win(path: str) -> str:
 
 def safe_write(adata, target: str,
                tmpdir: str = "/tmp/Fuxi",
-               compression: str = "gzip", cfg=None) -> None:
+               compression: str = "gzip", cfg=None,
+               compression_override: Optional[str] = None) -> None:
     """
     安全写入 h5ad 文件，避免 WSL /mnt 挂载的文件锁定问题。
 
@@ -131,12 +132,16 @@ def safe_write(adata, target: str,
         adata: AnnData 对象
         target: 目标 .h5ad 路径
         tmpdir: 临时目录（cfg 传入时优先使用 cfg.h5ad_tempdir）
-        compression: h5py 压缩方式 ('gzip' | 'lzf' | 'zstd')
+        compression: 默认 h5py 压缩方式 ('gzip' | 'lzf' | 'zstd')
         cfg: 可选的 Config 对象 — 传入后优先使用 cfg.h5ad_compression
+        compression_override: 显式覆盖 — 优先级高于 cfg.h5ad_compression。
+            用于 SnapATAC2 兼容写（compression_override=None 写未压缩文件）。
     """
-    # Respect cfg.h5ad_compression when caller passes its CFG explicitly.
-    if cfg is not None and compression == "gzip":
-        compression = getattr(cfg, 'h5ad_compression', 'gzip')
+    # Resolution order: compression_override > cfg.h5ad_compression > compression default
+    if compression_override is not None:
+        compression = compression_override
+    elif cfg is not None:
+        compression = getattr(cfg, 'h5ad_compression', compression)
     # Respect cfg.h5ad_tempdir (from ATACseq config)
     if cfg is not None:
         tmpdir = getattr(cfg, 'h5ad_tempdir', tmpdir)
