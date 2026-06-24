@@ -113,7 +113,7 @@ def main():
                 from core.ai_prompts import ATAC_ANNOTATION_SYSTEM_PROMPT, ATAC_ANNOTATION_USER_PROMPT_TEMPLATE
                 log.info("AI annotation...")
                 user_prompt = ATAC_ANNOTATION_USER_PROMPT_TEMPLATE.format(
-                    tissue=CFG.genome,
+                    tissue=CFG.tissue,
                     cluster_summary=json.dumps(cluster_summary, indent=2),
                 )
                 response = ai_query(ATAC_ANNOTATION_SYSTEM_PROMPT, user_prompt, cfg=CFG.ai, log=log)
@@ -133,7 +133,7 @@ def main():
     data.obs['annot_confidence'] = data.obs[cluster_col].astype(str).map(
         lambda x: annotations.get(x, {}).get('confidence', 'medium'))
 
-    safe_write(data, CFG.annotated_h5ad, cfg=CFG)
+    safe_write(data, CFG.annotated_h5ad, cfg=CFG, compression_override=None)
     log.info("Step 04 complete, took %.1fs", time.time() - t0)
 
 
