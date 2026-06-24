@@ -157,9 +157,9 @@ Core step scripts (`rna/steps/*.py`, `atac/steps/*.py`) **must not be edited in 
 1. Copy the script into the project directory: `projects/{modality}/{GSE_ID}/`
 2. Modify the copy — the original under `rna/steps/` or `atac/steps/` stays untouched
 3. Run the copy directly instead of through `run_pipeline.py`
-4. After the run completes, write a note to `notes/suggestions/{GSE_ID}.md` describing:
+4. After the run completes, write a note to `notes/suggestions/{modality}_{GSE_ID}.md` describing:
    - What broke and why
    - What the workaround was
    - Whether the root cause should be fixed in the core script
 
-This keeps core scripts reference-stable and builds a searchable record of edge cases that inform future pipeline improvements. See the existing `notes/suggestions/` directory for examples.
+This keeps core scripts reference-stable and builds a searchable record of edge cases that inform future pipeline improvements. See the existing `notes/suggestions/` directory for examples (e.g. `rna_GSE246169.md`, `atac_GSE246169.md`).
