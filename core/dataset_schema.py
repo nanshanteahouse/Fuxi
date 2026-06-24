@@ -14,7 +14,7 @@ dataset_schema.py — dataset.yaml Python 数据模型
     from core.dataset_schema import DatasetMeta, load_dataset, save_dataset
     import os
     data_root = os.environ['FUXI_DATA_ROOT']
-    ds = load_dataset(os.path.join(data_root, "GSE246169", "dataset.yaml"))
+    ds = load_dataset(os.path.join(data_root, "your_dataset", "dataset.yaml"))
     print(ds.modalities[0].name)  # "scRNA-seq"
 """
 

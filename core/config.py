@@ -221,6 +221,32 @@ class Config:
     target_class: str = ""
     target_order: str = ""
 
+    # Expert-rule constraint parameters (v3.0.0+ self-audit).
+    #
+    # Layer 1 — Precise overrides (0 / 0.0 = use template default):
+    #   expert_rule_top_n (int):
+    #       Only examine the top-N DE genes for rule-matching.
+    #       0 = use the value from the strictness template.
+    #   expert_rule_pval_cutoff (float):
+    #       Only consider genes with pvals_adj < this value.
+    #       0.0 = use the value from the strictness template.
+    #
+    # Layer 2 — Convenience template:
+    #   expert_rule_strictness (str):
+    #       "strict"   → top_n=50,   pval=0.01  (mature tissue, high-confidence)
+    #       "default"  → top_n=50,   pval=0.05  (general purpose, built-in default)
+    #       "deep"     → top_n=200,  pval=0.05  (KB markers rank deep but significant)
+    #       "wide"     → top_n=1000, pval=0.05  (developmental data, first triggers appear)
+    #       "relaxed"  → top_n=5000, pval=0.05  (developmental/organoid sweet spot)
+    #       "manual"   → requires both top_n (>0) AND pval_cutoff (>0.0)
+    #
+    #   pval_cutoff stays ≤ 0.05 in ALL presets — this is the last line of
+    #   defence against noise-triggered rules.  To relax pval beyond 0.05,
+    #   you MUST use "manual" + explicit expert_rule_pval_cutoff.
+    expert_rule_strictness: str = "default"
+    expert_rule_top_n: int = 0
+    expert_rule_pval_cutoff: float = 0.0
+
     # ═══════════════════════════════════════════════════════════════════
     #  RNA: 差异表达分析
     # ═══════════════════════════════════════════════════════════════════

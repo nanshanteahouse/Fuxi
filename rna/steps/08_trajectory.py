@@ -221,6 +221,44 @@ def main():
     # 设置图输出目录（必须在 plot 调用之前，否则 scanpy save= 默认写到 ./figures/）
     sc.settings.figdir = CFG.figure_dir
 
+    # 当 marker_validation PASS 率极低时，退回到 leiden 聚类
+    if 'marker_validation' in adata.obs and adata.n_obs > 0:
+        pass_cells = (adata.obs['marker_validation'] == 'PASS').sum()
+        pass_rate = pass_cells / adata.n_obs
+        if pass_rate < 0.1:
+            if getattr(CFG, 'interactive', False):
+                print(
+                    f"\n⚠  Annotation validation PASS rate = "
+                    f"{pass_rate * 100:.1f}%"
+                )
+                try:
+                    choice = input(
+                        "Trajectory analysis options:\n"
+                        "  [l] Use leiden clusters (safe fallback)\n"
+                        "  [c] Use cell_type labels anyway\n"
+                        "Choice> "
+                    ).strip().lower()
+                except (EOFError, KeyboardInterrupt):
+                    choice = 'l'
+                if choice == 'c':
+                    log.warning(
+                        "User chose cell_type labels despite %.1f%% PASS rate",
+                        pass_rate * 100,
+                    )
+                else:
+                    adata.obs['cell_type'] = adata.obs['leiden'].astype(str)
+                    log.info(
+                        "Falling back to leiden clusters for trajectory"
+                    )
+            else:
+                log.warning(
+                    "marker_validation PASS rate %.1f%% (<10%%) — "
+                    "cell_type labels are unreliable, falling back to "
+                    "leiden clusters",
+                    pass_rate * 100,
+                )
+                adata.obs['cell_type'] = adata.obs['leiden'].astype(str)
+
     recompute_neighbors(adata, CFG, log)
     run_paga(adata, CFG, log)
     root_mask = find_root_cells(adata, CFG, log)

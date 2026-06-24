@@ -357,13 +357,26 @@ def unified_annotate(adata, CFG, logger):
             _sys_module.modules.pop(_k, None)
     try:
         from rna.utils.marker_scoring import (
-            score_cluster_against_kb, apply_expert_rules, annotate_all_clusters,
+            score_cluster_against_kb, apply_expert_rules,
+            annotate_all_clusters, resolve_expert_rule_params,
         )
         from rna.utils.evidence_fusion import fuse_all_clusters
     finally:
         _sys_module.path = _orig_sys_path
 
     species = CFG.species
+
+    # ── Resolve expert-rule constraint parameters ────────────────────
+    rule_top_n, rule_pval = resolve_expert_rule_params(
+        strictness=getattr(CFG, 'expert_rule_strictness', 'default'),
+        top_n=getattr(CFG, 'expert_rule_top_n', 0),
+        pval_cutoff=getattr(CFG, 'expert_rule_pval_cutoff', 0.0),
+    )
+    logger.info(
+        "Expert rules: strictness=%s → top_n=%d, pval_cutoff=%.3f",
+        getattr(CFG, 'expert_rule_strictness', 'default'),
+        rule_top_n, rule_pval,
+    )
 
     # ── Compute per-cluster marker scores and expert rules ───────────
     all_scores = {}
@@ -379,9 +392,14 @@ def unified_annotate(adata, CFG, logger):
         lfc_idx = cl_data['logfoldchanges'].argsort()[::-1]
         cl_data = cl_data.iloc[lfc_idx]
         all_scores[cl_str] = score_cluster_against_kb(kb, cl_data, species=species)
-        all_rules[cl_str] = apply_expert_rules(kb, cl_data)
+        all_rules[cl_str] = apply_expert_rules(kb, cl_data,
+                                                top_n=rule_top_n,
+                                                pval_cutoff=rule_pval)
 
-    decisions = fuse_all_clusters(all_scores, all_rules, kb=kb, all_marker_dfs=marker_df)
+    decisions, fusion_quality = fuse_all_clusters(
+        all_scores, all_rules, kb=kb, all_marker_dfs=marker_df,
+        return_quality=True,
+    )
     logger.info("Evidence fusion: %d clusters processed", len(decisions))
 
     if not decisions:
@@ -408,7 +426,7 @@ def unified_annotate(adata, CFG, logger):
         logger.info(
             "AI fallback for %d low-confidence clusters", len(low_conf_clusters)
         )
-        kb_candidates = sorted([k for k in kb if k != 'expert_rules'])
+        kb_candidates = sorted([k for k in kb if k != 'expert_rules' and not k.startswith('_')])
         tissue = CFG.tissue
         stages_present = (
             sorted(adata.obs['stage'].unique().tolist())
@@ -549,7 +567,119 @@ def unified_annotate(adata, CFG, logger):
     meta_df.to_csv(meta_csv, index=False)
     logger.info("Cell metadata exported: %s", meta_csv)
 
+    # ── k. Annotation quality report ────────────────────────────────────────
+    _write_quality_report(adata, ann_records, fusion_quality, CFG, logger)
+
+    # ── l. Interactive review (--interactive flag) ──────────────────────────
+    if getattr(CFG, 'interactive', False):
+        _interactive_annotation_review(adata, fusion_quality, CFG, logger)
+
     return decision_map
+
+
+def _write_quality_report(adata, ann_records, fusion_quality, CFG, logger):
+    """Write 05_annotation_quality.json summarising annotation health."""
+    import json as _json
+
+    pass_cells = (
+        (adata.obs['marker_validation'] == 'PASS').sum()
+        if 'marker_validation' in adata.obs else 0
+    )
+    pass_rate = pass_cells / max(adata.n_obs, 1)
+
+    ambiguity_clusters = []
+    for rec in ann_records:
+        reasoning = rec.get('reasoning', '')
+        if 'also matched rules:' in reasoning:
+            ambiguity_clusters.append(rec['cluster'])
+
+    quality = {
+        "pass_rate": round(pass_rate, 4),
+        "total_clusters": len(ann_records),
+        "annotated_by_rule": fusion_quality.get("annotated_by_rule", 0),
+        "annotated_by_scoring": fusion_quality.get("annotated_by_scoring", 0),
+        "unknown": fusion_quality.get("unknown", 0),
+        "ambiguity_clusters": ambiguity_clusters,
+        "ai_disagreement_rate": round(
+            sum(1 for r in ann_records if not r.get('ai_agreed', True))
+            / max(len(ann_records), 1), 4,
+        ),
+        "kb_blind_spot": pass_rate < 0.1,
+        "recommended_strictness": (
+            "relaxed" if pass_rate < 0.1 else
+            "deep" if pass_rate < 0.3 else
+            "default"
+        ),
+    }
+
+    quality_path = os.path.join(CFG.table_dir, '05_annotation_quality.json')
+    with open(quality_path, 'w', encoding='utf-8') as f:
+        _json.dump(quality, f, indent=2)
+    logger.info(
+        "Annotation quality report: %s (pass_rate=%.1f%%)",
+        quality_path, quality["pass_rate"] * 100,
+    )
+
+
+def _interactive_annotation_review(adata, fusion_quality, CFG, logger):
+    """Present annotation quality summary and offer remediation choices.
+
+    Only called when ``CFG.interactive`` is ``True``.
+    """
+    pass_cells = (
+        (adata.obs['marker_validation'] == 'PASS').sum()
+        if 'marker_validation' in adata.obs else 0
+    )
+    pass_rate = pass_cells / max(adata.n_obs, 1)
+    n_total = fusion_quality.get("total", 0)
+    n_rule = fusion_quality.get("annotated_by_rule", 0)
+    n_scoring = fusion_quality.get("annotated_by_scoring", 0)
+    n_unknown = fusion_quality.get("unknown", 0)
+    n_ambiguity = fusion_quality.get("ambiguity", 0)
+
+    print("\n" + "=" * 60)
+    print("Annotation Quality Summary")
+    print("=" * 60)
+    print(f"  PASS rate:          {pass_rate * 100:.1f}%")
+    print(f"  Annotated:          {n_rule} by rule, {n_scoring} by scoring")
+    print(f"  Unknown:            {n_unknown}/{n_total}")
+    if n_ambiguity > 0:
+        print(f"  ⚠  High ambiguity:  {n_ambiguity} cluster(s) matched ≥3 rules")
+    if pass_rate < 0.1:
+        print(f"  ⚠  KB blind spot detected")
+        rec = "relaxed" if pass_rate < 0.1 else "deep" if pass_rate < 0.3 else "default"
+        print(f"  \U0001f4a1 Recommended:       strictness='{rec}'")
+    print()
+
+    if pass_rate < 0.1:
+        rec = "relaxed" if pass_rate < 0.1 else "deep"
+        try:
+            choice = input(
+                "KB coverage is very low on this dataset. Options:\n"
+                f"  [r] Re-annotate with strictness='{rec}'\n"
+                "  [s] Continue with score_genes fallback\n"
+                "  [c] Continue with current labels (not recommended)\n"
+                "  [a] Abort\n"
+                "Choice> "
+            ).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            logger.warning("Interactive input interrupted — continuing")
+            return
+
+        if choice == 'r':
+            logger.info(
+                "User chose: re-annotate with strictness='%s'", rec,
+            )
+            print(f"\nTo re-annotate, set in your config:\n"
+                  f"  CFG.expert_rule_strictness = '{rec}'\n"
+                  f"Or pass --config with the updated setting.\n")
+        elif choice == 's':
+            logger.info("User chose: score_genes fallback")
+            print("Set CFG.tissue_kb = '' to use score_genes mode.\n")
+        elif choice == 'a':
+            raise SystemExit("Aborted by user.")
+        else:
+            logger.info("User chose: continue with current labels")
 
 
 # ═══════════════════════════════════════════════════════════════════════

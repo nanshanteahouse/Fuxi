@@ -39,6 +39,9 @@ class FusionDecision(NamedTuple):
         What AI suggested (if AI was called).
     explanation : str
         Human-readable explanation.
+    alternative_rules : list
+        Other expert rules that also matched this cluster (if expert_rule
+        was the winning method).  Empty list otherwise.
     """
     cell_type: str
     confidence: str
@@ -48,6 +51,7 @@ class FusionDecision(NamedTuple):
     ai_agreed: bool
     ai_suggested: str
     explanation: str
+    alternative_rules: list
 
 
 # Decision priority tiers — evaluated in order.
@@ -110,10 +114,14 @@ def _explain(
     best_type: Optional[str],
     ai_suggestion: Optional[str],
     ai_agreed: bool,
+    alternative_rules: Optional[list] = None,
 ) -> str:
     """Build a human-readable explanation."""
     if method == 'expert_rule':
         parts = [f"Expert rule matched: {cell_type}"]
+        if alternative_rules and len(alternative_rules) > 1:
+            alt_names = [r.get("action") for r in alternative_rules[1:]]
+            parts.append(f"(also matched rules: {', '.join(alt_names)})")
         if score > 0:
             parts.append(f"(marker score: {score:.3f})")
     elif method == 'unknown':
@@ -151,6 +159,7 @@ def fuse_evidence(
     kb: Optional[dict] = None,
     cluster_markers: Optional[pd.DataFrame] = None,
     ai_suggestion: Optional[str] = None,
+    alternative_rules: Optional[list] = None,
 ) -> 'FusionDecision':
     """Combine marker scores, expert rules, and AI into one decision.
 
@@ -167,6 +176,9 @@ def fuse_evidence(
         Marker DataFrame for this cluster (reserved for future use).
     ai_suggestion : str or None
         AI-proposed cell type, if available.
+    alternative_rules : list or None
+        Other expert rules that also matched (from
+        :func:`apply_expert_rules`' second return element).
 
     Returns
     -------
@@ -187,7 +199,9 @@ def fuse_evidence(
             explanation=_explain(
                 expert_rule_result, 'expert_rule', rule_score, rule_n,
                 expert_rule_result, ai_suggestion, ai_agreed,
+                alternative_rules=alternative_rules,
             ),
+            alternative_rules=alternative_rules or [],
         )
 
     # ── No scores → early exit ─────────────────────────────────────────
@@ -201,6 +215,7 @@ def fuse_evidence(
             ai_agreed=False,
             ai_suggested=ai_suggestion or '',
             explanation="No marker scores available for this cluster.",
+            alternative_rules=[],
         )
 
     # ── Find the best-scoring cell type ─────────────────────────────────
@@ -227,6 +242,7 @@ def fuse_evidence(
                     'Unknown', 'unknown', best_score, n_markers,
                     best_type, ai_suggestion, False,
                 ),
+                alternative_rules=alternative_rules or [],
             )
 
         # Tiers 1–3: marker-scoring-based decisions
@@ -250,11 +266,12 @@ def fuse_evidence(
                 best_type, tier_name, best_score, n_markers,
                 best_type, ai_suggestion, ai_agreed,
             ),
+            alternative_rules=[],
         )
 
     # Fallback (should never reach here — 'unknown' always matches)
     return FusionDecision('Unknown', 'unknown', 0.0, 'unknown', 0, False, '',
-                          'Fallback: no tier matched.')
+                          'Fallback: no tier matched.', [])
 
 
 def fuse_all_clusters(
@@ -263,7 +280,8 @@ def fuse_all_clusters(
     kb: Optional[dict] = None,
     all_marker_dfs: Optional[pd.DataFrame] = None,
     ai_results: Optional[dict] = None,
-) -> list:
+    return_quality: bool = False,
+) -> list | tuple[list, dict]:
     """Process all clusters and return a list of :class:`FusionDecision`.
 
     Parameters
@@ -278,11 +296,15 @@ def fuse_all_clusters(
         Concatenated ``rank_genes_groups`` output with a ``cluster`` column.
     ai_results : dict or None
         ``{cluster_id: AI-suggested cell type}``.
+    return_quality : bool
+        When ``True``, also return a quality metadata dict
+        ``{annotated_by_rule, unknown, ambiguity, ai_agreed}``.
 
     Returns
     -------
-    list[FusionDecision]
+    list[FusionDecision]  or  tuple[list[FusionDecision], dict]
         One decision per cluster, sorted by cluster id.
+        When *return_quality* is ``True``, returns ``(decisions, quality)``.
     """
     if ai_results is None:
         ai_results = {}
@@ -299,13 +321,38 @@ def fuse_all_clusters(
             cl_mask = all_marker_dfs['cluster'] == cl
             cl_markers = all_marker_dfs[cl_mask].copy()
 
+        rule_value = all_rules.get(cl)
+        if isinstance(rule_value, tuple):
+            rule_result, alt_rules = rule_value
+        else:
+            rule_result, alt_rules = rule_value, []
+
         decision = fuse_evidence(
             marker_scores=all_scores.get(cl, {}),
-            expert_rule_result=all_rules.get(cl),
+            expert_rule_result=rule_result,
             kb=kb,
             cluster_markers=cl_markers,
             ai_suggestion=ai_results.get(cl),
+            alternative_rules=alt_rules,
         )
         decisions.append(decision)
 
+    if return_quality:
+        quality = {
+            "annotated_by_rule": sum(
+                1 for d in decisions if d.method == "expert_rule"
+            ),
+            "annotated_by_scoring": sum(
+                1 for d in decisions if d.method.startswith("marker_scoring")
+            ),
+            "unknown": sum(
+                1 for d in decisions if d.confidence == "unknown"
+            ),
+            "ambiguity": sum(
+                1 for d in decisions if len(d.alternative_rules) >= 3
+            ),
+            "ai_agreed": sum(1 for d in decisions if d.ai_agreed),
+            "total": len(decisions),
+        }
+        return decisions, quality
     return decisions
