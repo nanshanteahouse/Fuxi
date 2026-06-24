@@ -9,6 +9,10 @@ Cells: moderate scale
 GEO: GSE246169
 """
 
+"""
+
+# NOTE (2026-06-24): This source has been DISABLED from KB merging.
+
 source_meta = {
     "id": "hoang2023",
     "short_name": "Hoang 2023 ASCL1",
@@ -21,6 +25,8 @@ source_meta = {
     "n_cells": 50000,
     "n_subtypes": 18,
     "n_groups": 9,
+    "class": "Mammalia",
+    "order": "Primates",
 }
 
 markers = {
@@ -352,3 +358,5 @@ conflicts = [
         "source": {"a": "hoang2023", "b": "peng2020"},
     },
 ]
+
+"""

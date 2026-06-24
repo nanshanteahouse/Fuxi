@@ -1,6 +1,13 @@
-2.0.0
+3.0.0
 
 Changelog:
+- 3.0.0: Added taxonomic classification (class/order) to all source_meta entries;
+  merge engine now propagates class/order per cell type with _meta top-level KV;
+  marker_scoring.py gains phylogenetic_weight() for taxonomic distance weighting;
+  Config gains target_class + target_order for user-controlled phylogenetic filtering;
+  added 3 new source files (zuo2024, hahn2023, menon2019) — 22 total cell types
+  across Mammalia, Reptilia, Teleostei, Cyclostomata;
+  synonyms expanded with developmental (PRPC/NRPC) and cross-species (Lamprey_RGC) entries.
 - 2.0.0: Initial merge engine. Merges 7 source files (peng2019, peng2020, hu2019,
   yan2020, chen2023, hoang2023, zhang2024) into unified KB with consensus scoring
   (gold/high/medium/low) and cross-source conflict detection.

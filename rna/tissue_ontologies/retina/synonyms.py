@@ -570,13 +570,12 @@ RETINA_SYNONYMS: dict[str, dict[str, str | list[str]]] = {
     },
 
     "Vascular_Endothelial": {
-        "display_name": "Vascular Endothelial",
+        "display_name": "Vascular Endothelial Cell",
         "synonyms": [
+            "Vascular Endothelial Cell",
+            "vascular endothelial cell",
             "Vascular Endothelial",
             "vascular endothelial",
-            "Vascular endothelial cell",
-            "vascular endothelial cell",
-            "Vascular endothelial cells",
             "Endothelial",
             "endothelial",
             "Endothelial cell",
@@ -585,6 +584,117 @@ RETINA_SYNONYMS: dict[str, dict[str, str | list[str]]] = {
             "Vascular Endothelial Cells",
             "vascular endothelial cells",
             "Endothelial Cells",
+        ],
+    },
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Developmental / Progenitor types (v3.0.0+, zuo2024 + hahn2023)
+    # ═══════════════════════════════════════════════════════════════════════
+
+    "PRPC": {
+        "display_name": "Proliferating Retinal Progenitor Cell",
+        "synonyms": [
+            "Proliferating Retinal Progenitor Cell",
+            "PRPC",
+            "proliferating RPC",
+            "Proliferating RPC",
+            "Retinal Progenitor Cell (proliferating)",
+            "early RPC",
+            "Early RPC",
+            "cycling RPC",
+            "Cycling RPC",
+            "Retinal Progenitor",
+            "retinal progenitor cell",
+            "proliferating retinal progenitor",
+            "RPC-proliferating",
+            "PRPCs",
+        ],
+    },
+
+    "NRPC_RGC_fate": {
+        "display_name": "Neurogenic RPC (RGC Fate)",
+        "synonyms": [
+            "Neurogenic RPC (RGC Fate)",
+            "NRPC_RGC_fate",
+            "RGC-fated neurogenic RPC",
+            "RGC-fated NRPC",
+            "RGC progenitor",
+            "RGC Precursor",
+            "ATOH7+ RPC",
+            "RGC-committed RPC",
+            "neurogenic retinal progenitor (RGC)",
+            "RGC-fated progenitor",
+            "developing RGC",
+            "RGC neuroblast",
+        ],
+    },
+
+    "NRPC_AC_HC_fate": {
+        "display_name": "Neurogenic RPC (AC/HC Fate)",
+        "synonyms": [
+            "Neurogenic RPC (AC/HC Fate)",
+            "NRPC_AC_HC_fate",
+            "AC/HC-fated NRPC",
+            "AC/HC progenitor",
+            "Amacrine/Horizontal progenitor",
+            "amacrine-horizontal precursor",
+            "PRDM13+ RPC",
+            "AC/HC-committed RPC",
+            "neurogenic retinal progenitor (AC/HC)",
+            "AC-HC precursor",
+        ],
+    },
+
+    "NRPC_Cone_BC_fate": {
+        "display_name": "Neurogenic RPC (Cone/BC Fate)",
+        "synonyms": [
+            "Neurogenic RPC (Cone/BC Fate)",
+            "NRPC_Cone_BC_fate",
+            "Cone/BC-fated NRPC",
+            "Cone-Bipolar progenitor",
+            "OTX2+ RPC",
+            "photoreceptor-bipolar precursor",
+            "Cone/BC progenitor",
+            "Cone/BC-committed RPC",
+            "neurogenic retinal progenitor (Cone/BC)",
+            "Cone-BC precursor",
+        ],
+    },
+
+    "NRPC_Rod_fate": {
+        "display_name": "Neurogenic RPC (Rod Fate)",
+        "synonyms": [
+            "Neurogenic RPC (Rod Fate)",
+            "NRPC_Rod_fate",
+            "Rod-fated NRPC",
+            "Rod progenitor",
+            "Rod Precursor",
+            "NRL+ RPC",
+            "CRX+ NRL+ RPC",
+            "Rod-committed RPC",
+            "neurogenic retinal progenitor (Rod)",
+            "rod photoreceptor precursor",
+            "developing rod",
+        ],
+    },
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Cross-species naming variants (v3.0.0+, hahn2023)
+    # ═══════════════════════════════════════════════════════════════════════
+
+    "Lamprey_RGC": {
+        "display_name": "Lamprey Retinal Ganglion Cell",
+        "synonyms": [
+            "Lamprey Retinal Ganglion Cell",
+            "Lamprey RGC",
+            "lamprey RGC",
+            "Cyclostome RGC",
+            "cyclostome RGC",
+            "Petromyzon RGC",
+            "sea lamprey RGC",
+            "lamprey retinal ganglion",
+            "Agnathan RGC",
+            "agnathan RGC",
         ],
     },
 }

@@ -62,7 +62,8 @@ def build_annotation_prompt(adata, tissue: str, species: str,
                             precomputed_rank: bool = False,
                             extra_context: str = "",
                             compact: bool = False,
-                            kb_candidates: list[str] | None = None):
+                            kb_candidates: list[str] | None = None,
+                            unconstrained: bool = False):
     """
     构建 RNA 聚类注释的完整提示词对。
 
@@ -78,6 +79,9 @@ def build_annotation_prompt(adata, tissue: str, species: str,
         extra_context: 额外上下文信息追加到用户提示词尾部
         compact: 若为 True，每聚类仅展示 top 5 而非 top 20 marker 基因
         kb_candidates: 若提供，限制 AI 只能从该列表中选取细胞类型名称
+        unconstrained: 若为 True，kb_candidates 作为参考而非约束；
+            AI 可以建议列表外的细胞类型，用 ``[NOVEL] `` 前缀标记
+            （v3.1.0+ 审计模式 / 新组织类型探测）
 
     返回:
         (system_prompt, user_prompt) 二元组，可直接传入 ai_query()
@@ -110,7 +114,21 @@ def build_annotation_prompt(adata, tissue: str, species: str,
 
     if kb_candidates:
         candidates_str = "\n".join(f"  - {c}" for c in kb_candidates)
-        constraint_text = f"""
+        if unconstrained:
+            reference_text = f"""
+
+REFERENCE — Known cell types in the knowledge base:
+{candidates_str}
+
+These are known cell types but you are NOT limited to this list.
+If a cluster's markers do NOT match any known type, suggest a cell
+type outside this list and prefix it with '[NOVEL] ' so it can be
+flagged for KB review.  Use this sparingly — only when the markers
+clearly indicate a cell type not represented in the reference list.
+"""
+            user_prompt += reference_text
+        else:
+            constraint_text = f"""
 
 IMPORTANT — Constrained naming:
 You MUST choose cell type names from this list ONLY:
@@ -121,7 +139,7 @@ Rules:
 - If NO type from the list fits well, output "Uncertain" and explain why
 - Do NOT create new type names outside this list
 """
-        user_prompt += constraint_text
+            user_prompt += constraint_text
 
     return ANNOTATION_SYSTEM_PROMPT, user_prompt
 

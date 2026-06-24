@@ -30,6 +30,10 @@ def run_scrublet_sample(adata_sub, sample_name, cfg):
             min_gene_variability_pctl=cfg.scrublet_min_gene_var_pctl,
             n_prin_comps=cfg.scrublet_n_prin_comps,
         )
+        if predicted is None:
+            warnings.warn(f"Scrublet auto-threshold failed for {sample_name}, "
+                          f"falling back to manual threshold={cfg.scrublet_expected_doublet_rate}")
+            predicted = scrub.call_doublets(threshold=cfg.scrublet_expected_doublet_rate)
         return scores, predicted
     except Exception as e:
         import warnings
@@ -88,7 +92,7 @@ def detect_doublets_parallel(adata, cfg, log):
         results.append(run_scrublet_sample(sub, name, cfg))
 
     if small_subsets:
-        n_jobs = min(cfg.n_jobs, len(small_names))
+        n_jobs = min(cfg.n_jobs or os.cpu_count() or 1, len(small_names))
         log.info("  Small samples — processing %d groups in parallel (n_jobs=%d)",
                  len(small_names), n_jobs)
         small_results = Parallel(n_jobs=n_jobs)(

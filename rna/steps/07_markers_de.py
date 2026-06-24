@@ -96,7 +96,7 @@ def layer2_pairwise_de(adata, CFG, log, primary_col=None):
     ]
 
     if tasks:
-        n_jobs = min(getattr(CFG, 'n_jobs', 4), len(tasks))
+        n_jobs = min(getattr(CFG, 'n_jobs', 4) or os.cpu_count() or 1, len(tasks))
         results = Parallel(n_jobs=n_jobs, prefer='threads', require='sharedmem')(
             delayed(_layer2_one_pair)(ct, s1, s2, adata, ct_col, CFG, log)
             for ct, s1, s2 in tasks
@@ -221,6 +221,23 @@ def main():
         log.warning("05_annotated.h5ad not found, falling back to: %s", input_h5ad)
     adata = sc.read(input_h5ad)
     log.info("Loaded: %s — %d cells", input_h5ad, adata.n_obs)
+
+    # Quality awareness (v3.1.0+): check marker_validation PASS rate
+    _pass_rate = None
+    if 'marker_validation' in adata.obs and adata.n_obs > 0:
+        _pass_cells = (adata.obs['marker_validation'] == 'PASS').sum()
+        _pass_rate = _pass_cells / adata.n_obs
+        log.info("marker_validation PASS rate: %.1f%%", _pass_rate * 100)
+        _pass_rate_min = getattr(CFG, 'marker_validation_pass_rate_min', 0.1)
+        if _pass_rate < _pass_rate_min:
+            log.warning(
+                "⚠  marker_validation PASS rate %.1f%% (<%.0f%%) — "
+                "DE genes are computed on potentially unreliable cell_type "
+                "labels. Results should be interpreted with caution.",
+                _pass_rate * 100, _pass_rate_min * 100,
+            )
+    else:
+        log.info("No marker_validation column — skipping quality check.")
 
     # 自动检测注释层级列
     annotation_cols = []

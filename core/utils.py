@@ -38,6 +38,23 @@ if 'microsoft' in platform.release().lower():
     os.environ.setdefault('HDF5_USE_FILE_LOCKING', 'FALSE')
 
 
+# ── Auto-load .env ──────────────────────────────────────────────────
+# Standalone step scripts (python rna/steps/00_load.py --config=...)
+# call resolve_config() but don't load the .env file beforehand.
+# run_pipeline.py already does this, but steps spawned via subprocess
+# inherit the parent env anyway — the real fix is for direct runs.
+try:
+    from dotenv import load_dotenv
+    _dotenv_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        '.env',
+    )
+    if os.path.exists(_dotenv_path):
+        load_dotenv(_dotenv_path, override=True)
+except ImportError:
+    pass
+
+
 # ── Cross-platform path helpers ─────────────────────────────────────
 _DATA_ROOT_CACHE: Optional[str] = None
 _REPO_ROOT_CACHE: Optional[str] = None
@@ -248,6 +265,15 @@ def resolve_config(config_path: Optional[str] = None):
     # Auto-detect project_dir from config file location if not explicitly set.
     if not mod.CFG.project_dir:
         mod.CFG.project_dir = os.path.dirname(config_path)
+
+    # ── Resolve n_jobs ───────────────────────────────────────────────
+    # 0 means "auto-detect" but joblib.Parallel rejects 0 outright.
+    # Resolve here so both standalone step scripts and subprocess steps
+    # get a usable value (run_pipeline.py also does this, but steps
+    # shouldn't depend on the launcher).
+    _nc = getattr(mod.CFG, 'n_jobs', 0)
+    if _nc == 0:
+        mod.CFG.n_jobs = os.cpu_count() or 1
 
     mod.CFG.resolve_paths()
     return mod.CFG

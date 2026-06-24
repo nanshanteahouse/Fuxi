@@ -47,6 +47,12 @@ class AIConfig:
     ai_interpretation: bool = True
     ai_cache_responses: bool = True
 
+    # Unconstrained annotation mode (v3.1.0+).
+    # When True, AI is NOT constrained to KB candidates and can freely
+    # suggest cell types.  Useful for audit mode (KB blind-spot detection)
+    # or novel tissue types.  Default False (backward compatible).
+    unconstrained_annotation: bool = False
+
 
 @dataclass
 class Config:
@@ -213,6 +219,59 @@ class Config:
     tissue_kb: str = ""
     tissue_ontology: str = ""
 
+    # Phylogenetic filtering (v3.0.0+ KB feature).
+    # When non-empty, marker_scoring applies taxonomic weighting.
+    #   target_class  (str): Desired class (纲), e.g. "Mammalia".
+    #   target_order  (str): Desired order (目), e.g. "Primates".
+    # Both default to "" (no filtering — all KB sources used at full weight).
+    target_class: str = ""
+    target_order: str = ""
+
+    # Expert-rule constraint parameters (v3.0.0+ self-audit).
+    #
+    # Layer 1 — Precise overrides (0 / 0.0 = use template default):
+    #   expert_rule_top_n (int):
+    #       Only examine the top-N DE genes for rule-matching.
+    #       0 = use the value from the strictness template.
+    #   expert_rule_pval_cutoff (float):
+    #       Only consider genes with pvals_adj < this value.
+    #       0.0 = use the value from the strictness template.
+    #
+    # Layer 2 — Convenience template:
+    #   expert_rule_strictness (str):
+    #       "strict"   → top_n=50,   pval=0.01  (mature tissue, high-confidence)
+    #       "default"  → top_n=50,   pval=0.05  (general purpose, built-in default)
+    #       "deep"     → top_n=200,  pval=0.05  (KB markers rank deep but significant)
+    #       "wide"     → top_n=1000, pval=0.05  (developmental data, first triggers appear)
+    #       "relaxed"  → top_n=5000, pval=0.05  (developmental/organoid sweet spot)
+    #       "manual"   → requires both top_n (>0) AND pval_cutoff (>0.0)
+    #
+    #   pval_cutoff stays ≤ 0.05 in ALL presets — this is the last line of
+    #   defence against noise-triggered rules.  To relax pval beyond 0.05,
+    #   you MUST use "manual" + explicit expert_rule_pval_cutoff.
+    expert_rule_strictness: str = "default"
+    expert_rule_top_n: int = 0
+    expert_rule_pval_cutoff: float = 0.0
+
+    # Marker validation thresholds (v3.1.0+).
+    # Controls how StandardOntology.validate() cross-checks assigned cell types
+    # against KB markers using top DE genes.
+    #   marker_validation_n_top_genes (int):
+    #       Number of top DE genes per cluster to compare.  Default 15.
+    #   marker_validation_min_overlap (float):
+    #       Minimum overlap ratio (found/KB_total) for PASS status.
+    #       Default 0.5 (backward compatible).
+    #   marker_validation_marginal_threshold (float):
+    #       Threshold for MARGINAL tier (PASS > MARGINAL > LOW > FAIL).
+    #       Default 0.25.  Set to 0 to disable MARGINAL tier.
+    #   marker_validation_pass_rate_min (float):
+    #       Minimum PASS cell-rate for trajectory quality gate (Step 08).
+    #       Also used by Steps 07/09 for quality warnings.  Default 0.1.
+    marker_validation_n_top_genes: int = 15
+    marker_validation_min_overlap: float = 0.5
+    marker_validation_marginal_threshold: float = 0.25
+    marker_validation_pass_rate_min: float = 0.1
+
     # ═══════════════════════════════════════════════════════════════════
     #  RNA: 差异表达分析
     # ═══════════════════════════════════════════════════════════════════
@@ -221,6 +280,10 @@ class Config:
     de_pval_cutoff: float = 0.05
     de_logfc_cutoff: float = 0.25
     de_stage_pairwise: bool = True
+    # When True and marker_validation pass_rate < threshold, Step 07
+    # automatically uses leiden-based grouping instead of cell_type labels.
+    # Default False: only warns, user decides.  (v3.1.0+)
+    de_auto_switch_on_low_quality: bool = False
 
     # ═══════════════════════════════════════════════════════════════════
     #  ATAC: 差异分析

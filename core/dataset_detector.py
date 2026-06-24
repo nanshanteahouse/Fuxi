@@ -9,7 +9,7 @@ dataset_detector.py — 自动检测数据组学类型
 核心映射表来自 architecture_review 第 5.4 节。
 
 用法:
-    python -m core.dataset_detector $FUXI_DATA_ROOT/GSE246169
+    python -m core.dataset_detector $FUXI_DATA_ROOT/your_dataset
     python -m core.dataset_detector $FUXI_DATA_ROOT/ --all
 """
 

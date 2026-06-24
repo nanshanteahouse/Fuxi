@@ -48,9 +48,12 @@ def validate_kb(kb: Dict[str, Any]) -> Tuple[bool, List[str]]:
     """
     errors: List[str] = []
 
-    # Collect all known type keys (excluding "expert_rules")
+    # Collect all known type keys (excluding "expert_rules" and "_meta")
     type_keys: Set[str] = {
-        k for k in kb if k != "expert_rules" and isinstance(kb[k], dict)
+        k for k in kb
+        if k not in ("expert_rules", "_meta")
+        and not k.startswith("_")
+        and isinstance(kb[k], dict)
     }
 
     # Known species across the entire KB
@@ -126,10 +129,12 @@ def validate_kb(kb: Dict[str, Any]) -> Tuple[bool, List[str]]:
         if not markers_present:
             errors.append(f"expert_rules[{idx}]: empty condition.markers_present")
 
-        # Build deterministic key for condition
+        # Build deterministic key for condition (include absent markers)
+        markers_absent = condition.get("markers_absent", [])
+        absent_str = "!" + ",".join(sorted(markers_absent)) if markers_absent else ""
         cond_key = ";".join(
             f"{g}:{markers_present[g]}" for g in sorted(markers_present.keys())
-        )
+        ) + absent_str
 
         if cond_key in seen_conditions and seen_conditions[cond_key] != action:
             errors.append(

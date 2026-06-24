@@ -357,7 +357,9 @@ def unified_annotate(adata, CFG, logger):
             _sys_module.modules.pop(_k, None)
     try:
         from rna.utils.marker_scoring import (
-            score_cluster_against_kb, apply_expert_rules, annotate_all_clusters,
+            score_cluster_against_kb, apply_expert_rules,
+            annotate_all_clusters, resolve_expert_rule_params,
+            detect_low_quality_cluster,
         )
         from rna.utils.evidence_fusion import fuse_all_clusters
     finally:
@@ -365,9 +367,22 @@ def unified_annotate(adata, CFG, logger):
 
     species = CFG.species
 
+    # ── Resolve expert-rule constraint parameters ────────────────────
+    rule_top_n, rule_pval = resolve_expert_rule_params(
+        strictness=getattr(CFG, 'expert_rule_strictness', 'default'),
+        top_n=getattr(CFG, 'expert_rule_top_n', 0),
+        pval_cutoff=getattr(CFG, 'expert_rule_pval_cutoff', 0.0),
+    )
+    logger.info(
+        "Expert rules: strictness=%s → top_n=%d, pval_cutoff=%.3f",
+        getattr(CFG, 'expert_rule_strictness', 'default'),
+        rule_top_n, rule_pval,
+    )
+
     # ── Compute per-cluster marker scores and expert rules ───────────
     all_scores = {}
     all_rules = {}
+    low_quality_clusters: dict[str, str] = {}  # cluster_str → reason
     clusters = sorted(
         marker_df['cluster'].unique(),
         key=lambda x: int(x) if str(x).isdigit() else str(x),
@@ -378,10 +393,25 @@ def unified_annotate(adata, CFG, logger):
         cl_data = marker_df[cl_mask].copy()
         lfc_idx = cl_data['logfoldchanges'].argsort()[::-1]
         cl_data = cl_data.iloc[lfc_idx]
-        all_scores[cl_str] = score_cluster_against_kb(kb, cl_data, species=species)
-        all_rules[cl_str] = apply_expert_rules(kb, cl_data)
 
-    decisions = fuse_all_clusters(all_scores, all_rules, kb=kb, all_marker_dfs=marker_df)
+        # Path C: detect low-quality clusters (mito/ribo dominated)
+        is_lq, lq_reason = detect_low_quality_cluster(cl_data)
+        if is_lq:
+            low_quality_clusters[cl_str] = lq_reason
+            logger.info("Cluster %s flagged as low-quality: %s", cl_str, lq_reason)
+
+        all_scores[cl_str] = score_cluster_against_kb(
+            kb, cl_data, species=species, adaptive_top_n=True,
+        )
+        all_rules[cl_str] = apply_expert_rules(kb, cl_data,
+                                                top_n=rule_top_n,
+                                                pval_cutoff=rule_pval)
+
+    decisions, fusion_quality = fuse_all_clusters(
+        all_scores, all_rules, kb=kb, all_marker_dfs=marker_df,
+        return_quality=True,
+        low_quality_clusters=low_quality_clusters,
+    )
     logger.info("Evidence fusion: %d clusters processed", len(decisions))
 
     if not decisions:
@@ -408,7 +438,7 @@ def unified_annotate(adata, CFG, logger):
         logger.info(
             "AI fallback for %d low-confidence clusters", len(low_conf_clusters)
         )
-        kb_candidates = sorted([k for k in kb if k != 'expert_rules'])
+        kb_candidates = sorted([k for k in kb if k != 'expert_rules' and not k.startswith('_')])
         tissue = CFG.tissue
         stages_present = (
             sorted(adata.obs['stage'].unique().tolist())
@@ -418,14 +448,17 @@ def unified_annotate(adata, CFG, logger):
             f"Developmental stages: {stages_present}" if stages_present else ""
         )
 
+        # Unconstrained annotations require build_annotation_prompt import here
         from core.ai_prompts import build_annotation_prompt
         from core.ai_caller import ai_query
 
+        unconstrained = getattr(CFG.ai, 'unconstrained_annotation', False)
         sys_prompt, user_prompt = build_annotation_prompt(
             adata, tissue, species, precomputed_rank=True,
             extra_context=extra_context,
             compact=n_clusters > 20,
             kb_candidates=kb_candidates,
+            unconstrained=unconstrained,
         )
 
         try:
@@ -443,6 +476,7 @@ def unified_annotate(adata, CFG, logger):
                     all_scores, all_rules, kb=kb,
                     all_marker_dfs=marker_df,
                     ai_results=ai_results,
+                    low_quality_clusters=low_quality_clusters,
                 )
                 decision_map = dict(zip(decision_clusters, decisions))
         except Exception as exc:
@@ -452,6 +486,31 @@ def unified_annotate(adata, CFG, logger):
 
     # ── g. Map decisions to adata.obs ─────────────────────────────────────
     leiden_str = adata.obs['leiden'].astype(str)
+
+    # For low-quality clusters, downgrade: force Unknown + annotate reason.
+    _forced_unknown = 0
+    for cl_str, reason in low_quality_clusters.items():
+        if cl_str in decision_map and decision_map[cl_str].confidence != 'unknown':
+            old_ct = adata.obs['cell_type'].iloc[0] if cl_str == '0' else '—'
+            decision_map[cl_str] = decision_map[cl_str]._replace(
+                cell_type='Unknown',
+                confidence='unknown',
+                method='unknown',
+                explanation=(
+                    "Low-quality cluster ({}) — {}"
+                    .format(reason, decision_map[cl_str].explanation[:120])
+                ),
+            )
+            _forced_unknown += 1
+    if _forced_unknown:
+        logger.info(
+            "Downgraded %d low-quality cluster(s) to Unknown: %s",
+            _forced_unknown,
+            ", ".join(
+                "{} ({})".format(k, v) for k, v in low_quality_clusters.items()
+                if k in decision_map
+            ),
+        )
 
     adata.obs['cell_type'] = leiden_str.map(
         {k: v.cell_type for k, v in decision_map.items()}
@@ -489,6 +548,9 @@ def unified_annotate(adata, CFG, logger):
             'n_markers_found': v.n_markers_found,
             'ai_agreed': v.ai_agreed,
             'ai_suggested': v.ai_suggested,
+            'diagnostic_category': v.diagnostic.category if v.diagnostic else None,
+            'diagnostic_detail': v.diagnostic.detail if v.diagnostic else None,
+            'top_competitors': v.diagnostic.top_competitors if v.diagnostic else [],
         }) for k, v in decision_map.items()}
     )
 
@@ -507,6 +569,7 @@ def unified_annotate(adata, CFG, logger):
             'ai_agreed': d.ai_agreed,
             'ai_suggested': d.ai_suggested,
             'reasoning': d.explanation,
+            'diagnostic_category': d.diagnostic.category if d.diagnostic else '',
         })
     ann_df = pd.DataFrame(ann_records)
     ann_csv = os.path.join(CFG.table_dir, 'cell_type_annotations.csv')
@@ -549,7 +612,119 @@ def unified_annotate(adata, CFG, logger):
     meta_df.to_csv(meta_csv, index=False)
     logger.info("Cell metadata exported: %s", meta_csv)
 
+    # ── k. Annotation quality report ────────────────────────────────────────
+    _write_quality_report(adata, ann_records, fusion_quality, CFG, logger)
+
+    # ── l. Interactive review (--interactive flag) ──────────────────────────
+    if getattr(CFG, 'interactive', False):
+        _interactive_annotation_review(adata, fusion_quality, CFG, logger)
+
     return decision_map
+
+
+def _write_quality_report(adata, ann_records, fusion_quality, CFG, logger):
+    """Write 05_annotation_quality.json summarising annotation health."""
+    import json as _json
+
+    pass_cells = (
+        (adata.obs['marker_validation'] == 'PASS').sum()
+        if 'marker_validation' in adata.obs else 0
+    )
+    pass_rate = pass_cells / max(adata.n_obs, 1)
+
+    ambiguity_clusters = []
+    for rec in ann_records:
+        reasoning = rec.get('reasoning', '')
+        if 'also matched rules:' in reasoning:
+            ambiguity_clusters.append(rec['cluster'])
+
+    quality = {
+        "pass_rate": round(pass_rate, 4),
+        "total_clusters": len(ann_records),
+        "annotated_by_rule": fusion_quality.get("annotated_by_rule", 0),
+        "annotated_by_scoring": fusion_quality.get("annotated_by_scoring", 0),
+        "unknown": fusion_quality.get("unknown", 0),
+        "ambiguity_clusters": ambiguity_clusters,
+        "ai_disagreement_rate": round(
+            sum(1 for r in ann_records if not r.get('ai_agreed', True))
+            / max(len(ann_records), 1), 4,
+        ),
+        "kb_blind_spot": pass_rate < 0.1,
+        "recommended_strictness": (
+            "relaxed" if pass_rate < 0.1 else
+            "deep" if pass_rate < 0.3 else
+            "default"
+        ),
+    }
+
+    quality_path = os.path.join(CFG.table_dir, '05_annotation_quality.json')
+    with open(quality_path, 'w', encoding='utf-8') as f:
+        _json.dump(quality, f, indent=2)
+    logger.info(
+        "Annotation quality report: %s (pass_rate=%.1f%%)",
+        quality_path, quality["pass_rate"] * 100,
+    )
+
+
+def _interactive_annotation_review(adata, fusion_quality, CFG, logger):
+    """Present annotation quality summary and offer remediation choices.
+
+    Only called when ``CFG.interactive`` is ``True``.
+    """
+    pass_cells = (
+        (adata.obs['marker_validation'] == 'PASS').sum()
+        if 'marker_validation' in adata.obs else 0
+    )
+    pass_rate = pass_cells / max(adata.n_obs, 1)
+    n_total = fusion_quality.get("total", 0)
+    n_rule = fusion_quality.get("annotated_by_rule", 0)
+    n_scoring = fusion_quality.get("annotated_by_scoring", 0)
+    n_unknown = fusion_quality.get("unknown", 0)
+    n_ambiguity = fusion_quality.get("ambiguity", 0)
+
+    print("\n" + "=" * 60)
+    print("Annotation Quality Summary")
+    print("=" * 60)
+    print(f"  PASS rate:          {pass_rate * 100:.1f}%")
+    print(f"  Annotated:          {n_rule} by rule, {n_scoring} by scoring")
+    print(f"  Unknown:            {n_unknown}/{n_total}")
+    if n_ambiguity > 0:
+        print(f"  ⚠  High ambiguity:  {n_ambiguity} cluster(s) matched ≥3 rules")
+    if pass_rate < 0.1:
+        print(f"  ⚠  KB blind spot detected")
+        rec = "relaxed" if pass_rate < 0.1 else "deep" if pass_rate < 0.3 else "default"
+        print(f"  \U0001f4a1 Recommended:       strictness='{rec}'")
+    print()
+
+    if pass_rate < 0.1:
+        rec = "relaxed" if pass_rate < 0.1 else "deep"
+        try:
+            choice = input(
+                "KB coverage is very low on this dataset. Options:\n"
+                f"  [r] Re-annotate with strictness='{rec}'\n"
+                "  [s] Continue with score_genes fallback\n"
+                "  [c] Continue with current labels (not recommended)\n"
+                "  [a] Abort\n"
+                "Choice> "
+            ).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            logger.warning("Interactive input interrupted — continuing")
+            return
+
+        if choice == 'r':
+            logger.info(
+                "User chose: re-annotate with strictness='%s'", rec,
+            )
+            print(f"\nTo re-annotate, set in your config:\n"
+                  f"  CFG.expert_rule_strictness = '{rec}'\n"
+                  f"Or pass --config with the updated setting.\n")
+        elif choice == 's':
+            logger.info("User chose: score_genes fallback")
+            print("Set CFG.tissue_kb = '' to use score_genes mode.\n")
+        elif choice == 'a':
+            raise SystemExit("Aborted by user.")
+        else:
+            logger.info("User chose: continue with current labels")
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -644,7 +819,12 @@ def main():
         ann_result = unified_annotate(adata, CFG, log)
         if ann_result is not None:
             if std is not None:
-                validation_results = std.validate(adata)
+                validation_results = std.validate(
+                    adata,
+                    top_n=CFG.marker_validation_n_top_genes,
+                    min_overlap=CFG.marker_validation_min_overlap,
+                    marginal_threshold=CFG.marker_validation_marginal_threshold,
+                )
                 log.info("Marker validation: %d/%d PASS",
                          sum(1 for r in validation_results if r['status'] == 'PASS'),
                          len(validation_results))
@@ -659,7 +839,12 @@ def main():
         ann_result = ai_annotate(adata, CFG, log, std=std)
         if ann_result is not None:
             if std is not None:
-                validation_results = std.validate(adata)
+                validation_results = std.validate(
+                    adata,
+                    top_n=CFG.marker_validation_n_top_genes,
+                    min_overlap=CFG.marker_validation_min_overlap,
+                    marginal_threshold=CFG.marker_validation_marginal_threshold,
+                )
                 log.info("Marker validation: %d/%d PASS",
                          sum(1 for r in validation_results if r['status'] == 'PASS'),
                          len(validation_results))
@@ -673,7 +858,12 @@ def main():
     # ── Score_genes \u6a21\u5f0f (\u6240\u6709\u8def\u5f84\u56de\u9000) ─────────────────────────────────
     score_genes_mode(adata, CFG, log)
     if std is not None:
-        validation_results = std.validate(adata)
+        validation_results = std.validate(
+            adata,
+            top_n=CFG.marker_validation_n_top_genes,
+            min_overlap=CFG.marker_validation_min_overlap,
+            marginal_threshold=CFG.marker_validation_marginal_threshold,
+        )
         log.info("Marker validation: %d/%d PASS",
                  sum(1 for r in validation_results if r['status'] == 'PASS'),
                  len(validation_results))
