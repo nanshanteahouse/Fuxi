@@ -96,7 +96,7 @@ def layer2_pairwise_de(adata, CFG, log, primary_col=None):
     ]
 
     if tasks:
-        n_jobs = min(getattr(CFG, 'n_jobs', 4), len(tasks))
+        n_jobs = min(getattr(CFG, 'n_jobs', 4) or os.cpu_count() or 1, len(tasks))
         results = Parallel(n_jobs=n_jobs, prefer='threads', require='sharedmem')(
             delayed(_layer2_one_pair)(ct, s1, s2, adata, ct_col, CFG, log)
             for ct, s1, s2 in tasks
