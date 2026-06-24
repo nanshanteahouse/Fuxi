@@ -9,6 +9,10 @@ Cells: moderate scale
 GEO: GSE246169
 """
 
+"""
+
+# NOTE (2026-06-24): This source has been DISABLED from KB merging.
+
 source_meta = {
     "id": "hoang2023",
     "short_name": "Hoang 2023 ASCL1",
@@ -354,3 +358,5 @@ conflicts = [
         "source": {"a": "hoang2023", "b": "peng2020"},
     },
 ]
+
+"""

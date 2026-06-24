@@ -34,6 +34,8 @@ def load_all_sources(sources_dir: Optional[str] = None) -> List[Dict[str, Any]]:
     """Auto-discover and import all ``.py`` source files from ``sources/``.
 
     Excludes files whose name starts with ``_`` (notably ``_TEMPLATE.py``).
+    Also excludes files whose first 20 lines contain a ``DISABLED`` marker
+    (e.g. sources that have been commented out pending formal publication).
 
     Parameters
     ----------
@@ -61,8 +63,16 @@ def load_all_sources(sources_dir: Optional[str] = None) -> List[Dict[str, Any]]:
         if entry.startswith("_"):
             continue  # skip _TEMPLATE.py etc.
 
-        module_name = entry[:-3]
         filepath = os.path.join(sources_dir, entry)
+
+        # Check for DISABLED marker before importing
+        with open(filepath, "r", encoding="utf-8") as fh:
+            head = "".join(fh.readline() for _ in range(20))
+        if "# DISABLED" in head or "# NOTE" in head and "DISABLED" in head:
+            logger.info("Skipping disabled source: %s", entry)
+            continue
+
+        module_name = entry[:-3]
 
         spec = importlib.util.spec_from_file_location(module_name, filepath)
         if spec is None or spec.loader is None:
@@ -77,6 +87,9 @@ def load_all_sources(sources_dir: Optional[str] = None) -> List[Dict[str, Any]]:
             continue
 
         meta = getattr(mod, "source_meta", {})
+        if not meta:
+            logger.warning("Skipping source with empty source_meta: %s", entry)
+            continue
         sources.append(
             {
                 "meta": meta,
