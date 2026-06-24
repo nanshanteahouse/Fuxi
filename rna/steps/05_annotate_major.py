@@ -359,6 +359,7 @@ def unified_annotate(adata, CFG, logger):
         from rna.utils.marker_scoring import (
             score_cluster_against_kb, apply_expert_rules,
             annotate_all_clusters, resolve_expert_rule_params,
+            detect_low_quality_cluster,
         )
         from rna.utils.evidence_fusion import fuse_all_clusters
     finally:
@@ -381,6 +382,7 @@ def unified_annotate(adata, CFG, logger):
     # ── Compute per-cluster marker scores and expert rules ───────────
     all_scores = {}
     all_rules = {}
+    low_quality_clusters: dict[str, str] = {}  # cluster_str → reason
     clusters = sorted(
         marker_df['cluster'].unique(),
         key=lambda x: int(x) if str(x).isdigit() else str(x),
@@ -391,7 +393,16 @@ def unified_annotate(adata, CFG, logger):
         cl_data = marker_df[cl_mask].copy()
         lfc_idx = cl_data['logfoldchanges'].argsort()[::-1]
         cl_data = cl_data.iloc[lfc_idx]
-        all_scores[cl_str] = score_cluster_against_kb(kb, cl_data, species=species)
+
+        # Path C: detect low-quality clusters (mito/ribo dominated)
+        is_lq, lq_reason = detect_low_quality_cluster(cl_data)
+        if is_lq:
+            low_quality_clusters[cl_str] = lq_reason
+            logger.info("Cluster %s flagged as low-quality: %s", cl_str, lq_reason)
+
+        all_scores[cl_str] = score_cluster_against_kb(
+            kb, cl_data, species=species, adaptive_top_n=True,
+        )
         all_rules[cl_str] = apply_expert_rules(kb, cl_data,
                                                 top_n=rule_top_n,
                                                 pval_cutoff=rule_pval)
@@ -470,6 +481,31 @@ def unified_annotate(adata, CFG, logger):
 
     # ── g. Map decisions to adata.obs ─────────────────────────────────────
     leiden_str = adata.obs['leiden'].astype(str)
+
+    # For low-quality clusters, downgrade: force Unknown + annotate reason.
+    _forced_unknown = 0
+    for cl_str, reason in low_quality_clusters.items():
+        if cl_str in decision_map and decision_map[cl_str].confidence != 'unknown':
+            old_ct = adata.obs['cell_type'].iloc[0] if cl_str == '0' else '—'
+            decision_map[cl_str] = decision_map[cl_str]._replace(
+                cell_type='Unknown',
+                confidence='unknown',
+                method='unknown',
+                explanation=(
+                    "Low-quality cluster ({}) — {}"
+                    .format(reason, decision_map[cl_str].explanation[:120])
+                ),
+            )
+            _forced_unknown += 1
+    if _forced_unknown:
+        logger.info(
+            "Downgraded %d low-quality cluster(s) to Unknown: %s",
+            _forced_unknown,
+            ", ".join(
+                "{} ({})".format(k, v) for k, v in low_quality_clusters.items()
+                if k in decision_map
+            ),
+        )
 
     adata.obs['cell_type'] = leiden_str.map(
         {k: v.cell_type for k, v in decision_map.items()}

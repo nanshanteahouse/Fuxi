@@ -129,7 +129,12 @@ def _get_canonical_markers(kb: Dict[str, Any], type_key: str,
     if species:
         type_species = type_data.get("species", [])
         if species not in type_species:
-            # Relax species filter if genes are mapped to human orthologs
+            # Try common-name ↔ scientific-name normalisation.
+            if _species_matches(species, type_species):
+                # Species matches after normalisation — keep markers.
+                return list(result)
+            # Species does not match at all.
+            # Relax filter if genes are mapped to human orthologs.
             if gene_names and _looks_mapped_to_target(gene_names):
                 logger.debug(
                     "Species '%s' not in KB for type '%s', but genes appear "
@@ -156,6 +161,50 @@ def _looks_mapped_to_target(gene_names: List[str],
     n_ensembl = sum(1 for g in sample if re.match(r'^ENS[A-Z]{0,4}G\d{11}$', str(g)))
     ratio_mapped = 1.0 - (n_unmapped + n_ensembl) / len(sample)
     return ratio_mapped >= 0.75
+
+
+# Common-name → scientific-name mappings used by _species_matches().
+# Extend this table as new species are added to the KB.
+_SPECIES_SYNONYMS: Dict[str, str] = {
+    "human": "Homo sapiens",
+    "mouse": "Mus musculus",
+    "macaque": "Macaca fascicularis",
+    "marmoset": "Callithrix jacchus",
+    "zebrafish": "Danio rerio",
+    "chicken": "Gallus gallus",
+    "lamprey": "Petromyzon marinus",
+    "frog": "Xenopus laevis",
+    "pig": "Sus scrofa",
+    "cow": "Bos taurus",
+    "sheep": "Ovis aries",
+    "ferret": "Mustela putorius furo",
+    "squirrel": "Ictidomys tridecemlineatus",
+    "opossum": "Didelphis marsupialis",
+    "treeshrew": "Tupaia belangeri",
+    "anolis": "Anolis sagrei",
+    "deer_mouse": "Peromyscus maniculatus",
+    "striped_mouse": "Rhabdomys pumilio",
+}
+
+
+def _species_matches(user_species: str, kb_species_list: list[str]) -> bool:
+    """Return ``True`` if *user_species* matches any entry in *kb_species_list*.
+
+    Normalises common-name aliases (e.g. ``"human"`` → ``"Homo sapiens"``)
+    and performs case-insensitive comparison.
+    """
+    if not user_species or not kb_species_list:
+        return False
+    normalised_user = _SPECIES_SYNONYMS.get(
+        user_species.strip().lower(), user_species.strip()
+    )
+    for ks in kb_species_list:
+        normalised_ks = _SPECIES_SYNONYMS.get(
+            ks.strip().lower(), ks.strip()
+        )
+        if normalised_user.lower() == normalised_ks.lower():
+            return True
+    return False
 
 
 def _negative_marker_penalty(kb: Dict[str, Any], type_key: str,
@@ -348,7 +397,8 @@ def score_cluster_against_kb(kb: Dict[str, Any],
                              cluster_markers: pd.DataFrame,
                              species: Optional[str] = None,
                              target_class: str = "",
-                             target_order: str = ""
+                             target_order: str = "",
+                             adaptive_top_n: bool = False,
                              ) -> Dict[str, Score]:
     """Score one cluster against every cell type in the Knowledge Base.
 
@@ -359,8 +409,9 @@ def score_cluster_against_kb(kb: Dict[str, Any],
         structure) or a pre-built lookup from :func:`_build_kb_lookup`.
     cluster_markers : pd.DataFrame
         Top-N markers for a **single** cluster.  Must have columns
-        ``names``, ``logfoldchanges``, ``pvals_adj``.  The first 20 rows
-        are used as the cluster's marker set.
+        ``names``, ``logfoldchanges``, ``pvals_adj``.  Non-protein-coding
+        genes (lncRNA, MT-, RPL/RPS) are **automatically filtered out**
+        before scoring.
     species : str or None
         If set, only cell types matching this species are scored.
     target_class : str
@@ -370,12 +421,38 @@ def score_cluster_against_kb(kb: Dict[str, Any],
         Desired taxonomic order (目), e.g. ``"Primates"``.  Empty string
         (default) disables order-level weighting.  Only has effect when
         *target_class* is also non-empty.
+    adaptive_top_n : bool
+        When ``True``, start with ``top_n=20`` but expand to 50 or 100
+        if the KB-marker density in the top-20 is below 5%.  This helps
+        on developmental / organoid data where known markers rank deep
+        in the DE list.  Default ``False``.
 
     Returns
     -------
     Dict[str, Score]
         Mapping from ``type_key`` → :class:`Score` for each cell type.
     """
+    # ── Pre-filter: keep only protein-coding / meaningful genes ─────
+    from re import compile as _re_compile
+    _RE_LNCRNA = _re_compile(
+        r'^(LINC\d|AC\d|AL\d|AP\d|BX\d|FAM\d+[A-Z]|C\d+orf|'
+        r'RP\d+-|CTC-|CTD-|RP11-|XXyac-|LLNLF-|WI2-|XXbac-)'
+    )
+    _RE_RIBO = _re_compile(r'^(RPL|RPS|MRPL|MRPS)\d*')
+    # Filter: keep rows where names don't match noise patterns,
+    # preserving logFC sort order (caller pre-sorts).
+    _all_rows = cluster_markers.copy()
+    _keep_mask = pd.Series(True, index=_all_rows.index)
+    for _i, _row in _all_rows.iterrows():
+        _g = str(_row["names"])
+        if _g.startswith("MT-"):
+            _keep_mask[_i] = False
+        elif _RE_RIBO.match(_g):
+            _keep_mask[_i] = False
+        elif _RE_LNCRNA.match(_g):
+            _keep_mask[_i] = False
+    _filtered = _all_rows[_keep_mask]
+
     # ── Normalise input ─────────────────────────────────────────────
     sample_key = next((k for k in kb if k != "expert_rules"), None)
     is_raw = bool(sample_key and "markers" in kb[sample_key])
@@ -391,15 +468,28 @@ def score_cluster_against_kb(kb: Dict[str, Any],
         all_type_markers.update(entry.get("positive", []))
     background_size = max(len(all_type_markers), 1)
 
-    # Top-20 markers for this cluster.
+    # ── Adaptive top-N ──────────────────────────────────────────────
+    # Start at top_n=20.  If KB-marker density is <5%, expand to 50,
+    # then 100, then 200.  This helps when known markers rank deep on
+    # developmental / organoid data (KB self-audit Tier 0 finding).
     top_n = 20
-    top_markers = cluster_markers.head(top_n).copy()
+    top_markers = _filtered.head(top_n).copy()
     top_gene_set = set(top_markers["names"].tolist())
-
-    # Which top-20 genes fall within the KB background (union of all markers)?
-    # Only these enter the Fisher contingency table — genes outside the
-    # known marker universe are irrelevant for the enrichment test.
     top_in_bg = top_gene_set & all_type_markers
+
+    if adaptive_top_n:
+        for _candidate_n in (50, 100, 200):
+            if len(top_in_bg) / max(background_size, 1) >= 0.05:
+                break
+            _cand = _filtered.head(_candidate_n)
+            _cand_set = set(_cand["names"].tolist())
+            _cand_in_bg = _cand_set & all_type_markers
+            if len(_cand_in_bg) > len(top_in_bg):
+                top_n = _candidate_n
+                top_markers = _cand
+                top_gene_set = _cand_set
+                top_in_bg = _cand_in_bg
+
     n_top_in_bg = len(top_in_bg)
 
     results: Dict[str, Score] = {}
@@ -505,7 +595,8 @@ def annotate_all_clusters(kb_all_markers: Dict[str, Any],
                           all_marker_dfs: pd.DataFrame,
                           species: str,
                           target_class: str = "",
-                          target_order: str = ""
+                          target_order: str = "",
+                          adaptive_top_n: bool = False,
                           ) -> pd.DataFrame:
     """Score every cluster and assign the best-matching cell type.
 
@@ -524,6 +615,8 @@ def annotate_all_clusters(kb_all_markers: Dict[str, Any],
         :func:`score_cluster_against_kb`).
     target_order : str
         Taxonomic order for phylogenetic weighting.
+    adaptive_top_n : bool
+        Passed through to :func:`score_cluster_against_kb`.
 
     Returns
     -------
@@ -549,6 +642,7 @@ def annotate_all_clusters(kb_all_markers: Dict[str, Any],
         scores = score_cluster_against_kb(
             kb_all_markers, cl_sort, species=species,
             target_class=target_class, target_order=target_order,
+            adaptive_top_n=adaptive_top_n,
         )
 
         if not scores:
@@ -739,3 +833,39 @@ def apply_expert_rules(kb: Dict[str, Any],
         return None, []
     best = all_matched[0]
     return best.get("action"), all_matched
+
+
+def detect_low_quality_cluster(cluster_markers: pd.DataFrame,
+                                top_n: int = 20) -> tuple[bool, str]:
+    """Detect clusters dominated by mitochondrial or ribosomal genes.
+
+    Parameters
+    ----------
+    cluster_markers : pd.DataFrame
+        DE gene DataFrame for a single cluster, sorted by logFC descending.
+    top_n : int
+        How many top genes to examine.  Default 20.
+
+    Returns
+    -------
+    tuple[bool, str]
+        ``(is_low_quality, reason)``.  *reason* is an empty string when
+        the cluster is not flagged.
+    """
+    top = cluster_markers.head(top_n)
+    genes = top["names"].tolist()
+
+    n_mito = sum(1 for g in genes if str(g).startswith("MT-"))
+    n_ribo = sum(
+        1 for g in genes
+        if str(g).startswith(("RPL", "RPS", "MRPL", "MRPS"))
+    )
+
+    if n_mito >= 3:
+        return True, "mito_high ({} MT- genes in top-{})".format(n_mito, top_n)
+    if n_ribo >= 5:
+        return True, "ribo_high ({} ribosomal genes in top-{})".format(n_ribo, top_n)
+    if n_mito + n_ribo >= 6:
+        return True, "mito_ribo_mixed (MT={} RIBO={})".format(n_mito, n_ribo)
+
+    return False, ""
