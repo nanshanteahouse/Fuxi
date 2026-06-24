@@ -213,6 +213,14 @@ class Config:
     tissue_kb: str = ""
     tissue_ontology: str = ""
 
+    # Phylogenetic filtering (v3.0.0+ KB feature).
+    # When non-empty, marker_scoring applies taxonomic weighting.
+    #   target_class  (str): Desired class (纲), e.g. "Mammalia".
+    #   target_order  (str): Desired order (目), e.g. "Primates".
+    # Both default to "" (no filtering — all KB sources used at full weight).
+    target_class: str = ""
+    target_order: str = ""
+
     # ═══════════════════════════════════════════════════════════════════
     #  RNA: 差异表达分析
     # ═══════════════════════════════════════════════════════════════════

@@ -21,6 +21,11 @@ NO executable code beyond dict/list definitions.
         n_cells (int):      Approximate number of cells profiled
         n_subtypes (int):   Number of reported cell subtypes
         n_groups (int):     Number of major cell groups
+        class (str):        Taxonomic class (纲), e.g. "Mammalia", "Aves",
+                            "Reptilia", "Teleostei", "Cyclostomata".
+                            Use "multi" for sources with multi-class coverage.
+        order (str):        Taxonomic order (目), e.g. "Primates", "Rodentia",
+                            "Carnivora". Use "multi" for multi-order sources.
 
 2. markers (dict):
     Cell-type-level marker gene annotations reported by this source.
@@ -95,6 +100,8 @@ Vascular_Endothelial, Pericyte, Astrocyte, Oligodendrocyte, Fibroblast
 #     "n_cells": 0,
 #     "n_subtypes": 0,
 #     "n_groups": 0,
+#     "class": "Mammalia",
+#     "order": "Primates",
 # }
 
 # === MARKERS ===

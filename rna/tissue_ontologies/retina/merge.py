@@ -169,6 +169,8 @@ def merge_markers(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     for src in sources:
         src_id = src["source_id"]
+        src_class = src["meta"].get("class", "")
+        src_order = src["meta"].get("order", "")
 
         # ── Main markers dict ─────────────────────────────────────
         for raw_key, marker_data in src.get("markers", {}).items():
@@ -184,10 +186,16 @@ def merge_markers(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
                     "synonyms": set(),
                     "parent": "",
                     "source_ids": set(),
+                    "classes": set(),
+                    "orders": set(),
                 }
 
             entry = merged[canonical]
             entry["source_ids"].add(src_id)
+            if src_class:
+                entry["classes"].add(src_class)
+            if src_order:
+                entry["orders"].add(src_order)
 
             if raw_key != canonical:
                 entry["synonyms"].add(raw_key)
@@ -225,10 +233,16 @@ def merge_markers(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
                     "synonyms": set(),
                     "parent": "",
                     "source_ids": set(),
+                    "classes": set(),
+                    "orders": set(),
                 }
 
             entry = merged[canonical]
             entry["source_ids"].add(src_id)
+            if src_class:
+                entry["classes"].add(src_class)
+            if src_order:
+                entry["orders"].add(src_order)
             if nt.get("parent"):
                 entry["parent"] = nt["parent"]
 
@@ -405,13 +419,18 @@ def _rule_dedup_key(rule: Dict[str, Any]) -> str:
 
     Normalises the action through ``TYPE_ALIASES`` so that rules with
     ``Retinal_Ganglion_Cell`` and ``RGC`` actions are treated as duplicates.
+    Includes ``markers_absent`` in the key so that rules that differ only
+    by exclusion markers are NOT treated as duplicates.
     """
     condition = rule.get("condition", {})
     action = _normalize_type_key(rule.get("action", ""))
     markers = condition.get("markers_present", {})
+    absent = condition.get("markers_absent", [])
     sorted_genes = sorted(markers.keys())
+    sorted_absent = sorted(absent) if absent else []
     marker_str = ",".join(f"{g}:{markers[g]}" for g in sorted_genes)
-    return f"{action}|{marker_str}"
+    absent_str = "!" + ",".join(sorted_absent) if sorted_absent else ""
+    return f"{action}|{marker_str}{absent_str}"
 
 
 def merge_rules(sources: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -467,8 +486,17 @@ def build_final_kb(
                 "species": [...],
                 "synonyms": [...],
                 "parent": "...",
+                "class": "...",       # str (most common class across sources)
+                "order": "...",       # str (most common order across sources)
+                "classes": [...],     # list[str] all contributing classes
+                "orders": [...],      # list[str] all contributing orders
             },
             "expert_rules": [...],
+            "_meta": {
+                "total_sources": N,
+                "classes": {"Mammalia", ...},
+                "orders": {"Primates", ...},
+            },
         }
 
     Parameters
@@ -487,6 +515,10 @@ def build_final_kb(
     """
     total_sources = len(sources)
     kb: Dict[str, Any] = {}
+
+    # Collect all classes and orders for _meta
+    all_classes: Set[str] = set()
+    all_orders: Set[str] = set()
 
     for type_key, type_data in merged_types.items():
         confirm_out: Dict[str, List[str]] = {}
@@ -531,6 +563,19 @@ def build_final_kb(
                 len(src_set), total_sources
             )
 
+        # Resolve class/order — use most common; fall back to sorted list
+        classes_list = sorted(type_data.get("classes", set()))
+        orders_list = sorted(type_data.get("orders", set()))
+        resolved_class = classes_list[0] if len(classes_list) == 1 else (
+            ", ".join(classes_list) if classes_list else ""
+        )
+        resolved_order = orders_list[0] if len(orders_list) == 1 else (
+            ", ".join(orders_list) if orders_list else ""
+        )
+
+        all_classes.update(classes_list)
+        all_orders.update(orders_list)
+
         kb[type_key] = {
             "markers": {
                 "confirm": confirm_out,
@@ -542,9 +587,18 @@ def build_final_kb(
             "synonyms": sorted(type_data.get("synonyms", set())),
             "parent": type_data.get("parent", ""),
             "consensus_levels": consensus_levels,
+            "class": resolved_class,
+            "order": resolved_order,
+            "classes": classes_list,
+            "orders": orders_list,
         }
 
     kb["expert_rules"] = merged_rules
+    kb["_meta"] = {
+        "total_sources": total_sources,
+        "classes": sorted(all_classes),
+        "orders": sorted(all_orders),
+    }
     return kb
 
 

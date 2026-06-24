@@ -18,6 +18,10 @@ The KB is expected to have the following structure::
             "species": ["human", "mouse"],
             "synonyms": ["TypeA", "Type A"],
             "parent": "LineageX",
+            "class": "Mammalia",          # taxonomic class (纲)
+            "order": "Primates",          # taxonomic order (目)
+            "classes": ["Mammalia"],      # all contributing classes
+            "orders": ["Primates"],       # all contributing orders
         },
         "CellTypeB": ...,
         "expert_rules": [
@@ -30,7 +34,29 @@ The KB is expected to have the following structure::
                 "action": "CellTypeA",
             },
         ],
+        "_meta": {
+            "total_sources": N,
+            "classes": ["Mammalia"],
+            "orders": ["Primates"],
+        },
     }
+
+**Phylogenetic weighting** (v3.0.0+): When ``target_class`` and/or
+``target_order`` are passed, marker scores receive a multiplicative
+phylogenetic weight:
+
+    ========================  =====
+    Source → Target            Weight
+    ========================  =====
+    Same class + same order    1.0
+    Same class, different order 0.8
+    Different class, multi-class marker  0.9
+    Different class, single-class marker 0.6
+    ========================  =====
+
+This penalises markers that only appear in a distant taxonomic group
+while preserving the power of markers that are **conserved across
+multiple classes** (a strong signal of biological relevance).
 """
 
 from typing import Any, Dict, List, NamedTuple, Optional
@@ -139,7 +165,7 @@ def _negative_marker_penalty(kb: Dict[str, Any], type_key: str,
     Both raw KB (``negative_markers`` key) and lookup format (``negative``
     key) are accepted.
     """
-    type_data = kb.get(type_key, {})
+    type_data = _type_data(kb, type_key)
     if not type_data:
         return False
 
@@ -154,6 +180,112 @@ def _negative_marker_penalty(kb: Dict[str, Any], type_key: str,
     top10 = set(cluster_markers.head(10)["names"].tolist())
     found = sum(1 for m in neg_markers if m in top10)
     return found >= 2
+
+
+def _type_data(kb: Dict[str, Any], type_key: str) -> Dict[str, Any]:
+    """Return the raw type entry from *kb*, regardless of raw vs lookup format.
+
+    In raw KB the entry is ``kb[type_key]``.  In lookup format the entry may
+    be flattened; we return the raw entry when available, otherwise an empty
+    dict.
+    """
+    raw_entry = kb.get(type_key, {})
+    # Raw KB entries have "markers" key; lookup entries have "positive".
+    if "markers" in raw_entry or "positive" in raw_entry:
+        return raw_entry
+    return {}
+
+
+def phylogenetic_weight(source_class: str,
+                         target_class: str,
+                         target_order: str = "",
+                         source_order: str = "",
+                         source_classes_contrib: list | None = None
+                         ) -> float:
+    """Return a multiplicative weight based on taxonomic distance.
+
+    The weight reflects how relevant a KB cell-type marker set is for
+    annotating data from a target taxonomic class (纲) / order (目).
+
+    Parameters
+    ----------
+    source_class : str
+        The primary class of the KB cell type (e.g. ``"Mammalia"``).
+        Empty string means the class is unknown — weight falls through to
+        the default (0.8) permissive value.
+    target_class : str
+        The desired class (e.g. ``"Mammalia"``).  An empty string means
+        *no phylogenetic filtering* — weight is always 1.0.
+    target_order : str
+        The desired order (e.g. ``"Primates"``).  Only applied when
+        *target_class* is also non-empty.
+    source_order : str
+        The primary order of the KB cell type.  Compared with
+        *target_order* for intra-class fine-tuning.
+    source_classes_contrib : list[str] or None
+        All classes (across sources) that contributed markers to this type.
+        If a target class appears here (e.g. because this type was observed
+        across multiple classes in a cross-species study), it is treated as
+        *same class* (weight 1.0).  When ``None``, only ``source_class``
+        is used for the class check.
+
+    Returns
+    -------
+    float
+        Weight in [0.0, 1.0].
+
+    Weight table
+    ------------
+    ================================  =====
+    Source → Target                    Weight
+    ================================  =====
+    Same class + same order           1.0
+    Same class + different order      0.8
+    Different class, multi-class src  0.9
+    Different class, single-class src 0.6
+    Unknown source class              0.8
+    Empty target_class (no filter)    1.0
+    ================================  =====
+    """
+    # No phylogenetic target — use everything at full weight.
+    if not target_class:
+        return 1.0
+
+    # Unknown source class — permissive fallback.
+    if not source_class:
+        return 0.8
+
+    # Normalise for comparison.
+    tc = target_class.strip().lower()
+    sc = source_class.strip().lower()
+
+    # Collect all contributing classes for breadth checks.
+    contrib: set[str] = {sc}
+    if source_classes_contrib:
+        contrib.update(c.strip().lower() for c in source_classes_contrib if c)
+
+    # Same class → start at 1.0, then apply order-level fine-tuning.
+    if tc in contrib:
+        if target_order and source_order:
+            to = target_order.strip().lower()
+            so = source_order.strip().lower()
+            if to == so:
+                return 1.0    # same class + same order
+            else:
+                return 0.8    # same class + different order
+        return 1.0            # same class, no order filtering
+
+    # Different class.  Check whether this marker set is multi-class
+    # (conserved across classes) — that raises the weight.
+    if len(contrib) >= 3:
+        # Conserved across >=3 classes → strong biological signal.
+        return 0.9
+    elif len(contrib) >= 2:
+        # Two classes → moderate conservation signal.
+        return 0.8
+
+    # Single distant class → significant penalty.
+    return 0.6
 
 
 def _build_kb_lookup(kb: Dict[str, Any],
@@ -181,7 +313,7 @@ def _build_kb_lookup(kb: Dict[str, Any],
     kb_all: Dict[str, Any] = {}
 
     for type_key, type_data in kb.items():
-        if type_key == "expert_rules":
+        if type_key == "expert_rules" or type_key.startswith("_"):
             continue
 
         positive = _get_canonical_markers(kb, type_key, species)
@@ -214,7 +346,9 @@ def _build_kb_lookup(kb: Dict[str, Any],
 
 def score_cluster_against_kb(kb: Dict[str, Any],
                              cluster_markers: pd.DataFrame,
-                             species: Optional[str] = None
+                             species: Optional[str] = None,
+                             target_class: str = "",
+                             target_order: str = ""
                              ) -> Dict[str, Score]:
     """Score one cluster against every cell type in the Knowledge Base.
 
@@ -229,6 +363,13 @@ def score_cluster_against_kb(kb: Dict[str, Any],
         are used as the cluster's marker set.
     species : str or None
         If set, only cell types matching this species are scored.
+    target_class : str
+        Desired taxonomic class (纲), e.g. ``"Mammalia"``.  Empty string
+        (default) disables phylogenetic weighting.
+    target_order : str
+        Desired taxonomic order (目), e.g. ``"Primates"``.  Empty string
+        (default) disables order-level weighting.  Only has effect when
+        *target_class* is also non-empty.
 
     Returns
     -------
@@ -326,6 +467,22 @@ def score_cluster_against_kb(kb: Dict[str, Any],
 
         final_score = base_score * conf_mult
 
+        # ── 4b. Phylogenetic weight ─────────────────────────────────
+        if target_class:
+            # Read class/order/classes from the raw KB if available;
+            # fall back to the lookup entry.
+            type_data_raw = _type_data(kb, type_key)
+            source_cls = type_data_raw.get("class", "") if type_data_raw else ""
+            source_ord = type_data_raw.get("order", "") if type_data_raw else ""
+            source_classes = type_data_raw.get("classes", []) if type_data_raw else []
+            p_weight = phylogenetic_weight(
+                source_cls, target_class,
+                target_order=target_order,
+                source_order=source_ord,
+                source_classes_contrib=source_classes,
+            )
+            final_score *= p_weight
+
         # ── 5. Negative-marker penalty ──────────────────────────────
         neg_penalty = _negative_marker_penalty(
             kb if is_raw else kb_lookup, type_key, cluster_markers
@@ -346,7 +503,10 @@ def score_cluster_against_kb(kb: Dict[str, Any],
 
 def annotate_all_clusters(kb_all_markers: Dict[str, Any],
                           all_marker_dfs: pd.DataFrame,
-                          species: str) -> pd.DataFrame:
+                          species: str,
+                          target_class: str = "",
+                          target_order: str = ""
+                          ) -> pd.DataFrame:
     """Score every cluster and assign the best-matching cell type.
 
     Parameters
@@ -359,6 +519,11 @@ def annotate_all_clusters(kb_all_markers: Dict[str, Any],
         and **``cluster``** (the cluster identifier).
     species : str
         Species filter passed through to :func:`_build_kb_lookup`.
+    target_class : str
+        Taxonomic class for phylogenetic weighting (see
+        :func:`score_cluster_against_kb`).
+    target_order : str
+        Taxonomic order for phylogenetic weighting.
 
     Returns
     -------
@@ -382,7 +547,8 @@ def annotate_all_clusters(kb_all_markers: Dict[str, Any],
         cl_sort = cl_sort.iloc[lfc_idx]
 
         scores = score_cluster_against_kb(
-            kb_all_markers, cl_sort, species=species
+            kb_all_markers, cl_sort, species=species,
+            target_class=target_class, target_order=target_order,
         )
 
         if not scores:

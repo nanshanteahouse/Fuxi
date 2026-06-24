@@ -22,6 +22,8 @@ source_meta = {
     "n_cells": 84982,
     "n_subtypes": 58,
     "n_groups": 6,
+    "class": "Mammalia",
+    "order": "Primates",
 }
 
 markers = {
