@@ -197,6 +197,39 @@ def main():
     log.info("Loaded: %d spots, %d clusters",
              adata.n_obs, adata.obs['leiden'].nunique())
 
+    # ── Phase 1: scRNA marker-list transfer ──────────────────────────────
+    # If rna_ref is configured, load scRNA-derived per-cell-type markers
+    # and merge them into CFG.marker_dict.  This enriches the score_genes
+    # fallback without changing KB or AI mode behaviour.  User-configured
+    # marker_dict entries take priority over auto-derived ones.
+    if getattr(CFG, 'rna_ref', ''):
+        from core.utils import find_rna_marker_csv, load_scRNA_markers
+        csv_path = find_rna_marker_csv(cfg=CFG, log=log)
+        if csv_path and os.path.exists(csv_path):
+            log.info("scRNA marker transfer: loading from %s", csv_path)
+            try:
+                scrna_markers = load_scRNA_markers(
+                    csv_path,
+                    top_n=getattr(CFG, 'rna_marker_top_n', 10),
+                    pval_threshold=getattr(CFG, 'rna_marker_pval_threshold', 0.05),
+                    logfc_min=getattr(CFG, 'rna_marker_logfc_min', 0.0),
+                    log=log,
+                )
+                # Merge: scRNA markers as base, user markers override
+                merged = dict(scrna_markers)
+                merged.update(CFG.marker_dict)
+                log.info(
+                    "scRNA marker transfer: loaded %d cell types, "
+                    "merged with %d user-configured types → %d total",
+                    len(scrna_markers), len(CFG.marker_dict), len(merged),
+                )
+                CFG.marker_dict = merged
+            except Exception as e:
+                log.warning("scRNA marker transfer failed: %s — continuing", e)
+        else:
+            log.info("scRNA marker transfer: no marker CSV found for rna_ref='%s'",
+                     CFG.rna_ref)
+
     # ── Three annotation modes ──────────────────────────────────────────
     ai_enabled = getattr(CFG.ai, 'enabled', False)
     ai_annot_on = getattr(CFG.ai, 'ai_annotation', False)

@@ -12,7 +12,7 @@ Fuxi is a unified monorepo for single-cell multi-omics analysis, merging the pre
 |----------|--------|:-----:|:------:|
 | `rna` | Scanpy 1.10+ | 12 (00-11) | ✅ Production |
 | `atac` | Snapatac2 2.9 | 10 (00-09) | ✅ Production |
-| `spatial` | Squidpy (planned) | TBD | 🔵 Future |
+| `spatial` | Squidpy 1.8+ | 10 (00-09) | ✅ Production |
 
 ### Architecture
 
@@ -22,10 +22,11 @@ fuxi/
 │   └── preprocess/    #   Preprocessing pipeline (format detect → extract → config gen)
 ├── rna/               # scRNA-seq module (steps, utils, tissue_ontologies)
 ├── atac/              # scATAC-seq module (steps)
-├── spatial/           # Spatial transcriptomics (future)
+├── spatial/           # Spatial transcriptomics module (steps)
 ├── projects/          # Dataset-specific configs, organized by modality
 │   ├── rna/           # RNA dataset configs
-│   └── atac/          # ATAC dataset configs
+│   ├── atac/          # ATAC dataset configs
+│   └── spatial/       # Spatial dataset configs
 ├── tests/             # Unified test suite
 ├── templates/         # Config templates (10X h5/mtx, CSV, fragments, retina, etc.)
 └── docs/              # Architecture & pipeline documentation
@@ -44,6 +45,7 @@ fuxi/
   pip install -r requirements.txt          # all modalities
   pip install -r requirements/rna.txt        # scRNA-seq only
   pip install -r requirements/atac.txt       # scATAC-seq only
+  pip install -r requirements/spatial.txt    # spatial transcriptomics only
   ```
 
 ### Running the Pipeline
@@ -52,6 +54,7 @@ fuxi/
 # List available steps
 python core/run_pipeline.py --modality rna --list
 python core/run_pipeline.py --modality atac --list
+python core/run_pipeline.py --modality spatial --list
 
 # Run a full pipeline
 python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config_<GSE_ID>.py
@@ -95,11 +98,11 @@ CFG.resolve_paths()
 
 | Module | Purpose |
 |--------|---------|
-| `core/utils.py` | safe_write, safe_plot, setup_logger, resolve_config, validate_adata, monitor_performance |
+| `core/utils.py` | safe_write, safe_plot, setup_logger, resolve_config, validate_adata, monitor_performance, find_rna_h5ad, find_rna_marker_csv, load_scRNA_markers |
 | `core/ai_caller.py` | Unified LLM calls with retry, thinking mode, disk caching, model auto-discovery |
 | `core/ai_prompts.py` | RNA + ATAC annotation prompts, interpretation templates |
 | `core/config.py` | Merged Config dataclass with all RNA + ATAC fields |
-| `core/run_pipeline.py` | Unified CLI with `--modality rna\|atac` dispatch |
+| `core/run_pipeline.py` | Unified CLI with `--modality rna\|atac\|spatial` dispatch |
 | `core/dataset_schema.py` | Python model for dataset.yaml |
 | `core/dataset_detector.py` | Auto-detect modality from file patterns |
 | `core/preprocess/` | Preprocessing pipeline: format detection, archive extraction, config generation |

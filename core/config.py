@@ -385,6 +385,14 @@ class Config:
     rna_h5ad: str = ""
 
     # ═══════════════════════════════════════════════════════════════════
+    #  Spatial: scRNA reference for marker-list transfer (Step 05)
+    # ═══════════════════════════════════════════════════════════════════
+    rna_ref: str = ""
+    rna_marker_top_n: int = 10
+    rna_marker_pval_threshold: float = 0.05
+    rna_marker_logfc_min: float = 0.0
+
+    # ═══════════════════════════════════════════════════════════════════
     #  RNA: checkpoint 路径（属性）
     # ═══════════════════════════════════════════════════════════════════
     @property

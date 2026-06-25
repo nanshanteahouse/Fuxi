@@ -341,6 +341,15 @@ def main():
         else:
             print("[run] No RNA h5ad auto-discovered — Step 09 will be skipped.")
 
+    # ── Spatial: auto-discover scRNA marker CSV for Phase 1 transfer ─
+    if args.modality == "spatial" and not getattr(CFG, 'rna_ref', ''):
+        from core.utils import find_rna_marker_csv
+        auto_csv = find_rna_marker_csv(cfg=CFG)
+        if auto_csv:
+            print(f"[run] Auto-discovered scRNA marker CSV: {auto_csv}")
+        else:
+            print("[run] No scRNA marker CSV auto-discovered.")
+
     python_exe = sys.executable
 
     # ── Parse step range ─────────────────────────────────────────────
