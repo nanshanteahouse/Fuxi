@@ -90,8 +90,8 @@ def data_root() -> str:
                 "Data root not configured.\n"
                 "  Set the FUXI_DATA_ROOT environment variable to the\n"
                 "  directory containing your GEO dataset folders, e.g.:\n"
-                '    export FUXI_DATA_ROOT=/mnt/e/neurobiology   # WSL\n'
-                '    set FUXI_DATA_ROOT=E:/neurobiology          # Windows'
+                '    export FUXI_DATA_ROOT=/mnt/e/data   # WSL\n'
+                '    set FUXI_DATA_ROOT=E:/data          # Windows'
             )
     return _DATA_ROOT_CACHE
 

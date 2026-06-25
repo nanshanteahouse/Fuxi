@@ -13,7 +13,13 @@ Input:  04_clustered.h5ad
 Output: 05_annotated.h5ad
 """
 import sys, os, time, argparse, json, logging
+# Add repo root so `from core.*` and `from rna.*` resolve correctly
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+# Also add rna/ so `from tissue_ontologies import load_kb` resolves
+# (needed by unified_annotate() → rna/tissue_ontologies)
+_rna_pkg = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'rna')
+if _rna_pkg not in sys.path:
+    sys.path.insert(0, _rna_pkg)
 from core.utils import setup_logger, resolve_config, safe_write, safe_plot
 import scanpy as sc
 import pandas as pd

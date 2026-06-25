@@ -69,9 +69,9 @@ Raw data lives in a directory configured via the **`FUXI_DATA_ROOT`** environmen
 
 ```bash
 # Required: set data root before running any pipeline
-export FUXI_DATA_ROOT=/mnt/e/neurobiology    # WSL
+export FUXI_DATA_ROOT=/mnt/e/data              # WSL
 # or
-set FUXI_DATA_ROOT=E:/neurobiology           # Windows
+set FUXI_DATA_ROOT=E:/data                     # Windows
 ```
 
 ## Project Config Pattern

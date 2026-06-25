@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-GSE169109 配置模板 — 人胎下丘脑发育 scRNA-seq
+配置模板 — 人胎下丘脑发育 scRNA-seq (10X MTX)
 ================================================
-这是通用管线的具体配置示例，对应 GSE169109 项目。
+可复制到项目目录并修改各参数适配具体数据集。
 
 使用方法:
     cp config_hypothalamus.py ../../config_myproject.py
@@ -14,9 +14,9 @@ from core.config import CFG
 
 # ── 数据格式 ──
 CFG.data_format = '10X_mtx'
-CFG.mtx_prefix = 'GSE169109_'
+CFG.mtx_prefix = '<GSE_ID>_'
 
-# ── 样本映射 (19 个样本, GW7~GW20) ──
+# ── 样本映射 (示例: 19 个样本, GW7~GW20) ──
 CFG.sample_map = {
     1: 'GW7-lane1',   2: 'GW7-lane2',
     3: 'GW8-1',       4: 'GW8-2',

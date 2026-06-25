@@ -75,11 +75,10 @@ def main():
                 library_id=library_id,
                 crop=CFG.crop_image,
                 mask_circle=True,
-                layer=None,
             )
         else:
             # Minimum processing: extract basic features
-            sq.im.process(adata, library_id=library_id, layer=None)
+            sq.im.process(adata, library_id=library_id)
 
         log.info("  Image features extracted")
 

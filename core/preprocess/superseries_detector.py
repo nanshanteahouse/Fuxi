@@ -238,7 +238,7 @@ def query_ncbi(accession: str) -> Optional[dict]:
     Caches results for 24 hours.
 
     Args:
-        accession: GEO accession ID (e.g. 'GSE237215').
+        accession: GEO accession ID (e.g. 'GSE12345').
 
     Returns:
         {'is_superseries': bool,
@@ -296,7 +296,7 @@ def detect_superseries(root_dir: str,
     Args:
         root_dir:   Top-level dataset directory.
         file_list:  All file paths under root_dir (after extraction).
-        gse_id:     GEO accession ID (e.g. 'GSE237215').
+        gse_id:     GEO accession ID (e.g. 'GSE12345').
         query_ncbi_flag:  If True, also query NCBI E-utilities.
 
     Returns:

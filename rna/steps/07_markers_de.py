@@ -2,7 +2,7 @@
 """
 Step 07: 标记基因 + 差异表达分析
 =====================================
-三层分析 (结合 GSE169109 + GSE138002):
+三层分析:
   Layer 1: 每组 vs 其他 — Wilcoxon rank-sum (多注释层级)
   Layer 2: 相邻发育阶段配对比较 — per cell type
   Layer 3: 发育时间趋势基因 — Spearman 相关

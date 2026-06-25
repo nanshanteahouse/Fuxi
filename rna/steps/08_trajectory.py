@@ -2,7 +2,7 @@
 """
 Step 08: 轨迹分析 — PAGA + 扩散伪时间 + 分支分析
 ===================================================
-继承 GSE169109 的深度轨迹分析:
+继承深度轨迹分析最佳实践:
   1. PAGA (在子聚类或聚类级别上)
   2. 根细胞自动识别 (ROI 类型或标记基因)
   3. 扩散伪时间 (DPT)
@@ -126,7 +126,7 @@ def compute_dpt(adata, root_mask, CFG, log):
               save='_08_pseudotime_diffmap.pdf', cmap='plasma')
 
 def branch_analysis(adata, CFG, log):
-    """分支间差异表达 (GSE169109 策略)"""
+    """分支间差异表达 (分支间配对比较策略)"""
     if 'cell_type' not in adata.obs:
         log.info("No cell_type annotation, skipping branch analysis.")
         return

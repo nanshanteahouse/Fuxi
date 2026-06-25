@@ -43,7 +43,7 @@ UNSUPPORTED_PATTERNS = [
 # ── 10X MTX directory co-occurrence set ─────────────────────────────
 # A directory containing >=N_MATCH of these files is classified as 10X MTX.
 # We check whether basenames *end with* any of these patterns (handles
-# prefixed filenames like "GSE116106_retina_aggr_10_matrix.mtx.gz").
+# prefixed filenames like "<GEO_ID>_retina_aggr_10_matrix.mtx.gz").
 TENX_MTX_SUFFIXES = [
     '_matrix.mtx.gz', '_matrix.mtx',
     '_counts.mtx.gz', '_counts.mtx',
@@ -56,14 +56,12 @@ TENX_MTX_SUFFIXES = [
 TENX_MTX_MIN_MATCH = 2
 
 # ── TSV-based count matrix identifiers ───────────────────────────────
-# Datasets where each GSM sample is a single cell-by-gene TSV/CSV file
-# (e.g. GSE194285: *.tsv.gz files with sequencer lane IDs).
+# Datasets where each GSM sample is a single cell-by-gene TSV/CSV file.
 CSV_MATRIX_EXTENSIONS = {'.csv', '.csv.gz', '.tsv', '.tsv.gz', '.txt', '.txt.gz'}
 
 # ── 10X H5 identifiers ──────────────────────────────────────────────
 # Directory-level patterns: any file whose basename *ends with* one of
-# these substrings signals 10X HDF5 format (handles prefixed filenames
-# like "GSE268630_Multi_Fetal_11w2d_FR_filtered_feature_bc_matrix.h5").
+# these substrings signals 10X HDF5 format.
 TENX_H5_SUFFIXES = ['_filtered_feature_bc_matrix.h5', '_raw_feature_bc_matrix.h5']
 
 # ── 10X ATAC peak identifiers ───────────────────────────────────────

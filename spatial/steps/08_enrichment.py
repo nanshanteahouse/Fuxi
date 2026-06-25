@@ -71,7 +71,7 @@ def main():
         if CFG.enrichment_method in ('ora', 'both'):
             log.info("[ORA] Gene set: %s", gs)
             try:
-                from rna.steps._enrichment import run_ora
+                from rna.steps import run_ora
                 ora_df = run_ora(marker_df, gs, CFG, log)
                 if ora_df is not None and not ora_df.empty:
                     ora_results[gs_name] = ora_df
@@ -81,7 +81,7 @@ def main():
         if CFG.enrichment_method in ('prerank', 'both'):
             log.info("[GSEA] Gene set: %s", gs)
             try:
-                from rna.steps._enrichment import run_prerank
+                from rna.steps import run_prerank
                 prerank_df = run_prerank(marker_df, gs, CFG, log)
                 if prerank_df is not None and not prerank_df.empty:
                     prerank_results[gs_name] = prerank_df
