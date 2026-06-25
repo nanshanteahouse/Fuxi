@@ -24,6 +24,7 @@ import sys
 import os
 import time
 import json
+import shutil
 import glob as glob_mod
 import argparse
 from datetime import datetime
@@ -445,6 +446,100 @@ def _infer_modality(classification: dict) -> str:
 #  Main entry point
 # ═══════════════════════════════════════════════════════════════════════
 
+def _group_files_by_accession(file_list: list[str],
+                               child_accessions: list[str]) -> dict[str, list[str]]:
+    """Group *file_list* into per-accession buckets using filename patterns.
+
+    Delegates to ``superseries_detector.group_files_by_accession()``, which
+    matches each file's basename against the given child GSE accessions.
+    """
+    return ssd.group_files_by_accession(file_list, child_accessions)
+
+
+def _generate_parent_dataset_yaml(gse_id: str,
+                                   superseries_info: dict,
+                                   classification: dict,
+                                   file_list: list[str],
+                                   output_dir: str,
+                                   data_root: Optional[str],
+                                   input_dir_override: Optional[str] = None,
+                                   dry_run: bool = False,
+                                   force: bool = False) -> Optional[str]:
+    """Generate a parent-level dataset.yaml for a SuperSeries.
+
+    This YAML serves as an index/placeholder — it records the SuperSeries
+    metadata and lists the child accessions but does not reference pipeline
+    runnables.  The actual per-child dataset.yaml files live under each
+    child's project directory (flat layout).
+
+    Returns the path to the generated file, or None.
+    """
+    species = fd.guess_species(file_list)
+    tissue = fd.guess_tissue(file_list)
+
+    # Determine data format from classification
+    data_format = _detect_primary_format(classification)
+
+    # Determine base dir for path computation
+    if input_dir_override:
+        gse_dir = os.path.abspath(input_dir_override)
+    elif data_root:
+        gse_dir = os.path.join(data_root, gse_id)
+    else:
+        gse_dir = os.path.dirname(file_list[0]) if file_list else '.'
+
+    # Modality entry: placeholder
+    modality_entry = ModalityEntry(
+        name='SuperSeries',
+        status='placeholder',
+        format=data_format,
+        file_count=len(file_list),
+    )
+
+    # Build subseries list
+    subseries = []
+    for child_acc in superseries_info.get('child_accessions', []):
+        subseries.append({
+            'id': child_acc,
+            'title': '',
+            'modality': 'scRNA-seq',
+        })
+
+    ds = DatasetMeta(
+        id=gse_id,
+        type='SuperSeries',
+        title=superseries_info.get('title', ''),
+        species=species if species != 'unknown' else 'homo_sapiens',
+        tissue=tissue if tissue != 'unknown' else None,
+        modalities=[modality_entry],
+        samples=[],
+        subseries=subseries,
+        comparisons=[],
+        resources=Resources(
+            genome=fd.guess_genome(species),
+        ),
+        meta=Meta(
+            created=datetime.now().isoformat(),
+            generated_by='fuxi_preprocess',
+            pipeline_status=PipelineStatus(),
+        ),
+    )
+
+    os.makedirs(output_dir, exist_ok=True)
+    yaml_path = os.path.join(output_dir, 'dataset.yaml')
+
+    if dry_run:
+        print(f"    [DRY-RUN] Would write: {yaml_path}")
+        return yaml_path
+
+    if os.path.exists(yaml_path) and not force:
+        print(f"    [SKIP] {yaml_path} — use --force to overwrite.")
+        return yaml_path
+
+    save_dataset(ds, yaml_path)
+    print(f"    Written: {yaml_path}")
+    return yaml_path
+
 def run_preprocess(gse_id: Optional[str] = None,
                    input_dir: Optional[str] = None,
                    dataset_name: Optional[str] = None,
@@ -633,46 +728,153 @@ def run_preprocess(gse_id: Optional[str] = None,
         elif not quiet:
             print(f"  {len(unmatched)} unmatched file(s) (use -v for details)")
 
-    # ── Phase 4: Generate dataset.yaml ─────────────────────────────────
-    if not quiet:
-        print("\n[Phase 4] Generating dataset.yaml...")
+    # ── Resolve output modalities ────────────────────────────────────────
     if detected_modality == 'multiome':
-        # Generate one yaml per modality
         modalities_out = ['rna', 'atac']
     else:
         modalities_out = [detected_modality]
 
-    for mod in modalities_out:
-        proj_dir = _resolve_project_dir(mod, gse_id, output_dir)
-        generate_dataset_yaml(
+    # ── Phase 4+5: Generate project files ────────────────────────────────
+    if not quiet:
+        print()
+
+    if superseries_info.get('is_superseries'):
+        # ── Flat layout: move files → sibling dirs, then generate ────────
+        if not quiet:
+            print("[Phase 4/5] SuperSeries: organising child accessions...")
+        child_accs = superseries_info.get('child_accessions', [])
+
+        # Group files by child accession using filename patterns
+        file_groups = ssd.group_files_by_accession(all_files, child_accs)
+
+        # Parent dir for sibling child dirs (= same level as gse_dir)
+        data_parent = os.path.dirname(gse_dir.rstrip('/\\'))
+
+        for child_gse in child_accs:
+            child_files = file_groups.get(child_gse, [])
+            if not child_files:
+                if not quiet:
+                    print(f"  [SKIP] {child_gse}: no matching files found")
+                continue
+
+            # Create sibling directory: e.g. E:/neurobiology/GSE133382/
+            child_data_dir = os.path.join(data_parent, child_gse)
+            os.makedirs(child_data_dir, exist_ok=True)
+
+            if not quiet:
+                print(f"  {child_gse}: {len(child_files)} file(s) → {child_data_dir}")
+
+            # Move files from parent to sibling dir
+            moved_files = []
+            for f in child_files:
+                dest = os.path.join(child_data_dir, os.path.basename(f))
+                if os.path.abspath(f) == os.path.abspath(dest):
+                    # File already in the right place
+                    moved_files.append(dest)
+                    continue
+                if dry_run:
+                    print(f"    [DRY-RUN] mv {f} → {dest}")
+                    moved_files.append(dest)
+                else:
+                    if os.path.exists(dest) and not force:
+                        print(f"    [SKIP] {dest} exists (use --force to overwrite)")
+                        moved_files.append(dest)
+                    else:
+                        shutil.move(f, dest)
+                        moved_files.append(dest)
+
+            # Re-collect after move for unified file list
+            if dry_run:
+                # Files weren't actually moved — use original paths for detection
+                child_abs_files = sorted(child_files)
+            else:
+                child_abs_files = sorted([f for f in moved_files if os.path.exists(f)])
+
+            # Per-child format classification on the new location
+            child_classification = fd.classify_files_by_format(child_abs_files)
+            child_modality = modality or _infer_modality(child_classification)
+            if child_modality == 'multiome':
+                child_modalities = ['rna', 'atac']
+            else:
+                child_modalities = [child_modality]
+
+            for child_mod in child_modalities:
+                # dataset.yaml IN the sibling data dir itself
+                generate_dataset_yaml(
+                    gse_id=child_gse,
+                    modality=child_mod,
+                    superseries_info={'is_superseries': False},
+                    classification=child_classification,
+                    file_list=child_abs_files,
+                    output_dir=child_data_dir,
+                    data_root=data_root,
+                    input_dir_override=child_data_dir,
+                    dry_run=dry_run,
+                    force=force,
+                )
+
+                # config.py in projects/
+                child_proj_dir = _resolve_project_dir(child_mod, child_gse, output_dir)
+                generate_config(
+                    gse_id=child_gse,
+                    modality=child_mod,
+                    classification=child_classification,
+                    file_list=child_abs_files,
+                    output_dir=child_proj_dir,
+                    data_root=data_root,
+                    input_dir_override=child_data_dir,
+                    dry_run=dry_run,
+                    force=force,
+                )
+
+        # Parent-level placeholder dataset.yaml — written to gse_dir itself
+        if not quiet:
+            print(f"  Parent: {gse_id} → {gse_dir}/dataset.yaml")
+        _generate_parent_dataset_yaml(
             gse_id=gse_id,
-            modality=mod,
             superseries_info=superseries_info,
             classification=classification,
             file_list=all_files,
-            output_dir=proj_dir,
+            output_dir=gse_dir,
             data_root=data_root,
-            input_dir_override=input_dir,
+            input_dir_override=input_dir or gse_dir,
             dry_run=dry_run,
             force=force,
         )
+    else:
+        # ── Single-accession original flow ────────────────────────────────
+        if not quiet:
+            print("[Phase 4] Generating dataset.yaml...")
+        for mod in modalities_out:
+            proj_dir = _resolve_project_dir(mod, gse_id, output_dir)
+            generate_dataset_yaml(
+                gse_id=gse_id,
+                modality=mod,
+                superseries_info=superseries_info,
+                classification=classification,
+                file_list=all_files,
+                output_dir=proj_dir,
+                data_root=data_root,
+                input_dir_override=input_dir,
+                dry_run=dry_run,
+                force=force,
+            )
 
-    # ── Phase 5: Generate config ───────────────────────────────────────
-    if not quiet:
-        print("\n[Phase 5] Generating config file...")
-    for mod in modalities_out:
-        proj_dir = _resolve_project_dir(mod, gse_id, output_dir)
-        generate_config(
-            gse_id=gse_id,
-            modality=mod,
-            classification=classification,
-            file_list=all_files,
-            output_dir=proj_dir,
-            data_root=data_root,
-            input_dir_override=input_dir,
-            dry_run=dry_run,
-            force=force,
-        )
+        if not quiet:
+            print("\n[Phase 5] Generating config file...")
+        for mod in modalities_out:
+            proj_dir = _resolve_project_dir(mod, gse_id, output_dir)
+            generate_config(
+                gse_id=gse_id,
+                modality=mod,
+                classification=classification,
+                file_list=all_files,
+                output_dir=proj_dir,
+                data_root=data_root,
+                input_dir_override=input_dir,
+                dry_run=dry_run,
+                force=force,
+            )
 
     # ── Phase 6: Summary ───────────────────────────────────────────────
     elapsed = time.time() - t_start
@@ -695,16 +897,37 @@ def run_preprocess(gse_id: Optional[str] = None,
         print(f"  Elapsed:      {elapsed:.1f}s")
         if not dry_run:
             print(f"\n  Generated:")
-            for mod in modalities_out:
-                out_dir = _resolve_project_dir(mod, gse_id, output_dir)
-                print(f"    {os.path.join(out_dir, 'dataset.yaml')}")
-                print(f"    {os.path.join(out_dir, f'config_{gse_id}.py')}")
+            if superseries_info.get('is_superseries'):
+                data_parent = os.path.dirname(gse_dir.rstrip('/\\'))
+                for child_gse in superseries_info.get('child_accessions', []):
+                    child_dir = os.path.join(data_parent, child_gse)
+                    print(f"    {os.path.join(child_dir, 'dataset.yaml')}  (files moved to {child_dir}/)")
+                    for mod in modalities_out:
+                        out_dir = _resolve_project_dir(mod, child_gse, output_dir)
+                        print(f"    {os.path.join(out_dir, f'config_{child_gse}.py')}")
+                print(f"    {os.path.join(gse_dir, 'dataset.yaml')}  (parent index)")
+            else:
+                for mod in modalities_out:
+                    out_dir = _resolve_project_dir(mod, gse_id, output_dir)
+                    print(f"    {os.path.join(out_dir, 'dataset.yaml')}")
+                    print(f"    {os.path.join(out_dir, f'config_{gse_id}.py')}")
         print(f"\n  Next steps:")
-        print(f"    1. Review and edit the generated files")
-        print(f"    2. Run the pipeline:")
-        for mod in modalities_out:
-            cfg_path = os.path.join(_resolve_project_dir(mod, gse_id), f'config_{gse_id}.py')
-            print(f"       python core/run_pipeline.py --modality {mod} --config {cfg_path}")
+        if superseries_info.get('is_superseries'):
+            print(f"    Each sub-series is an independent project. Review and edit")
+            print(f"    the generated configs, then run each separately, e.g.:")
+            for child_gse in superseries_info.get('child_accessions', []):
+                for mod in modalities_out:
+                    cfg_path = os.path.join(
+                        _resolve_project_dir(mod, child_gse, output_dir),
+                        f'config_{child_gse}.py',
+                    )
+                    print(f"       python core/run_pipeline.py --modality {mod} --config {cfg_path}")
+        else:
+            print(f"    1. Review and edit the generated files")
+            print(f"    2. Run the pipeline:")
+            for mod in modalities_out:
+                cfg_path = os.path.join(_resolve_project_dir(mod, gse_id, output_dir), f'config_{gse_id}.py')
+                print(f"       python core/run_pipeline.py --modality {mod} --config {cfg_path}")
         print()
 
     return 0
