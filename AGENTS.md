@@ -7,14 +7,14 @@
 ```bash
 python core/run_pipeline.py --modality rna --list
 python core/run_pipeline.py --modality atac --list
-python core/run_pipeline.py --modality rna --config projects/rna/GSE246169/config_GSE246169.py
+python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config_<GSE_ID>.py
 ```
 
 ## Key paths
 
 | Module | Location |
 |--------|----------|
-| Shared core | `core/` (config, utils, ai_caller, ai_prompts, run_pipeline) |
+| Shared core | `core/` (config, utils, ai_caller, ai_prompts, run_pipeline, preprocess) |
 | RNA steps | `rna/steps/` (12 scripts) |
 | ATAC steps | `atac/steps/` (10 scripts) |
 | Project configs | `projects/{modality}/{GSE_ID}/config_*.py` |

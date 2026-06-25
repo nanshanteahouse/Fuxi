@@ -29,10 +29,10 @@ python core/run_pipeline.py --modality rna --list
 python core/run_pipeline.py --modality atac --list
 
 # Run full pipeline
-python core/run_pipeline.py --modality rna --config projects/rna/GSE246169/config_GSE246169.py
+python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config_<GSE_ID>.py
 
 # Run a single step (0-indexed)
-python core/run_pipeline.py --modality atac --step 0 --config projects/atac/GSE246169/config_GSE246169.py
+python core/run_pipeline.py --modality atac --step 0 --config projects/atac/<GSE_ID>/config_<GSE_ID>.py
 
 # Run a range or selection of steps
 python core/run_pipeline.py --modality rna --steps 0-2 --config ...
@@ -51,7 +51,16 @@ There is no test runner or linting configuration in this repo. The `tests/` dire
 
 ### Adding a Dataset
 
-1. Create `projects/{modality}/{GSE_ID}/` with a `config_GSE_ID.py` that imports from `core.config` and mutates the `CFG` singleton
+**Option A — Automated (recommended):**
+
+```bash
+# The preprocessor auto-detects format, extracts archives, and generates config + dataset.yaml
+python core/preprocess/preprocessor.py --gse <GSE_ID> --data-root $FUXI_DATA_ROOT
+```
+
+**Option B — Manual:**
+
+1. Create `projects/{modality}/{GSE_ID}/` with a `config_<GSE_ID>.py` that imports from `core.config` and mutates the `CFG` singleton
 2. Place raw data in `$FUXI_DATA_ROOT/{GSE_ID}/`
 3. Use config templates from `templates/config_templates/` as starting points
 
@@ -68,12 +77,18 @@ core/               Shared infrastructure (no biology libs imported)
   utils.py            safe_write, safe_plot, setup_logger, resolve_config, validate_adata, data_root()
   dataset_schema.py   Python model for dataset.yaml files
   dataset_detector.py Auto-detect modality from file patterns
+  preprocess/         Preprocessing pipeline (format detect, archive extract, config gen)
+    preprocessor.py     Main entry point — GEO download → ready-to-run
+    format_detector.py  Extended format detection (archives, 10X dir structure)
+    archive_extractor.py Archive extraction (tar.gz, zip, gz, bz2)
+    superseries_detector.py SuperSeries detection + sub-series splitting
 
 rna/                scRNA-seq module (Scanpy 1.10+)
   steps/             12 pipeline steps (00_load → 11_exploratory), each a standalone script
   utils/
     marker_scoring.py  Hypergeometric + cosine scoring of clusters against Knowledge Base
     evidence_fusion.py 5-tier decision engine merging marker scores, expert rules, AI
+    annotation_patcher.py Safe annotation patch utility (v3.1.0+)
   annotation_standardizer.py  6-tier name standardization for cell type annotations
   ortholog.py        Cross-species Ensembl→human gene symbol mapping
   tissue_ontologies/ Expert Knowledge Bases — currently retina only, with markers + synonyms
@@ -162,4 +177,4 @@ Core step scripts (`rna/steps/*.py`, `atac/steps/*.py`) **must not be edited in 
    - What the workaround was
    - Whether the root cause should be fixed in the core script
 
-This keeps core scripts reference-stable and builds a searchable record of edge cases that inform future pipeline improvements. See the existing `notes/suggestions/` directory for examples (e.g. `rna_GSE246169.md`, `atac_GSE246169.md`).
+This keeps core scripts reference-stable and builds a searchable record of edge cases that inform future pipeline improvements. See the existing `notes/suggestions/` directory for examples.

@@ -19,14 +19,15 @@ Fuxi is a unified monorepo for single-cell multi-omics analysis, merging the pre
 ```
 fuxi/
 ├── core/              # Shared infrastructure (utils, ai_caller, config, run_pipeline)
+│   └── preprocess/    #   Preprocessing pipeline (format detect → extract → config gen)
 ├── rna/               # scRNA-seq module (steps, utils, tissue_ontologies)
 ├── atac/              # scATAC-seq module (steps)
 ├── spatial/           # Spatial transcriptomics (future)
 ├── projects/          # Dataset-specific configs, organized by modality
-│   ├── rna/           # 15 RNA projects
-│   └── atac/          # 1 ATAC project
+│   ├── rna/           # RNA dataset configs
+│   └── atac/          # ATAC dataset configs
 ├── tests/             # Unified test suite
-├── templates/         # Config templates
+├── templates/         # Config templates (10X h5/mtx, CSV, fragments, retina, etc.)
 └── docs/              # Architecture & pipeline documentation
 ```
 
@@ -51,13 +52,13 @@ python core/run_pipeline.py --modality rna --list
 python core/run_pipeline.py --modality atac --list
 
 # Run a full pipeline
-python core/run_pipeline.py --modality rna --config projects/rna/GSE246169/config_GSE246169.py
+python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config_<GSE_ID>.py
 
 # Run a single step
-python core/run_pipeline.py --modality atac --step 0 --config projects/atac/GSE246169/config_GSE246169.py
+python core/run_pipeline.py --modality atac --step 0 --config projects/atac/<GSE_ID>/config_<GSE_ID>.py
 
 # Resume from checkpoint
-python core/run_pipeline.py --modality rna --resume --config projects/rna/GSE107618/config_GSE107618.py
+python core/run_pipeline.py --modality rna --resume --config projects/rna/<GSE_ID>/config_<GSE_ID>.py
 ```
 
 ### Data Organization
@@ -82,7 +83,7 @@ from core.utils import data_root
 CFG = Config()
 CFG.modality = "rna"
 CFG.project_dir = os.path.dirname(os.path.abspath(__file__))
-CFG.data_dir = os.path.join(data_root(), "GSE107618")
+CFG.data_dir = os.path.join(data_root(), "<GSE_ID>")
 # ... dataset-specific settings ...
 
 CFG.resolve_paths()
@@ -99,3 +100,4 @@ CFG.resolve_paths()
 | `core/run_pipeline.py` | Unified CLI with `--modality rna\|atac` dispatch |
 | `core/dataset_schema.py` | Python model for dataset.yaml |
 | `core/dataset_detector.py` | Auto-detect modality from file patterns |
+| `core/preprocess/` | Preprocessing pipeline: format detection, archive extraction, config generation |
