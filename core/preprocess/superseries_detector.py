@@ -38,6 +38,7 @@ from urllib.error import URLError
 # ── Constants ─────────────────────────────────────────────────────────
 
 _GSE_DIR_RE = re.compile(r'^GSE\d+$')
+_GSE_FILE_RE = re.compile(r'(?:^|[\W_]+)(GSE\d+)(?=[\W_]|$)')
 _SERIES_RELATION_RE = re.compile(
     r'!Series_relation\s*=\s*Super[Ss]eries\s+(?:of|is|:)\s*(.*)',
     re.IGNORECASE,
@@ -190,33 +191,71 @@ def _ncbi_save_cache(accession: str, data: dict) -> None:
         json.dump(data, f, indent=2)
 
 
-def _ncbi_esummary(accession: str) -> Optional[dict]:
-    """Query NCBI E-utilities esummary for a GEO accession.
+def _ncbi_esearch(accession: str) -> Optional[str]:
+    """Query NCBI E-utilities esearch to convert GSE accession to numeric UID.
 
-    Returns the JSON result dict, or None on failure.
+    NCBI esummary does not accept string GSE accessions directly; it requires
+    the numeric database UID. This function performs the lookup.
+
+    Args:
+        accession: GEO accession (e.g. 'GSE137400').
+
+    Returns:
+        Numeric UID string (e.g. '200137400'), or None on failure.
     """
     url = (
-        'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi'
-        f'?db=gds&id={accession}&retmode=json'
+        'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
+        f'?db=gds&term={accession}[Accession]&retmode=json'
     )
     req = Request(url)
     req.add_header('User-Agent', 'Fuxi/1.0 (single-cell pipeline; academic use)')
     try:
         with urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode())
-        return data
+        uid_list = data.get('esearchresult', {}).get('idlist', [])
+        if uid_list:
+            return uid_list[0]
+    except (URLError, json.JSONDecodeError, OSError):
+        pass
+    return None
+
+
+def _ncbi_esummary(uid: str) -> Optional[dict]:
+    """Query NCBI E-utilities esummary for a GEO dataset numeric UID.
+
+    Args:
+        uid: Numeric database UID (e.g. '200137400'), NOT a GSE accession string.
+
+    Returns:
+        The entry dict from esummary result, or None on failure.
+    """
+    url = (
+        'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi'
+        f'?db=gds&id={uid}&retmode=json'
+    )
+    req = Request(url)
+    req.add_header('User-Agent', 'Fuxi/1.0 (single-cell pipeline; academic use)')
+    try:
+        with urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode())
+        result = data.get('result', {})
+        return result.get(uid) or result
     except (URLError, json.JSONDecodeError, OSError) as e:
         return {'_error': str(e)}
 
 
-def _ncbi_elink_superseries(accession: str) -> Optional[list[str]]:
+def _ncbi_elink_superseries(uid: str) -> Optional[list[str]]:
     """Query NCBI E-utilities elink to get child accessions of a SuperSeries.
 
-    Returns a list of child accession IDs, or None on failure.
+    Args:
+        uid: Numeric database UID (e.g. '200137400'), NOT a GSE accession string.
+
+    Returns:
+        A list of child accession IDs (GSE strings), or None on failure.
     """
     url = (
         'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi'
-        f'?dbfrom=gds&db=gds&linkname=gds_gds_superseries&id={accession}&retmode=json'
+        f'?dbfrom=gds&db=gds&linkname=gds_gds_superseries&id={uid}&retmode=json'
     )
     req = Request(url)
     req.add_header('User-Agent', 'Fuxi/1.0 (single-cell pipeline; academic use)')
@@ -255,12 +294,15 @@ def query_ncbi(accession: str) -> Optional[dict]:
     # Rate-limit: NCBI allows 3 req/sec without API key
     time.sleep(0.34)
 
-    esummary = _ncbi_esummary(accession)
-    if esummary is None or '_error' in esummary:
+    # Two-step: esearch converts GSE string → numeric UID, then esummary
+    uid = _ncbi_esearch(accession)
+    if uid is None:
         return None
 
-    result_data = esummary.get('result', {})
-    entry = result_data.get(accession, {})
+    time.sleep(0.34)
+    entry = _ncbi_esummary(uid)
+    if entry is None or '_error' in entry:
+        return None
 
     entry_type = entry.get('entrytype', '')
     is_super = entry_type.upper() in ('GSE', 'SUPERSERIES')
@@ -268,9 +310,22 @@ def query_ncbi(accession: str) -> Optional[dict]:
     child_accessions: list[str] = []
     if is_super:
         time.sleep(0.34)
-        children = _ncbi_elink_superseries(accession)
+        children = _ncbi_elink_superseries(uid)  # returns numeric UIDs
         if children:
-            child_accessions.extend(children)
+            # Batch-resolve child UIDs to GSE accessions via esummary
+            child_uids = [str(c) for c in children]
+            time.sleep(0.34)
+            child_data = _ncbi_esummary(','.join(child_uids))
+            if child_data and '_error' not in child_data:
+                # When batch-queried, the result dict has UID keys
+                for cuid in child_uids:
+                    ce = child_data.get(cuid, {})
+                    acc = ce.get('accession', '')
+                    if acc and acc not in child_accessions:
+                        child_accessions.append(acc)
+            # Fallback: just use what we got
+            if not child_accessions:
+                child_accessions.extend(str(c) for c in children)
 
     result = {
         'is_superseries': is_super,
@@ -283,6 +338,92 @@ def query_ncbi(accession: str) -> Optional[dict]:
 
     _ncbi_save_cache(accession, result)
     return result
+
+
+# ── Strategy 4: Filename patterns ────────────────────────────────────────
+
+def _collect_gse_accessions_from_filenames(file_list: list[str]) -> set[str]:
+    """Scan filenames for embedded GSE accession numbers.
+
+    When a SuperSeries' data files are placed flat in one directory (no
+    sub-directory structure), each file's name often contains its own sub-series
+    GSE accession, e.g. 'GSE133382_AtlasRGCs_CountMatrix.csv.gz'.
+
+    Returns:
+        A set of unique GSE accession strings found in filenames.
+    """
+    accessions: set[str] = set()
+    for f in file_list:
+        basename = os.path.basename(f)
+        matches = _GSE_FILE_RE.findall(basename)
+        for m in matches:
+            if m.upper() != m:
+                continue
+            accessions.add(m)
+    return accessions
+
+
+def detect_subseries_from_filenames(file_list: list[str],
+                                    parent_gse: str) -> list[str]:
+    """Detect sub-series by scanning filenames for GSE accessions.
+
+    Looks for GSE numbers embedded in filenames that differ from the parent
+    accession.  This catches the common GEO pattern where a SuperSeries
+    directory contains files named like::
+
+        GSE133382_CountMatrix.csv.gz
+        GSE137398_ONCRGCs_control_count_mat.csv.gz
+        GSE137828_Actinomycin_RGCs_count_matrix.csv.gz
+
+    Args:
+        file_list:  All file paths in the dataset directory.
+        parent_gse: The parent SuperSeries accession (e.g. 'GSE137400').
+
+    Returns:
+        A sorted list of sub-series GSE accessions found.
+    """
+    found = _collect_gse_accessions_from_filenames(file_list)
+    # Exclude the parent itself (the SuperSeries accession)
+    parent_upper = parent_gse.upper()
+    children = [gse for gse in found if gse.upper() != parent_upper]
+    return sorted(set(children))
+
+
+def group_files_by_accession(file_list: list[str],
+                             child_accessions: list[str]) -> dict[str, list[str]]:
+    """Group files by their embedded sub-series accession.
+
+    Each file is assigned to the first matching GSE accession found in
+    its filename.  Files that do not match any child accession are grouped
+    under the key ``_unmatched``.
+
+    Args:
+        file_list:  All file paths in the dataset directory.
+        child_accessions:  List of sub-series GSE accessions known to exist.
+
+    Returns:
+        {accession: [file_path, ...]} for each child accession,
+        plus possibly an ``_unmatched`` key.
+    """
+    groups: dict[str, list[str]] = {acc: [] for acc in child_accessions}
+    unmatched: list[str] = []
+
+    for f in file_list:
+        basename = os.path.basename(f)
+        assigned = False
+        for acc in child_accessions:
+            if acc in basename:
+                groups[acc].append(f)
+                assigned = True
+                break
+        if not assigned:
+            unmatched.append(f)
+
+    # Remove empty groups
+    groups = {k: v for k, v in groups.items() if v}
+    if unmatched:
+        groups['_unmatched'] = unmatched
+    return groups
 
 
 # ── Top-level detection orchestrator ──────────────────────────────────
@@ -348,6 +489,23 @@ def detect_superseries(root_dir: str,
             result['summary'] = result['summary'] or ncbi_result.get('summary', '')
             existing = set(result['child_accessions'])
             for acc in ncbi_result.get('child_accessions', []):
+                if acc not in existing:
+                    result['child_accessions'].append(acc)
+
+    # Strategy 4: Filename patterns — scan for GSE\d+ in filenames
+    # Only activate if the SuperSeries isn't already confirmed by other means
+    # AND the parent gse_id is known.  This catches the flat-file pattern
+    # where a SuperSeries directory contains files named with their sub-series
+    # accession numbers.
+    if gse_id and not result['is_superseries']:
+        filename_children = detect_subseries_from_filenames(file_list, gse_id)
+        if len(filename_children) >= 2:
+            # Require at least 2 distinct child GSEs to avoid false positives
+            # from self-references or accidental filename patterns
+            result['is_superseries'] = True
+            result['detected_by'] = 'filenames'
+            existing = set(result['child_accessions'])
+            for acc in filename_children:
                 if acc not in existing:
                     result['child_accessions'].append(acc)
 
