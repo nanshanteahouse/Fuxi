@@ -194,6 +194,96 @@ def load_dataset(yaml_path: str) -> DatasetMeta:
     )
 
 
+def _sample_to_dict(s):
+    """Serialize a SampleEntry to a plain dict for YAML emission."""
+    d = {"id": s.id, "label": s.label}
+    if s.group is not None:
+        d["group"] = s.group
+    if s.species is not None:
+        d["species"] = s.species
+    if s.note is not None:
+        d["note"] = s.note
+    if s.rna:
+        d["rna"] = [{"file": f.file, "format": f.format} if isinstance(f, FileEntry) else f
+                     for f in s.rna]
+    if s.atac:
+        d["atac"] = [{"file": f.file, "format": f.format} if isinstance(f, FileEntry) else f
+                      for f in s.atac]
+    if s.spatial:
+        d["spatial"] = [{"file": f.file, "format": f.format} if isinstance(f, FileEntry) else f
+                         for f in s.spatial]
+    if s.spots:
+        d["spots"] = [{"file": f.file, "format": f.format} if isinstance(f, FileEntry) else f
+                       for f in s.spots]
+    return d
+
+
 def save_dataset(ds: DatasetMeta, yaml_path: str) -> None:
-    """将 DatasetMeta 保存为 YAML 文件（暂不实现）"""
-    raise NotImplementedError("save_dataset not implemented yet")
+    """将 DatasetMeta 保存为 YAML 文件"""
+    import yaml
+    from datetime import datetime
+
+    data = {
+        "id": ds.id,
+        "type": ds.type,
+        "title": ds.title,
+    }
+    if ds.species is not None:
+        data["species"] = ds.species
+    if ds.tissue is not None:
+        data["tissue"] = ds.tissue
+    if ds.note is not None:
+        data["note"] = ds.note
+    if ds.description is not None:
+        data["description"] = ds.description
+    if ds.pubmed_id is not None:
+        data["pubmed_id"] = ds.pubmed_id
+    if ds.parent_superseries is not None:
+        data["parent_superseries"] = ds.parent_superseries
+
+    data["modalities"] = [
+        {
+            "name": m.name,
+            "status": m.status,
+            "format": m.format,
+            "file_count": m.file_count,
+            "total_size_gb": m.total_size_gb,
+        }
+        for m in ds.modalities
+    ]
+
+    data["samples"] = [_sample_to_dict(s) for s in ds.samples]
+
+    if ds.subseries:
+        data["subseries"] = ds.subseries
+
+    data["comparisons"] = [
+        {"name": c.name, "type": c.type, "groups": c.groups}
+        for c in ds.comparisons
+    ]
+
+    res = ds.resources
+    if res is not None:
+        data["resources"] = {}
+        if res.genome:
+            data["resources"]["genome"] = res.genome
+        if res.ortholog_map:
+            data["resources"]["ortholog_map"] = res.ortholog_map
+        if res.technology:
+            data["resources"]["technology"] = res.technology
+
+    ps = ds.meta.pipeline_status
+    data["meta"] = {
+        "created": ds.meta.created or datetime.now().isoformat(),
+        "updated": ds.meta.updated or datetime.now().isoformat(),
+        "generated_by": ds.meta.generated_by or "fuxi_preprocess",
+        "pipeline_status": {
+            "scRNAseq": ps.scRNAseq,
+            "ATACseq": ps.ATACseq,
+            "spatial": ps.spatial,
+        },
+    }
+
+    os.makedirs(os.path.dirname(yaml_path) or ".", exist_ok=True)
+    with open(yaml_path, 'w', encoding='utf-8') as f:
+        yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)

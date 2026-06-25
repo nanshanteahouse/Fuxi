@@ -1,0 +1,825 @@
+# Fuxi 分析管线使用指南
+
+> 适用于：**单细胞组学研究人员** | 无需编程背景即可上手
+
+---
+
+## 目录
+
+1. [管线能做什么？](#1-管线能做什么)
+2. [前置准备](#2-前置准备)
+3. [快速开始：运行第一条管线](#3-快速开始运行第一条管线)
+4. [scRNA-seq 管线详解](#4-scrna-seq-管线详解)
+5. [scATAC-seq 管线详解](#5-scatac-seq-管线详解)
+6. [结果文件说明](#6-结果文件说明)
+7. [常用运行技巧](#7-常用运行技巧)
+8. [配置文件详解](#8-配置文件详解)
+9. [常见问题（FAQ）](#9-常见问题faq)
+
+---
+
+## 1. 管线能做什么？
+
+当你从 GEO 等公共数据库下载好单细胞数据、运行完预处理脚本得到配置文件后，分析管线将自动完成从原始数据到生物学结论的**全流程计算**：
+
+| 阶段 | 做了什么 | 生物学意义 |
+|------|---------|-----------|
+| 🔬 数据加载 | 自动识别并读取 6 种常见单细胞数据格式 | 统一为内部格式，屏蔽格式差异 |
+| 🧹 质量控制 | 去除双细胞、死细胞、低质量细胞 | 保证下游分析基于可靠数据 |
+| 🔗 批次整合 | 归一化 + 高变基因 + PCA + 批次校正 | 消除技术差异，保留生物学信号 |
+| 🗺️ 聚类与可视化 | 多参数网格搜索 + UMAP 降维 | 发现细胞亚群，呈现数据结构 |
+| 🏷️ 细胞注释 | KB 打分 / AI 大模型 / 标记基因三种模式自动注释 | 将聚类编号转化为有生物学意义的细胞类型 |
+| 🔍 差异分析 | 标记基因 + 阶段比较 + 时序趋势三层 DE | 鉴定各类细胞的特征基因和发育动态 |
+| 🌳 轨迹推断 | PAGA + 扩散伪时间 | 重建细胞分化/发育路径 |
+| 🧬 通路富集 | GO/KEGG 过表达分析 + GSEA | 揭示细胞类型的生物学功能 |
+
+**简单来说：配置文件就绪 → 一条命令 → 从原始数据到论文级图表全部自动产出。**
+
+---
+
+## 2. 前置准备
+
+### 2.1 安装环境
+
+```bash
+# Linux / WSL
+cd /path/to/Fuxi
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements/rna.txt  # 或 requirements.txt（全部模态）
+```
+
+### 2.2 设置环境变量
+
+```bash
+# 必需：数据根目录（存放所有下载的原始数据）
+export FUXI_DATA_ROOT=/data/geo_datasets
+
+# WSL 用户注意：必须关闭 HDF5 文件锁
+export HDF5_USE_FILE_LOCKING=FALSE
+
+# 可选：AI 注释所需的 API Key
+export LLM_API_KEY=sk-your-api-key-here
+```
+
+### 2.3 确认配置文件就绪
+
+运行管线前，你需要确保数据集目录下已有两个文件：
+
+```
+projects/{模态}/{数据集ID}/
+├── dataset.yaml          # 数据集元信息清单
+└── config_{数据集ID}.py   # 管线配置文件
+```
+
+这两个文件通常由**预处理脚本**自动生成。如果你还没有配置文件，请先参考《Fuxi 预处理脚本使用指南》。
+
+---
+
+## 3. 快速开始：运行第一条管线
+
+### 3.1 查看可用步骤
+
+```bash
+# 查看 scRNA-seq 管线的所有步骤
+python core/run_pipeline.py --modality rna --list
+
+# 查看 scATAC-seq 管线的所有步骤
+python core/run_pipeline.py --modality atac --list
+```
+
+你会看到类似这样的输出：
+
+```
+Fuxi — RNA-seq pipeline step list
+============================================================
+  [00] Load raw data → 00_raw.h5ad
+  [01] Downsampling (optional, config: downsample_target)
+  [02] Scrublet doublet detection (per sample) → 01_doublet.h5ad
+  [03] QC filtering (doublets removed) → 02_qc.h5ad
+  [04] Normalize + HVG + PCA + Harmony → 03_integrated.h5ad
+  [05] Multi-param UMAP + multi-resolution Leiden
+  [06] AI-assisted major cell type annotation (dual mode)
+  [07] Interactive subtype analysis (requires --cell-type)
+  [08] Differential expression (multi-layer)
+  [09] PAGA + DPT trajectory analysis
+  [10] GO/KEGG enrichment + AI interpretation
+  [11] Exploratory analysis (composition/QC/marker)
+```
+
+### 3.2 一键运行全流程
+
+```bash
+# scRNA-seq 全流程（12 步，从头到尾）
+python core/run_pipeline.py --modality rna --config projects/rna/{数据集ID}/config_{数据集ID}.py
+
+# scATAC-seq 全流程（10 步）
+python core/run_pipeline.py --modality atac --config projects/atac/{数据集ID}/config_{数据集ID}.py
+```
+
+运行过程中，终端会实时显示每一步的进度和耗时：
+
+```
+============================================================
+[run] [RNA] Step [00]: Load raw data → 00_raw.h5ad
+============================================================
+[run] Step [00] completed (took 45.2s).
+
+============================================================
+[run] [RNA] Step [02]: Scrublet doublet detection (per sample) → 01_doublet.h5ad
+============================================================
+[run] Step [02] completed (took 120.8s).
+...
+============================================================
+[run] Fuxi RNA-seq pipeline execution finished.
+============================================================
+[run] Step timing summary:
+  [00]    45.2s  Load raw data → 00_raw.h5ad
+  ...
+  [Total] 1845.3s  12 steps total
+```
+
+### 3.3 检查点与断点续跑
+
+管线采用**检查点机制**：每步完成后会保存中间结果文件。如果中途因故中断，可以使用 `--resume` 从断点继续，已完成的步骤会自动跳过：
+
+```bash
+python core/run_pipeline.py --modality rna --resume --config projects/rna/{数据集ID}/config_{数据集ID}.py
+```
+
+### 3.4 运行单个步骤
+
+如果你想单独运行或重跑某一步：
+
+```bash
+# 只运行第 06 步（细胞注释）
+python core/run_pipeline.py --modality rna --step 6 --config projects/rna/{数据集ID}/config_{数据集ID}.py
+
+# 运行步骤 03 到 06
+python core/run_pipeline.py --modality rna --steps 3-6 --config projects/rna/{数据集ID}/config_{数据集ID}.py
+
+# 运行步骤 00, 02, 04（跳着跑）
+python core/run_pipeline.py --modality rna --steps 0,2,4 --config projects/rna/{数据集ID}/config_{数据集ID}.py
+```
+
+---
+
+## 4. scRNA-seq 管线详解
+
+scRNA-seq 管线包含 12 个步骤（编号 00-11），数据依次流转：
+
+```
+原始数据 → 00_load → 01_downsample → 02_doublet → 03_qc
+         → 04_integrate → 05_cluster → 06_annotate
+         → 07_subcluster → 08_markers → 09_trajectory
+         → 10_enrichment → 11_exploratory
+```
+
+### Step 00：数据加载
+
+**输入**：原始数据文件（自动识别格式） | **输出**：`00_raw.h5ad`
+
+管线自动识别并加载以下格式之一：
+
+| 格式 | 典型文件 | 适用场景 |
+|------|---------|---------|
+| `10X_h5` | `*filtered_feature_bc_matrix.h5` | Cell Ranger 标准输出 |
+| `10X_mtx` | `matrix.mtx.gz` + `barcodes.tsv.gz` + `features.tsv.gz` | Cell Ranger 原始输出 |
+| `csv_matrix` | 基因×细胞计数矩阵（CSV/TSV/MTX） | 自定义实验、Smart-seq2 等 |
+| `h5ad` | `*.h5ad` | 已预处理的数据 |
+
+加载过程中自动完成：
+- **样本/阶段映射**：根据 barcode 后缀（如 `-1`、`-2`）自动标注每个细胞的样本来源和发育阶段
+- **多文件合并**：如果某个数据集有多个 H5 文件，自动合并为一个 AnnData 对象
+- **格式兼容**：自动处理 legacy 2 列 genes.tsv 与标准 3 列 features.tsv 的转换
+
+### Step 01：降采样（可选）
+
+**输入**：`00_raw.h5ad` | **输出**：覆盖 `00_raw.h5ad`
+
+> 此步骤默认**跳过**。仅当配置中设置了 `CFG.downsample_target` 时才运行。
+
+三种降采样策略：
+- **分层抽样**（`stratified`）：按样本比例分配，保持各样本的相对比例
+- **随机抽样**（`random`）：全局均匀随机抽取
+- **每样本上限**（`max_per_sample`）：限制每个样本的最大细胞数，适用于样本极度不均衡的数据
+
+### Step 02：双细胞检测（Scrublet）
+
+**输入**：`00_raw.h5ad` | **输出**：`01_doublet.h5ad`
+
+按样本独立运行 Scrublet 算法，检测因液滴中包裹了两个细胞而产生的"双细胞"假象。
+
+- 大样本（>15,000 细胞）串行处理以避免内存溢出
+- 小样本通过并行加速
+- 如果某样本的 Scrublet 运行失败，该样本的所有细胞标记为非双细胞（优雅降级，不阻塞管线）
+
+输出：`doublet_scores`（双细胞概率分数）和 `predicted_doublet`（是/否）两列。
+
+### Step 03：质量控制（QC）
+
+**输入**：`01_doublet.h5ad` | **输出**：`02_qc.h5ad`
+
+按以下顺序依次过滤：
+
+1. **去除双细胞**：剔除 `predicted_doublet=True` 的细胞
+2. **基因数过滤**：去除检测基因数过少（空液滴）或过多（双细胞漏网）的细胞（默认 500-7500）
+3. **线粒体过滤**：去除线粒体基因占比 > 20% 的细胞（死细胞/受损细胞）
+4. **复杂度过滤**：去除 `log10(基因数)/log10(总UMI) < 0.7` 的细胞（低质量细胞）
+
+同时计算每个细胞的完整 QC 指标：线粒体比例、核糖体比例、基因-UMI 复杂度等，供后续分析使用。
+
+### Step 04：归一化与批次整合
+
+**输入**：`02_qc.h5ad` | **输出**：`03_integrated.h5ad`
+
+这是管线中最关键的整合步骤，将不同样本/批次的数据对齐到同一个分析空间：
+
+1. **高变基因筛选（HVG）**：识别信息量最大的基因（默认约 4000 个）。自动尝试多种方法（`seurat_v3` → `cell_ranger` → `seurat` → 手动方差筛选），确保在任何数据上都能成功
+2. **回归协变量**（可选）：去除 `total_counts` 和 `pct_counts_mt` 等技术因素对表达量的影响
+3. **归一化**：每个细胞的总计数归一化到 10,000，然后 log1p 变换
+4. **PCA 降维**：主成分分析（默认 100 维），生成肘部图
+5. **Harmony 批次校正**：消除不同样本/批次间的技术差异（可选，通过 `CFG.use_harmony` 控制）
+
+> 💡 完整基因表达矩阵保存在 `.raw` 中，下游标记基因计算和差异分析均使用 `.raw`，确保不会因 HVG 筛选丢失信息。
+
+### Step 05：聚类与 UMAP
+
+**输入**：`03_integrated.h5ad` | **输出**：`04_clustered.h5ad`
+
+执行**多参数网格搜索**，自动找到最优聚类方案：
+
+- 遍历多种 `n_neighbors` 参数（默认 [15, 20, 30]）和 Leiden 分辨率（默认 [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]）
+- 每种组合计算一次 UMAP 降维和 Leiden 聚类
+- 以 **Silhouette 分数**（轮廓系数）为标准，自动选出最优参数
+- 生成所有参数组合的 UMAP 对比图（PDF）和网格搜索汇总表（CSV）
+
+> 💡 这一步的计算量较大，因为它尝试了 3×6=18 种参数组合。但这是值得的——你不用手动反复尝试不同参数。
+
+### Step 06：细胞类型注释
+
+**输入**：`04_clustered.h5ad` | **输出**：`05_annotated.h5ad`
+
+这是管线的核心步骤，将"Cluster 0, Cluster 1, ..."转化为"Rod Photoreceptor, Bipolar Cell, Müller Glia, ..."等有生物学意义的标签。管线支持三种注释模式，按优先级自动选择：
+
+#### 模式一：KB 知识库模式（最高准确度）
+
+如果你研究的是已有知识库支持的组织（如视网膜），只需在配置中设置：
+```python
+CFG.tissue_kb = "retina"
+```
+
+管线将自动执行一个精密的多层决策流程：
+1. **标记基因计算**：对每个聚类，用 Wilcoxon 秩和检验找出高表达基因
+2. **知识库打分**：将各聚类的标记基因与知识库中各细胞类型的已知标记基因进行超几何检验 + 余弦相似度双重打分
+3. **专家规则匹配**：应用优先级排序的确定性匹配规则（如"同时高表达 RHO 和 PDE6A → Rod Photoreceptor"）
+4. **证据融合**：5 层决策引擎综合 marker 分数、专家规则、层级结构等信息，给出带置信度的共识注释
+5. **AI 兜底**（可选）：对低置信度聚类，自动调用大语言模型（LLM）基于标记基因重新推理
+6. **质量控制**：自动标记线粒体/核糖体主导的低质量聚类为 "Unknown"，生成注释质量报告
+
+#### 模式二：AI 大模型模式
+
+如果启用 AI 注释：
+```python
+CFG.ai.enabled = True
+CFG.ai.ai_annotation = True
+```
+
+管线会将每个聚类的 top 标记基因发送给大语言模型，模型基于生物学知识推断细胞类型，并返回结构化的注释结果（细胞类型 + 亚型 + 状态 + 置信度 + 推理过程）。
+
+支持多种 LLM 后端：OpenAI API、DeepSeek、vLLM、Ollama 等（通过 `CFG.ai.api_base` 配置）。
+
+#### 模式三：Score_genes 简单打分（兜底）
+
+如果既没有知识库也没有 AI，管线自动回退到经典的标记基因打分模式——你只需要在配置中提供 `CFG.marker_dict`（手工整理的各细胞类型的标记基因列表）。
+
+> 💡 **注释结果包含**：`cell_type`（主类型）、`cell_subtype`（亚型）、`cell_state`（状态）、`annot_confidence`（置信度）、`annot_reasoning`（推理过程）。
+
+### Step 07：子聚类分析（可选）
+
+**输入**：`05_annotated.h5ad` | **输出**：`05_sub_{细胞类型}.h5ad`
+
+对某个特定细胞类型（如"Müller Glia"）进行精细亚型分析：
+
+```bash
+python core/run_pipeline.py --modality rna --step 7 \
+    --cell-type "Müller Glia" \
+    --config projects/rna/{数据集ID}/config_{数据集ID}.py
+```
+
+该步骤将在指定细胞类型的子集上重新运行 PCA → 邻居图 → UMAP → Leiden 聚类，并可选择性地使用 AI 对亚群进行重注释。结果自动写回主 `05_annotated.h5ad` 文件的 `cell_subtype` 列。
+
+### Step 08：差异表达分析（三层 DE）
+
+**输入**：`05_annotated.h5ad` | **输出**：CSV 表格 + 热图/点图
+
+执行三个层次的差异表达分析：
+
+**第一层：标记基因** — 每类细胞 vs 所有其他细胞（Wilcoxon 秩和检验）
+- 输出：`marker_genes_per_group.csv`
+- 用于鉴定各类细胞的身份标志基因
+
+**第二层：阶段配对比较** — 同一类细胞在相邻发育阶段之间的比较（t 检验）
+- 输出：`pairwise_stage_de.csv`
+- 追踪细胞在发育过程中的转录变化（需要数据有 `stage` 注释）
+- 自动并行处理多组比较
+
+**第三层：时间趋势基因** — 基因表达随发育时间的 Spearman 相关
+- 输出：`temporal_trend_genes.csv`
+- 每类细胞取前 20 个上调基因和前 20 个下调基因
+- 要求至少 3 个发育阶段
+
+> 💡 同时生成：标记基因热图（每类 top 5 基因）、已知标记基因点图。
+
+### Step 09：轨迹分析（PAGA + DPT）
+
+**输入**：`04_clustered.h5ad`（通常使用） | **输出**：`05_final.h5ad`
+
+重建细胞的发育/分化轨迹：
+
+1. **PAGA 图**：构建细胞类型间的拓扑连接图，揭示分化关系
+2. **根细胞识别**：自动确定轨迹起点（优先级：配置指定根类型 → 根标记基因最高表达 → 最早发育阶段 → 数据集第一个细胞）
+3. **扩散伪时间（DPT）**：沿 PAGA 拓扑计算每个细胞的伪时间位置
+4. **分支分析**：鉴定分化分支点的谱系特异性基因
+5. **发育基因可视化**：绘制已知发育基因（SOX2、PAX6、NEUROD1 等）沿伪时间的表达趋势
+
+### Step 10：GO/KEGG 通路富集
+
+**输入**：Step 08 的标记基因表 | **输出**：CSV 表格 + 气泡图 + AI 解读
+
+两种互补的富集方法：
+
+| 方法 | 原理 | 输出 |
+|------|------|------|
+| **ORA**（过表达分析） | 取 top 标记基因，超几何检验看哪些通路被显著富集 | `enrichment_ora.csv` |
+| **GSEA**（基因集富集分析） | 所有基因按分数排序，检验通路基因是否在列表顶/底部聚集 | `enrichment_gsea.csv` |
+
+支持 200+ 基因集库，常用包括：
+- `GO_Biological_Process` — 基因本体生物学过程
+- `KEGG_2021_Human` — KEGG 代谢/信号通路
+- `Reactome_2022` — Reactome 通路数据库
+- `MSigDB_Hallmark_2020` — 标志性基因集
+
+> 💡 如果启用了 AI，富集结果会自动生成一段生物学解读报告（`ai_interpretation.txt`）。
+
+### Step 11：探索性分析
+
+**输入**：`05_annotated.h5ad` | **输出**：CSV 表格 + 多种 PDF 图表
+
+生成全面的探索性汇总图表，帮助你快速理解数据全貌：
+
+- **细胞组成分析**：各类细胞在不同样本/阶段的占比堆叠柱状图
+- **QC 指标可视化**：基因数、UMI 数、线粒体比例在 UMAP 上的分布
+- **标记基因表达**：已知标记基因在 UMAP 上的表达热图
+- **聚类统计**：各聚类/细胞类型的细胞数及占比
+
+---
+
+## 5. scATAC-seq 管线详解
+
+scATAC-seq 管线包含 10 个步骤（编号 00-09）：
+
+```
+原始数据 → 00_load → 01_qc → 02_process → 03_cluster
+         → 04_annotate → 05_marker_peaks → 06_motif
+         → 07_trajectory → 08_enrichment → 09_integrate
+```
+
+### Step 00：数据加载
+
+**输入**：原始 ATAC 数据 | **输出**：`00_raw.h5ad`
+
+支持三种格式：
+
+| 格式 | 典型文件 | 说明 |
+|------|---------|------|
+| `10x_fragments` | `*fragments.tsv.gz` | ATAC 片段文件，通过 SnapATAC2 流式导入 |
+| `10x_peak_h5` | `*filtered_peak_bc_matrix.h5` | 10X 峰-细胞矩阵 HDF5 |
+| `h5ad` | `*.h5ad` | 预处理过的 AnnData |
+
+### Step 01：QC + Peak Calling
+
+**输入**：`00_raw.h5ad` | **输出**：`01_filtered.h5ad`
+
+1. **片段数过滤**：去除片段数异常（过少=空液滴，过多=双细胞）的细胞
+2. **MACS3 Peak Calling**：在 pseudobulk 上调用 MACS3 识别开放染色质区域（仅保留标准染色体 chr1-22, X, Y）
+3. **峰-细胞矩阵构建**：生成二值化的可及性矩阵（开放=1, 关闭=0）
+4. **双细胞检测**：在峰矩阵上运行 Scrublet
+
+### Step 02：特征选择与降维
+
+**输入**：`01_filtered.h5ad` | **输出**：`02_processed.h5ad`
+
+1. **去除双细胞**
+2. **IDF 特征选择**：选取信息量最大的峰（默认 top 50k），降低噪声
+3. **谱嵌入**：基于矩阵的 Lanczos 谱分解（30 维）
+4. **KNN 邻居图**：在谱空间中构建细胞邻居关系
+
+### Step 03：聚类与 UMAP
+
+**输入**：`02_processed.h5ad` | **输出**：`03_clustered.h5ad`
+
+与 RNA 管线相同的多参数网格搜索策略（遍历 `n_neighbors` × `resolution`），在谱嵌入空间中以 Silhouette 分数自动选择最优聚类。
+
+### Step 04：AI 染色质状态注释
+
+**输入**：`03_clustered.h5ad` | **输出**：`04_annotated.h5ad`
+
+1. 计算每个聚类的差异可及性峰（marker regions）
+2. 将 top 峰及其邻近基因发送给大语言模型（LLM）
+3. LLM 基于染色质开放区域的基因关联推断细胞类型/染色质状态
+4. AI 响应自动磁盘缓存（SHA256 去重），重复运行不额外调用 API
+
+### Step 05-08：下游分析
+
+| 步骤 | 内容 | 输出 |
+|------|------|------|
+| Step 05 | 差异可及性峰 per 细胞类型 | `marker_peaks.csv` |
+| Step 06 | TF 结合基序富集（CIS-BP 数据库） | `motif_enrichment_{细胞类型}.csv` |
+| Step 07 | ATAC 伪时间轨迹分析 | `07_trajectory.h5ad` |
+| Step 08 | 峰关联基因的 GO/KEGG 富集 | `enrichment_*.csv` |
+
+### Step 09：RNA+ATAC 整合
+
+**输入**：ATAC `04_annotated.h5ad` + RNA h5ad（自动发现） | **输出**：`09_integrated.h5ad`
+
+如果你有配对的多组学数据（同一批细胞的 RNA-seq + ATAC-seq）：
+1. 自动发现同数据集下的 RNA 结果文件
+2. 通过 barcode 交集找到共有的细胞
+3. 构建 MuData 多模态对象（`rna` + `atac` 两个 modality）
+4. 运行联合 PCA
+
+> 💡 对于**多组学（multiome）数据集**，预处理脚本会自动生成 RNA 和 ATAC 两份配置。先分别跑完 RNA 和 ATAC 管线，再跑 ATAC Step 09 即可自动整合。
+
+---
+
+## 6. 结果文件说明
+
+管线运行完毕后，所有结果统一存放在数据集的 `results/` 目录下，按类型分为三个子目录：
+
+```
+results/
+├── h5ad/                          # 中间检查点文件
+│   ├── 00_raw.h5ad                # 原始数据
+│   ├── 01_doublet.h5ad            # 双细胞检测后
+│   ├── 02_qc.h5ad                 # QC 过滤后
+│   ├── 03_integrated.h5ad         # 批次整合后
+│   ├── 04_clustered.h5ad          # 聚类 + UMAP 后
+│   ├── 05_annotated.h5ad          # 细胞注释后 ★
+│   └── 05_final.h5ad              # 轨迹分析后
+│
+├── figures/                       # 可视化图表
+│   ├── pca_elbow.png              # PCA 肘部图
+│   ├── harmony_comparison.png     # Harmony 校正前后对比
+│   ├── umap_leiden_resolutions.pdf # 多分辨率聚类对比
+│   ├── 05_celltype.pdf            # 按细胞类型着色的 UMAP
+│   ├── 07_marker_heatmap.pdf      # 标记基因热图
+│   ├── 07_dotplot.pdf             # 标记基因点图
+│   ├── 08_pseudotime.pdf          # 伪时间 UMAP
+│   ├── 08_paga_umap.pdf           # PAGA 轨迹图
+│   ├── 08_dev_genes_heatmap.pdf   # 发育基因沿伪时间热图
+│   ├── enrichment/                # 富集分析图表
+│   │   ├── ora_*_bubble.pdf       # ORA 气泡图
+│   │   └── prerank_*_bubble.pdf   # GSEA 气泡图
+│   └── 06_exploratory/            # 探索性分析图集
+│       ├── composition_by_stage_*.png  # 细胞组成堆叠图
+│       └── _06_marker_dotplot.pdf      # 标记基因点图
+│
+└── tables/                        # 数据表格
+    ├── marker_genes_per_group.csv # 标记基因（Layer 1）
+    ├── pairwise_stage_de.csv      # 阶段配对 DE（Layer 2）
+    ├── temporal_trend_genes.csv   # 时间趋势基因（Layer 3）
+    ├── branch_deg.csv             # 分支 DEG
+    ├── cell_type_sizes.csv        # 细胞类型统计
+    ├── enrichment_ora.csv         # ORA 汇总
+    ├── enrichment_gsea.csv        # GSEA 汇总
+    └── enrichment/                # 详细富集结果
+        ├── ora_*_summary.csv
+        ├── prerank_*_summary.csv
+        └── ai_interpretation.txt  # AI 生物学解读
+```
+
+> 💡 加 ★ 的 `05_annotated.h5ad` 是最重要的输出文件——它包含每个细胞的最终注释标签，是绝大多数下游分析（差异表达、轨迹、富集）的起点。
+
+---
+
+## 7. 常用运行技巧
+
+### 7.1 查看管线进度
+
+```bash
+# 列出所有步骤及其对应的检查点文件
+python core/run_pipeline.py --modality rna --list --config projects/rna/{数据集ID}/config_{数据集ID}.py
+```
+
+### 7.2 从断点恢复
+
+```bash
+# 自动检测第一个未完成的步骤，从那里继续
+python core/run_pipeline.py --modality rna --resume --config projects/rna/{数据集ID}/config_{数据集ID}.py
+```
+
+管线会自动扫描检查点文件，跳过已完成的步骤。无论中断原因是网络问题、内存不足还是手动终止，都可以用同一条命令恢复。
+
+### 7.3 只重跑特定步骤
+
+如果你对某一步的结果不满意，调整配置参数后：
+
+```bash
+# 只重跑注释步骤（Step 06）
+python core/run_pipeline.py --modality rna --step 6 --config projects/rna/{数据集ID}/config_{数据集ID}.py
+
+# 重跑后面的所有步骤
+python core/run_pipeline.py --modality rna --steps 6-11 --config projects/rna/{数据集ID}/config_{数据集ID}.py
+```
+
+### 7.4 跳过慢步骤
+
+如果你只关注部分分析结果：
+
+```bash
+# 只跑加载到注释（前 7 步）
+python core/run_pipeline.py --modality rna --steps 0-6 --config projects/rna/{数据集ID}/config_{数据集ID}.py
+```
+
+### 7.5 清理中间文件
+
+管线运行过程中会产生多个中间检查点文件（每个 h5ad 可能数百 MB 到数 GB）。如果你磁盘空间有限，可以在每步完成后自动删除上游文件：
+
+```bash
+python core/run_pipeline.py --modality rna --cleanup --config projects/rna/{数据集ID}/config_{数据集ID}.py
+```
+
+### 7.6 子聚类分析
+
+对某个已注释的细胞类型进行精细亚型分析：
+
+```bash
+python core/run_pipeline.py --modality rna --step 7 \
+    --cell-type "Müller Glia" \
+    --config projects/rna/{数据集ID}/config_{数据集ID}.py
+```
+
+你可以对多个细胞类型分别运行，结果会自动合并回主注释文件。
+
+### 7.7 多组学数据处理
+
+```bash
+# 第一步：分别跑 RNA 和 ATAC
+python core/run_pipeline.py --modality rna  --config projects/rna/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality atac --config projects/atac/{数据集ID}/config_{数据集ID}.py
+
+# 第二步：ATAC Step 09 自动整合
+# 在 ATAC 全流程的最后一步自动完成，或单独运行：
+python core/run_pipeline.py --modality atac --step 9 --config projects/atac/{数据集ID}/config_{数据集ID}.py
+```
+
+---
+
+## 8. 配置文件详解
+
+配置文件（`config_{数据集ID}.py`）是一个 Python 脚本，通过修改全局 `CFG` 对象来控制管线的所有行为。以下是最常需要调整的配置项：
+
+### 8.1 数据输入配置
+
+```python
+# 数据格式（必须与你的文件格式匹配）
+CFG.data_format = '10X_mtx'     # 选项: 10X_h5, 10X_mtx, csv_matrix, h5ad, 10x_fragments, 10x_peak_h5
+
+# 10X MTX 格式相关
+CFG.mtx_dir = '.'               # MTX 文件所在目录
+CFG.mtx_prefix = 'sample_'     # MTX 文件前缀
+
+# CSV 格式相关
+CFG.matrix_file = 'counts.csv.gz'
+CFG.barcodes_file = 'barcodes.tsv.gz'
+CFG.features_file = 'features.tsv.gz'
+```
+
+### 8.2 样本与阶段映射
+
+```python
+# barcode 后缀 → 样本名称
+CFG.sample_map = {
+    1: 'Control',
+    2: 'Treatment',
+}
+
+# 样本名称 → 发育阶段
+CFG.stage_map = {
+    'Control':   'E14.5',
+    'Treatment': 'P0',
+}
+CFG.stage_order = ['E14.5', 'P0']  # 阶段的时间顺序（用于时序分析）
+```
+
+### 8.3 注释配置（核心）
+
+```python
+# 方式一：使用知识库（如果你的组织有 KB 支持）
+CFG.tissue_kb = "retina"
+
+# 方式二：手工指定标记基因（KB 不支持时）
+CFG.marker_dict = {
+    'Rod Photoreceptor': ['RHO', 'PDE6A', 'NRL', 'GNAT1'],
+    'Bipolar Cell':      ['VSX2', 'GRIK1', 'TRPM1', 'CABP5'],
+    'Müller Glia':       ['GLUL', 'RLBP1', 'CLU', 'VIM'],
+    # ... 按你的组织添加
+}
+
+# 方式三：启用 AI 注释
+CFG.ai.enabled = True
+CFG.ai.ai_annotation = True
+CFG.ai.model = "deepseek-chat"              # 模型名称
+CFG.ai.api_base = "https://api.deepseek.com/v1"
+```
+
+### 8.4 质量控制
+
+```python
+CFG.min_genes = 500            # 细胞最少检测基因数
+CFG.max_genes = 7500           # 细胞最多检测基因数（去除双细胞漏网）
+CFG.max_pct_mito = 20.0        # 最大线粒体百分比
+CFG.min_genes_per_umi = 0.70   # 复杂度阈值（TPM 数据需降低，如 0.50）
+CFG.min_cells_per_gene = 3     # 基因在最少几个细胞中表达
+```
+
+### 8.5 批次校正
+
+```python
+CFG.use_harmony = True              # 启用 Harmony 批次校正
+CFG.harmony_batch_key = "sample"    # 按哪个列做批次校正
+CFG.use_regress_out = False         # 是否回归 total_counts 和 MT%
+```
+
+### 8.6 聚类参数
+
+```python
+CFG.n_neighbors_grid = [15, 20, 30]        # UMAP 邻居数候选值
+CFG.resolution_grid = [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]  # Leiden 分辨率候选值
+CFG.best_resolution = None                  # 设为具体值可跳过网格搜索
+```
+
+### 8.7 物种与基因组
+
+```python
+CFG.species = 'human'    # 物种（影响线粒体基因模式、富集分析数据库等）
+CFG.tissue = 'retina'    # 组织名称
+CFG.genome = 'hg38'      # 参考基因组（ATAC 管线必需）
+```
+
+---
+
+## 9. 常见问题（FAQ）
+
+### Q1：运行报 "HDF5 file locking" 错误
+
+```
+OSError: Unable to open file (file locking disabled on this file system)
+```
+
+**原因**：WSL 环境下访问 Windows 文件系统（`/mnt/` 路径）时，HDF5 的文件锁机制不兼容。
+
+**解决**：运行管线前先设置环境变量：
+
+```bash
+export HDF5_USE_FILE_LOCKING=FALSE
+```
+
+> 💡 建议将此设置写入 `~/.bashrc` 或 `~/.zshrc`，一劳永逸。
+
+### Q2：预处理生成的配置文件里有 `# TODO` 标记，怎么处理？
+
+预处理脚本只能自动填充它能确定的信息。标记 `# TODO` 的部分需要你根据实验设计手工填写：
+
+- **`CFG.marker_dict`**：查阅文献，整理你目标组织各细胞类型的已知标记基因。如果你的组织有 KB 支持（如 retina），直接设置 `CFG.tissue_kb` 即可
+- **`CFG.sample_map`**：从 GEO 页面的 SRA Run Selector 或论文 Methods 部分整理 barcode → 样本对应关系
+- **`CFG.stage_map`**：如果你研究发育过程，建立样本 → 发育阶段映射
+
+### Q3：管线的某一步失败了，怎么恢复？
+
+```bash
+# 直接使用 --resume，管线会自动从失败的那一步继续
+python core/run_pipeline.py --modality rna --resume --config projects/rna/{数据集ID}/config_{数据集ID}.py
+```
+
+`--resume` 会扫描检查点文件，自动找到第一个未完成的步骤。已完成的步骤不会重复运行，所以恢复速度很快。
+
+### Q4：我的细胞注释结果不好，怎么办？
+
+首先确认你选择了合适的注释模式：
+
+1. **如果你的组织有 KB 支持**（如 retina）→ 使用 KB 模式：`CFG.tissue_kb = "retina"`
+2. **如果你有 AI API Key** → 开启 AI 兜底：`CFG.ai.ai_annotation = True`（AI 会自动接手 KB 模式下低置信度的聚类）
+3. **如果是非标准组织** → 手工整理 `CFG.marker_dict`（参考 CellMarker 2.0、PanglaoDB 等数据库）
+
+> 💡 KB + AI 的组合效果最好：KB 提供专家级规则匹配，AI 负责处理未知和前体细胞类型。
+
+### Q5：我的数据是 TPM 格式，QC 把所有细胞都过滤掉了？
+
+TPM 数据中每个细胞的 `total_counts` 恰为 1,000,000，这会导致复杂度指标 `min_genes_per_umi` 几乎为 0。
+
+**解决**：在配置中大幅降低复杂度阈值：
+
+```python
+CFG.min_genes_per_umi = 0.50  # TPM 数据
+```
+
+然后重跑 QC 步骤：
+
+```bash
+python core/run_pipeline.py --modality rna --step 3 --config ...
+```
+
+### Q6：ATAC 管线的 Peak 并集内存爆炸？
+
+多样本 ATAC 数据中，每个样本独立做 peak calling 会导致 peak 坐标几乎不重叠，并集可能达到百万级甚至更多。
+
+**建议**：如果可能，将多个样本的 fragment 文件合并，用 SnapATAC2 的 MACS3 统一进行 peak calling，获得一致性 peak set。
+
+### Q7：AI 注释的 API 调用会花多少钱？
+
+管线设计了多层**缓存和降级机制**来控制成本：
+
+- **磁盘缓存**：相同输入（SHA256 匹配）不会重复调用 API，重跑免费
+- **优雅降级**：API 失败时自动回退到标记基因打分，不会阻塞管线
+- **成本可控**：单次 scRNA-seq 注释通常调用 1 次 API（所有聚类一次发送），成本极低
+
+### Q8：我的数据和参考基因组不是人类，怎么处理？
+
+```python
+CFG.species = 'mouse'    # 支持: human, mouse, macaque, zebrafish 等
+CFG.genome = 'mm10'      # 相应的参考基因组
+
+# 如果有同源基因映射文件，配置正交映射
+CFG.ortholog_map = 'path/to/ortholog_map.csv'
+```
+
+> 💡 跨物种分析时，KB 注释模式的准确度会随进化距离递减。建议采取 KB + AI 组合模式，让 AI 弥补 KB 在非人物种上的盲区。
+
+### Q9：gseapy 安装失败？
+
+GSEApy 0.11.0+ 需要 Rust 编译器。如果 `pip install gseapy` 失败：
+
+```bash
+# 安装 Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# 然后重新安装
+pip install gseapy
+```
+
+> 💡 如果不想安装 Rust，可以安装较旧版本的 gseapy：`pip install gseapy==0.10.8`
+
+### Q10：如何知道我的数据适合用什么参数？
+
+管线的网格搜索机制已经为你解决了大部分参数选择问题（如 Leiden 分辨率、UMAP 邻居数）。以下参数可能需要根据你的数据特性手工调整：
+
+| 参数 | 调整依据 |
+|------|---------|
+| `min_genes` / `max_genes` | 查看 QC 步骤生成的分布图，取 1%-99% 分位数附近 |
+| `max_pct_mito` | 通常 20% 是安全默认值；代谢活跃组织（如心肌）可适当放宽 |
+| `n_pcs` | 查看 `pca_elbow.png`，取肘部位置 |
+| `harmony_batch_key` | 通常是 "sample"；如果你的实验包含不同测序平台，也可是 "platform" |
+
+---
+
+## 附录：快速命令参考
+
+### scRNA-seq
+
+```bash
+# 全流程
+python core/run_pipeline.py --modality rna --config projects/rna/{数据集ID}/config_{数据集ID}.py
+
+# 断点续跑
+python core/run_pipeline.py --modality rna --resume --config projects/rna/{数据集ID}/config_{数据集ID}.py
+
+# 单步
+python core/run_pipeline.py --modality rna --step 6 --config ...
+
+# 范围
+python core/run_pipeline.py --modality rna --steps 4-8 --config ...
+
+# 子聚类
+python core/run_pipeline.py --modality rna --step 7 --cell-type "细胞类型名" --config ...
+
+# 列出步骤
+python core/run_pipeline.py --modality rna --list --config ...
+```
+
+### scATAC-seq
+
+```bash
+# 全流程
+python core/run_pipeline.py --modality atac --config projects/atac/{数据集ID}/config_{数据集ID}.py
+
+# 断点续跑
+python core/run_pipeline.py --modality atac --resume --config projects/atac/{数据集ID}/config_{数据集ID}.py
+
+# 单步
+python core/run_pipeline.py --modality atac --step 4 --config ...
+
+# 整合 RNA+ATAC
+python core/run_pipeline.py --modality atac --step 9 --config ...
+```
