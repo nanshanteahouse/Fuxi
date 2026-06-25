@@ -46,7 +46,7 @@
 cd /path/to/Fuxi
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements/rna.txt  # 或 requirements.txt（全部模态）
 ```
 
 ### 2.2 设置环境变量

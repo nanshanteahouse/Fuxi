@@ -41,7 +41,9 @@ fuxi/
   cd <repo_root>
   python -m venv .venv
   source .venv/bin/activate
-  pip install -r requirements.txt
+  pip install -r requirements.txt          # all modalities
+  pip install -r requirements/rna.txt        # scRNA-seq only
+  pip install -r requirements/atac.txt       # scATAC-seq only
   ```
 
 ### Running the Pipeline

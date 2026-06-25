@@ -145,13 +145,20 @@ source .venv/bin/activate
 
 ### 4.1 Basic installation
 
-Make sure the virtual environment is active (your prompt starts with `(.venv)`), then:
+Make sure the virtual environment is active (your prompt starts with `(.venv)`), then pick the command matching your needs:
 
 ```bash
+# All modalities (RNA + ATAC + spatial)
 pip install -r requirements.txt
+
+# scRNA-seq only (skip ATAC packages entirely)
+pip install -r requirements/rna.txt
+
+# scATAC-seq only
+pip install -r requirements/atac.txt
 ```
 
-This installs all required Python packages:
+This installs the required Python packages:
 
 | Category | Key packages | Purpose |
 |----------|-------------|---------|
@@ -165,6 +172,8 @@ This installs all required Python packages:
 | **Multi-omics integration** | `muon`, `mudata` | Joint RNA + ATAC analysis |
 | **AI annotation** | `openai` | LLM-assisted cell type annotation |
 
+> 💡 **Only need scRNA-seq?** Use `pip install -r requirements/rna.txt` to install only the packages you need — no ATAC dependencies will be pulled.
+
 ### 4.2 How long will it take?
 
 A fresh install typically takes **5–15 minutes**, depending on your network speed and machine.
@@ -172,10 +181,12 @@ A fresh install typically takes **5–15 minutes**, depending on your network sp
 ### 4.3 Verify the installation
 
 ```bash
-# Confirm core packages imported successfully
+# scRNA-seq (core check — always passes if you used requirements.txt or requirements/rna.txt)
 python -c "import scanpy; print('scanpy', scanpy.__version__)"
-python -c "import snapatac2; print('snapatac2', snapatac2.__version__)"
 python -c "import numpy; print('numpy', numpy.__version__)"
+
+# scATAC-seq (only if you installed via requirements.txt or requirements/atac.txt)
+python -c "import snapatac2; print('snapatac2', snapatac2.__version__)"
 ```
 
 If these commands complete without errors, your dependencies are ready.
@@ -186,7 +197,7 @@ When the project code is updated, you may need to install new dependencies:
 
 ```bash
 git pull                       # Pull the latest code
-pip install -r requirements.txt # Install any newly added packages
+pip install -r requirements/rna.txt  # Install any newly added packages (adjust as needed)
 ```
 
 ---
@@ -278,19 +289,20 @@ echo $FUXI_DATA_ROOT
 # 4. Confirm all core packages load correctly
 python -c "
 import scanpy as sc
-import snapatac2 as snap
 import anndata
 import numpy as np
 import pandas as pd
 import matplotlib
 print('All core packages loaded successfully')
 print(f'  Scanpy:    {sc.__version__}')
-print(f'  Snapatac2: {snap.__version__}')
 print(f'  AnnData:   {anndata.__version__}')
 print(f'  NumPy:     {np.__version__}')
 print(f'  Pandas:    {pd.__version__}')
 print(f'  Matplotlib:{matplotlib.__version__}')
 "
+
+# 5. (Optional) Confirm ATAC packages if you installed them
+python -c "import snapatac2 as snap; print('Snapatac2:', snap.__version__)"
 ```
 
 If you see `All core packages loaded successfully` followed by version numbers, your environment is ready.
@@ -337,8 +349,8 @@ Common package-specific issues and solutions:
 # Confirm Python 3.14+
 python --version
 
-# On macOS: snapatac2 is Linux-only. Skip ATAC packages:
-pip install scanpy anndata numpy scipy pandas matplotlib joblib scrublet leidenalg gseapy openai python-dotenv harmony-pytorch
+# On macOS: snapatac2 is Linux-only. Install RNA packages only:
+pip install -r requirements/rna.txt
 ```
 
 **`harmony-pytorch` fails to install:**
@@ -406,7 +418,7 @@ deactivate                # Exit first
 rm -rf .venv              # Remove the old environment
 python3.14 -m venv .venv  # Recreate
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements/rna.txt  # or requirements.txt
 ```
 
 ### Q6: Running out of memory during installation or pipeline execution
@@ -428,7 +440,7 @@ Yes. If you're comfortable with conda, replace the virtualenv steps with:
 ```bash
 conda create -n fuxi python=3.14 -y
 conda activate fuxi
-pip install -r requirements.txt
+pip install -r requirements/rna.txt  # or requirements.txt for all modalities
 ```
 
 > 💡 These docs use venv as the primary path because conda channels may lag behind Python 3.14, and Snapatac2 recommends pip installation. Both approaches ultimately do `pip install` — pick whichever you're more familiar with.
@@ -441,7 +453,7 @@ Before running the pipeline, confirm each item:
 
 - [ ] Python 3.14+ is installed
 - [ ] Virtual environment `.venv` is created and activated
-- [ ] `pip install -r requirements.txt` completed successfully
+- [ ] `pip install -r requirements/rna.txt` (or `requirements.txt`) completed successfully
 - [ ] `FUXI_DATA_ROOT` is set and the directory exists
 - [ ] (WSL2) `HDF5_USE_FILE_LOCKING=FALSE` is set
 - [ ] (Optional) `LLM_API_KEY` is set if you plan to use AI annotation

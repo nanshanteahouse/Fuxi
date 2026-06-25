@@ -145,10 +145,17 @@ source .venv/bin/activate
 
 ### 4.1 基础安装
 
-确保虚拟环境已激活（提示符前有 `(.venv)`），然后：
+确保虚拟环境已激活（提示符前有 `(.venv)`），然后根据你的需求选择对应的命令：
 
 ```bash
+# 安装全部模态（RNA + ATAC + spatial）
 pip install -r requirements.txt
+
+# 仅安装 scRNA-seq（跳过 ATAC 包）
+pip install -r requirements/rna.txt
+
+# 仅安装 scATAC-seq
+pip install -r requirements/atac.txt
 ```
 
 此命令会安装所有必要的 Python 包，包括：
@@ -165,6 +172,8 @@ pip install -r requirements.txt
 | **多组学整合** | `muon`, `mudata` | RNA + ATAC 联合分析 |
 | **AI 注释** | `openai` | 调用大语言模型辅助细胞类型注释 |
 
+> 💡 **只需要 scRNA-seq？** 使用 `pip install -r requirements/rna.txt` 即可只安装你需要的包，不会拉取 ATAC 相关依赖。
+
 ### 4.2 安装时间参考
 
 首次安装通常需要 **5-15 分钟**，具体取决于网络速度和机器性能。
@@ -172,10 +181,12 @@ pip install -r requirements.txt
 ### 4.3 验证安装
 
 ```bash
-# 确认核心包已正确安装
+# scRNA-seq（核心检查 — 使用 requirements.txt 或 requirements/rna.txt 安装后均可通过）
 python -c "import scanpy; print('scanpy', scanpy.__version__)"
-python -c "import snapatac2; print('snapatac2', snapatac2.__version__)"
 python -c "import numpy; print('numpy', numpy.__version__)"
+
+# scATAC-seq（仅当你通过 requirements.txt 或 requirements/atac.txt 安装了 ATAC 包）
+python -c "import snapatac2; print('snapatac2', snapatac2.__version__)"
 ```
 
 如果上述命令均无报错，说明依赖安装成功。
@@ -186,7 +197,7 @@ python -c "import numpy; print('numpy', numpy.__version__)"
 
 ```bash
 git pull                    # 拉取最新代码
-pip install -r requirements.txt  # 安装可能新增的依赖
+pip install -r requirements/rna.txt  # 安装可能新增的依赖（根据实际模态选择）
 ```
 
 ---
@@ -278,19 +289,20 @@ echo $FUXI_DATA_ROOT
 # 4. 确认核心功能可用
 python -c "
 import scanpy as sc
-import snapatac2 as snap
 import anndata
 import numpy as np
 import pandas as pd
 import matplotlib
 print('✅ 所有核心包加载成功')
 print(f'  Scanpy:    {sc.__version__}')
-print(f'  Snapatac2: {snap.__version__}')
 print(f'  AnnData:   {anndata.__version__}')
 print(f'  NumPy:     {np.__version__}')
 print(f'  Pandas:    {pd.__version__}')
 print(f'  Matplotlib:{matplotlib.__version__}')
 "
+
+# 5. （可选）如果安装了 ATAC 包，确认 ATAC 功能
+python -c "import snapatac2; print('Snapatac2:', snapatac2.__version__)"
 ```
 
 如果看到绿色的 `✅ 所有核心包加载成功` 和各包的版本号，说明环境配置完毕。
@@ -338,8 +350,8 @@ print(f'  Matplotlib:{matplotlib.__version__}')
 python --version
 
 # 如果在 macOS 上
-# snapatac2 仅支持 Linux，可跳过 ATAC 相关功能：
-pip install scanpy anndata numpy scipy pandas matplotlib joblib scrublet leidenalg gseapy openai python-dotenv harmony-pytorch
+# snapatac2 仅支持 Linux，可只安装 RNA 包：
+pip install -r requirements/rna.txt
 ```
 
 **`harmony-pytorch` 安装失败：**
@@ -407,7 +419,7 @@ deactivate                # 先退出
 rm -rf .venv              # 删除旧的虚拟环境
 python3.14 -m venv .venv  # 重新创建
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements/rna.txt  # 或 requirements.txt
 ```
 
 ### Q6: 内存不足导致安装或运行失败
@@ -429,7 +441,7 @@ pip install -r requirements.txt
 ```bash
 conda create -n fuxi python=3.14 -y
 conda activate fuxi
-pip install -r requirements.txt
+pip install -r requirements/rna.txt  # 或 requirements.txt（全部模态）
 ```
 
 > 💡 本文档以 venv 为主线，因为 conda 渠道对 Python 3.14 的支持可能滞后，且 Snapatac2 推荐 pip 安装。两种方式本质上都是 `pip install`，选你熟悉的即可。
@@ -442,7 +454,7 @@ pip install -r requirements.txt
 
 - [ ] Python 3.14+ 已安装
 - [ ] 虚拟环境 `.venv` 已创建并激活
-- [ ] `pip install -r requirements.txt` 执行成功
+- [ ] `pip install -r requirements/rna.txt`（或 `requirements.txt`）执行成功
 - [ ] `FUXI_DATA_ROOT` 环境变量已设置且目录存在
 - [ ] （WSL2 用户）`HDF5_USE_FILE_LOCKING=FALSE` 已设置
 - [ ] （可选）`LLM_API_KEY` 已设置（如需 AI 注释功能）

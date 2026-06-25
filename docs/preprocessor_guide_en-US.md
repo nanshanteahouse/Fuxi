@@ -42,7 +42,7 @@ After you've downloaded single-cell data from GEO, ArrayExpress, or other source
 cd /path/to/Fuxi
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements/rna.txt  # or requirements.txt for all modalities
 ```
 
 ### 2.2 Set the data root directory

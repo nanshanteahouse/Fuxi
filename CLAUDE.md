@@ -15,7 +15,9 @@ Fuxi (伏羲) is a unified single-cell multi-omics pipeline monorepo, formed by 
 cd <repo_root>
 python -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements.txt          # all modalities
+pip install -r requirements/rna.txt        # scRNA-seq only
+pip install -r requirements/atac.txt       # scATAC-seq only
 
 # Required env var before any pipeline run
 export FUXI_DATA_ROOT=<path_to_geo_datasets>
