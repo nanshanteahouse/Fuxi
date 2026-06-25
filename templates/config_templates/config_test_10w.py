@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""config_test_10w.py — 测试配置: GSE268630 10w NR"""
+"""config_test_10w.py — 测试配置模板 (ATAC)"""
 
 from core.config import Config, CFG
 import os, sys
@@ -7,12 +7,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 from core.utils import data_root
 
 # ── 数据路径 ──
-CFG.data_dir = os.path.join(data_root(), "GSE268630")
+CFG.data_dir = os.path.join(data_root(), "<GSE_ID>")
 CFG.data_format = "10x_fragments"
-CFG.fragment_file = os.path.join(CFG.data_dir, "GSM8295580_Multiome_10w_NR_atac_fragments.tsv.gz")
+CFG.fragment_file = os.path.join(CFG.data_dir, "<fragments.tsv.gz>")
 CFG.barcodes_file = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    "barcodes_10w_NR.txt",
+    "<barcodes.txt>",
 )
 
 # ── 参考基因组 ──

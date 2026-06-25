@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-GSE138002 配置模板 — 人视网膜发育 scRNA-seq
-==============================================
-这是通用管线的具体配置示例，对应 GSE138002 项目。
+配置模板 — 人视网膜发育 scRNA-seq (CSV 矩阵)
+================================================
+可复制到项目目录并修改各参数适配具体数据集。
 
 使用方法:
     cp config_retina.py ../../config_myproject.py
@@ -14,9 +14,9 @@ from core.config import CFG
 
 # ── 数据格式 (CSV 矩阵) ──
 CFG.data_format = 'csv_matrix'
-CFG.matrix_file = 'GSE138002_Final_matrix.mtx.gz'
-CFG.barcodes_file = 'GSE138002_Final_barcodes.csv.gz'
-CFG.features_file = 'GSE138002_genes.csv.gz'
+CFG.matrix_file = '<GSE_ID>_matrix.mtx.gz'
+CFG.barcodes_file = '<GSE_ID>_barcodes.csv.gz'
+CFG.features_file = '<GSE_ID>_genes.csv.gz'
 
 # ── CSV 中已有的元数据列映射 ──
 CFG.meta_columns = {
@@ -38,9 +38,8 @@ STAGE_MAP = {
     '59_Day': 'Organoid',
     'Adult': 'Adult',
 }
-# 注意: 此处 stage_map 为 dict[int, str] 格式，而 GSE138002 的 age 值
-# 是字符串，因此使用 meta_columns + 步骤 04 中的手动映射。
-# 在 config.py 的 stage_map 中我们使用空字典，实际映射在 04 步完成。
+# 注意: 此处 stage_map 为 dict[int, str] 格式，而实际使用时 age 值
+# 可能是字符串，因此使用 meta_columns + 步骤 04 中的手动映射。
 CFG.stage_map = {}
 CFG.stage_order = ['Organoid', 'EarlyFetal', 'MidFetal', 'LateFetal', 'Postnatal', 'Adult']
 

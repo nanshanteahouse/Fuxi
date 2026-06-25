@@ -9,13 +9,16 @@ from pathlib import Path
 from collections import defaultdict
 
 # Locate the Compara file relative to the configured data root.
-# The file ships inside GSE246169 (multi-omics dataset).  If data_root()
+# The file may ship inside a multi-omics dataset directory.  If data_root()
 # is not configured, you need to either set FUXI_DATA_ROOT or edit
 # COMPARA_PATH below.
 try:
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..'))
     from core.utils import data_root
-    COMPARA_PATH = os.path.join(data_root(), "GSE246169", "Compara.101.protein_default.homologies.tsv.gz")
+    COMPARA_PATH = os.environ.get(
+        "COMPARA_PATH",
+        os.path.join(data_root(), "<your_dataset>", "Compara.101.protein_default.homologies.tsv.gz"),
+    )
 except RuntimeError:
     # data_root() not configured — edit this path for your machine
     COMPARA_PATH = os.environ.get(

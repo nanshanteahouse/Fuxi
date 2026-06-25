@@ -2,10 +2,10 @@
 """
 Step 02: QC filtering (doublets already removed in Step 01)
 ============================================================
-继承了 GSE169109 的最佳实践:
-  1. QC 指标 (mito%, ribo%, 复杂度)
-  2. 过滤 predicted_doublet 细胞 (由 Step 01 产生)
-  3. 自适应 MAD 或全局阈值过滤
+Best practices:
+  1. QC metrics (mito%, ribo%, complexity)
+  2. Filter predicted_doublet cells (from Step 01)
+  3. Adaptive MAD or global threshold filtering
 
 输入: 01_doublet.h5ad (含 doublet_scores, predicted_doublet 列)
 输出: 02_qc.h5ad (过滤后的细胞 + QC 指标)

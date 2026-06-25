@@ -183,7 +183,7 @@ def generate_skeleton(directory: str, geo_id: Optional[str] = None) -> str:
 def main():
     if len(sys.argv) < 2:
         print(f"Usage: python {__file__} <directory> [--all] [--generate-skeleton]")
-        print(f"       python {__file__} $FUXI_DATA_ROOT/GSE246169")
+        print(f"       python {__file__} $FUXI_DATA_ROOT/<GSE_ID>")
         print(f"       python {__file__} $FUXI_DATA_ROOT/ --all --generate-skeleton")
         sys.exit(1)
 

@@ -15,7 +15,7 @@ print(f'{"Species":>12s}  {"Type":>16s}  {"Genes":>7s}  {"EnsBefore":>9s}  {"Ens
 print('-' * 85)
 
 for sp in species_list:
-    path = os.path.join(_REPO, 'projects', 'GSE237215', sp, 'results', 'h5ad', '00_raw.h5ad')
+    path = os.path.join(_REPO, 'projects', 'rna', '<GSE_ID>', sp, 'results', 'h5ad', '00_raw.h5ad')
     try:
         adata = sc.read_h5ad(path)
         n_genes = adata.n_vars

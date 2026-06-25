@@ -115,6 +115,38 @@ ATAC_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
 
 
 # ═══════════════════════════════════════════════════════════════════════
+#  Spatial step registry
+# ═══════════════════════════════════════════════════════════════════════
+SPATIAL_STEPS = [
+    ("00", "00_load.py",           "Load spatial data -> 00_raw.h5ad (coords + image)"),
+    ("01", "01_qc.py",             "QC filtering (spots + tissue detection) -> 01_qc.h5ad"),
+    ("02", "02_image.py",          "Image processing (sq.im.process) -> 02_image.h5ad"),
+    ("03", "03_normalize.py",      "Normalize + HVG + spatial graph -> 03_processed.h5ad"),
+    ("04", "04_cluster.py",        "PCA + UMAP + Leiden clustering -> 04_clustered.h5ad"),
+    ("05", "05_annotate.py",       "Cell type annotation (AI / score_genes) -> 05_annotated.h5ad"),
+    ("06", "06_spatial_de.py",     "DE + spatially variable genes -> marker & SVG CSVs"),
+    ("07", "07_trajectory.py",     "Pseudotime analysis -> 07_trajectory.h5ad"),
+    ("08", "08_enrichment.py",     "GO/KEGG enrichment -> enrichment CSVs"),
+    ("09", "09_exploratory.py",    "Spatial visualization -> figures + CSVs"),
+]
+
+SPATIAL_CHECKPOINT_FILES = [
+    "00_raw.h5ad",           # step 00
+    "01_qc.h5ad",            # step 01
+    "02_image.h5ad",         # step 02
+    "03_processed.h5ad",     # step 03
+    "04_clustered.h5ad",     # step 04
+    "05_annotated.h5ad",     # step 05
+    "05_annotated.h5ad",     # step 06
+    "05_annotated.h5ad",     # step 07
+    "05_annotated.h5ad",     # step 08
+    "05_annotated.h5ad",     # step 09
+]
+
+SPATIAL_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5}
+
+
+# ═══════════════════════════════════════════════════════════════════════
 #  Modality dispatch
 # ═══════════════════════════════════════════════════════════════════════
 MODALITY_MAP = {
@@ -129,6 +161,12 @@ MODALITY_MAP = {
         "checkpoints": ATAC_CHECKPOINT_FILES,
         "write_checkpoints": ATAC_STEPS_WRITE_CHECKPOINT,
         "dir": "atac",
+    },
+    "spatial": {
+        "steps": SPATIAL_STEPS,
+        "checkpoints": SPATIAL_CHECKPOINT_FILES,
+        "write_checkpoints": SPATIAL_STEPS_WRITE_CHECKPOINT,
+        "dir": "spatial",
     },
 }
 
@@ -167,16 +205,24 @@ def find_first_incomplete(h5ad_dir: str, steps, checkpoints, write_checkpoints, 
     return len(steps)
 
 
-def _get_step_dependency(step: int, steps, checkpoints) -> str:
+def _get_step_dependency(step: int, steps, checkpoints, modality: str = "rna") -> str:
     """Return the checkpoint file that step `step` reads from."""
-    # ATAC dependencies
-    if len(steps) == 10:  # ATAC
+    if modality == "atac":
         deps = {
             5: checkpoints[4],
             6: checkpoints[4],
             7: checkpoints[4],
             8: checkpoints[5],
             9: checkpoints[4],
+        }
+        return deps.get(step, checkpoints[step - 1] if step > 0 else "")
+    if modality == "spatial":
+        deps = {
+            5: checkpoints[3],   # annotate reads clustered
+            6: checkpoints[5],   # spatial_de reads annotated
+            7: checkpoints[5],   # trajectory reads annotated
+            8: checkpoints[6],   # enrichment reads DE CSVs
+            9: checkpoints[5],   # exploratory reads annotated
         }
         return deps.get(step, checkpoints[step - 1] if step > 0 else "")
     # RNA dependencies
@@ -295,6 +341,15 @@ def main():
         else:
             print("[run] No RNA h5ad auto-discovered — Step 09 will be skipped.")
 
+    # ── Spatial: auto-discover scRNA marker CSV for Phase 1 transfer ─
+    if args.modality == "spatial" and not getattr(CFG, 'rna_ref', ''):
+        from core.utils import find_rna_marker_csv
+        auto_csv = find_rna_marker_csv(cfg=CFG)
+        if auto_csv:
+            print(f"[run] Auto-discovered scRNA marker CSV: {auto_csv}")
+        else:
+            print("[run] No scRNA marker CSV auto-discovered.")
+
     python_exe = sys.executable
 
     # ── Parse step range ─────────────────────────────────────────────
@@ -303,7 +358,7 @@ def main():
         if start >= len(STEPS):
             print("[run] All steps completed.")
             return
-        dep = _get_step_dependency(start, STEPS, CHECKPOINT_FILES)
+        dep = _get_step_dependency(start, STEPS, CHECKPOINT_FILES, modality=args.modality)
         if dep:
             dep_path = os.path.join(CFG.h5ad_dir, dep)
             if '*' in dep:
@@ -375,7 +430,7 @@ def main():
 
         # ── Optional checkpoint cleanup ──────────────────────────────
         if args.cleanup or getattr(CFG, 'cleanup_intermediates', False):
-            dep = _get_step_dependency(i, STEPS, CHECKPOINT_FILES)
+            dep = _get_step_dependency(i, STEPS, CHECKPOINT_FILES, modality=args.modality)
             if dep and i in STEPS_WRITE_CHECKPOINT:
                 dep_path = os.path.join(CFG.h5ad_dir, dep)
                 if '*' not in dep_path and os.path.exists(dep_path):

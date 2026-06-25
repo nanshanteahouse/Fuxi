@@ -11,10 +11,11 @@
 3. [Quick start: running your first pipeline](#3-quick-start-running-your-first-pipeline)
 4. [scRNA-seq pipeline in detail](#4-scrna-seq-pipeline-in-detail)
 5. [scATAC-seq pipeline in detail](#5-scatac-seq-pipeline-in-detail)
-6. [Output files reference](#6-output-files-reference)
-7. [Practical tips](#7-practical-tips)
-8. [Configuration file deep-dive](#8-configuration-file-deep-dive)
-9. [FAQ](#9-faq)
+6. [Spatial transcriptomics pipeline in detail](#6-spatial-transcriptomics-pipeline-in-detail)
+7. [Output files reference](#7-output-files-reference)
+8. [Practical tips](#8-practical-tips)
+9. [Configuration file deep-dive](#9-configuration-file-deep-dive)
+10. [FAQ](#10-faq)
 
 ---
 
@@ -86,6 +87,9 @@ python core/run_pipeline.py --modality rna --list
 
 # View all scATAC-seq pipeline steps
 python core/run_pipeline.py --modality atac --list
+
+# View all spatial transcriptomics pipeline steps
+python core/run_pipeline.py --modality spatial --list
 ```
 
 You'll see output like this:
@@ -94,16 +98,7 @@ You'll see output like this:
 Fuxi — RNA-seq pipeline step list
 ============================================================
   [00] Load raw data → 00_raw.h5ad
-  [01] Downsampling (optional, config: downsample_target)
-  [02] Scrublet doublet detection (per sample) → 01_doublet.h5ad
-  [03] QC filtering (doublets removed) → 02_qc.h5ad
-  [04] Normalize + HVG + PCA + Harmony → 03_integrated.h5ad
-  [05] Multi-param UMAP + multi-resolution Leiden
-  [06] AI-assisted major cell type annotation (dual mode)
-  [07] Interactive subtype analysis (requires --cell-type)
-  [08] Differential expression (multi-layer)
-  [09] PAGA + DPT trajectory analysis
-  [10] GO/KEGG enrichment + AI interpretation
+  ...
   [11] Exploratory analysis (composition/QC/marker)
 ```
 
@@ -115,6 +110,9 @@ python core/run_pipeline.py --modality rna --config projects/rna/{dataset_id}/co
 
 # scATAC-seq full workflow (10 steps)
 python core/run_pipeline.py --modality atac --config projects/atac/{dataset_id}/config_{dataset_id}.py
+
+# Spatial transcriptomics full workflow (10 steps)
+python core/run_pipeline.py --modality spatial --config projects/spatial/{dataset_id}/config_{dataset_id}.py
 ```
 
 The terminal shows real-time progress with timing for each step:
@@ -187,6 +185,8 @@ The pipeline auto-detects and loads one of the following formats:
 | `10X_mtx` | `matrix.mtx.gz` + `barcodes.tsv.gz` + `features.tsv.gz` | Cell Ranger raw output |
 | `csv_matrix` | Gene × cell count matrix (CSV/TSV/MTX) | Custom protocols, Smart-seq2, etc. |
 | `h5ad` | `*.h5ad` | Pre-processed data |
+
+> **R formats (`.rds` / `.qs`)**: Not natively supported. Use [r2h5ad](https://github.com/nanshanteahouse/r2h5ad) to convert to h5ad before loading.
 
 Automatically handles during loading:
 - **Sample/stage mapping**: Assigns each cell to its sample of origin and developmental stage based on barcode suffix (e.g., `-1`, `-2`)
@@ -453,6 +453,186 @@ If you have paired multiome data (RNA-seq + ATAC-seq from the same cells):
 
 ---
 
+## 6. Spatial transcriptomics pipeline in detail
+
+The spatial transcriptomics pipeline has 10 steps (numbered 00-09), designed for 10X Visium data (and extensible to other platforms):
+
+```
+Raw data → 00_load → 01_qc → 02_image → 03_normalize
+         → 04_cluster → 05_annotate → 06_spatial_de
+         → 07_trajectory → 08_enrichment → 09_exploratory
+```
+
+For a detailed pipeline report including real-world issues and fixes, see `notes/suggestions/spatial_<GSE_ID>.md`.
+
+### Supported platforms
+
+| Platform | Config value | Notes |
+|----------|-------------|-------|
+| 10X Visium | `"visium"` | SpaceRanger output directory or h5ad with spatial coords |
+| Slide-seq | `"slideseq"` | Bead-based spatial barcoding |
+| MERFISH | `"merfish"` | Imaging-based, gene panel |
+| seqFISH | `"seqfish"` | Imaging-based, gene panel |
+
+### Input format
+
+Two data formats are supported:
+
+| Format | Config | Input |
+|--------|--------|-------|
+| 10X Visium directory | `CFG.data_format = "visium"` | Directory containing `filtered_feature_bc_matrix.h5` + `spatial/` |
+| Pre-built h5ad | `CFG.data_format = "h5ad"` | `.h5ad` with `obsm['spatial']` coordinates and `uns['spatial']` images |
+
+### Step 00: Data loading
+
+**Input**: Raw Visium data or h5ad | **Output**: `00_raw.h5ad`
+
+- For `visium` format: uses `sq.read.visium()` with auto-detection of `library_id`
+- For `h5ad` format: reads with `sc.read()` and validates spatial coordinates
+- Auto-converts to sparse CSR format and ensures unique observation names
+- Adds default `in_tissue` flag for Visium data
+
+### Step 01: Quality control
+
+**Input**: `00_raw.h5ad` | **Output**: `01_qc.h5ad`
+
+Applies QC metrics adapted for spatial data:
+- Gene count filter (default 200-7,500)
+- Mitochondrial percentage filter (default <25%)
+- Gene-UMI complexity filter
+- Post-filtering spot count logged with low-count warning
+
+### Step 02: Image processing
+
+**Input**: `01_qc.h5ad` | **Output**: `02_image.h5ad`
+
+Extracts image features from the tissue H&E/IF image:
+- Auto-detects the library_id from `uns['spatial']`
+- Crops image to tissue region (configurable)
+- Extracts basic image features (texture, histogram) via `sq.im.process()`
+- Gracefully degrades if no image is present (skips processing, continues pipeline)
+
+### Step 03: Normalization
+
+**Input**: `02_image.h5ad` | **Output**: `03_processed.h5ad`
+
+- Library-size normalization to 10,000 per spot
+- Log1p transformation
+- Preserves raw counts in `.raw`
+- PCA dimensionality reduction
+
+### Step 04: Clustering & UMAP
+
+**Input**: `03_processed.h5ad` | **Output**: `04_clustered.h5ad`
+
+- Multi-resolution Leiden clustering (grid search over resolutions)
+- UMAP embedding (2D)
+- Spatial neighbor graph construction (`sq.gr.spatial_neighbors`)
+- Grid search summary saved to `param_grid_summary.csv`
+
+### Step 05: Cell type annotation
+
+**Input**: `04_clustered.h5ad` | **Output**: `05_annotated.h5ad`
+
+This is the core annotation step. Three annotation modes, chosen by priority:
+
+#### Mode 1: KB knowledge base mode (highest accuracy)
+
+If `CFG.tissue_kb` is set (e.g. `"retina"`), the pipeline reuses the RNA pipeline's full annotation engine:
+- Computes marker genes per spatial cluster
+- Scores clusters against the tissue Knowledge Base
+- Applies expert deterministic rules
+- Evidence fusion across scoring tiers
+- AI fallback for low-confidence clusters
+
+#### Mode 2: AI LLM mode
+
+If `CFG.ai.enabled` and `CFG.ai.ai_annotation` are set:
+- Sends per-cluster marker genes to an LLM for annotation
+- Returns structured annotations (cell_type, subtype, state, confidence, reasoning)
+
+#### Mode 3: Score_genes simple scoring (fallback)
+
+Uses `CFG.marker_dict` for per-cluster marker gene scoring. This mode can be enriched by:
+- **User-configured markers** in the config file
+- **scRNA-derived markers** via Phase 1 marker-list transfer (see below)
+
+#### Phase 1: scRNA marker-list transfer (NEW)
+
+When scRNA-seq has been run on matched samples (same tissue, same timepoints), per-cell-type marker genes can be automatically transferred to spatial annotation:
+
+```python
+# In your spatial config:
+CFG.rna_ref = "<RNA_dataset_id>"   # e.g. "GSE235585"
+CFG.rna_marker_top_n = 10          # top-N markers per cell type
+CFG.rna_marker_pval_threshold = 0.05
+CFG.rna_marker_logfc_min = 0.0     # 0 = positive LFC only
+```
+
+How it works:
+1. Auto-discovers the scRNA `marker_genes_per_group_cell_type.csv` from the matched RNA project
+2. Extracts top-N significant marker genes per cell type
+3. Merges into `CFG.marker_dict` (user-configured entries take priority)
+4. Enriches the `score_genes_mode()` fallback without affecting KB or AI mode
+
+> 💡 This is **marker-list transfer**, not cell-to-cell label transfer. It leverages the scRNA pipeline's already-computed differential expression results to inform spatial cluster annotation. Zero new dependencies required.
+
+### Step 06: Spatial DE + SVG
+
+**Input**: `05_annotated.h5ad` | **Output**: `marker_genes_per_group.csv`, `svg_rankings.csv`, `06_svg.h5ad`
+
+- Per-cluster differential expression (Wilcoxon rank-sum)
+- Moran's I spatial autocorrelation for spatially variable genes (SVG)
+- Top SVG spatial scatter plots
+- SVM markers marked in `adata.var['spatially_variable']`
+
+### Step 07: Trajectory analysis
+
+**Input**: `05_annotated.h5ad` | **Output**: `07_trajectory.h5ad`
+
+- PAGA graph construction on spatial clusters
+- Diffusion pseudotime (DPT)
+- Root cell identification by marker genes or cell type
+
+### Step 08: GO/KEGG enrichment
+
+**Input**: `marker_genes_per_group.csv` from Step 06 | **Output**: Enrichment CSVs + bubble plots
+
+Reuses the RNA pipeline's enrichment engine:
+- ORA (over-representation analysis) via Enrichr API
+- Pre-ranked GSEA (local computation)
+- Supports 200+ gene set libraries (GO, KEGG, Reactome, MSigDB Hallmark, etc.)
+
+### Step 09: Exploratory analysis
+
+**Input**: `05_annotated.h5ad` + `06_svg.h5ad` | **Output**: Figures + CSV tables
+
+- Spatial cell type scatter plots on tissue coordinates
+- Gene expression spatial maps (top markers + SVGs)
+- Spot composition statistics (cluster / cell type sizes)
+- Spatial neighborhood graph summary (edges, average degree)
+- UMAP summary plots
+
+### Spatial-specific config fields
+
+```python
+CFG.spatial_platform = "visium"          # visium | slideseq | merfish | seqfish
+CFG.library_id = ""                      # Visium library ID (auto-detected if empty)
+CFG.crop_image = True                    # Crop image to tissue region
+CFG.spatial_neighbors_n = 6              # Spatial neighbors count
+CFG.spatial_neighbors_radius = 0.0       # Radius mode (0 = use n_neighbors)
+CFG.run_spatial_autocorr = True          # Run Moran's I SVG detection
+CFG.svg_n_top = 2000                     # Max SVGs for downstream analysis
+
+# Phase 1: scRNA marker-list transfer
+CFG.rna_ref = ""                         # scRNA project path or dataset_id
+CFG.rna_marker_top_n = 10                # Top-N markers per cell type
+CFG.rna_marker_pval_threshold = 0.05     # pvals_adj threshold
+CFG.rna_marker_logfc_min = 0.0           # min logfoldchanges
+```
+
+---
+
 ## 6. Output files reference
 
 After the pipeline completes, all results are organized under the dataset's `results/` directory in three subdirectories:
@@ -503,7 +683,7 @@ results/
 
 ---
 
-## 7. Practical tips
+## 8. Practical tips
 
 ### 7.1 Check pipeline progress
 
@@ -574,9 +754,26 @@ python core/run_pipeline.py --modality atac --config projects/atac/{dataset_id}/
 python core/run_pipeline.py --modality atac --step 9 --config projects/atac/{dataset_id}/config_{dataset_id}.py
 ```
 
+### 7.8 Cross-modality scRNA → spatial marker transfer
+
+If you have scRNA-seq data from matched samples, you can transfer per-cell-type marker genes into spatial annotation:
+
+```bash
+# Step 1: Run RNA pipeline first (produces marker_genes_per_group_cell_type.csv)
+python core/run_pipeline.py --modality rna --config projects/rna/{rna_dataset_id}/config_{rna_dataset_id}.py
+
+# Step 2: Configure spatial config with rna_ref pointing to the RNA dataset
+# In your spatial config:
+#   CFG.rna_ref = "{rna_dataset_id}"
+# Step 3: Run spatial pipeline — annotation automatically uses scRNA markers
+python core/run_pipeline.py --modality spatial --config projects/spatial/{spatial_dataset_id}/config_{spatial_dataset_id}.py
+```
+
+The `--list` command will show whether scRNA marker auto-discovery succeeded.
+
 ---
 
-## 8. Configuration file deep-dive
+## 9. Configuration file deep-dive
 
 The configuration file (`config_{dataset_id}.py`) is a Python script that controls all pipeline behavior by mutating the global `CFG` object. Below are the most commonly adjusted settings:
 
@@ -668,9 +865,35 @@ CFG.tissue = 'retina'    # Tissue name
 CFG.genome = 'hg38'      # Reference genome (required for ATAC pipeline)
 ```
 
+### 8.8 Spatial transcriptomics
+
+```python
+# Platform and input
+CFG.spatial_platform = "visium"          # visium | slideseq | merfish | seqfish
+CFG.library_id = ""                      # Visium library ID (auto-detected if empty)
+CFG.data_format = "visium"               # visium | h5ad
+
+# Image processing
+CFG.crop_image = True                    # Crop image to tissue region
+
+# Spatial graph
+CFG.spatial_neighbors_n = 6              # Number of spatial neighbors
+CFG.spatial_neighbors_radius = 0.0       # Radius mode (0 = use n_neighbors)
+
+# Spatially variable genes
+CFG.run_spatial_autocorr = True          # Run Moran's I
+CFG.svg_n_top = 2000                     # Max SVGs for downstream analysis
+
+# Phase 1: scRNA marker-list transfer
+CFG.rna_ref = ""                         # scRNA project path or dataset_id
+CFG.rna_marker_top_n = 10                # Top-N markers per cell type
+CFG.rna_marker_pval_threshold = 0.05     # pvals_adj threshold
+CFG.rna_marker_logfc_min = 0.0           # min logfoldchanges
+```
+
 ---
 
-## 9. FAQ
+## 10. FAQ
 
 ### Q1: "HDF5 file locking" error
 
@@ -822,4 +1045,21 @@ python core/run_pipeline.py --modality atac --step 4 --config ...
 
 # RNA+ATAC integration
 python core/run_pipeline.py --modality atac --step 9 --config ...
+```
+
+### Spatial transcriptomics
+
+```bash
+# Full workflow
+python core/run_pipeline.py --modality spatial --config projects/spatial/{dataset_id}/config_{dataset_id}.py
+
+# Resume from checkpoint
+python core/run_pipeline.py --modality spatial --resume --config projects/spatial/{dataset_id}/config_{dataset_id}.py
+
+# Single step
+python core/run_pipeline.py --modality spatial --step 5 --config ...
+
+# With scRNA marker transfer (Phase 1)
+python core/run_pipeline.py --modality spatial --config projects/spatial/{dataset_id}/config_{dataset_id}.py
+# Config must set: CFG.rna_ref = "{rna_dataset_id}"
 ```
