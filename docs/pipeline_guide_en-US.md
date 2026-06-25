@@ -186,6 +186,8 @@ The pipeline auto-detects and loads one of the following formats:
 | `csv_matrix` | Gene × cell count matrix (CSV/TSV/MTX) | Custom protocols, Smart-seq2, etc. |
 | `h5ad` | `*.h5ad` | Pre-processed data |
 
+> **R formats (`.rds` / `.qs`)**: Not natively supported. Use [r2h5ad](https://github.com/nanshanteahouse/r2h5ad) to convert to h5ad before loading.
+
 Automatically handles during loading:
 - **Sample/stage mapping**: Assigns each cell to its sample of origin and developmental stage based on barcode suffix (e.g., `-1`, `-2`)
 - **Multi-file merging**: If a dataset contains multiple H5 files, concatenates them into a single AnnData object

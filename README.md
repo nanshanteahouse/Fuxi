@@ -14,6 +14,19 @@ Fuxi is a unified monorepo for single-cell multi-omics analysis, merging the pre
 | `atac` | Snapatac2 2.9 | 10 (00-09) | ✅ Production |
 | `spatial` | Squidpy 1.8+ | 10 (00-09) | ✅ Production |
 
+### Supported Input Formats
+
+| Format | data_format | Modality | Template |
+|--------|-------------|----------|----------|
+| 10X HDF5 (.h5) | `10X_h5` | RNA | `config_10X_h5.py` |
+| 10X MTX (matrix.mtx + barcodes + features) | `10X_mtx` | RNA | `config_10X_mtx.py` |
+| CSV / TSV count matrix | `csv_matrix` | RNA | `config_csv_matrix.py` |
+| Pre-existing h5ad | `h5ad` | RNA | — |
+| 10X Fragments (fragments.tsv.gz) | `10x_fragments` | ATAC | `config_fragments.py` |
+| 10X Visium (SpaceRanger output) | `visium` | Spatial | `config_visium.py` |
+
+**R / Seurat formats (.rds, .qs)** — not natively supported. Use the companion tool [r2h5ad](https://github.com/nanshanteahouse/r2h5ad) to convert RDS/QS files to h5ad before loading with `data_format = "h5ad"`:
+
 ### Architecture
 
 ```

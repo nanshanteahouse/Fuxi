@@ -186,6 +186,8 @@ scRNA-seq 管线包含 12 个步骤（编号 00-11），数据依次流转：
 | `csv_matrix` | 基因×细胞计数矩阵（CSV/TSV/MTX） | 自定义实验、Smart-seq2 等 |
 | `h5ad` | `*.h5ad` | 已预处理的数据 |
 
+> **R 格式（`.rds` / `.qs`）**：管线不原生支持。可使用 [r2h5ad](https://github.com/nanshanteahouse/r2h5ad) 转为 h5ad 后加载。
+
 加载过程中自动完成：
 - **样本/阶段映射**：根据 barcode 后缀（如 `-1`、`-2`）自动标注每个细胞的样本来源和发育阶段
 - **多文件合并**：如果某个数据集有多个 H5 文件，自动合并为一个 AnnData 对象
