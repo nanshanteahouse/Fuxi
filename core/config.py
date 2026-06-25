@@ -309,6 +309,25 @@ class Config:
     # ═══════════════════════════════════════════════════════════════════
     terminal_cell_types: List[str] = field(default_factory=list)
 
+    # --- Spatial: platform & input ---
+    spatial_platform: str = "visium"     # 'visium' | 'slideseq' | 'merfish' | 'seqfish'
+    library_id: str = ""                 # Visium library ID (e.g. 'V1_Adult_Mouse_Brain')
+    img_path: str = ""                   # Tissue image path (H&E or IF)
+    spot_diameter: float = 0.0           # Spot diameter in um; 0 = auto-detect from scalefactors
+
+    # --- Spatial: image processing ---
+    crop_image: bool = True              # Crop image to tissue region
+    img_rescale: float = 1.0             # Image rescale factor (1.0 = original)
+
+    # --- Spatial: spatial graph ---
+    spatial_neighbors_n: int = 6         # Number of spatial neighbors
+    spatial_neighbors_radius: float = 0.0  # Spatial radius; 0 = use n_neighbors
+
+    # --- Spatial: spatially variable genes (SVG) ---
+    run_spatial_autocorr: bool = True    # Run Moran's I spatial autocorrelation
+    moran_percentile: int = 90           # SVG percentile cutoff (0-100)
+    svg_n_top: int = 2000               # Max SVGs to retain (for downstream)
+
     # ═══════════════════════════════════════════════════════════════════
     #  富集分析（通用）
     # ═══════════════════════════════════════════════════════════════════
@@ -420,6 +439,15 @@ class Config:
     @property
     def trajectory_h5ad(self) -> str:
         return os.path.join(self.h5ad_dir, "07_trajectory.h5ad")
+
+    # -- Spatial: checkpoint paths --
+    @property
+    def sq_image_h5ad(self) -> str:
+        return os.path.join(self.h5ad_dir, "02_image.h5ad")
+
+    @property
+    def sq_processed_h5ad(self) -> str:
+        return os.path.join(self.h5ad_dir, "03_processed.h5ad")
 
     # ──────────────────────────────────────────────────────────────────
     #  方法
