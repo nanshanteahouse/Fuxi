@@ -293,6 +293,10 @@ def main():
         adata.X = adata.X.astype('float32', copy=False) if sp.issparse(adata.X) else adata.X
         log.info("X precision converted to float32")
 
+    # ── 可选降采样（config-driven） ──
+    from core.downsample import downsample_by_config
+    adata = downsample_by_config(adata, CFG, log)
+
     # ── 保存 ──
     log.info("Saving to %s...", CFG.raw_h5ad)
     from core.utils import safe_write

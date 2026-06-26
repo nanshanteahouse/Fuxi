@@ -1,6 +1,14 @@
-3.0.0
+3.1.0
 
 Changelog:
+- 3.1.0: Added 4 expert rules for non-neuronal cell types (Astrocyte, Pericyte,
+  Vascular_Endothelial, Fibroblast) in peng2020.py; extended _SPECIES_SYNONYMS in
+  marker_scoring.py with missing common-name aliases (peromyscus, rhabdomys,
+  cynomolgus, mus_musculus); unified Latin binomial names with ortholog.py
+  (opossum→Monodelphis domestica, tree_shrew→Tupaia chinensis); added species
+  validation warning in resolve_config() (core/utils.py); expanded retina config
+  template marker_dict with 7 non-neuronal types (Microglia, Astrocytes, Pericytes,
+  RPE, Endothelial, Oligodendrocytes, Fibroblast).
 - 3.0.0: Added taxonomic classification (class/order) to all source_meta entries;
   merge engine now propagates class/order per cell type with _meta top-level KV;
   marker_scoring.py gains phylogenetic_weight() for taxonomic distance weighting;

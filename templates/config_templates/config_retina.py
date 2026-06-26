@@ -74,6 +74,13 @@ CFG.marker_dict = {
     'Muller Glia':       ['RLBP1', 'GFAP', 'VIM', 'SLC1A3', 'GLUL'],
     'BC/Photo_Precurs':  ['CRX', 'OTX2', 'VSX1'],
     'AC/HC_Precurs':     ['PTF1A', 'TFAP2A', 'PROX1', 'ONECUT1'],
+    'Microglia':         ['AIF1', 'P2RY12', 'CSF1R', 'CX3CR1', 'CD74'],
+    'Astrocytes':        ['GFAP', 'AQP4', 'ALDH1L1', 'S100B', 'SOX9'],
+    'Pericytes':         ['PDGFRB', 'CSPG4', 'RGS5', 'ANPEP', 'ACTA2'],
+    'RPE':               ['RPE65', 'BEST1', 'LRAT', 'TIMP3', 'RDH10'],
+    'Endothelial':       ['PECAM1', 'VWF', 'CDH5', 'CLDN5', 'EGFL7'],
+    'Oligodendrocytes':  ['MBP', 'PLP1', 'MOG', 'OLIG2', 'SOX10'],
+    'Fibroblast':        ['COL1A1', 'DCN', 'LUM', 'COL3A1', 'COL1A2'],
 }
 
 # ── 轨迹根细胞使用标记基因自动检测 ──

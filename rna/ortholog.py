@@ -77,6 +77,32 @@ SPECIES_TO_REST_NAME: Dict[str, str] = {
     "macaque":      "macaca_fascicularis",
 }
 
+# ── Species name → taxonomic class (纲) ──────────────────────────────
+# Used by phylogenetic_weight() to penalise/reward cross-class matches.
+# The KB stores class annotations per cell type (e.g. "Mammalia");
+# score_cluster_against_kb() compares target_class against source classes
+# to apply taxonomic-distance weighting.
+SPECIES_TO_CLASS: Dict[str, str] = {
+    "human":        "Mammalia",
+    "mouse":        "Mammalia",
+    "macaque":      "Mammalia",
+    "marmoset":     "Mammalia",
+    "tree_shrew":   "Mammalia",
+    "cow":          "Mammalia",
+    "pig":          "Mammalia",
+    "sheep":        "Mammalia",
+    "ferret":       "Mammalia",
+    "squirrel":     "Mammalia",
+    "opossum":      "Mammalia",
+    "peromyscus":   "Mammalia",
+    "rhabdomys":    "Mammalia",
+    "lizard":       "Reptilia",
+    "chicken":      "Aves",
+    "frog":         "Amphibia",
+    "zebrafish":    "Teleostei",
+    "lamprey":      "Petromyzontida",
+}
+
 
 # ═══════════════════════════════════════════════════════════════════════
 #  Gene ID type detection

@@ -274,6 +274,7 @@ def generate_dataset_yaml(gse_id: str,
     Returns the path to the generated YAML, or None.
     """
     species = fd.guess_species(file_list)
+    species_key = species  # already normalised by guess_species()
     tissue = fd.guess_tissue(file_list)
     data_format = _detect_primary_format(classification, modality)
 
@@ -381,6 +382,7 @@ def generate_dataset_yaml(gse_id: str,
         type='SuperSeries' if superseries_info.get('is_superseries') else 'SingleAccession',
         title=superseries_info.get('title', ''),
         species=species if species != 'unknown' else 'homo_sapiens',
+        species_key=species_key if species_key != 'unknown' else 'human',
         tissue=tissue if tissue != 'unknown' else None,
         parent_superseries=None,
         modalities=[modality_entry],
@@ -510,6 +512,7 @@ def _generate_parent_dataset_yaml(gse_id: str,
         type='SuperSeries',
         title=superseries_info.get('title', ''),
         species=species if species != 'unknown' else 'homo_sapiens',
+        species_key=species_key if species_key != 'unknown' else 'human',
         tissue=tissue if tissue != 'unknown' else None,
         modalities=[modality_entry],
         samples=[],

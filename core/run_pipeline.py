@@ -51,35 +51,33 @@ except ImportError:
 # ═══════════════════════════════════════════════════════════════════════
 RNA_STEPS = [
     ("00", "00_load.py",                "Load raw data → 00_raw.h5ad"),
-    ("01", "downsample.py",             "Downsampling (optional, config: downsample_target)"),
-    ("02", "01_doublet.py",             "Scrublet doublet detection (per sample) → 01_doublet.h5ad"),
-    ("03", "02_qc.py",                  "QC filtering (doublets removed) → 02_qc.h5ad"),
-    ("04", "03_integrate.py",           "Normalize + HVG + PCA + Harmony → 03_integrated.h5ad"),
-    ("05", "04_cluster_umap.py",        "Multi-param UMAP + multi-resolution Leiden"),
-    ("06", "05_annotate_major.py",      "AI-assisted major cell type annotation (dual mode)"),
-    ("07", "06_subcluster.py",          "Interactive subtype analysis (requires --cell-type)"),
-    ("08", "07_markers_de.py",          "Differential expression (multi-layer)"),
-    ("09", "08_trajectory.py",          "PAGA + DPT trajectory analysis"),
-    ("10", "09_enrichment.py",          "GO/KEGG enrichment + AI interpretation"),
-    ("11", "06_exploratory.py",         "Exploratory analysis (composition/QC/marker)"),
+    ("01", "01_doublet.py",             "Scrublet doublet detection (per sample) → 01_doublet.h5ad"),
+    ("02", "02_qc.py",                  "QC filtering (doublets removed) → 02_qc.h5ad"),
+    ("03", "03_integrate.py",           "Normalize + HVG + PCA + Harmony → 03_integrated.h5ad"),
+    ("04", "04_cluster_umap.py",        "Multi-param UMAP + multi-resolution Leiden"),
+    ("05", "05_annotate_major.py",      "AI-assisted major cell type annotation (dual mode)"),
+    ("06", "06_subcluster.py",          "Interactive subtype analysis (requires --cell-type)"),
+    ("07", "07_markers_de.py",          "Differential expression (multi-layer)"),
+    ("08", "08_trajectory.py",          "PAGA + DPT trajectory analysis"),
+    ("09", "09_enrichment.py",          "GO/KEGG enrichment + AI interpretation"),
+    ("10", "10_exploratory.py",         "Exploratory analysis (composition/QC/marker)"),
 ]
 
 RNA_CHECKPOINT_FILES = [
     "00_raw.h5ad",               # step 00
-    "00_raw.h5ad",               # step 01 (downsample overwrites)
-    "01_doublet.h5ad",           # step 02
-    "02_qc.h5ad",                # step 03
-    "03_integrated.h5ad",        # step 04
-    "04_clustered.h5ad",         # step 05
-    "05_annotated.h5ad",         # step 06
+    "01_doublet.h5ad",           # step 01
+    "02_qc.h5ad",                # step 02
+    "03_integrated.h5ad",        # step 03
+    "04_clustered.h5ad",         # step 04
+    "05_annotated.h5ad",         # step 05
+    "05_annotated.h5ad",         # step 06 (reads 05_annotated)
     "05_annotated.h5ad",         # step 07 (reads 05_annotated)
-    "05_annotated.h5ad",         # step 08 (reads 05_annotated)
-    "04_clustered.h5ad",         # step 09 (reads 04_clustered)
-    "marker_genes_per_group.csv",# step 10 (reads CSV from tables/)
-    "05_annotated.h5ad",         # step 11 (reads 05_annotated)
+    "04_clustered.h5ad",         # step 08 (reads 04_clustered)
+    "marker_genes_per_group.csv",# step 09 (reads CSV from tables/)
+    "05_annotated.h5ad",         # step 10 (reads 05_annotated)
 ]
 
-RNA_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5, 6}
+RNA_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5}
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -190,18 +188,6 @@ def find_first_incomplete(h5ad_dir: str, steps, checkpoints, write_checkpoints, 
                 return i
         elif not os.path.exists(ckpt) or os.path.getsize(ckpt) == 0:
             return i
-
-        # ── RNA Step 01 special: downsample may not be done ──────────
-        if i == 1 and cfg is not None and hasattr(cfg, 'downsample_target') and cfg.downsample_target is not None:
-            try:
-                import scanpy as sc
-                adata = sc.read(ckpt, backed='r')
-                n_cells = adata.n_obs
-                adata.file.close()
-                if n_cells > cfg.downsample_target:
-                    return i
-            except Exception:
-                pass
     return len(steps)
 
 
@@ -227,13 +213,13 @@ def _get_step_dependency(step: int, steps, checkpoints, modality: str = "rna") -
         return deps.get(step, checkpoints[step - 1] if step > 0 else "")
     # RNA dependencies
     deps = {
-        5: checkpoints[3],
-        6: checkpoints[4],
-        7: checkpoints[6],
-        8: checkpoints[6],
-        9: checkpoints[4],
-        10: checkpoints[6],
-        11: checkpoints[6],
+        4: checkpoints[3],
+        5: checkpoints[4],
+        6: checkpoints[5],
+        7: checkpoints[5],
+        8: checkpoints[4],
+        9: checkpoints[5],
+        10: checkpoints[5],
     }
     return deps.get(step, checkpoints[step - 1] if step > 0 else "")
 
@@ -395,15 +381,13 @@ def main():
 
         print(f"\n{'=' * 60}")
         cell_info = ""
-        if args.modality == "rna" and i == 7 and args.cell_type:
+        if args.modality == "rna" and i == 6 and args.cell_type:
             cell_info = f" (cell-type: {args.cell_type})"
         print(f"[run] [{args.modality.upper()}] Step [{num}]: {desc}{cell_info}")
         print(f"{'=' * 60}")
 
         extra_args = [f"--config={config_path}"]
-        if args.modality == "rna" and i == 1:
-            extra_args.append("--overwrite")
-        if args.modality == "rna" and i == 7 and args.cell_type:
+        if args.modality == "rna" and i == 6 and args.cell_type:
             extra_args.extend(["--cell-type", args.cell_type])
 
         step_t0 = time.time()
@@ -419,7 +403,7 @@ def main():
         elapsed = time.time() - step_t0
 
         if result.returncode != 0:
-            if args.modality == "rna" and i == 7 and not args.cell_type:
+            if args.modality == "rna" and i == 6 and not args.cell_type:
                 print(f"\n[run] Step [{num}] skipped (no --cell-type for pipeline mode)")
                 step_times.append((num, desc, 0))
                 continue

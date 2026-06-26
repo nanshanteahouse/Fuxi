@@ -97,6 +97,7 @@ class DatasetMeta:
     type: str           # SingleAccession, SuperSeries
     title: str
     species: Optional[str] = None
+    species_key: Optional[str] = None   # normalised pipeline key (e.g. 'human', 'mouse')
     tissue: Optional[str] = None
     note: Optional[str] = None
     description: Optional[str] = None
@@ -180,6 +181,7 @@ def load_dataset(yaml_path: str) -> DatasetMeta:
         type=data.get('type', 'SingleAccession'),
         title=data.get('title', ''),
         species=data.get('species'),
+        species_key=data.get('species_key'),
         tissue=data.get('tissue'),
         note=data.get('note'),
         description=data.get('description'),
@@ -230,6 +232,8 @@ def save_dataset(ds: DatasetMeta, yaml_path: str) -> None:
     }
     if ds.species is not None:
         data["species"] = ds.species
+    if ds.species_key is not None:
+        data["species_key"] = ds.species_key
     if ds.tissue is not None:
         data["tissue"] = ds.tissue
     if ds.note is not None:

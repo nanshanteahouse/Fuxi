@@ -131,18 +131,17 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 
 | Step | Script | Key Output |
 |------|--------|-----------|
-| 00 | `00_load.py` | 00_raw.h5ad |
-| 01 | `downsample.py` | (optional, overwrites 00_raw) |
-| 02 | `01_doublet.py` | 01_doublet.h5ad |
-| 03 | `02_qc.py` | 02_qc.h5ad |
-| 04 | `03_integrate.py` | 03_integrated.h5ad |
-| 05 | `04_cluster_umap.py` | 04_clustered.h5ad |
-| 06 | `05_annotate_major.py` | 05_annotated.h5ad |
-| 07 | `06_subcluster.py` | (requires --cell-type) |
-| 08 | `07_markers_de.py` | marker CSVs |
-| 09 | `08_trajectory.py` | trajectory h5ad |
-| 10 | `09_enrichment.py` | enrichment CSVs |
-| 11 | `06_exploratory.py` | summary figures + CSVs |
+| 00 | `00_load.py` | 00_raw.h5ad (可选内联降采样) |
+| 01 | `01_doublet.py` | 01_doublet.h5ad |
+| 02 | `02_qc.py` | 02_qc.h5ad |
+| 03 | `03_integrate.py` | 03_integrated.h5ad |
+| 04 | `04_cluster_umap.py` | 04_clustered.h5ad |
+| 05 | `05_annotate_major.py` | 05_annotated.h5ad |
+| 06 | `06_subcluster.py` | (requires --cell-type) |
+| 07 | `07_markers_de.py` | marker CSVs |
+| 08 | `08_trajectory.py` | trajectory h5ad |
+| 09 | `09_enrichment.py` | enrichment CSVs |
+| 10 | `10_exploratory.py` | summary figures + CSVs |
 
 ### ATAC Pipeline Steps
 

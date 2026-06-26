@@ -522,14 +522,24 @@ def guess_species(file_list: list[str],
     2.  Content scan: read first 200 lines of any CSV/TSV/txt/gz metadata
         or series-matrix file and look for Latin binomial strings.
 
-    Returns a species name string (e.g. 'homo_sapiens') or 'unknown'.
+    Returns a species name string in pipeline-key format (e.g. 'human',
+    'mouse', 'zebrafish'), or 'unknown'.
+
+    .. note::
+
+       The return value is now normalised to a **pipeline key** (common name,
+       no underscores) that can be used directly in ``CFG.species`` and will
+       match the ``_SPECIES_SYNONYMS`` table in ``rna/utils/marker_scoring.py``.
+       The older underscore-form keys (e.g. ``homo_sapiens``) are still
+       returned as well for backward compatibility, but NEW code should
+       prefer the normalised form.
     """
     # Layer 1: filename heuristics
     all_names = ' '.join(os.path.basename(f) for f in file_list).lower()
-    for keywords, species in SPECIES_KEYWORDS:
+    for keywords, species_underscored in SPECIES_KEYWORDS:
         for kw in keywords:
             if kw.lower() in all_names:
-                return species
+                return _normalise_species(species_underscored)
 
     if not content_scan:
         return 'unknown'
@@ -547,9 +557,90 @@ def guess_species(file_list: list[str],
             continue
         species = _sniff_species_from_text(text)
         if species:
-            return species
+            return _normalise_species(species)
 
     return 'unknown'
+
+
+# ── Species name normalisation ──────────────────────────────────────
+# Maps both underscored names (homo_sapiens) and Latin binomials
+# (Homo sapiens) from guess_species() / _sniff_species_from_text()
+# to the canonical pipeline key used by CFG.species and
+# _SPECIES_SYNONYMS in rna/utils/marker_scoring.py.
+_SPECIES_NORMALISE: Dict[str, str] = {
+    # Human
+    "homo_sapiens":    "human",
+    "Homo sapiens":    "human",
+    # Mouse
+    "mus_musculus":    "mouse",
+    "Mus musculus":    "mouse",
+    # Rat
+    "rattus_norvegicus":     "rat",
+    "Rattus norvegicus":     "rat",
+    # Zebrafish
+    "danio_rerio":     "zebrafish",
+    "Danio rerio":     "zebrafish",
+    # Cow
+    "bos_taurus":      "cow",
+    "Bos taurus":      "cow",
+    # Pig
+    "sus_scrofa":      "pig",
+    "Sus scrofa":      "pig",
+    # Macaque (rhesus)
+    "macaca_mulatta":   "macaque",
+    "Macaca mulatta":   "macaque",
+    # Marmoset
+    "callithrix_jacchus":   "marmoset",
+    "Callithrix jacchus":   "marmoset",
+    # Chicken
+    "gallus_gallus":   "chicken",
+    "Gallus gallus":   "chicken",
+    # Fruit fly
+    "drosophila_melanogaster":   "drosophila",
+    "Drosophila melanogaster":   "drosophila",
+    # Worm
+    "caenorhabditis_elegans":    "c_elegans",
+    "Caenorhabditis elegans":    "c_elegans",
+    # Frog
+    "xenopus_tropicalis":  "frog",
+    "Xenopus tropicalis":  "frog",
+    # Macaca fascicularis (cynomolgus) — also maps to macaque
+    "Macaca fascicularis":  "macaque",
+    # Ictidomys tridecemlineatus
+    "Ictidomys tridecemlineatus":  "squirrel",
+    # Anolis sagrei
+    "Anolis sagrei":  "lizard",
+    # Monodelphis domestica
+    "Monodelphis domestica":  "opossum",
+    # Didelphis marsupialis
+    "Didelphis marsupialis":  "opossum",
+    # Tupaia chinensis
+    "Tupaia chinensis":  "tree_shrew",
+    # Tupaia belangeri
+    "Tupaia belangeri":  "tree_shrew",
+    # Callithrix jacchus (already normalised above; just in case)
+    "Callithrix jacchus":  "marmoset",
+    # Mustela putorius furo
+    "Mustela putorius furo":  "ferret",
+    # Ovis aries
+    "Ovis aries":  "sheep",
+    # Peromyscus maniculatus
+    "Peromyscus maniculatus":  "peromyscus",
+    # Rhabdomys pumilio
+    "Rhabdomys pumilio":  "rhabdomys",
+    # Petromyzon marinus
+    "Petromyzon marinus":  "lamprey",
+}
+
+
+def _normalise_species(raw: str) -> str:
+    """Normalise a species name to its pipeline key.
+
+    Accepts underscored names (``homo_sapiens``) and Latin binomials
+    (``Homo sapiens``).  Falls back to *raw* when no normalisation
+    entry is found.
+    """
+    return _SPECIES_NORMALISE.get(raw, _SPECIES_NORMALISE.get(raw.lower(), raw))
 
 
 def guess_tissue(file_list: list[str]) -> str:

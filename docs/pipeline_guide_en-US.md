@@ -105,7 +105,7 @@ Fuxi — RNA-seq pipeline step list
 ### 3.2 Run the full pipeline in one command
 
 ```bash
-# scRNA-seq full workflow (12 steps)
+# scRNA-seq full workflow (10 steps)
 python core/run_pipeline.py --modality rna --config projects/rna/{dataset_id}/config_{dataset_id}.py
 
 # scATAC-seq full workflow (10 steps)
@@ -134,7 +134,7 @@ The terminal shows real-time progress with timing for each step:
 [run] Step timing summary:
   [00]    45.2s  Load raw data → 00_raw.h5ad
   ...
-  [Total] 1845.3s  12 steps total
+  [Total] 1845.3s  10 steps total
 ```
 
 ### 3.3 Checkpoints and resume
@@ -151,10 +151,10 @@ If you want to run or re-run a specific step:
 
 ```bash
 # Run only Step 06 (cell annotation)
-python core/run_pipeline.py --modality rna --step 6 --config projects/rna/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality rna --step 5 --config projects/rna/{dataset_id}/config_{dataset_id}.py
 
-# Run Steps 03 through 06
-python core/run_pipeline.py --modality rna --steps 3-6 --config projects/rna/{dataset_id}/config_{dataset_id}.py
+# Run Steps 02 through 05
+python core/run_pipeline.py --modality rna --steps 2-5 --config projects/rna/{dataset_id}/config_{dataset_id}.py
 
 # Run specific non-consecutive steps
 python core/run_pipeline.py --modality rna --steps 0,2,4 --config projects/rna/{dataset_id}/config_{dataset_id}.py
@@ -164,13 +164,13 @@ python core/run_pipeline.py --modality rna --steps 0,2,4 --config projects/rna/{
 
 ## 4. scRNA-seq pipeline in detail
 
-The scRNA-seq pipeline has 12 steps (numbered 00–11), with data flowing sequentially:
+The scRNA-seq pipeline has 11 steps (numbered 00–10), with data flowing sequentially:
 
 ```
-Raw data → 00_load → 01_downsample → 02_doublet → 03_qc
-         → 04_integrate → 05_cluster → 06_annotate
-         → 07_subcluster → 08_markers → 09_trajectory
-         → 10_enrichment → 11_exploratory
+Raw data → 00_load → 01_doublet → 02_qc
+         → 03_integrate → 04_cluster → 05_annotate
+         → 06_subcluster → 07_markers → 08_trajectory
+         → 09_enrichment → 10_exploratory
 ```
 
 ### Step 00: Data loading
@@ -193,18 +193,7 @@ Automatically handles during loading:
 - **Multi-file merging**: If a dataset contains multiple H5 files, concatenates them into a single AnnData object
 - **Format compatibility**: Auto-converts legacy 2-column `genes.tsv` to standard 3-column `features.tsv`
 
-### Step 01: Downsampling (optional)
-
-**Input**: `00_raw.h5ad` | **Output**: overwrites `00_raw.h5ad`
-
-> This step is **skipped by default**. It only runs when `CFG.downsample_target` is set in the config.
-
-Three downsampling strategies:
-- **Stratified**: Preserves per-sample proportions, allocating target cells proportionally
-- **Random**: Uniform random sampling across the entire dataset
-- **Max per sample**: Caps each sample at N cells (useful for highly imbalanced datasets)
-
-### Step 02: Doublet detection (Scrublet)
+### Step 01: Doublet detection (Scrublet)
 
 **Input**: `00_raw.h5ad` | **Output**: `01_doublet.h5ad`
 
@@ -216,7 +205,7 @@ Runs Scrublet independently per sample to detect "doublets" — droplets that ca
 
 Output: `doublet_scores` (doublet probability score) and `predicted_doublet` (boolean flag) columns.
 
-### Step 03: Quality control (QC)
+### Step 02: Quality control (QC)
 
 **Input**: `01_doublet.h5ad` | **Output**: `02_qc.h5ad`
 
@@ -229,7 +218,7 @@ Filters are applied in order:
 
 Also computes complete per-cell QC metrics: mitochondrial percentage, ribosomal percentage, and gene-UMI complexity ratio.
 
-### Step 04: Normalization & batch integration
+### Step 03: Normalization & batch integration
 
 **Input**: `02_qc.h5ad` | **Output**: `03_integrated.h5ad`
 
@@ -243,7 +232,7 @@ This is the most critical integration step, aligning data from different samples
 
 > 💡 The full gene expression matrix is preserved in `.raw`, which downstream marker gene and differential expression analyses use — ensuring no information loss from HVG filtering.
 
-### Step 05: Clustering & UMAP
+### Step 04: Clustering & UMAP
 
 **Input**: `03_integrated.h5ad` | **Output**: `04_clustered.h5ad`
 
@@ -256,7 +245,7 @@ Performs a **multi-parameter grid search** to automatically find the optimal clu
 
 > 💡 This step is computationally heavy because it tries 3×6=18 parameter combinations. But it's worth it — you never need to manually iterate on parameters.
 
-### Step 06: Cell type annotation
+### Step 05: Cell type annotation
 
 **Input**: `04_clustered.h5ad` | **Output**: `05_annotated.h5ad`
 
@@ -295,7 +284,7 @@ If neither KB nor AI is available, the pipeline falls back to classic marker gen
 
 > 💡 **Annotation output includes**: `cell_type` (primary label), `cell_subtype` (subtype), `cell_state` (state), `annot_confidence` (confidence level), and `annot_reasoning` (rationale).
 
-### Step 07: Subclustering (optional)
+### Step 06: Subclustering (optional)
 
 **Input**: `05_annotated.h5ad` | **Output**: `05_sub_{cell_type}.h5ad`
 
@@ -309,7 +298,7 @@ python core/run_pipeline.py --modality rna --step 7 \
 
 This step re-runs PCA → neighbor graph → UMAP → Leiden clustering on the subset of the specified cell type, and optionally uses AI for subcluster re-annotation. Results are automatically written back to the main `05_annotated.h5ad` file's `cell_subtype` column.
 
-### Step 08: Differential expression (three-layer DE)
+### Step 07: Differential expression (three-layer DE)
 
 **Input**: `05_annotated.h5ad` | **Output**: CSV tables + heatmaps/dotplots
 
@@ -331,7 +320,7 @@ Three layers of differential expression analysis:
 
 > 💡 Also generates: marker gene heatmaps (top 5 per group) and known-marker dotplots.
 
-### Step 09: Trajectory analysis (PAGA + DPT)
+### Step 08: Trajectory analysis (PAGA + DPT)
 
 **Input**: `04_clustered.h5ad` (typical) | **Output**: `05_final.h5ad`
 
@@ -343,9 +332,9 @@ Reconstructs cellular developmental/differentiation trajectories:
 4. **Branch analysis**: Identifies lineage-specific genes at branch points
 5. **Developmental gene visualization**: Plots known developmental genes (SOX2, PAX6, NEUROD1, etc.) along pseudotime
 
-### Step 10: GO/KEGG pathway enrichment
+### Step 09: GO/KEGG pathway enrichment
 
-**Input**: Marker gene table from Step 08 | **Output**: CSV tables + bubble plots + AI interpretation
+**Input**: Marker gene table from Step 07 | **Output**: CSV tables + bubble plots + AI interpretation
 
 Two complementary enrichment methods:
 
@@ -362,7 +351,7 @@ Supports 200+ gene set libraries, commonly used ones include:
 
 > 💡 If AI is enabled, enrichment results are automatically accompanied by a biological interpretation report (`ai_interpretation.txt`).
 
-### Step 11: Exploratory analysis
+### Step 10: Exploratory analysis
 
 **Input**: `05_annotated.h5ad` | **Output**: CSV tables + various PDF figures
 
@@ -596,7 +585,7 @@ How it works:
 
 ### Step 08: GO/KEGG enrichment
 
-**Input**: `marker_genes_per_group.csv` from Step 06 | **Output**: Enrichment CSVs + bubble plots
+**Input**: `marker_genes_per_group.csv` from Step 05 | **Output**: Enrichment CSVs + bubble plots
 
 Reuses the RNA pipeline's enrichment engine:
 - ORA (over-representation analysis) via Enrichr API
@@ -661,7 +650,7 @@ results/
 │   ├── enrichment/                # Enrichment figures
 │   │   ├── ora_*_bubble.pdf       # ORA bubble plot
 │   │   └── prerank_*_bubble.pdf   # GSEA bubble plot
-│   └── 06_exploratory/            # Exploratory analysis atlas
+│   └── 10_exploratory/            # Exploratory analysis atlas
 │       ├── composition_by_stage_*.png  # Cell composition stacked bars
 │       └── _06_marker_dotplot.pdf      # Known marker dotplot
 │
@@ -707,7 +696,7 @@ If you're not satisfied with a step's results and want to adjust parameters:
 
 ```bash
 # Re-run only the annotation step (Step 06)
-python core/run_pipeline.py --modality rna --step 6 --config projects/rna/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality rna --step 5 --config projects/rna/{dataset_id}/config_{dataset_id}.py
 
 # Re-run from annotation onward
 python core/run_pipeline.py --modality rna --steps 6-11 --config projects/rna/{dataset_id}/config_{dataset_id}.py
@@ -1019,7 +1008,7 @@ python core/run_pipeline.py --modality rna --config projects/rna/{dataset_id}/co
 python core/run_pipeline.py --modality rna --resume --config projects/rna/{dataset_id}/config_{dataset_id}.py
 
 # Single step
-python core/run_pipeline.py --modality rna --step 6 --config ...
+python core/run_pipeline.py --modality rna --step 5 --config ...
 
 # Range of steps
 python core/run_pipeline.py --modality rna --steps 4-8 --config ...
