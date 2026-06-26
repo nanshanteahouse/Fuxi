@@ -45,6 +45,8 @@ CFG.n_spectral = 30
 CFG.n_neighbors = 15
 CFG.param_grid_n_neighbors = [15, 20, 30]
 CFG.param_grid_resolutions = [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
+CFG.umap_min_dist = 0.3    # increase (e.g. 0.5) for more UMAP spread
+CFG.umap_spread = 1.0
 
 # ── Differential accessibility ──
 CFG.marker_peaks_log2fc = 0.5

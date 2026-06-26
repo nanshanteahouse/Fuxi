@@ -36,6 +36,8 @@ CFG.n_spectral = 30
 CFG.n_neighbors = 15
 CFG.param_grid_n_neighbors = [15, 20]
 CFG.param_grid_resolutions = [0.3, 0.8, 1.5]
+CFG.umap_min_dist = 0.3    # ATAC 也使用 UMAP
+CFG.umap_spread = 1.0
 
 # ── 差异分析 ──
 CFG.marker_peaks_log2fc = 0.25

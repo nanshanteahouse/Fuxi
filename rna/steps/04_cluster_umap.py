@@ -60,7 +60,7 @@ def main():
         # ── 计算 UMAP（每个 n_neighbors 只算一次，所有 resolution 共享）──
         log.info("  Computing UMAP (n_neighbors=%d)...", n)
         try:
-            sc.tl.umap(adata, min_dist=0.3, spread=1.0, random_state=CFG.random_seed)
+            sc.tl.umap(adata, min_dist=getattr(CFG, 'umap_min_dist', 0.3), spread=getattr(CFG, 'umap_spread', 1.0), random_state=CFG.random_seed)
             umap_coords = adata.obsm['X_umap'].copy()
         except Exception as e:
             log.error("  UMAP computation failed (n_neighbors=%d): %s", n, e)

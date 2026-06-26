@@ -68,6 +68,8 @@ CFG.harmony_batch_key = 'sample'
 # ── Clustering ──
 CFG.leiden_resolutions = [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
 CFG.best_resolution = 1.0
+CFG.umap_min_dist = 0.3    # increase (e.g. 0.5) for more UMAP spread
+CFG.umap_spread = 1.0
 
 # ── Cell type markers ──
 # TODO: Add known marker genes for {{TISSUE}} tissue.

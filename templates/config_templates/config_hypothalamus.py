@@ -59,6 +59,8 @@ CFG.harmony_batch_key = 'sample'
 # ── 聚类 ──
 CFG.leiden_resolutions = [0.3, 0.5, 0.8]
 CFG.best_resolution = 0.8
+CFG.umap_min_dist = 0.3    # 增大（如0.5）可增强 UMAP 散点延展性
+CFG.umap_spread = 1.0
 
 # ── 已知下丘脑细胞类型标记 ──
 CFG.marker_dict = {
