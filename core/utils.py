@@ -281,7 +281,42 @@ def resolve_config(config_path: Optional[str] = None):
         mod.CFG.n_jobs = os.cpu_count() or 1
 
     mod.CFG.resolve_paths()
+
+    # ── Species sanity check ───────────────────────────────────────────
+    # Warn early when the species string won't match any KB entry, rather
+    # than silently failing downstream (Fisher scores all zero, etc.).
+    _validate_species(mod.CFG)
+
     return mod.CFG
+
+
+# Species pipeline-keys known to rna/ortholog.py and rna/utils/marker_scoring.py.
+# Keep in sync when adding new species.
+_KNOWN_SPECIES_KEYS = frozenset({
+    "human", "mouse", "macaque", "cynomolgus", "marmoset",
+    "zebrafish", "chicken", "lamprey", "frog",
+    "pig", "cow", "sheep", "ferret",
+    "squirrel", "opossum", "tree_shrew", "treeshrew",
+    "lizard", "anolis", "peromyscus", "deer_mouse",
+    "rhabdomys", "striped_mouse",
+    # mus_musculus is used by some legacy mouse configs
+    "mus_musculus",
+})
+
+
+def _validate_species(cfg) -> None:
+    """Log a warning if *cfg.species* is not a recognised pipeline key."""
+    species = getattr(cfg, 'species', '')
+    if not species:
+        return  # empty species = user hasn't set it yet; not necessarily wrong
+    if species not in _KNOWN_SPECIES_KEYS:
+        logging.getLogger("core").warning(
+            "CFG.species=%r is not a recognised species key. "
+            "KB marker scoring and phylogenetic weighting may silently fail. "
+            "Add this species to _SPECIES_SYNONYMS in rna/utils/marker_scoring.py "
+            "if it is a valid species.",
+            species,
+        )
 
 
 def validate_adata(adata, stage_name="", logger=None, fix_nan_inf=True) -> bool:
@@ -528,6 +563,11 @@ def load_scRNA_markers(
         len(marker_dict), top_n, pval_threshold, logfc_min,
     )
     return marker_dict
+
+
+@dataclass
+class PerformanceReport:
+    """Performance metrics for a pipeline step."""
     step: str = ""
     wall_sec: float = 0.0
     cpu_sec: float = 0.0

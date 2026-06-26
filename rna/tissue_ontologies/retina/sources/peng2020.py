@@ -330,6 +330,43 @@ expert_rules = [
         "source": "peng2020",
         "notes": "VSX1+TRPM1 co-expression defines human bipolar cells",
     },
+    {
+        "priority": 2,
+        "condition": {
+            "markers_present": {"GFAP": 1.0, "AQP4": 1.0},
+            "markers_absent": ["MOG"],
+        },
+        "action": "Astrocyte",
+        "source": "peng2020",
+        "notes": "GFAP+AQP4 co-expression defines astrocytes; MOG absence excludes oligodendrocytes",
+    },
+    {
+        "priority": 2,
+        "condition": {
+            "markers_present": {"PDGFRB": 1.0, "CSPG4": 1.0},
+        },
+        "action": "Pericyte",
+        "source": "peng2020",
+        "notes": "PDGFRB+CSPG4 co-expression defines retinal pericytes",
+    },
+    {
+        "priority": 2,
+        "condition": {
+            "markers_present": {"PECAM1": 1.0, "CDH5": 1.0},
+        },
+        "action": "Vascular_Endothelial",
+        "source": "peng2020",
+        "notes": "PECAM1+CDH5 co-expression defines retinal vascular endothelial cells",
+    },
+    {
+        "priority": 2,
+        "condition": {
+            "markers_present": {"COL1A1": 1.0, "DCN": 1.0},
+        },
+        "action": "Fibroblast",
+        "source": "peng2020",
+        "notes": "COL1A1+DCN co-expression defines retinal fibroblasts",
+    },
 ]
 
 conflicts = [

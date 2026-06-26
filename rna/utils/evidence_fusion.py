@@ -96,6 +96,43 @@ _CONFIDENCE_MAP = {
 }
 
 
+# ── Label normalisation ──────────────────────────────────────────────
+# AI-generated labels and KB cell-type keys often differ only by
+# whitespace vs underscores (e.g. "Amacrine Cell" vs "Amacrine_Cell").
+# Normalise both sides to a canonical form before comparison so that
+# ai_agreed reflects genuine biological disagreement rather than
+# formatting differences.
+
+def _normalise_label(label: Optional[str]) -> str:
+    """Canonicalise a cell-type label for fuzzy comparison.
+
+    Collapses runs of non-alphanumeric characters into a single
+    underscore, lowercases, and strips leading/trailing underscores.
+    Non-ASCII characters (e.g. ``ü`` in ``Müller``) are decomposed
+    to their ASCII base form via NFKD normalisation.
+    """
+    if not label:
+        return ""
+    import re
+    import unicodedata
+    # NFKD decomposes accents / umlauts: ü -> u + combining diaeresis
+    nfkd = unicodedata.normalize('NFKD', label)
+    # Drop combining chars and other non-ASCII
+    ascii_label = nfkd.encode('ascii', 'ignore').decode('ascii')
+    # Replace all non-alphanumeric runs with a single underscore.
+    normalised = re.sub(r'[^a-zA-Z0-9]+', '_', ascii_label)
+    return normalised.strip('_').lower()
+
+
+def _labels_match(a: Optional[str], b: Optional[str]) -> bool:
+    """Return ``True`` if *a* and *b* refer to the same cell type.
+
+    Uses :func:`_normalise_label` to ignore whitespace/underscore/
+    hyphen/punctuation differences.
+    """
+    return _normalise_label(a) == _normalise_label(b)
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  Internal helpers
 # ═══════════════════════════════════════════════════════════════════════
@@ -263,6 +300,7 @@ def fuse_evidence(
     ai_suggestion: Optional[str] = None,
     alternative_rules: Optional[list] = None,
     low_quality_reason: str = "",
+    unconstrained: bool = False,
 ) -> 'FusionDecision':
     """Combine marker scores, expert rules, and AI into one decision.
 
@@ -293,7 +331,7 @@ def fuse_evidence(
     # ── Tier 0: expert rule (highest priority) ─────────────────────────
     if expert_rule_result is not None:
         rule_score, rule_n = _resolve_score(marker_scores, expert_rule_result)
-        ai_agreed = (ai_suggestion == expert_rule_result) if ai_suggestion else False
+        ai_agreed = _labels_match(ai_suggestion, expert_rule_result) if ai_suggestion else False
 
         # Quality gate (v3.1.0+): if Fisher scoring completely disagrees
         # with the expert rule (zero KB marker overlap), downgrade confidence
@@ -330,6 +368,28 @@ def fuse_evidence(
             ai_suggested=ai_suggestion or '',
             explanation=" | ".join(explanation_parts),
             alternative_rules=alternative_rules or [],
+        )
+
+    # ── Unconstrained AI mode: accept AI suggestion directly ──────────
+    if unconstrained and ai_suggestion and (
+        not marker_scores
+        or max((_resolve_score(marker_scores, k)[0] for k in marker_scores), default=0) < 0.25
+    ):
+        return FusionDecision(
+            cell_type=ai_suggestion,
+            confidence='medium',
+            score=0.0,
+            method='ai_unconstrained',
+            n_markers_found=0,
+            ai_agreed=True,
+            ai_suggested=ai_suggestion,
+            explanation=f"Unconstrained AI mode — accepted AI suggestion '{ai_suggestion}' (no KB match).",
+            alternative_rules=[],
+            diagnostic=DiagnosticInfo(
+                category='weak_signal' if marker_scores else 'no_kb_match',
+                top_competitors=[],
+                detail=f"AI assigned '{ai_suggestion}' in unconstrained mode.",
+            ),
         )
 
     # ── No scores → early exit ─────────────────────────────────────────
@@ -384,12 +444,12 @@ def fuse_evidence(
 
         # Tiers 1–3: marker-scoring-based decisions
         if tier_name == 'marker_scoring_medium':
-            ai_agreed = (ai_suggestion == best_type) if ai_suggestion else True
+            ai_agreed = _labels_match(ai_suggestion, best_type) if ai_suggestion else True
         elif tier_name == 'marker_scoring_low':
-            ai_agreed = (ai_suggestion == best_type) if ai_suggestion else False
+            ai_agreed = _labels_match(ai_suggestion, best_type) if ai_suggestion else False
         else:
             # marker_scoring_high — AI not required for agreement
-            ai_agreed = (ai_suggestion == best_type) if ai_suggestion else True
+            ai_agreed = _labels_match(ai_suggestion, best_type) if ai_suggestion else True
 
         return FusionDecision(
             cell_type=best_type,
@@ -419,6 +479,7 @@ def fuse_all_clusters(
     ai_results: Optional[dict] = None,
     return_quality: bool = False,
     low_quality_clusters: Optional[dict] = None,
+    unconstrained: bool = False,
 ) -> list | tuple[list, dict]:
     """Process all clusters and return a list of :class:`FusionDecision`.
 
@@ -478,6 +539,7 @@ def fuse_all_clusters(
             ai_suggestion=ai_results.get(cl),
             alternative_rules=alt_rules,
             low_quality_reason=low_quality_clusters.get(str(cl), ""),
+            unconstrained=unconstrained,
         )
         decisions.append(decision)
 

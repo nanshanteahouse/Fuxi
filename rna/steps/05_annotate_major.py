@@ -371,6 +371,18 @@ def unified_annotate(adata, CFG, logger):
 
     species = CFG.species
 
+    # ── Resolve taxonomic class/order for phylogenetic weighting ──────
+    # CFG.target_class/order take precedence; fall back to species lookup.
+    from rna.ortholog import SPECIES_TO_CLASS
+    target_class = CFG.target_class or SPECIES_TO_CLASS.get(species, "")
+    target_order = CFG.target_order or ""
+    if target_class:
+        logger.info("Phylogenetic weighting: target_class=%s, target_order=%s",
+                     target_class, target_order or "(none)")
+    else:
+        logger.info("Phylogenetic weighting: disabled (no target_class for '%s')",
+                     species)
+
     # ── Resolve expert-rule constraint parameters ────────────────────
     rule_top_n, rule_pval = resolve_expert_rule_params(
         strictness=getattr(CFG, 'expert_rule_strictness', 'default'),
@@ -405,7 +417,9 @@ def unified_annotate(adata, CFG, logger):
             logger.info("Cluster %s flagged as low-quality: %s", cl_str, lq_reason)
 
         all_scores[cl_str] = score_cluster_against_kb(
-            kb, cl_data, species=species, adaptive_top_n=True,
+            kb, cl_data, species=species,
+            target_class=target_class, target_order=target_order,
+            adaptive_top_n=True,
         )
         all_rules[cl_str] = apply_expert_rules(kb, cl_data,
                                                 top_n=rule_top_n,
@@ -415,6 +429,7 @@ def unified_annotate(adata, CFG, logger):
         all_scores, all_rules, kb=kb, all_marker_dfs=marker_df,
         return_quality=True,
         low_quality_clusters=low_quality_clusters,
+        unconstrained=getattr(CFG.ai, 'unconstrained_annotation', False),
     )
     logger.info("Evidence fusion: %d clusters processed", len(decisions))
 
@@ -481,6 +496,7 @@ def unified_annotate(adata, CFG, logger):
                     all_marker_dfs=marker_df,
                     ai_results=ai_results,
                     low_quality_clusters=low_quality_clusters,
+                    unconstrained=getattr(CFG.ai, 'unconstrained_annotation', False),
                 )
                 decision_map = dict(zip(decision_clusters, decisions))
         except Exception as exc:

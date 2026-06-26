@@ -69,6 +69,18 @@ from scipy.stats import fisher_exact
 
 logger = logging.getLogger(__name__)
 
+# ── Consensus-weight map ──────────────────────────────────────────────
+# Mirrors merge.compute_consensus_level() — maps qualitative label to a
+# multiplicative weight for Fisher's exact test "a" cell (the number of
+# KB marker hits in the cluster's top-N DE genes).
+
+_CONSENSUS_WEIGHTS: Dict[str, float] = {
+    "gold":   3.0,
+    "high":   2.0,
+    "medium": 1.5,
+    "low":    1.0,
+}
+
 
 # ═══════════════════════════════════════════════════════════════════════
 #  Data structures
@@ -165,10 +177,14 @@ def _looks_mapped_to_target(gene_names: List[str],
 
 # Common-name → scientific-name mappings used by _species_matches().
 # Extend this table as new species are added to the KB.
+# NOTE: scientific names MUST be kept in sync with rna/ortholog.py
+# (SPECIES_TO_REST_NAME / SPECIES_TO_DATASET).
 _SPECIES_SYNONYMS: Dict[str, str] = {
     "human": "Homo sapiens",
     "mouse": "Mus musculus",
+    "mus_musculus": "Mus musculus",
     "macaque": "Macaca fascicularis",
+    "cynomolgus": "Macaca fascicularis",
     "marmoset": "Callithrix jacchus",
     "zebrafish": "Danio rerio",
     "chicken": "Gallus gallus",
@@ -179,10 +195,14 @@ _SPECIES_SYNONYMS: Dict[str, str] = {
     "sheep": "Ovis aries",
     "ferret": "Mustela putorius furo",
     "squirrel": "Ictidomys tridecemlineatus",
-    "opossum": "Didelphis marsupialis",
+    "opossum": "Monodelphis domestica",
+    "tree_shrew": "Tupaia belangeri",
     "treeshrew": "Tupaia belangeri",
+    "lizard": "Anolis sagrei",
     "anolis": "Anolis sagrei",
+    "peromyscus": "Peromyscus maniculatus",
     "deer_mouse": "Peromyscus maniculatus",
+    "rhabdomys": "Rhabdomys pumilio",
     "striped_mouse": "Rhabdomys pumilio",
 }
 
@@ -357,6 +377,10 @@ def _build_kb_lookup(kb: Dict[str, Any],
     source count; callers may use ``marker_weights`` for weighted scoring
     if desired.
 
+    Additionally, each gene's ``consensus_level`` (gold/high/medium/low)
+    is propagated into the lookup.  Callers can use it together with
+    ``marker_weights`` to implement consensus-weighted Fisher scoring.
+
     Duplicates are removed and the optional *species* filter is applied.
     """
     kb_all: Dict[str, Any] = {}
@@ -383,6 +407,7 @@ def _build_kb_lookup(kb: Dict[str, Any],
             "synonyms": list(type_data.get("synonyms", [])),
             "parent": type_data.get("parent", ""),
             "marker_weights": marker_weights,
+            "consensus_levels": dict(type_data.get("consensus_levels", {})),
         }
 
     return kb_all
@@ -508,17 +533,67 @@ def score_cluster_against_kb(kb: Dict[str, Any],
         # -----------------|-----------|--------------
         # Is type marker   | a         | b
         # Not type marker  | c         | d
-        a = len(positive_set & top_in_bg)   # type markers in top-20
+        #
+        # Consensus-weighted variant: each marker hit contributes its
+        # consensus weight instead of a flat 1, so gold markers (5+ sources)
+        # count 3× and low markers (1 source) count 1×.  The unweighted
+        # raw hit-count is also preserved for backward-compatible reporting.
+        consensus_levels = entry.get("consensus_levels", {})
+        _a_weighted = 0.0
+        for _gene in (positive_set & top_in_bg):
+            _level = consensus_levels.get(_gene, "low")
+            _a_weighted += _CONSENSUS_WEIGHTS.get(_level, 1.0)
+
+        a = len(positive_set & top_in_bg)   # type markers in top-20 (raw)
+        a_w = int(round(_a_weighted))        # consensus-weighted hits
+
         b = len(positive_set) - a           # type markers NOT in top-20
         c = n_top_in_bg - a                  # non-type KB markers in top-20
         d = max(background_size - a - b - c, 1)  # remaining KB markers
-        if a > 0 and b >= 0 and c >= 0 and d > 0:
+
+        # Try weighted first (when it makes a material difference);
+        # fall back to raw counts.
+        _fisher_source = "raw"
+        if a_w > a and a_w > 0 and (b - (a_w - a)) >= 0:
+            b_w = b - (a_w - a)  # adjust 'not-in-top' to balance
+            c_w = c
+            d_w = max(background_size - a_w - b_w - c_w, 1)
+            if d_w > 0:
+                try:
+                    _r = fisher_exact([[a_w, b_w], [c_w, d_w]], alternative='greater')
+                    _w_p = float(str(_r[1]))
+                    _w_score = 1.0 - _w_p
+                    # Only keep weighted result if it improves the score
+                    # and doesn't explode p-value to 1.0.
+                    if _w_score > 0 and _w_p < 0.999:
+                        raw_p = _w_p
+                        hypergeometric_score = _w_score
+                        _fisher_source = "consensus_weighted"
+                    else:
+                        # Weighted table degraded — stick with raw.
+                        _fisher_source = "raw_fallback"
+                        if a > 0 and b >= 0 and c >= 0 and d > 0:
+                            _r = fisher_exact([[a, b], [c, d]], alternative='greater')
+                            raw_p = float(str(_r[1]))
+                        else:
+                            raw_p = 1.0
+                        hypergeometric_score = 1.0 - raw_p
+                except ValueError:
+                    _fisher_source = "raw_fallback"
+                    if a > 0 and b >= 0 and c >= 0 and d > 0:
+                        _r = fisher_exact([[a, b], [c, d]], alternative='greater')
+                        raw_p = float(str(_r[1]))
+                    else:
+                        raw_p = 1.0
+                    hypergeometric_score = 1.0 - raw_p
+        elif a > 0 and b >= 0 and c >= 0 and d > 0:
             table = [[a, b], [c, d]]
             _r = fisher_exact(table, alternative='greater')
             raw_p = float(str(_r[1]))
+            hypergeometric_score = 1.0 - raw_p
         else:
             raw_p = 1.0
-        hypergeometric_score = 1.0 - raw_p
+            hypergeometric_score = 1.0 - raw_p
 
         # ── 2. Cosine similarity score ──────────────────────────────
         all_genes = list(set(top_markers["names"].tolist() + positive_markers))
@@ -550,6 +625,8 @@ def score_cluster_against_kb(kb: Dict[str, Any],
         # ── 4. Combine ──────────────────────────────────────────────
         if hypergeometric_score >= cos_sim:
             base_method = "hypergeometric"
+            if _fisher_source == "consensus_weighted":
+                base_method = "hypergeometric_weighted"
             base_score = hypergeometric_score
         else:
             base_method = "cosine"
