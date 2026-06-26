@@ -41,6 +41,10 @@ CFG.features_file = '{{FEATURES_FILE}}'
 # ── Dataset metadata ──
 CFG.tissue = '{{TISSUE}}'   # TODO: verify tissue type
 CFG.species = '{{SPECIES}}'
+CFG.expression_type = '{{EXPRESSION_TYPE}}'   # raw_counts | TPM | log1p_counts | CPM | FPKM
+# TPM/FPKM/CPM: total_counts & complexity filters are auto-skipped.
+# Scrublet is auto-disabled for non-raw_counts data.
+# Adjust min_genes / max_pct_mito accordingly.
 
 # ── Stage mapping (if developmental data) ──
 # TODO: Map stage labels to broad developmental categories.
@@ -55,9 +59,9 @@ CFG.species = '{{SPECIES}}'
 CFG.min_genes = 200
 CFG.max_genes = 7500
 CFG.max_pct_mito = 20.0
-CFG.min_genes_per_umi = 0.7
 CFG.min_cells_per_gene = 3
-CFG.run_scrublet = True
+CFG.run_scrublet = True           # auto-disabled when expression_type != "raw_counts"
+CFG.min_genes_per_umi = 0.7       # complexity filter — only applied when expression_type="raw_counts"
 # CFG.use_adaptive_thresholds = True   # MAD-based thresholds instead of fixed
 # CFG.mad_n_mads = 3.0
 

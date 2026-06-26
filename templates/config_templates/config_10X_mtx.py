@@ -25,6 +25,10 @@ CFG.mtx_dir = '{{MTX_DIR}}'
 # ── Dataset metadata ──
 CFG.tissue = '{{TISSUE}}'   # TODO: verify tissue type
 CFG.species = '{{SPECIES}}'
+CFG.expression_type = '{{EXPRESSION_TYPE}}'   # raw_counts | TPM | log1p_counts | CPM | FPKM
+# TPM/FPKM/CPM: total_counts & complexity filters are auto-skipped.
+# Scrublet is auto-disabled for non-raw_counts data.
+# Adjust min_genes / max_pct_mito accordingly.
 
 # ── Sample mapping ──
 # TODO: Map 10X barcode suffixes (-1, -2, ...) to sample names.
@@ -45,9 +49,9 @@ CFG.species = '{{SPECIES}}'
 CFG.min_genes = 500
 CFG.max_genes = 7500
 CFG.max_pct_mito = 20.0
-CFG.min_genes_per_umi = 0.7
 CFG.min_cells_per_gene = 3
-CFG.run_scrublet = True
+CFG.run_scrublet = True           # auto-disabled when expression_type != "raw_counts"
+CFG.min_genes_per_umi = 0.7       # complexity filter — only applied when expression_type="raw_counts"
 # CFG.use_adaptive_thresholds = True   # 替代固定阈值，基于 MAD
 # CFG.mad_n_mads = 3.0
 

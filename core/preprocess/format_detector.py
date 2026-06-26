@@ -678,3 +678,106 @@ def guess_genome(species: str) -> str:
         'xenopus_tropicalis':     'xenTro10',
     }
     return _map.get(species, '')
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  Expression type detection
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Keyword hints in filenames and content to infer whether the data is
+# raw-count or normalised (TPM, FPKM, CPM, log1p).
+_EXPRESSION_KEYWORDS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r'\bTPM\b', re.IGNORECASE), 'TPM'),
+    (re.compile(r'\bFPKM\b', re.IGNORECASE), 'FPKM'),
+    (re.compile(r'\bRPKM\b', re.IGNORECASE), 'FPKM'),          # treat RPKM ≈ FPKM
+    (re.compile(r'\bCPM\b', re.IGNORECASE), 'CPM'),
+    (re.compile(r'\blog1p\b', re.IGNORECASE), 'log1p_counts'),
+    (re.compile(r'\blog2\s*\(?\s*cpm', re.IGNORECASE), 'log1p_counts'),  # log2(cpm+1) ≈ log1p
+    (re.compile(r'\bnormalized\s+counts?\b', re.IGNORECASE), 'log1p_counts'),
+    # Delimiter-separated variants — match TPM/FPKM/CPM/log1p surrounded by
+    # `.` / `_` / start-of-string / end-of-string.
+    # Examples: "Merge.TPM.csv", "TPM_normalized.tsv.gz", "expr_TPM_counts"
+    (re.compile(r'(?:[._]|^)TPM(?:[._]|$)', re.IGNORECASE), 'TPM'),
+    (re.compile(r'(?:[._]|^)FPKM(?:[._]|$)', re.IGNORECASE), 'FPKM'),
+    (re.compile(r'(?:[._]|^)RPKM(?:[._]|$)', re.IGNORECASE), 'FPKM'),
+    (re.compile(r'(?:[._]|^)CPM(?:[._]|$)', re.IGNORECASE), 'CPM'),
+    (re.compile(r'(?:[._]|^)log1p(?:[._]|$)', re.IGNORECASE), 'log1p_counts'),
+]
+
+
+def detect_expression_type(classification: dict, file_list: list[str],
+                           scan_contents: bool = True) -> str:
+    """Detect the expression data type for RNA datasets.
+
+    Strategy:
+      1. If the primary format is 10X H5 / MTX → "raw_counts" (always).
+      2. Scan filenames for TPM / FPKM / CPM / log1p keywords.
+      3. If *scan_contents* is True, peek into the first CSV/TSV/txt matrix
+         to check for integer-valued entries and TPM/FPKM headers.
+
+    Returns one of: "raw_counts", "TPM", "FPKM", "CPM", "log1p_counts".
+    """
+    primary = _detect_primary_format_for_expression(
+        classification.get('tenx_h5_dirs', {}),
+        classification.get('tenx_mtx_dirs', {}),
+        classification.get('csv_files', []),
+    )
+
+    # ── Layer 0: 10X native formats are always raw_counts ──
+    if primary in ('10X_h5', '10X_mtx'):
+        return 'raw_counts'
+
+    # ── Layer 1: filenames ──
+    all_basenames = ' '.join(os.path.basename(f) for f in file_list)
+    for pattern, exp_type in _EXPRESSION_KEYWORDS:
+        if pattern.search(all_basenames):
+            return exp_type
+
+    # ── Layer 2: content scan — peek into the first candidate matrix file ──
+    if scan_contents and primary == 'csv_matrix':
+        # Look at all csv_files (not just the first) for expression keywords
+        for fpath in classification.get('csv_files', [])[:5]:
+            text = _scan_file_head(fpath, n_lines=50)
+            if not text:
+                continue
+            for pattern, exp_type in _EXPRESSION_KEYWORDS:
+                if pattern.search(text):
+                    return exp_type
+            # Heuristic: if every value in the first data row is integer,
+            # it's likely raw counts; if decimal (0.5 / 1e-6 style), likely TPM/CPM
+            lines = text.strip().split('\n')
+            if len(lines) >= 2:
+                vals = _extract_numeric_values(lines[1])
+                if vals and all(v == int(v) for v in vals):
+                    return 'raw_counts'
+                if vals and any(v < 1.0 and v > 0 for v in vals):
+                    return 'TPM'  # best guess for small positive floats
+
+    # ── Fallback ──
+    return 'raw_counts'
+
+
+def _extract_numeric_values(line: str, max_vals: int = 30) -> list[float]:
+    """Extract numeric values from a CSV/TSV line (skipping the first column
+    which is usually a gene name)."""
+    import re as _re
+    parts = _re.split(r'[,\t]', line)
+    vals = []
+    for p in parts[1:]:  # skip first (gene name)
+        try:
+            vals.append(float(p))
+        except (ValueError, TypeError):
+            continue
+    return vals[:max_vals]
+
+
+def _detect_primary_format_for_expression(tenx_h5: dict, tenx_mtx: dict,
+                                           csv_files: list) -> str:
+    """Minimal duplicate of _detect_primary_format scoped for RNA detection."""
+    if tenx_h5:
+        return '10X_h5'
+    if tenx_mtx:
+        return '10X_mtx'
+    if csv_files:
+        return 'csv_matrix'
+    return 'unknown'

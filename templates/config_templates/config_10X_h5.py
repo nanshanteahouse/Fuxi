@@ -53,16 +53,21 @@ CFG.stage_order = []  # 阶段顺序，用于图例排序
 # ── 数据集元信息 ──
 CFG.tissue = "unknown"   # 组织类型: brain, retina, liver, etc.
 CFG.species = "human"    # 物种: human, mouse, rat
+CFG.expression_type = "raw_counts"   # 10X H5 默认是 raw UMI counts
+# raw_counts | log1p_counts | TPM | CPM | FPKM
+# TPM/FPKM/CPM: total_counts & complexity filters are auto-skipped.
+# Scrublet is auto-disabled for non-raw_counts data.
 
 # ── QC ──
 CFG.min_genes = 500
 CFG.max_genes = 7500
 CFG.max_pct_mito = 20.0
-CFG.min_genes_per_umi = 0.7
 CFG.min_cells_per_gene = 3
-CFG.run_scrublet = True
+CFG.run_scrublet = True           # auto-disabled when expression_type != "raw_counts"
+CFG.min_genes_per_umi = 0.7       # complexity filter — only applied when expression_type="raw_counts"
 # CFG.use_adaptive_thresholds = True   # 替代固定阈值，基于 MAD
 # CFG.mad_n_mads = 3.0
+# CFG.qc_ncount_max_mad = 5.0
 
 # ── HVG ──
 CFG.n_top_genes = 4000

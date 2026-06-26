@@ -211,6 +211,9 @@ def generate_config(gse_id: str,
                 break
         break
 
+    # Detect expression type
+    expression_type = fd.detect_expression_type(classification, file_list)
+
     replacements = {
         'MTX_PREFIX': mtx_prefix,
         'MTX_DIR': mtx_dir or '.',
@@ -222,6 +225,7 @@ def generate_config(gse_id: str,
         'SPECIES': species,
         'GENOME': genome,
         'H5_DIR': h5_dir or '.',
+        'EXPRESSION_TYPE': expression_type,
     }
 
     filled = _fill_template(template_text, replacements)

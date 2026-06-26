@@ -202,22 +202,32 @@ Runs Scrublet independently per sample to detect "doublets" — droplets that ca
 
 - Large samples (>15,000 cells) are processed serially to avoid out-of-memory errors
 - Small samples are processed in parallel for speed
+- **Auto-skip for non-raw-counts data**: When `expression_type` is `TPM`, `FPKM`, `CPM`, or `log1p_counts`, Scrublet is disabled automatically since its negative-binomial assumption is violated for normalized data
 - If Scrublet fails for a given sample, all cells in that sample are marked as non-doublet (graceful degradation — the pipeline never blocks)
 
 Output: `doublet_scores` (doublet probability score) and `predicted_doublet` (boolean flag) columns.
 
 ### Step 02: Quality control (QC)
 
-**Input**: `01_doublet.h5ad` | **Output**: `02_qc.h5ad`
+**Input**: `01_doublet.h5ad` | **Output**: `02_qc.h5ad`<br>
+**Plots**: `{figure_dir}/02_qc/` — `nFeature_distribution.png`, `nCount_vs_nFeature.png`, `pct_mito_distribution.png`
 
-Filters are applied in order:
+Two modes, controlled by `use_adaptive_thresholds`:
+
+| Mode | Config | Behavior |
+|------|--------|----------|
+| Hard thresholds (default) | `use_adaptive_thresholds=False` | Uses fixed cutoffs from config |
+| MAD adaptive | `use_adaptive_thresholds=True` | Median ± N × MAD per metric, clipped by hard thresholds as safety caps |
+
+Filter dimensions (all expressed as `(lo, hi)` in a thresholds dict):
 
 1. **Remove doublets**: Discard cells flagged `predicted_doublet=True`
 2. **Gene count filter**: Remove cells with too few genes (empty droplets) or too many genes (missed doublets). Default range: 500–7,500
 3. **Mitochondrial filter**: Remove cells with >20% mitochondrial reads (dead/damaged cells)
-4. **Complexity filter**: Remove cells where `log10(n_genes) / log10(total_counts) < 0.7` (low-quality cells with unusual gene detection patterns)
+4. **nCount filter** (raw_counts only): Upper-bound on `total_counts`. Skipped automatically for TPM/FPKM/CPM
+5. **Complexity filter** (raw_counts only): `log10(n_genes) / log10(total_counts)` lower-bound. Skipped automatically for TPM/FPKM/CPM
 
-Also computes complete per-cell QC metrics: mitochondrial percentage, ribosomal percentage, and gene-UMI complexity ratio.
+**3 diagnostic plots are always generated**, annotated with the actual threshold lines (hard or MAD), providing a permanent audit trail without requiring manual inspection.
 
 ### Step 03: Normalization & batch integration
 
@@ -855,11 +865,17 @@ CFG.ai.api_base = "https://api.deepseek.com/v1"
 ### 8.4 Quality control
 
 ```python
-CFG.min_genes = 500            # Minimum detected genes per cell
-CFG.max_genes = 7500           # Maximum detected genes per cell (catches missed doublets)
-CFG.max_pct_mito = 20.0        # Maximum mitochondrial percentage
-CFG.min_genes_per_umi = 0.70   # Complexity threshold (reduce for TPM data, e.g. 0.50)
-CFG.min_cells_per_gene = 3     # Minimum cells expressing a gene
+CFG.expression_type = "raw_counts"     # raw_counts | TPM | FPKM | CPM | log1p_counts
+                                       # TPM/FPKM/CPM: total_counts & complexity filters auto-skipped
+                                       # Scrublet auto-disabled for non-raw_counts data
+CFG.min_genes = 500                    # Minimum detected genes per cell
+CFG.max_genes = 7500                   # Maximum detected genes per cell (catches missed doublets)
+CFG.max_pct_mito = 20.0                # Maximum mitochondrial percentage
+CFG.min_genes_per_umi = 0.70           # Complexity threshold — only for raw_counts
+CFG.min_cells_per_gene = 3             # Minimum cells expressing a gene
+CFG.use_adaptive_thresholds = False    # True → MAD-based thresholds (auto-adapt to data)
+CFG.mad_n_mads = 3.0                   # N × MAD for adaptive thresholds
+CFG.qc_ncount_max_mad = 5.0            # Wider MAD multiplier for nCount upper bound
 ```
 
 ### 8.5 Batch correction
@@ -961,19 +977,19 @@ First, confirm you've chosen the right annotation mode:
 
 ### Q5: My data is TPM-formatted and QC filters out ALL cells?
 
-TPM data has each cell's `total_counts` exactly equal to 1,000,000, which makes the complexity metric (`min_genes_per_umi`) nearly zero.
+TPM data has each cell's `total_counts` exactly equal to 1,000,000, which makes the complexity metric (`min_genes_per_umi`) degenerate (≈ log10(nFeature)/6).
 
-**Solution**: Reduce the complexity threshold significantly in your config:
+**Solution**: Set `expression_type = "TPM"` in your config. This automatically:
+
+1. Skips the `total_counts` filter (nCount is non-interpretable on TPM/FPKM/CPM data)
+2. Skips the `log_genes_per_umi` complexity filter (equally non-interpretable)
+3. Disables Scrublet (negative-binomial assumption is violated for non-count data)
 
 ```python
-CFG.min_genes_per_umi = 0.50  # For TPM data
+CFG.expression_type = "TPM"  # Auto-adjusts QC for TPM/FPKM/CPM data
 ```
 
-Then re-run the QC step:
-
-```bash
-python core/run_pipeline.py --modality rna --step 3 --config ...
-```
+No need to manually tune `min_genes_per_umi`.
 
 ### Q6: ATAC pipeline runs out of memory during peak merging?
 
@@ -1021,8 +1037,10 @@ The pipeline's grid search mechanism already handles most parameter choices (Lei
 
 | Parameter | How to determine |
 |-----------|-----------------|
+| `expression_type` | Set to `"TPM"`/`"FPKM"`/`"CPM"` for non-count matrices → auto-adjusts QC |
 | `min_genes` / `max_genes` | Check the distribution plots from the QC step; aim for the 1%–99% percentile range |
 | `max_pct_mito` | 20% is a safe default; metabolically active tissues (e.g., cardiac muscle) may need a higher threshold |
+| `use_adaptive_thresholds` | Enable for auto-adaptive QC (MAD-based); `mad_n_mads=3.0` is a good starting point |
 | `n_pcs` | Inspect `pca_elbow.png` and pick the elbow point |
 | `harmony_batch_key` | Usually "sample"; if your experiment spans sequencing platforms, use "platform" |
 
