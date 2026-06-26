@@ -10,7 +10,7 @@ Fuxi is a unified monorepo for single-cell multi-omics analysis, merging the pre
 
 | Modality | Engine | Steps | Status |
 |----------|--------|:-----:|:------:|
-| `rna` | Scanpy 1.10+ | 12 (00-11) | ✅ Production |
+| `rna` | Scanpy 1.10+ | 10 (00-10) | ✅ Production |
 | `atac` | Snapatac2 2.9 | 10 (00-09) | ✅ Production |
 | `spatial` | Squidpy 1.8+ | 10 (00-09) | ✅ Production |
 
