@@ -25,6 +25,10 @@ CFG.mtx_dir = '{{MTX_DIR}}'
 # ── Dataset metadata ──
 CFG.tissue = '{{TISSUE}}'   # TODO: verify tissue type
 CFG.species = '{{SPECIES}}'
+CFG.expression_type = '{{EXPRESSION_TYPE}}'   # raw_counts | TPM | log1p_counts | CPM | FPKM
+# TPM/FPKM/CPM: total_counts & complexity filters are auto-skipped.
+# Scrublet is auto-disabled for non-raw_counts data.
+# Adjust min_genes / max_pct_mito accordingly.
 
 # ── Sample mapping ──
 # TODO: Map 10X barcode suffixes (-1, -2, ...) to sample names.
@@ -45,9 +49,9 @@ CFG.species = '{{SPECIES}}'
 CFG.min_genes = 500
 CFG.max_genes = 7500
 CFG.max_pct_mito = 20.0
-CFG.min_genes_per_umi = 0.7
 CFG.min_cells_per_gene = 3
-CFG.run_scrublet = True
+CFG.run_scrublet = True           # auto-disabled when expression_type != "raw_counts"
+CFG.min_genes_per_umi = 0.7       # complexity filter — only applied when expression_type="raw_counts"
 # CFG.use_adaptive_thresholds = True   # 替代固定阈值，基于 MAD
 # CFG.mad_n_mads = 3.0
 
@@ -108,6 +112,14 @@ CFG.de_stage_pairwise = True
 # CFG.enrichment_method = 'both'     # 'ora' | 'prerank' | 'both'
 # CFG.enrichment_gene_sets = ['GO_Biological_Process_2023', 'KEGG_2021_Human']
 # CFG.enrichment_organism = 'human'
+
+# ── GRN regulatory network analysis (uncomment to enable) ──
+CFG.run_grn = True
+CFG.grn_method = "decoupler"         # 'decoupler' only for now (pySCENIC TBD)
+CFG.grn_species = "human"            # 'human' | 'mouse'
+CFG.grn_n_top_regulons = 50          # top N variable TFs for heatmap
+CFG.grn_min_regulon_size = 5         # minimum target genes per regulon
+# CFG.grn_confidence_levels = ["A", "B", "C"]  # DoRothEA confidence levels
 
 # ── AI settings (uncomment to enable) ──
 # CFG.ai.enabled = True

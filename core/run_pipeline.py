@@ -61,6 +61,7 @@ RNA_STEPS = [
     ("08", "08_trajectory.py",          "PAGA + DPT trajectory analysis"),
     ("09", "09_enrichment.py",          "GO/KEGG enrichment + AI interpretation"),
     ("10", "10_exploratory.py",         "Exploratory analysis (composition/QC/marker)"),
+    ("11", "11_grn.py",                 "GRN regulatory network analysis (decoupler) → 11_grn.h5ad"),
 ]
 
 RNA_CHECKPOINT_FILES = [
@@ -75,9 +76,10 @@ RNA_CHECKPOINT_FILES = [
     "04_clustered.h5ad",         # step 08 (reads 04_clustered)
     "marker_genes_per_group.csv",# step 09 (reads CSV from tables/)
     "05_annotated.h5ad",         # step 10 (reads 05_annotated)
+    "11_grn.h5ad",               # step 11
 ]
 
-RNA_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5}
+RNA_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5, 11}
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -220,6 +222,7 @@ def _get_step_dependency(step: int, steps, checkpoints, modality: str = "rna") -
         8: checkpoints[4],
         9: checkpoints[5],
         10: checkpoints[5],
+        11: checkpoints[5],
     }
     return deps.get(step, checkpoints[step - 1] if step > 0 else "")
 

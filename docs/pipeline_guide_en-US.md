@@ -33,6 +33,7 @@ After you've downloaded single-cell data from GEO and run the preprocessor to ge
 | 🔍 Differential analysis | Marker genes + stage-wise comparison + temporal trends — three-layer DE | Identifies characteristic genes and developmental dynamics |
 | 🌳 Trajectory inference | PAGA + diffusion pseudotime | Reconstructs cell differentiation/developmental paths |
 | 🧬 Pathway enrichment | GO/KEGG over-representation analysis + GSEA | Reveals biological functions of cell types |
+| 🧭 GRN analysis | Pseudobulk + decoupler TF activity inference | Identifies transcription factors driving each cell type identity |
 
 **TL;DR: Config file ready → one command → from raw data to publication-quality figures, fully automated.**
 
@@ -99,13 +100,13 @@ Fuxi — RNA-seq pipeline step list
 ============================================================
   [00] Load raw data → 00_raw.h5ad
   ...
-  [11] Exploratory analysis (composition/QC/marker)
+  [11] GRN regulatory network analysis (decoupler) → 11_grn.h5ad
 ```
 
 ### 3.2 Run the full pipeline in one command
 
 ```bash
-# scRNA-seq full workflow (10 steps)
+# scRNA-seq full workflow (12 steps, from scratch to GRN)
 python core/run_pipeline.py --modality rna --config projects/rna/{dataset_id}/config_{dataset_id}.py
 
 # scATAC-seq full workflow (10 steps)
@@ -157,20 +158,20 @@ python core/run_pipeline.py --modality rna --step 5 --config projects/rna/{datas
 python core/run_pipeline.py --modality rna --steps 2-5 --config projects/rna/{dataset_id}/config_{dataset_id}.py
 
 # Run specific non-consecutive steps
-python core/run_pipeline.py --modality rna --steps 0,2,4 --config projects/rna/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality rna --steps 0,2,4,11 --config projects/rna/{dataset_id}/config_{dataset_id}.py
 ```
 
 ---
 
 ## 4. scRNA-seq pipeline in detail
 
-The scRNA-seq pipeline has 11 steps (numbered 00–10), with data flowing sequentially:
+The scRNA-seq pipeline has 12 steps (numbered 00–11), with data flowing sequentially:
 
 ```
 Raw data → 00_load → 01_doublet → 02_qc
          → 03_integrate → 04_cluster → 05_annotate
          → 06_subcluster → 07_markers → 08_trajectory
-         → 09_enrichment → 10_exploratory
+         → 09_enrichment → 10_exploratory → 11_grn
 ```
 
 ### Step 00: Data loading
@@ -201,22 +202,32 @@ Runs Scrublet independently per sample to detect "doublets" — droplets that ca
 
 - Large samples (>15,000 cells) are processed serially to avoid out-of-memory errors
 - Small samples are processed in parallel for speed
+- **Auto-skip for non-raw-counts data**: When `expression_type` is `TPM`, `FPKM`, `CPM`, or `log1p_counts`, Scrublet is disabled automatically since its negative-binomial assumption is violated for normalized data
 - If Scrublet fails for a given sample, all cells in that sample are marked as non-doublet (graceful degradation — the pipeline never blocks)
 
 Output: `doublet_scores` (doublet probability score) and `predicted_doublet` (boolean flag) columns.
 
 ### Step 02: Quality control (QC)
 
-**Input**: `01_doublet.h5ad` | **Output**: `02_qc.h5ad`
+**Input**: `01_doublet.h5ad` | **Output**: `02_qc.h5ad`<br>
+**Plots**: `{figure_dir}/02_qc/` — `nFeature_distribution.png`, `nCount_vs_nFeature.png`, `pct_mito_distribution.png`
 
-Filters are applied in order:
+Two modes, controlled by `use_adaptive_thresholds`:
+
+| Mode | Config | Behavior |
+|------|--------|----------|
+| Hard thresholds (default) | `use_adaptive_thresholds=False` | Uses fixed cutoffs from config |
+| MAD adaptive | `use_adaptive_thresholds=True` | Median ± N × MAD per metric, clipped by hard thresholds as safety caps |
+
+Filter dimensions (all expressed as `(lo, hi)` in a thresholds dict):
 
 1. **Remove doublets**: Discard cells flagged `predicted_doublet=True`
 2. **Gene count filter**: Remove cells with too few genes (empty droplets) or too many genes (missed doublets). Default range: 500–7,500
 3. **Mitochondrial filter**: Remove cells with >20% mitochondrial reads (dead/damaged cells)
-4. **Complexity filter**: Remove cells where `log10(n_genes) / log10(total_counts) < 0.7` (low-quality cells with unusual gene detection patterns)
+4. **nCount filter** (raw_counts only): Upper-bound on `total_counts`. Skipped automatically for TPM/FPKM/CPM
+5. **Complexity filter** (raw_counts only): `log10(n_genes) / log10(total_counts)` lower-bound. Skipped automatically for TPM/FPKM/CPM
 
-Also computes complete per-cell QC metrics: mitochondrial percentage, ribosomal percentage, and gene-UMI complexity ratio.
+**3 diagnostic plots are always generated**, annotated with the actual threshold lines (hard or MAD), providing a permanent audit trail without requiring manual inspection.
 
 ### Step 03: Normalization & batch integration
 
@@ -361,6 +372,34 @@ Generates comprehensive summary visualizations to help you quickly understand th
 - **QC metric visualization**: Distribution of n_genes, total_counts, and mitochondrial percentage on UMAP
 - **Marker gene expression**: Known marker gene expression patterns on UMAP
 - **Cluster statistics**: Cell counts and percentages per cluster/cell type
+
+### Step 11: GRN regulatory network analysis (decoupler)
+
+**Input**: `05_annotated.h5ad` | **Output**: `11_grn.h5ad` + CSV tables + heatmap
+
+Transcription factor (TF) activity inference based on pseudobulk aggregation of annotated cell types:
+
+1. **Pseudobulk aggregation**: Computes mean expression per `cell_type` to smooth single-cell dropout noise
+2. **Regulon network**: Fetches the CollecTRI database (~1,185 TFs with signed target-gene interactions) via decoupler
+3. **TF activity inference**: Runs ULM (Univariate Linear Model) — tests whether a TF's target genes are enriched among highly expressed genes in each cell type
+4. **Output**:
+   - `11_grn.h5ad` — pseudobulk AnnData (obs = cell types, var = genes) with `obsm['X_tf_activity']` containing TF activity scores
+   - `tables/11_grn/tf_activity_per_cell_type.csv` — full TF activity matrix (cell types × TFs)
+   - `tables/11_grn/tf_activity_pvals.csv` — corresponding p-values
+   - `figures/11_grn/tf_activity_heatmap.png` — clustered heatmap of top-N variable TFs across cell types
+
+**Config fields:**
+
+```python
+CFG.run_grn = True               # Enable/disable this step
+CFG.grn_method = "decoupler"     # Method ('decoupler' only for now; pySCENIC TBD)
+CFG.grn_species = "human"        # 'human' | 'mouse'
+CFG.grn_n_top_regulons = 50      # Number of top-variance TFs for heatmap
+CFG.grn_min_regulon_size = 5     # Minimum target genes per regulon
+CFG.grn_confidence_levels = ["A","B","C"]  # DoRothEA confidence levels (if using DoRothEA)
+```
+
+> 💡 **No external database downloads required.** decoupler fetches regulon networks online on first use and caches them locally. CollecTRI (default) covers more TFs than DoRothEA and is the recommended network.
 
 ---
 
@@ -635,7 +674,8 @@ results/
 │   ├── 03_integrated.h5ad         # After batch integration
 │   ├── 04_clustered.h5ad          # After clustering + UMAP
 │   ├── 05_annotated.h5ad          # After cell annotation ★
-│   └── 05_final.h5ad              # After trajectory analysis
+│   ├── 05_final.h5ad              # After trajectory analysis
+│   └── 11_grn.h5ad               # Pseudobulk + TF activities (GRN) ★
 │
 ├── figures/                       # Visualizations
 │   ├── pca_elbow.png              # PCA elbow plot
@@ -662,6 +702,8 @@ results/
     ├── cell_type_sizes.csv        # Cell type statistics
     ├── enrichment_ora.csv         # ORA summary
     ├── enrichment_gsea.csv        # GSEA summary
+    ├── 11_grn/                    # GRN analysis
+    │   └── tf_activity_per_cell_type.csv  # TF activity matrix
     └── enrichment/                # Detailed enrichment results
         ├── ora_*_summary.csv
         ├── prerank_*_summary.csv
@@ -823,11 +865,17 @@ CFG.ai.api_base = "https://api.deepseek.com/v1"
 ### 8.4 Quality control
 
 ```python
-CFG.min_genes = 500            # Minimum detected genes per cell
-CFG.max_genes = 7500           # Maximum detected genes per cell (catches missed doublets)
-CFG.max_pct_mito = 20.0        # Maximum mitochondrial percentage
-CFG.min_genes_per_umi = 0.70   # Complexity threshold (reduce for TPM data, e.g. 0.50)
-CFG.min_cells_per_gene = 3     # Minimum cells expressing a gene
+CFG.expression_type = "raw_counts"     # raw_counts | TPM | FPKM | CPM | log1p_counts
+                                       # TPM/FPKM/CPM: total_counts & complexity filters auto-skipped
+                                       # Scrublet auto-disabled for non-raw_counts data
+CFG.min_genes = 500                    # Minimum detected genes per cell
+CFG.max_genes = 7500                   # Maximum detected genes per cell (catches missed doublets)
+CFG.max_pct_mito = 20.0                # Maximum mitochondrial percentage
+CFG.min_genes_per_umi = 0.70           # Complexity threshold — only for raw_counts
+CFG.min_cells_per_gene = 3             # Minimum cells expressing a gene
+CFG.use_adaptive_thresholds = False    # True → MAD-based thresholds (auto-adapt to data)
+CFG.mad_n_mads = 3.0                   # N × MAD for adaptive thresholds
+CFG.qc_ncount_max_mad = 5.0            # Wider MAD multiplier for nCount upper bound
 ```
 
 ### 8.5 Batch correction
@@ -929,19 +977,19 @@ First, confirm you've chosen the right annotation mode:
 
 ### Q5: My data is TPM-formatted and QC filters out ALL cells?
 
-TPM data has each cell's `total_counts` exactly equal to 1,000,000, which makes the complexity metric (`min_genes_per_umi`) nearly zero.
+TPM data has each cell's `total_counts` exactly equal to 1,000,000, which makes the complexity metric (`min_genes_per_umi`) degenerate (≈ log10(nFeature)/6).
 
-**Solution**: Reduce the complexity threshold significantly in your config:
+**Solution**: Set `expression_type = "TPM"` in your config. This automatically:
+
+1. Skips the `total_counts` filter (nCount is non-interpretable on TPM/FPKM/CPM data)
+2. Skips the `log_genes_per_umi` complexity filter (equally non-interpretable)
+3. Disables Scrublet (negative-binomial assumption is violated for non-count data)
 
 ```python
-CFG.min_genes_per_umi = 0.50  # For TPM data
+CFG.expression_type = "TPM"  # Auto-adjusts QC for TPM/FPKM/CPM data
 ```
 
-Then re-run the QC step:
-
-```bash
-python core/run_pipeline.py --modality rna --step 3 --config ...
-```
+No need to manually tune `min_genes_per_umi`.
 
 ### Q6: ATAC pipeline runs out of memory during peak merging?
 
@@ -989,8 +1037,10 @@ The pipeline's grid search mechanism already handles most parameter choices (Lei
 
 | Parameter | How to determine |
 |-----------|-----------------|
+| `expression_type` | Set to `"TPM"`/`"FPKM"`/`"CPM"` for non-count matrices → auto-adjusts QC |
 | `min_genes` / `max_genes` | Check the distribution plots from the QC step; aim for the 1%–99% percentile range |
 | `max_pct_mito` | 20% is a safe default; metabolically active tissues (e.g., cardiac muscle) may need a higher threshold |
+| `use_adaptive_thresholds` | Enable for auto-adaptive QC (MAD-based); `mad_n_mads=3.0` is a good starting point |
 | `n_pcs` | Inspect `pca_elbow.png` and pick the elbow point |
 | `harmony_batch_key` | Usually "sample"; if your experiment spans sequencing platforms, use "platform" |
 

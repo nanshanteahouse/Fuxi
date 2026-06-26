@@ -120,6 +120,7 @@ class Config:
     # ═══════════════════════════════════════════════════════════════════
     tissue: str = "unknown"
     species: str = "human"
+    expression_type: str = "raw_counts"  # raw_counts | log1p_counts | TPM | CPM | FPKM
 
     # ═══════════════════════════════════════════════════════════════════
     #  RNA: QC 阈值
@@ -133,6 +134,7 @@ class Config:
     min_cells_per_gene: int = 3
     use_adaptive_thresholds: bool = False
     mad_n_mads: float = 3.0
+    qc_ncount_max_mad: float = 5.0
 
     # ═══════════════════════════════════════════════════════════════════
     #  ATAC: 参考基因组
@@ -162,7 +164,7 @@ class Config:
     #  RNA: Scrublet 双细胞检测
     # ═══════════════════════════════════════════════════════════════════
     run_scrublet: bool = True
-    scrublet_expected_doublet_rate: float = 0.06
+    scrublet_expected_doublet_rate: float | None = None  # None = 根据细胞数自动拟合
     scrublet_batch_key: str = "sample"
     scrublet_min_counts: int = 2
     scrublet_min_cells: int = 3
@@ -363,6 +365,18 @@ class Config:
     # ═══════════════════════════════════════════════════════════════════
     max_cells: Optional[int] = None
 
+    # ============================================================
+    #  RNA: GRN gene regulatory network analysis (Step 11)
+    # ============================================================
+    run_grn: bool = True
+    grn_method: str = "decoupler"          # 'decoupler' only for now
+    grn_species: str = "human"             # 'human' | 'mouse'
+    grn_n_top_regulons: int = 50
+    grn_min_regulon_size: int = 5
+    grn_confidence_levels: list = field(
+        default_factory=lambda: ["A", "B", "C"]
+    )
+
     # ═══════════════════════════════════════════════════════════════════
     #  执行环境（通用）
     # ═══════════════════════════════════════════════════════════════════
@@ -432,6 +446,10 @@ class Config:
     @property
     def final_h5ad(self) -> str:
         return os.path.join(self.h5ad_dir, "05_final.h5ad")
+
+    @property
+    def grn_h5ad(self) -> str:
+        return os.path.join(self.h5ad_dir, "11_grn.h5ad")
 
     # ── ATAC: checkpoint 路径 ──
     @property

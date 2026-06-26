@@ -17,6 +17,88 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.metrics import silhouette_score
+from joblib import Parallel, delayed
+
+
+def _evaluate_n_neighbor(adata, n, resolutions_grid, CFG, use_rep, log):
+    """Worker for parallel grid search: evaluate one n_neighbors value.
+
+    Runs neighbors → UMAP → serial Leiden over all resolutions.
+    Returns (n, results_summary_rows, umap_coords_dict, leiden_cols_dict)
+    or None on failure.
+
+    Operates on a *copy* of adata to avoid shared-state conflicts,
+    but the caller must pass an already-copied AnnData.
+    """
+    try:
+        sc.pp.neighbors(
+            adata, n_neighbors=n,
+            n_pcs=CFG.n_pcs_use, use_rep=use_rep,
+            random_state=CFG.random_seed,
+        )
+    except Exception as e:
+        log.error("Neighbor computation failed (n_neighbors=%d): %s", n, e)
+        return None
+
+    try:
+        sc.tl.umap(adata, min_dist=getattr(CFG, 'umap_min_dist', 0.3),
+                   spread=getattr(CFG, 'umap_spread', 1.0),
+                   random_state=CFG.random_seed)
+        umap_coords = adata.obsm['X_umap'].copy()
+    except Exception as e:
+        log.error("UMAP computation failed (n_neighbors=%d): %s", n, e)
+        return None
+
+    summary_rows = []
+    umap_coords_dict = {}
+    leiden_cols_dict = {}
+
+    for res in resolutions_grid:
+        umap_key = f'umap_{n}_{res}'
+        leiden_key = f'leiden_{n}_{res}'
+
+        umap_coords_dict[umap_key] = umap_coords.copy()
+
+        try:
+            sc.tl.leiden(adata, resolution=res, key_added=leiden_key,
+                         random_state=CFG.random_seed, flavor=CFG.leiden_flavor)
+        except Exception as e:
+            log.error("Leiden failed (n=%d, r=%.1f): %s", n, res, e)
+            continue
+
+        leiden_labels = adata.obs[leiden_key]
+        n_clusters = int(leiden_labels.nunique())
+
+        # Silhouette score (PCA space, sampled for large datasets)
+        sil_score = None
+        try:
+            if adata.n_obs > 10000:
+                rng = np.random.RandomState(CFG.random_seed)
+                idx = rng.choice(adata.n_obs, 10000, replace=False)
+                sil_score = float(silhouette_score(
+                    adata.obsm[use_rep][idx, :CFG.n_pcs_use],
+                    leiden_labels.values[idx],
+                ))
+            else:
+                sil_score = float(silhouette_score(
+                    adata.obsm[use_rep][:, :CFG.n_pcs_use],
+                    leiden_labels.values,
+                ))
+        except Exception:
+            pass
+
+        score_str = f", silhouette={sil_score:.4f}" if sil_score is not None else ""
+        log.info("  n=%d, r=%.1f → %d clusters%s", n, res, n_clusters, score_str)
+
+        summary_rows.append({
+            'n_neighbors': n,
+            'resolution': res,
+            'n_clusters': n_clusters,
+            'silhouette_score': sil_score,
+        })
+        leiden_cols_dict[leiden_key] = leiden_labels.values.copy()
+
+    return (n, summary_rows, umap_coords_dict, leiden_cols_dict)
 
 
 def main():
@@ -44,76 +126,30 @@ def main():
 
     results_summary = []
 
-    for n in n_neighbors_grid:
-        # 邻居图
-        log.info("Computing neighbors (n_neighbors=%d, use_rep=%s)...", n, use_rep)
-        try:
-            sc.pp.neighbors(
-                adata, n_neighbors=n,
-                n_pcs=CFG.n_pcs_use, use_rep=use_rep,
-                random_state=CFG.random_seed,
-            )
-        except Exception as e:
-            log.error("Neighbor computation failed (n_neighbors=%d): %s", n, e)
+    # ── Parallel outer loop over n_neighbors ──
+    n_jobs = min(getattr(CFG, 'n_jobs', 4) or os.cpu_count() or 1, len(n_neighbors_grid))
+    log.info("Evaluating %d n_neighbors values with n_jobs=%d", len(n_neighbors_grid), n_jobs)
+    parallel_results = Parallel(n_jobs=n_jobs, prefer='threads')(
+        delayed(_evaluate_n_neighbor)(
+            adata.copy(), n, resolutions_grid, CFG, use_rep, log
+        )
+        for n in n_neighbors_grid
+    )
+
+    # ── Collect results back into main adata ──
+    for r in parallel_results:
+        if r is None:
             continue
+        n, summary_rows, umap_coords_dict, leiden_cols_dict = r
+        results_summary.extend(summary_rows)
 
-        # ── 计算 UMAP（每个 n_neighbors 只算一次，所有 resolution 共享）──
-        log.info("  Computing UMAP (n_neighbors=%d)...", n)
-        try:
-            sc.tl.umap(adata, min_dist=getattr(CFG, 'umap_min_dist', 0.3), spread=getattr(CFG, 'umap_spread', 1.0), random_state=CFG.random_seed)
-            umap_coords = adata.obsm['X_umap'].copy()
-        except Exception as e:
-            log.error("  UMAP computation failed (n_neighbors=%d): %s", n, e)
-            continue
+        # Write UMAP coords and leiden labels back to main adata
+        for umap_key, coords in umap_coords_dict.items():
+            adata.obsm[umap_key] = coords
+        for leiden_key, labels in leiden_cols_dict.items():
+            adata.obs[leiden_key] = labels
 
-        # ── 逐 resolution 计算 Leiden + Silhouette（串行，无 deepcopy）──
-        log.info("  Serial computation of %d resolutions...", len(resolutions_grid))
-        for res in resolutions_grid:
-            umap_key = f'umap_{n}_{res}'
-            leiden_key = f'leiden_{n}_{res}'
-
-            # 所有 resolution 共享同一份 UMAP 坐标
-            adata.obsm[umap_key] = umap_coords
-
-            try:
-                sc.tl.leiden(adata, resolution=res, key_added=leiden_key,
-                             random_state=CFG.random_seed, flavor=CFG.leiden_flavor)
-            except Exception as e:
-                log.error("  Leiden failed (n=%d, r=%.1f): %s", n, res, e)
-                continue
-
-            leiden_labels = adata.obs[leiden_key]
-            n_clusters = int(leiden_labels.nunique())
-
-            # Silhouette score（PCA 空间，大数据集采样 10K 细胞）
-            sil_score = None
-            try:
-                if adata.n_obs > 10000:
-                    rng = np.random.RandomState(CFG.random_seed)
-                    idx = rng.choice(adata.n_obs, 10000, replace=False)
-                    sil_score = float(silhouette_score(
-                        adata.obsm[use_rep][idx, :CFG.n_pcs_use],
-                        leiden_labels.values[idx],
-                    ))
-                else:
-                    sil_score = float(silhouette_score(
-                        adata.obsm[use_rep][:, :CFG.n_pcs_use],
-                        leiden_labels.values,
-                    ))
-            except Exception:
-                pass
-
-            score_str = f", silhouette={sil_score:.4f}" if sil_score is not None else ""
-            log.info("  n=%d, r=%.1f → %d clusters%s", n, res, n_clusters, score_str)
-
-            results_summary.append({
-                'n_neighbors': n,
-                'resolution': res,
-                'n_clusters': n_clusters,
-                'silhouette_score': sil_score,
-            })
-
-        # ── 单参数组合 UMAP 图 (逐 resolution，数据已就绪) ──
+        # ── Single-param UMAP plots for this n_neighbors (serial, data already ready) ──
         for res in resolutions_grid:
             umap_key = f'umap_{n}_{res}'
             leiden_key = f'leiden_{n}_{res}'
