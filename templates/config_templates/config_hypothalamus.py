@@ -52,9 +52,17 @@ CFG.run_scrublet = True
 # ── HVG ──
 CFG.n_top_genes = 4000
 CFG.hvg_batch_key = 'sample'
+CFG.hvg_flavor = 'seurat_v3'
+# CFG.use_regress_out = False
 
-# ── 批次校正 ──
+# ── 批次校正 / Harmony ──
 CFG.harmony_batch_key = 'sample'
+CFG.use_harmony = True
+CFG.harmony_max_iter = 20
+
+# ── PCA ──
+CFG.n_pcs_full = 100
+CFG.n_pcs_use = 50
 
 # ── 聚类 ──
 CFG.leiden_resolutions = [0.3, 0.5, 0.8]
@@ -82,9 +90,52 @@ CFG.subcluster_types = ['NE', 'NP', 'Neuron']
 CFG.subcluster_resolution = 0.4
 CFG.min_cells_subcluster = 50
 
+# ── 知识库 ──
+# CFG.tissue_kb = ''   # rna/tissue_ontologies/ 中的组织 KB 名称
+
+# ── 差异表达 ──
+CFG.de_method = 'wilcoxon'
+CFG.de_n_genes = 50
+CFG.de_pval_cutoff = 0.05
+CFG.de_logfc_cutoff = 0.25
+CFG.de_stage_pairwise = True
+# CFG.de_auto_switch_on_low_quality = True
+
 # ── 轨迹 ──
 CFG.root_cell_types = ['NE', 'NP']
+# CFG.root_markers = ['SOX2', 'PAX6', 'NES']
+# CFG.n_diffmap_comps = 15
+# CFG.n_branchings = 2
+
+# ── 富集分析 (取消注释以启用) ──
+# CFG.run_enrichment = True
+# CFG.enrichment_method = 'both'
+# CFG.enrichment_gene_sets = ['GO_Biological_Process_2023', 'KEGG_2021_Human']
+# CFG.enrichment_organism = 'human'
+
+# ── AI 设置 (取消注释以启用) ──
+# CFG.ai.enabled = True
+# CFG.ai.api_base = 'https://api.deepseek.com/v1'
+# CFG.ai.model = 'deepseek-v4-pro'
+# CFG.ai.api_key = os.environ.get('LLM_API_KEY', '')
+# CFG.ai.max_tokens = 32768
+# CFG.ai.temperature = 0.1
+# CFG.ai.thinking_enabled = True
+# CFG.ai.reasoning_effort = 'high'
+# CFG.ai.ai_annotation = True
+# CFG.ai.ai_subcluster = True
+# CFG.ai.ai_interpretation = True
+# CFG.ai.ai_cache_responses = True
 
 # ── 执行 ──
 CFG.n_jobs = 0  # auto-detect (override in project config if needed)
 CFG.random_seed = 42
+# CFG.force_csr = True
+# CFG.use_float32 = False
+# CFG.limit_blas_threads = True
+# CFG.scanpy_verbosity = 2
+# CFG.h5ad_compression = 'gzip'
+
+# ── 降采样 (可选) ──
+# CFG.downsample_target = 5000
+# CFG.downsample_strategy = 'sample'

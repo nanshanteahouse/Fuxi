@@ -56,14 +56,25 @@ CFG.min_genes = 200
 CFG.max_genes = 7500
 CFG.max_pct_mito = 20.0
 CFG.min_genes_per_umi = 0.7
+CFG.min_cells_per_gene = 3
 CFG.run_scrublet = True
+# CFG.use_adaptive_thresholds = True   # MAD-based thresholds instead of fixed
+# CFG.mad_n_mads = 3.0
 
 # ── HVG ──
 CFG.n_top_genes = 4000
 CFG.hvg_batch_key = 'sample'
+CFG.hvg_flavor = 'seurat_v3'
+# CFG.use_regress_out = False     # regress out cell cycle, n_counts, etc.
 
-# ── Batch correction ──
+# ── Batch correction / Harmony ──
 CFG.harmony_batch_key = 'sample'
+CFG.use_harmony = True
+CFG.harmony_max_iter = 20
+
+# ── PCA ──
+CFG.n_pcs_full = 100
+CFG.n_pcs_use = 50
 
 # ── Clustering ──
 CFG.leiden_resolutions = [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
@@ -90,12 +101,22 @@ CFG.min_cells_subcluster = 50
 # ── Trajectory ──
 CFG.root_cell_types = []    # TODO: developmental root cell types
 # CFG.root_markers = ['SOX2', 'PAX6', 'NES']
+# CFG.n_diffmap_comps = 15
+# CFG.n_branchings = 2
 
 # ── Differential expression ──
 CFG.de_method = 'wilcoxon'
 CFG.de_n_genes = 50
 CFG.de_pval_cutoff = 0.05
 CFG.de_logfc_cutoff = 0.25
+CFG.de_stage_pairwise = True
+# CFG.de_auto_switch_on_low_quality = True   # auto-switch for low-quality data
+
+# ── Enrichment (uncomment to enable) ──
+# CFG.run_enrichment = True
+# CFG.enrichment_method = 'both'     # 'ora' | 'prerank' | 'both'
+# CFG.enrichment_gene_sets = ['GO_Biological_Process_2023', 'KEGG_2021_Human']
+# CFG.enrichment_organism = 'human'
 
 # ── AI settings (uncomment to enable) ──
 # CFG.ai.enabled = True
@@ -114,3 +135,12 @@ CFG.de_logfc_cutoff = 0.25
 # ── Execution ──
 CFG.n_jobs = 0   # auto-detect
 CFG.random_seed = 42
+# CFG.force_csr = True           # force CSR sparse matrix format
+# CFG.use_float32 = False        # use float32 to reduce memory
+# CFG.limit_blas_threads = True  # limit BLAS threads
+# CFG.scanpy_verbosity = 2       # Scanpy log level (0=error, 1=warning, 2=info)
+# CFG.h5ad_compression = 'gzip'  # h5ad write compression
+
+# ── Downsampling (optional) ──
+# CFG.downsample_target = 5000         # max cells per sample
+# CFG.downsample_strategy = 'sample'   # 'sample' | 'random'

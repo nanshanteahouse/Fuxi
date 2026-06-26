@@ -26,21 +26,11 @@ CFG.meta_columns = {
 }
 
 # ── 阶段分组映射 ──
-STAGE_MAP = {
-    'Hgw9':  'EarlyFetal',  'Hgw11': 'EarlyFetal',  'Hgw12': 'EarlyFetal',
-    'Hgw13': 'EarlyFetal',
-    'Hgw14': 'MidFetal',    'Hgw15': 'MidFetal',    'Hgw16': 'MidFetal',
-    'Hgw17': 'MidFetal',    'Hgw18': 'MidFetal',    'Hgw19': 'MidFetal',
-    'Hgw20': 'MidFetal',
-    'Hgw22': 'LateFetal',   'Hgw24': 'LateFetal',   'Hgw27': 'LateFetal',
-    'Hpnd8': 'Postnatal',
-    '24_Day': 'Organoid',   '30_Day': 'Organoid',   '42_Day': 'Organoid',
-    '59_Day': 'Organoid',
-    'Adult': 'Adult',
+CFG.stage_map = {
+    # 注意: 此处 stage 来自 meta_columns 中 'stage' 列的原始值，
+    # 实际映射在步骤 04 中使用 pandas map 手动完成。
+    # 参见 rna/steps/04_cluster_umap.py 中的 _map_stages() 函数。
 }
-# 注意: 此处 stage_map 为 dict[int, str] 格式，而实际使用时 age 值
-# 可能是字符串，因此使用 meta_columns + 步骤 04 中的手动映射。
-CFG.stage_map = {}
 CFG.stage_order = ['Organoid', 'EarlyFetal', 'MidFetal', 'LateFetal', 'Postnatal', 'Adult']
 
 # ── QC ──
@@ -49,13 +39,23 @@ CFG.max_genes = 7500
 CFG.max_pct_mito = 20.0
 CFG.min_cells_per_gene = 3
 CFG.run_scrublet = True
+# CFG.use_adaptive_thresholds = True   # 替代固定阈值，基于 MAD
+# CFG.mad_n_mads = 3.0
 
 # ── HVG ──
 CFG.n_top_genes = 5000
 CFG.hvg_batch_key = 'sample'
+CFG.hvg_flavor = 'seurat_v3'
+# CFG.use_regress_out = False
 
-# ── 批次校正 ──
+# ── 批次校正 / Harmony ──
 CFG.harmony_batch_key = 'age'
+CFG.use_harmony = True
+CFG.harmony_max_iter = 20
+
+# ── PCA ──
+CFG.n_pcs_full = 100
+CFG.n_pcs_use = 50
 
 # ── 聚类 ──
 CFG.leiden_resolutions = [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
@@ -85,9 +85,57 @@ CFG.marker_dict = {
     'Fibroblast':        ['COL1A1', 'DCN', 'LUM', 'COL3A1', 'COL1A2'],
 }
 
-# ── 轨迹根细胞使用标记基因自动检测 ──
+# ── 子聚类 ──
+# CFG.subcluster_types = ['RPCs', 'Muller Glia']
+# CFG.subcluster_resolution = 0.4
+# CFG.min_cells_subcluster = 50
+
+# ── 知识库 ──
+# CFG.tissue_kb = ''   # rna/tissue_ontologies/ 中的组织 KB 名称
+
+# ── 差异表达 ──
+CFG.de_method = 'wilcoxon'
+CFG.de_n_genes = 50
+CFG.de_pval_cutoff = 0.05
+CFG.de_logfc_cutoff = 0.25
+CFG.de_stage_pairwise = True
+# CFG.de_auto_switch_on_low_quality = True
+
+# ── 轨迹 ──
 CFG.root_markers = ['VSX2', 'PAX6', 'SOX2', 'HES1', 'NOTCH1']
+# CFG.root_cell_types = []
+# CFG.n_diffmap_comps = 15
+# CFG.n_branchings = 2
+
+# ── 富集分析 (取消注释以启用) ──
+# CFG.run_enrichment = True
+# CFG.enrichment_method = 'both'
+# CFG.enrichment_gene_sets = ['GO_Biological_Process_2023', 'KEGG_2021_Human']
+# CFG.enrichment_organism = 'human'
+
+# ── AI 设置 (取消注释以启用) ──
+# CFG.ai.enabled = True
+# CFG.ai.api_base = 'https://api.deepseek.com/v1'
+# CFG.ai.model = 'deepseek-v4-pro'
+# CFG.ai.api_key = os.environ.get('LLM_API_KEY', '')
+# CFG.ai.max_tokens = 32768
+# CFG.ai.temperature = 0.1
+# CFG.ai.thinking_enabled = True
+# CFG.ai.reasoning_effort = 'high'
+# CFG.ai.ai_annotation = True
+# CFG.ai.ai_subcluster = True
+# CFG.ai.ai_interpretation = True
+# CFG.ai.ai_cache_responses = True
 
 # ── 执行 ──
 CFG.n_jobs = 0  # auto-detect (override in project config if needed)
 CFG.random_seed = 42
+# CFG.force_csr = True
+# CFG.use_float32 = False
+# CFG.limit_blas_threads = True
+# CFG.scanpy_verbosity = 2
+# CFG.h5ad_compression = 'gzip'
+
+# ── 降采样 (可选) ──
+# CFG.downsample_target = 5000
+# CFG.downsample_strategy = 'sample'

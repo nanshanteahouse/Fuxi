@@ -59,14 +59,25 @@ CFG.min_genes = 500
 CFG.max_genes = 7500
 CFG.max_pct_mito = 20.0
 CFG.min_genes_per_umi = 0.7
+CFG.min_cells_per_gene = 3
 CFG.run_scrublet = True
+# CFG.use_adaptive_thresholds = True   # 替代固定阈值，基于 MAD
+# CFG.mad_n_mads = 3.0
 
 # ── HVG ──
 CFG.n_top_genes = 4000
 CFG.hvg_batch_key = 'sample'
+CFG.hvg_flavor = 'seurat_v3'
+# CFG.use_regress_out = False     # 回归细胞周期/n_counts 等协变量
 
-# ── 批次校正 ──
+# ── 批次校正 / Harmony ──
 CFG.harmony_batch_key = 'sample'
+CFG.use_harmony = True
+CFG.harmony_max_iter = 20
+
+# ── PCA ──
+CFG.n_pcs_full = 100
+CFG.n_pcs_use = 50
 
 # ── 聚类 ──
 CFG.leiden_resolutions = [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
@@ -85,6 +96,9 @@ CFG.marker_dict = {
     # 'Endothelial': ['PECAM1', 'VWF', 'CDH5'],
 }
 
+# ── 知识库 ──
+# CFG.tissue_kb = ''   # rna/tissue_ontologies/ 中的组织 KB 名称，如 'retina'
+
 # ── 子聚类 ──
 # 对哪些细胞类型进行进一步子聚类
 CFG.subcluster_types = []
@@ -94,7 +108,47 @@ CFG.min_cells_subcluster = 50
 # ── 轨迹 ──
 # 根细胞类型（发育起点）
 CFG.root_cell_types = []
+# CFG.root_markers = ['SOX2', 'PAX6', 'NES']   # 通过标记基因自动检测根
+# CFG.n_diffmap_comps = 15
+# CFG.n_branchings = 2
+
+# ── 差异表达 ──
+CFG.de_method = 'wilcoxon'
+CFG.de_n_genes = 50
+CFG.de_pval_cutoff = 0.05
+CFG.de_logfc_cutoff = 0.25
+CFG.de_stage_pairwise = True
+# CFG.de_auto_switch_on_low_quality = True   # 低质量数据自动切换方法
+
+# ── 富集分析 (取消注释以启用) ──
+# CFG.run_enrichment = True
+# CFG.enrichment_method = 'both'       # 'ora' | 'prerank' | 'both'
+# CFG.enrichment_gene_sets = ['GO_Biological_Process_2023', 'KEGG_2021_Human']
+# CFG.enrichment_organism = 'human'
+
+# ── AI 设置 (取消注释以启用) ──
+# CFG.ai.enabled = True
+# CFG.ai.api_base = 'https://api.deepseek.com/v1'
+# CFG.ai.model = 'deepseek-v4-pro'
+# CFG.ai.api_key = os.environ.get('LLM_API_KEY', '')
+# CFG.ai.max_tokens = 32768
+# CFG.ai.temperature = 0.1
+# CFG.ai.thinking_enabled = True
+# CFG.ai.reasoning_effort = 'high'
+# CFG.ai.ai_annotation = True
+# CFG.ai.ai_subcluster = True
+# CFG.ai.ai_interpretation = True
+# CFG.ai.ai_cache_responses = True
 
 # ── 执行 ──
 CFG.n_jobs = 0  # auto-detect (override in project config if needed)
 CFG.random_seed = 42
+# CFG.force_csr = True           # 强制 CSR 稀疏矩阵格式
+# CFG.use_float32 = False        # 使用 float32 减少内存
+# CFG.limit_blas_threads = True  # 限制 BLAS 线程数
+# CFG.scanpy_verbosity = 2       # Scanpy 日志级别 (0=error, 1=warning, 2=info)
+# CFG.h5ad_compression = 'gzip'  # h5ad 写入压缩
+
+# ── 降采样 (可选) ──
+# CFG.downsample_target = 5000         # 每样本最多保留 N 细胞
+# CFG.downsample_strategy = 'sample'   # 'sample' | 'random'
