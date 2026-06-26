@@ -120,6 +120,7 @@ class Config:
     # ═══════════════════════════════════════════════════════════════════
     tissue: str = "unknown"
     species: str = "human"
+    expression_type: str = "raw_counts"  # raw_counts | log1p_counts | TPM | CPM | FPKM
 
     # ═══════════════════════════════════════════════════════════════════
     #  RNA: QC 阈值
@@ -163,7 +164,7 @@ class Config:
     #  RNA: Scrublet 双细胞检测
     # ═══════════════════════════════════════════════════════════════════
     run_scrublet: bool = True
-    scrublet_expected_doublet_rate: float = 0.06
+    scrublet_expected_doublet_rate: float | None = None  # None = 根据细胞数自动拟合
     scrublet_batch_key: str = "sample"
     scrublet_min_counts: int = 2
     scrublet_min_cells: int = 3
