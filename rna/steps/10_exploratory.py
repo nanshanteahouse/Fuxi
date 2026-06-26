@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Step 06: 探索性分析
-======================
+Step 10: 探索性分析
+=======================
   1. 细胞组成随发育阶段的变化 (堆叠柱状图)
   2. UMAP 上的 QC 指标检查
   3. 已知标记基因的 UMAP 表达
@@ -63,13 +63,13 @@ def main():
     args_parser.add_argument("--config", default="../config.py")
     args = args_parser.parse_args()
     CFG = resolve_config(args.config)
-    log = setup_logger("06_exploratory", os.path.join(CFG.log_dir, "06_exploratory.log"))
-    log.info("Step 06: Exploratory analysis")
+    log = setup_logger("10_exploratory", os.path.join(CFG.log_dir, "10_exploratory.log"))
+    log.info("Step 10: Exploratory analysis")
 
     adata = sc.read(CFG.cluster_h5ad)
     log.info("Loaded: %s — %d cells", CFG.cluster_h5ad, adata.n_obs)
 
-    fig_dir = os.path.join(CFG.figure_dir, '06_exploratory')
+    fig_dir = os.path.join(CFG.figure_dir, '10_exploratory')
     os.makedirs(fig_dir, exist_ok=True)
     sc.settings.figdir = fig_dir
     sc.settings.autoshow = False

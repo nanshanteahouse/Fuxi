@@ -1,32 +1,24 @@
 #!/usr/bin/env python3
 """
-Downsampling — 大型 scRNA-seq 数据集的细胞降采样
-===================================================
-当数据集过大导致下游步骤 OOM 时，在任意 h5ad checkpoint 之间插入此脚本，
-减少细胞数以控制内存使用。
+Downsampling — CLI 包装器
+===============================
+核心逻辑在 core/downsample.py，本文件仅处理 CLI 参数解析和文件 I/O。
 
-支持三种降采样策略:
-  1. stratified  (默认): 按样本分层采样，保持各样本比例 → 适合有 sample 列的数据
-  2. random:             完全随机采样 → 适合无分组的简单降采样
-  3. max_per_sample:     每个样本最多保留 N 个细胞 → 适合样本大小极不均衡的数据
-
-使用方法:
+使用方式:
   # 插入在 pipeline 步骤之间:
-  python run_pipeline.py --step 0 --config config_large.py
-  ./venv/bin/python scripts/downsample.py --config config_large.py --target-total 50000
-  python run_pipeline.py --step 1 --config config_large.py
+  python rna/steps/downsample.py --config config_large.py --target-total 50000
 
   # 指定输入输出 checkpoint (路径从 config 读取):
-  ./venv/bin/python scripts/downsample.py \\
+  python rna/steps/downsample.py \\
       --config config_myproject.py \\
       --strategy stratified --target-total 30000
 
   # 超大文件使用 backed 模式（低内存读取）:
-  ./venv/bin/python scripts/downsample.py \\
+  python rna/steps/downsample.py \\
       --config config_large.py --backed --target-total 50000
 
   # 每个样本最多 3000 细胞:
-  ./venv/bin/python scripts/downsample.py \\
+  python rna/steps/downsample.py \\
       --config config_large.py --strategy max_per_sample --max-per-sample 3000
 """
 import sys, os, time, argparse
@@ -36,6 +28,13 @@ import scipy.sparse as sp
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 from core.utils import setup_logger, resolve_config, safe_write
+from core.downsample import (
+    downsample_random,
+    downsample_stratified,
+    downsample_max_per_sample,
+    estimate_memory_gb,
+    _check_sample_col,
+)
 
 # 与 run_pipeline.py CHECKPOINT_FILES 同步，副本避免跨目录导入
 CHECKPOINT_FILES = [
@@ -44,144 +43,6 @@ CHECKPOINT_FILES = [
     "05_annotated.h5ad", "05_annotated.h5ad", "04_clustered.h5ad",
     "marker_genes_per_group.csv", "05_annotated.h5ad",
 ]
-
-
-def _check_sample_col(adata: sc.AnnData, sample_key: str, log) -> str:
-    """查找可用的样本分组列。返回实际使用的列名或 None。"""
-    if sample_key and sample_key in adata.obs:
-        return sample_key
-    # 尝试常见列名
-    for candidate in ['sample', 'Sample', 'samples', 'batch', 'Batch', 'stage', 'Stage']:
-        if candidate in adata.obs:
-            log.info("Using '%s' as group column ('%s' not found)", candidate, sample_key)
-            return candidate
-    return None
-
-
-def downsample_random(adata: sc.AnnData, target: int, rng: np.random.RandomState,
-                      log) -> sc.AnnData:
-    """完全随机采样 target 个细胞。"""
-    n_cells = adata.n_obs
-    if target >= n_cells:
-        log.info("target_total (%d) >= current cell count (%d), no downsampling needed", target, n_cells)
-        return adata
-    idx = rng.choice(n_cells, size=target, replace=False)
-    idx.sort()
-    log.info("Random sampling: %d → %d cells (%.1f%%)", n_cells, target, 100 * target / n_cells)
-    return adata[idx].copy()
-
-
-def downsample_stratified(adata: sc.AnnData, target: int, sample_key: str,
-                          rng: np.random.RandomState, log) -> sc.AnnData:
-    """按样本分层采样，保持各样本比例。"""
-    n_cells = adata.n_obs
-    if target >= n_cells:
-        log.info("target_total (%d) >= current cell count (%d), no downsampling needed", target, n_cells)
-        return adata
-
-    counts = adata.obs[sample_key].value_counts()
-    log.info("Stratified sampling, group=%s, target_total=%d", sample_key, target)
-    for s, c in counts.items():
-        log.info("  Sample %s: %d cells (%.1f%%)", s, c, 100 * c / n_cells)
-
-    # 按比例分配 target
-    fractions = counts / n_cells
-    per_sample_targets = (fractions * target).astype(int)
-    # 处理余数 — 从余数最大的样本补 1
-    remainder = target - per_sample_targets.sum()
-    if remainder > 0:
-        sorted_idx = np.argsort((fractions * target) - per_sample_targets)[::-1]
-        for i in range(remainder):
-            per_sample_targets.iloc[int(sorted_idx[i])] += 1
-
-    # 每个样本分别采样
-    indices = []
-    for sample_name in counts.index:
-        mask = adata.obs[sample_key] == sample_name
-        sample_idx = np.where(mask)[0]
-        n_sample = len(sample_idx)
-        t = min(per_sample_targets[sample_name], n_sample)
-        if t < n_sample:
-            chosen = rng.choice(sample_idx, size=t, replace=False)
-        else:
-            chosen = sample_idx
-        indices.append(chosen)
-
-    idx = np.concatenate(indices)
-    idx.sort()
-    log.info("Stratified sampling: %d → %d cells (%.1f%%)", n_cells, len(idx), 100 * len(idx) / n_cells)
-    return adata[idx].copy()
-
-
-def downsample_max_per_sample(adata: sc.AnnData, max_per: int, sample_key: str,
-                              rng: np.random.RandomState, log) -> sc.AnnData:
-    """每个样本最多保留 max_per 个细胞。"""
-    counts = adata.obs[sample_key].value_counts()
-    log.info("Capping per sample, max %d cells per sample", max_per)
-
-    indices = []
-    for sample_name in counts.index:
-        mask = adata.obs[sample_key] == sample_name
-        sample_idx = np.where(mask)[0]
-        n_sample = len(sample_idx)
-        if n_sample > max_per:
-            chosen = rng.choice(sample_idx, size=max_per, replace=False)
-            log.info("  Sample %s: %d → %d (truncated %d)", sample_name, n_sample, max_per, n_sample - max_per)
-        else:
-            chosen = sample_idx
-            log.info("  Sample %s: %d (unchanged)", sample_name, n_sample)
-        indices.append(chosen)
-
-    idx = np.concatenate(indices)
-    idx.sort()
-    log.info("Capped sampling: %d → %d cells (%.1f%%)", adata.n_obs, len(idx), 100 * len(idx) / adata.n_obs)
-    return adata[idx].copy()
-
-
-def estimate_memory_gb(adata: sc.AnnData) -> float:
-    """粗略估计 AnnData 在内存中的大小 (GB)。"""
-    total = 0.0
-    # X matrix
-    if hasattr(adata, 'X') and adata.X is not None:
-        if sp.issparse(adata.X):
-            # CSR: data + indices + indptr
-            total += adata.X.data.nbytes + adata.X.indices.nbytes + adata.X.indptr.nbytes
-        else:
-            total += adata.X.nbytes
-    # obs
-    for col in adata.obs.columns:
-        dtype = adata.obs[col].dtype
-        if dtype == object:
-            continue  # string columns are harder to estimate
-        total += adata.obs[col].values.nbytes if hasattr(adata.obs[col].values, 'nbytes') else 0
-    # var
-    for col in adata.var.columns:
-        dtype = adata.var[col].dtype
-        if dtype == object:
-            continue
-        total += adata.var[col].values.nbytes if hasattr(adata.var[col].values, 'nbytes') else 0
-    # layers
-    if hasattr(adata, 'layers'):
-        for layer_name in adata.layers.keys():
-            layer = adata.layers[layer_name]
-            if sp.issparse(layer):
-                total += layer.data.nbytes + layer.indices.nbytes + layer.indptr.nbytes
-            elif layer is not None:
-                total += layer.nbytes
-    # obsm
-    if hasattr(adata, 'obsm'):
-        for key in adata.obsm.keys():
-            arr = adata.obsm[key]
-            if hasattr(arr, 'nbytes'):
-                total += arr.nbytes
-    # varm
-    if hasattr(adata, 'varm'):
-        for key in adata.varm.keys():
-            arr = adata.varm[key]
-            if hasattr(arr, 'nbytes'):
-                total += arr.nbytes
-    # uns (skip, too heterogeneous)
-    return total / (1024 ** 3)
 
 
 def main():
@@ -238,7 +99,6 @@ def main():
     if strategy == "max_per_sample":
         if args.max_per_sample is None:
             parser.error("--strategy max_per_sample requires --max-per-sample")
-        target_per_sample = args.max_per_sample
     elif args.max_per_sample is not None:
         parser.error("--max-per-sample only for --strategy max_per_sample")
 
@@ -262,7 +122,6 @@ def main():
     elif args.overwrite or args.config is None:
         output_path = input_path
     elif CFG is not None:
-        # 默认生成 *_downsampled.h5ad 同级文件
         base, ext = os.path.splitext(input_path)
         output_path = f"{base}_downsampled{ext}"
     else:
@@ -279,7 +138,6 @@ def main():
                     args.max_per_sample = CFG.downsample_max_per_sample
                 args.random_seed = CFG.downsample_random_seed
             else:
-                # 配置未启用降采样 — 跳过（管道模式无操作）
                 print("[downsample] Skipped: downsample_target not configured")
                 return
 
@@ -287,7 +145,6 @@ def main():
     if CFG is not None:
         log_dir = CFG.log_dir
     else:
-        # 无 config 时，在输出文件同目录下写日志
         log_dir = os.path.join(os.path.dirname(os.path.abspath(output_path)), 'logs')
     os.makedirs(log_dir, exist_ok=True)
     log = setup_logger("downsample", os.path.join(log_dir, "downsample.log"))
@@ -321,12 +178,10 @@ def main():
     log.info("  Cells: %d × Genes: %d", adata.n_obs, adata.n_vars)
     log.info("  Read time: %.1fs", time.time() - read_t)
 
-    # 如果 backed，加载到内存
     if args.backed:
         log.info("  backed mode — converting to in-memory AnnData...")
         adata = adata.to_memory()
 
-    # 预估内存
     est_gb = estimate_memory_gb(adata)
     log.info("  Estimated memory: %.2f GB (this object only)", est_gb)
 
@@ -391,13 +246,7 @@ def main():
     # ── 写入 ──
     log.info("Saving to: %s", output_path)
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-
-    if output_path == input_path and CFG:
-        # 覆盖原始 checkpoint — 使用 safe_write
-        safe_write(adata, output_path, cfg=CFG)
-    else:
-        # 新文件 — safe_write 是安全的
-        safe_write(adata, output_path, cfg=CFG)
+    safe_write(adata, output_path, cfg=CFG)
 
     # ── 摘要 ──
     elapsed = time.time() - t0

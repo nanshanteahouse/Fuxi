@@ -661,7 +661,7 @@ results/
 │   ├── enrichment/                # Enrichment figures
 │   │   ├── ora_*_bubble.pdf       # ORA bubble plot
 │   │   └── prerank_*_bubble.pdf   # GSEA bubble plot
-│   └── 06_exploratory/            # Exploratory analysis atlas
+│   └── 10_exploratory/            # Exploratory analysis atlas
 │       ├── composition_by_stage_*.png  # Cell composition stacked bars
 │       └── _06_marker_dotplot.pdf      # Known marker dotplot
 │

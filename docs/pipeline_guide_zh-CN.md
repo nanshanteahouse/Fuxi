@@ -661,7 +661,7 @@ results/
 │   ├── enrichment/                # 富集分析图表
 │   │   ├── ora_*_bubble.pdf       # ORA 气泡图
 │   │   └── prerank_*_bubble.pdf   # GSEA 气泡图
-│   └── 06_exploratory/            # 探索性分析图集
+│   └── 10_exploratory/            # 探索性分析图集
 │       ├── composition_by_stage_*.png  # 细胞组成堆叠图
 │       └── _06_marker_dotplot.pdf      # 标记基因点图
 │
