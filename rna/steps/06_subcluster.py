@@ -196,14 +196,102 @@ def main():
         log.info("Saved subset (no subclustering performed): %s", output_path)
         return
 
-    # ── (d) PCA on subset ─────────────────────────────────────────────
-    n_comps = min(50, sub.n_obs - 2)
-    log.info("Running PCA (n_comps=%d)...", n_comps)
-    sc.pp.pca(sub, n_comps=n_comps, svd_solver='arpack')
+    # ── (d) Re-process from raw counts on subset ──────────────────────
+    # Subsetting changes which genes are informative across the selected
+    # cell type.  Re-select HVGs, re-normalize, re-run PCA + Harmony so
+    # subcluster resolution is driven by relevant variation, not by the
+    # full-dataset HVG set.
+    raw_path = os.path.join(CFG.h5ad_dir, "02_qc.h5ad")
+    if os.path.exists(raw_path):
+        raw_adata = sc.read(raw_path)
+        common_bc = list(sub.obs_names.intersection(raw_adata.obs_names))
+        n_common = len(common_bc)
+        if n_common < n_cells:
+            log.info("Matched %d / %d cells in 02_qc.h5ad", n_common, n_cells)
 
-    # ── (e) Neighbors ─────────────────────────────────────────────────
-    log.info("Computing neighbor graph (n_pcs=30)...")
-    sc.pp.neighbors(sub, n_pcs=30, random_state=CFG.random_seed)
+        if n_common >= min_cells:
+            # Align both objects to the same barcode order
+            sub = sub[common_bc].copy()
+            sub_raw = raw_adata[common_bc].copy()
+            del raw_adata
+            log.info("Raw subset loaded: %d cells, %d genes",
+                     sub_raw.n_obs, sub_raw.n_vars)
+
+            # Re-select HVGs within the subset
+            hvg_flavors = [CFG.hvg_flavor, 'seurat_v3', 'seurat']
+            hvg_ok = False
+            for flavor in hvg_flavors:
+                try:
+                    sc.pp.highly_variable_genes(
+                        sub_raw, n_top_genes=CFG.n_top_genes, flavor=flavor,
+                    )
+                    hvg_ok = True
+                    log.info("Subset HVG: flavor=%s, %d genes selected",
+                             flavor, sub_raw.var['highly_variable'].sum())
+                    break
+                except (ValueError, ImportError):
+                    continue
+
+            if hvg_ok and sub_raw.var['highly_variable'].sum() > 0:
+                # Normalize + log1p on HVG subset
+                sub_raw = sub_raw[:, sub_raw.var['highly_variable']].copy()
+                sc.pp.normalize_total(sub_raw, target_sum=CFG.normalize_target_sum)
+                sc.pp.log1p(sub_raw)
+
+                # PCA
+                n_comps_sub = min(50, sub_raw.n_obs - 2)
+                sc.pp.pca(sub_raw, n_comps=n_comps_sub, svd_solver='randomized',
+                          random_state=CFG.random_seed)
+                log.info("Subset PCA: n_comps=%d", n_comps_sub)
+
+                # Harmony batch correction
+                if CFG.use_harmony and CFG.harmony_batch_key in sub_raw.obs.columns:
+                    from harmony import harmonize
+                    n_pcs_use = min(CFG.n_pcs_use, n_comps_sub)
+                    log.info("Subset Harmony (batch_key=%s, n_pcs_use=%d)...",
+                             CFG.harmony_batch_key, n_pcs_use)
+                    try:
+                        Z = harmonize(
+                            sub_raw.obsm['X_pca'][:, :n_pcs_use],
+                            sub_raw.obs,
+                            batch_key=CFG.harmony_batch_key,
+                            random_state=CFG.random_seed,
+                            max_iter_harmony=CFG.harmony_max_iter,
+                        )
+                        sub_raw.obsm['X_pca_harmony'] = Z
+                    except Exception as e:
+                        log.warning("Subset Harmony failed (%s), using raw PCA", e)
+                        sub_raw.obsm['X_pca_harmony'] = sub_raw.obsm['X_pca'].copy()
+                else:
+                    sub_raw.obsm['X_pca_harmony'] = sub_raw.obsm['X_pca'].copy()
+
+                # Copy embeddings back to sub (already index-aligned)
+                sub.obsm['X_pca'] = sub_raw.obsm['X_pca']
+                sub.obsm['X_pca_harmony'] = sub_raw.obsm['X_pca_harmony']
+            else:
+                log.warning("Subset HVG selection failed, falling back to "
+                            "parent-level PCA")
+                n_comps_sub = min(50, sub.n_obs - 2)
+                sc.pp.pca(sub, n_comps=n_comps_sub, svd_solver='arpack')
+        else:
+            log.warning("Too few overlapping cells in 02_qc.h5ad (%d < %d), "
+                        "falling back to parent-level PCA",
+                        n_common, min_cells)
+            n_comps_sub = min(50, sub.n_obs - 2)
+            sc.pp.pca(sub, n_comps=n_comps_sub, svd_solver='arpack')
+    else:
+        log.warning("02_qc.h5ad not found at %s — falling back to "
+                    "parent-level PCA", raw_path)
+        n_comps_sub = min(50, sub.n_obs - 2)
+        sc.pp.pca(sub, n_comps=n_comps_sub, svd_solver='arpack')
+
+    # ── (e) Neighbors (use Harmony-corrected PCA when available) ─────
+    n_pcs_use = min(CFG.n_pcs_use, n_comps_sub)
+    use_rep = 'X_pca_harmony' if 'X_pca_harmony' in sub.obsm else 'X_pca'
+    log.info("Computing neighbor graph (use_rep=%s, n_pcs=%d)...",
+             use_rep, n_pcs_use)
+    sc.pp.neighbors(sub, n_pcs=n_pcs_use, use_rep=use_rep,
+                    random_state=CFG.random_seed)
 
     # ── (f) UMAP ──────────────────────────────────────────────────────
     log.info("Computing UMAP...")
