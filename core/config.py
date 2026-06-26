@@ -202,6 +202,8 @@ class Config:
     param_grid_resolutions: list = field(default_factory=lambda: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
     leiden_flavor: str = "igraph"
     best_resolution: float = 1.0
+    umap_min_dist: float = 0.3
+    umap_spread: float = 1.0
 
     # ═══════════════════════════════════════════════════════════════════
     #  ATAC: 降维

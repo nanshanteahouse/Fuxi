@@ -34,10 +34,13 @@ CFG.max_genes = 7500
 CFG.max_pct_mito = 20.0
 CFG.min_genes_per_umi = 0.7
 CFG.min_cells_per_gene = 3
+# CFG.use_adaptive_thresholds = True
+# CFG.mad_n_mads = 3.0
 
 # ── HVG ──
 CFG.n_top_genes = 4000
 CFG.hvg_flavor = 'seurat_v3'
+# CFG.use_regress_out = False
 
 # ── Spatial graph ──
 CFG.spatial_neighbors_n = 6
@@ -52,6 +55,8 @@ CFG.n_neighbors = 30
 CFG.leiden_resolutions = [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
 CFG.best_resolution = 1.0
 CFG.leiden_flavor = 'igraph'
+CFG.umap_min_dist = 0.3    # increase (e.g. 0.5) for more UMAP spread
+CFG.umap_spread = 1.0
 
 # ── Cell type markers ──
 # TODO: Add known marker genes for {{TISSUE}} tissue.
@@ -76,10 +81,17 @@ CFG.de_logfc_cutoff = 0.25
 
 # ── Trajectory ──
 CFG.root_cell_types = []   # TODO: developmental root cell types
-# Alternative: auto-detect root via marker genes
 # CFG.root_markers = ['SOX2', 'PAX6', 'NES']
 CFG.n_diffmap_comps = 15
 CFG.n_branchings = 2
+
+# ── Differential expression ──
+CFG.de_method = 'wilcoxon'
+CFG.de_n_genes = 50
+CFG.de_pval_cutoff = 0.05
+CFG.de_logfc_cutoff = 0.25
+CFG.de_stage_pairwise = True
+# CFG.de_auto_switch_on_low_quality = True
 
 # ── Enrichment ──
 CFG.run_enrichment = True
@@ -89,6 +101,11 @@ CFG.enrichment_gene_sets = [
     'KEGG_2021_Human',
 ]
 CFG.enrichment_organism = 'human'
+# CFG.enrichment_n_top_genes = 2000
+# CFG.enrichment_pval_cutoff = 0.05
+# CFG.enrichment_min_size = 15
+# CFG.enrichment_max_size = 500
+# CFG.enrichment_permutations = 1000
 
 # ── Image processing ──
 CFG.crop_image = True
@@ -110,3 +127,9 @@ CFG.img_rescale = 1.0
 # ── Execution ──
 CFG.n_jobs = 0   # auto-detect
 CFG.random_seed = 42
+# CFG.force_csr = True
+# CFG.use_float32 = False
+# CFG.limit_blas_threads = True
+# CFG.scanpy_verbosity = 2
+# CFG.h5ad_compression = 'gzip'
+# CFG.h5ad_tempdir = '/tmp/Fuxi'

@@ -46,18 +46,31 @@ CFG.min_genes = 500
 CFG.max_genes = 7500
 CFG.max_pct_mito = 20.0
 CFG.min_genes_per_umi = 0.7
+CFG.min_cells_per_gene = 3
 CFG.run_scrublet = True
+# CFG.use_adaptive_thresholds = True   # 替代固定阈值，基于 MAD
+# CFG.mad_n_mads = 3.0
 
 # ── HVG ──
 CFG.n_top_genes = 4000
 CFG.hvg_batch_key = 'sample'
+CFG.hvg_flavor = 'seurat_v3'
+# CFG.use_regress_out = False     # 回归细胞周期/n_counts 等协变量
 
-# ── Batch correction ──
+# ── Batch correction / Harmony ──
 CFG.harmony_batch_key = 'sample'
+CFG.use_harmony = True
+CFG.harmony_max_iter = 20
+
+# ── PCA ──
+CFG.n_pcs_full = 100
+CFG.n_pcs_use = 50
 
 # ── Clustering ──
 CFG.leiden_resolutions = [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
 CFG.best_resolution = 1.0
+CFG.umap_min_dist = 0.3    # increase (e.g. 0.5) for more UMAP spread
+CFG.umap_spread = 1.0
 
 # ── Cell type markers ──
 # TODO: Add known marker genes for {{TISSUE}} tissue.
@@ -79,12 +92,22 @@ CFG.min_cells_subcluster = 50
 CFG.root_cell_types = []    # TODO: developmental root cell types
 # Alternative: auto-detect root via marker genes
 # CFG.root_markers = ['SOX2', 'PAX6', 'NES']
+# CFG.n_diffmap_comps = 15
+# CFG.n_branchings = 2
 
 # ── Differential expression ──
 CFG.de_method = 'wilcoxon'
 CFG.de_n_genes = 50
 CFG.de_pval_cutoff = 0.05
 CFG.de_logfc_cutoff = 0.25
+CFG.de_stage_pairwise = True
+# CFG.de_auto_switch_on_low_quality = True   # 低质量数据自动切换方法
+
+# ── Enrichment (uncomment to enable) ──
+# CFG.run_enrichment = True
+# CFG.enrichment_method = 'both'     # 'ora' | 'prerank' | 'both'
+# CFG.enrichment_gene_sets = ['GO_Biological_Process_2023', 'KEGG_2021_Human']
+# CFG.enrichment_organism = 'human'
 
 # ── AI settings (uncomment to enable) ──
 # CFG.ai.enabled = True
@@ -103,3 +126,12 @@ CFG.de_logfc_cutoff = 0.25
 # ── Execution ──
 CFG.n_jobs = 0   # auto-detect
 CFG.random_seed = 42
+# CFG.force_csr = True           # 强制 CSR 稀疏矩阵格式
+# CFG.use_float32 = False        # 使用 float32 减少内存
+# CFG.limit_blas_threads = True  # 限制 BLAS 线程数
+# CFG.scanpy_verbosity = 2       # Scanpy 日志级别 (0=error, 1=warning, 2=info)
+# CFG.h5ad_compression = 'gzip'  # h5ad 写入压缩
+
+# ── Downsampling (optional) ──
+# CFG.downsample_target = 5000         # 每样本最多保留 N 细胞
+# CFG.downsample_strategy = 'sample'   # 'sample' | 'random'

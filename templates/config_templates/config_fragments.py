@@ -23,6 +23,9 @@ CFG.barcodes_file = '{{BARCODES_FILE}}'
 
 # ── Reference genome ──
 CFG.genome = '{{GENOME}}'   # TODO: verify
+# CFG.chrom_sizes = ''       # path to chromosome sizes (auto-resolved if empty)
+# CFG.blacklist_bed = ''     # path to ENCODE blacklist BED
+# CFG.tss_bed = ''           # path to TSS BED (auto-resolved if empty)
 
 # ── Dataset metadata ──
 CFG.tissue = '{{TISSUE}}'   # TODO: verify tissue type
@@ -32,10 +35,13 @@ CFG.species = '{{SPECIES}}'
 CFG.min_fragments = 1000
 CFG.max_fragments = 50000
 CFG.min_tsse = 7.0
+# CFG.max_blacklist_ratio = 0.05
+# CFG.min_peak_region_fragments = 300
 
 # ── Peak calling ──
 CFG.peak_qval = 0.05
 CFG.peak_width = 500
+# CFG.use_macs3 = True
 
 # ── Feature selection / dimensionality reduction ──
 CFG.n_features = 50000
@@ -45,6 +51,8 @@ CFG.n_spectral = 30
 CFG.n_neighbors = 15
 CFG.param_grid_n_neighbors = [15, 20, 30]
 CFG.param_grid_resolutions = [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
+CFG.umap_min_dist = 0.3    # increase (e.g. 0.5) for more UMAP spread
+CFG.umap_spread = 1.0
 
 # ── Differential accessibility ──
 CFG.marker_peaks_log2fc = 0.5
@@ -55,17 +63,27 @@ CFG.motif_db = 'JASPAR2024'
 
 # ── Trajectory ──
 CFG.root_cell_types = []   # TODO: add root cell type names
+# CFG.terminal_cell_types = []
 
 # ── Peak-to-gene enrichment ──
 CFG.peak_gene_distance = 100000
 # CFG.gene_annotation_bed = ''  # TODO: set path to gene TSS BED file
 CFG.enrichment_gene_sets = ['GO_Biological_Process_2023', 'KEGG_2021_Human']
 CFG.enrichment_organism = 'human'
+# CFG.enrichment_method = 'both'
+# CFG.enrichment_n_top_genes = 2000
+# CFG.enrichment_pval_cutoff = 0.05
+# CFG.enrichment_min_size = 15
+# CFG.enrichment_max_size = 500
+# CFG.enrichment_permutations = 1000
 
 # ── RNA integration (multiome / paired RNA+ATAC) ──
 # CFG.rna_h5ad = ''           # TODO: set path to RNA AnnData for integration
 # If RNA data exists for the same dataset under projects/rna/,
 # the pipeline auto-discovers it.
+# CFG.rna_marker_top_n = 200
+# CFG.rna_marker_pval_threshold = 0.05
+# CFG.rna_marker_logfc_min = 0.25
 
 # ── AI settings (uncomment to enable) ──
 # CFG.ai.enabled = True
@@ -83,3 +101,9 @@ CFG.enrichment_organism = 'human'
 CFG.n_jobs = 0   # auto-detect
 CFG.random_seed = 42
 CFG.h5ad_tempdir = '/tmp/Fuxi'
+# CFG.force_csr = True
+# CFG.use_float32 = False
+# CFG.limit_blas_threads = True
+# CFG.scanpy_verbosity = 2
+# CFG.h5ad_compression = 'gzip'
+# CFG.cleanup_intermediates = True   # remove intermediate h5ad files
