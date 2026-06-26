@@ -33,6 +33,7 @@
 | 🔍 差异分析 | 标记基因 + 阶段比较 + 时序趋势三层 DE | 鉴定各类细胞的特征基因和发育动态 |
 | 🌳 轨迹推断 | PAGA + 扩散伪时间 | 重建细胞分化/发育路径 |
 | 🧬 通路富集 | GO/KEGG 过表达分析 + GSEA | 揭示细胞类型的生物学功能 |
+| 🧭 GRN 调控网络 | 伪细胞聚合 + decoupler TF 活性推断 | 鉴定驱动各类细胞身份的转录因子 |
 
 **简单来说：配置文件就绪 → 一条命令 → 从原始数据到论文级图表全部自动产出。**
 
@@ -99,13 +100,13 @@ Fuxi — RNA-seq pipeline step list
 ============================================================
   [00] Load raw data → 00_raw.h5ad
   ...
-  [11] Exploratory analysis (composition/QC/marker)
+  [11] GRN regulatory network analysis (decoupler) → 11_grn.h5ad
 ```
 
 ### 3.2 一键运行全流程
 
 ```bash
-# scRNA-seq 全流程（12 步，从头到尾）
+# scRNA-seq 全流程（12 步，从数据加载到 GRN 分析）
 python core/run_pipeline.py --modality rna --config projects/rna/{数据集ID}/config_{数据集ID}.py
 
 # scATAC-seq 全流程（10 步）
@@ -164,13 +165,13 @@ python core/run_pipeline.py --modality rna --steps 0,2,4 --config projects/rna/{
 
 ## 4. scRNA-seq 管线详解
 
-scRNA-seq 管线包含 11 个步骤（编号 00-10），数据依次流转：
+scRNA-seq 管线包含 12 个步骤（编号 00-11），数据依次流转：
 
 ```
 原始数据 → 00_load → 01_doublet → 02_qc
          → 03_integrate → 04_cluster → 05_annotate
          → 06_subcluster → 07_markers → 08_trajectory
-         → 09_enrichment → 10_exploratory
+         → 09_enrichment → 10_exploratory → 11_grn
 ```
 
 ### Step 00：数据加载
@@ -361,6 +362,34 @@ python core/run_pipeline.py --modality rna --step 7 \
 - **QC 指标可视化**：基因数、UMI 数、线粒体比例在 UMAP 上的分布
 - **标记基因表达**：已知标记基因在 UMAP 上的表达热图
 - **聚类统计**：各聚类/细胞类型的细胞数及占比
+
+### Step 11：GRN 调控网络分析（decoupler）
+
+**输入**：`05_annotated.h5ad` | **输出**：`11_grn.h5ad` + CSV 表格 + 热图
+
+基于已注释细胞类型的伪细胞聚合进行转录因子（TF）活性推断：
+
+1. **伪细胞聚合**：按 `cell_type` 取平均表达量，平滑单细胞 dropout 噪声
+2. **Regulon 网络**：通过 decoupler 获取 CollecTRI 数据库（~1,185 个 TF，含带符号的靶基因调控关系）
+3. **TF 活性推断**：运行 ULM（单变量线性模型）——检验每个细胞类型中 TF 的靶基因是否在高表达基因中显著富集
+4. **输出**：
+   - `11_grn.h5ad` — 伪细胞 AnnData（obs=细胞类型，var=基因），含 `obsm['X_tf_activity']`
+   - `tables/11_grn/tf_activity_per_cell_type.csv` — 完整 TF 活性矩阵（细胞类型 × TF）
+   - `tables/11_grn/tf_activity_pvals.csv` — 对应的 P 值矩阵
+   - `figures/11_grn/tf_activity_heatmap.png` — 按方差选出的 top N 个 TF 的聚类热图
+
+**配置参数：**
+
+```python
+CFG.run_grn = True               # 启用/关闭此步骤
+CFG.grn_method = "decoupler"     # 方法（目前仅 decoupler；pySCENIC 待定）
+CFG.grn_species = "human"        # 'human' | 'mouse'
+CFG.grn_n_top_regulons = 50      # 热图中显示的方差最高 TF 数量
+CFG.grn_min_regulon_size = 5     # 每个 regulon 的最少靶基因数
+CFG.grn_confidence_levels = ["A","B","C"]  # DoRothEA 置信度等级（若使用 DoRothEA）
+```
+
+> 💡 **无需下载额外的数据库文件。**decoupler 在首次使用时联网获取 regulon 网络并缓存到本地。CollecTRI（默认）比 DoRothEA 覆盖更多 TF，是推荐的网络。
 
 ---
 
@@ -635,7 +664,8 @@ results/
 │   ├── 03_integrated.h5ad         # 批次整合后
 │   ├── 04_clustered.h5ad          # 聚类 + UMAP 后
 │   ├── 05_annotated.h5ad          # 细胞注释后 ★
-│   └── 05_final.h5ad              # 轨迹分析后
+│   ├── 05_final.h5ad              # 轨迹分析后
+│   └── 11_grn.h5ad               # 伪细胞 + TF 活性 (GRN) ★
 │
 ├── figures/                       # 可视化图表
 │   ├── pca_elbow.png              # PCA 肘部图
@@ -662,6 +692,8 @@ results/
     ├── cell_type_sizes.csv        # 细胞类型统计
     ├── enrichment_ora.csv         # ORA 汇总
     ├── enrichment_gsea.csv        # GSEA 汇总
+    ├── 11_grn/                    # GRN 调控网络分析
+    │   └── tf_activity_per_cell_type.csv  # TF 活性矩阵
     └── enrichment/                # 详细富集结果
         ├── ora_*_summary.csv
         ├── prerank_*_summary.csv

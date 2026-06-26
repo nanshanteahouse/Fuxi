@@ -33,6 +33,7 @@ After you've downloaded single-cell data from GEO and run the preprocessor to ge
 | 🔍 Differential analysis | Marker genes + stage-wise comparison + temporal trends — three-layer DE | Identifies characteristic genes and developmental dynamics |
 | 🌳 Trajectory inference | PAGA + diffusion pseudotime | Reconstructs cell differentiation/developmental paths |
 | 🧬 Pathway enrichment | GO/KEGG over-representation analysis + GSEA | Reveals biological functions of cell types |
+| 🧭 GRN analysis | Pseudobulk + decoupler TF activity inference | Identifies transcription factors driving each cell type identity |
 
 **TL;DR: Config file ready → one command → from raw data to publication-quality figures, fully automated.**
 
@@ -99,13 +100,13 @@ Fuxi — RNA-seq pipeline step list
 ============================================================
   [00] Load raw data → 00_raw.h5ad
   ...
-  [11] Exploratory analysis (composition/QC/marker)
+  [11] GRN regulatory network analysis (decoupler) → 11_grn.h5ad
 ```
 
 ### 3.2 Run the full pipeline in one command
 
 ```bash
-# scRNA-seq full workflow (10 steps)
+# scRNA-seq full workflow (12 steps, from scratch to GRN)
 python core/run_pipeline.py --modality rna --config projects/rna/{dataset_id}/config_{dataset_id}.py
 
 # scATAC-seq full workflow (10 steps)
@@ -157,20 +158,20 @@ python core/run_pipeline.py --modality rna --step 5 --config projects/rna/{datas
 python core/run_pipeline.py --modality rna --steps 2-5 --config projects/rna/{dataset_id}/config_{dataset_id}.py
 
 # Run specific non-consecutive steps
-python core/run_pipeline.py --modality rna --steps 0,2,4 --config projects/rna/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality rna --steps 0,2,4,11 --config projects/rna/{dataset_id}/config_{dataset_id}.py
 ```
 
 ---
 
 ## 4. scRNA-seq pipeline in detail
 
-The scRNA-seq pipeline has 11 steps (numbered 00–10), with data flowing sequentially:
+The scRNA-seq pipeline has 12 steps (numbered 00–11), with data flowing sequentially:
 
 ```
 Raw data → 00_load → 01_doublet → 02_qc
          → 03_integrate → 04_cluster → 05_annotate
          → 06_subcluster → 07_markers → 08_trajectory
-         → 09_enrichment → 10_exploratory
+         → 09_enrichment → 10_exploratory → 11_grn
 ```
 
 ### Step 00: Data loading
@@ -361,6 +362,34 @@ Generates comprehensive summary visualizations to help you quickly understand th
 - **QC metric visualization**: Distribution of n_genes, total_counts, and mitochondrial percentage on UMAP
 - **Marker gene expression**: Known marker gene expression patterns on UMAP
 - **Cluster statistics**: Cell counts and percentages per cluster/cell type
+
+### Step 11: GRN regulatory network analysis (decoupler)
+
+**Input**: `05_annotated.h5ad` | **Output**: `11_grn.h5ad` + CSV tables + heatmap
+
+Transcription factor (TF) activity inference based on pseudobulk aggregation of annotated cell types:
+
+1. **Pseudobulk aggregation**: Computes mean expression per `cell_type` to smooth single-cell dropout noise
+2. **Regulon network**: Fetches the CollecTRI database (~1,185 TFs with signed target-gene interactions) via decoupler
+3. **TF activity inference**: Runs ULM (Univariate Linear Model) — tests whether a TF's target genes are enriched among highly expressed genes in each cell type
+4. **Output**:
+   - `11_grn.h5ad` — pseudobulk AnnData (obs = cell types, var = genes) with `obsm['X_tf_activity']` containing TF activity scores
+   - `tables/11_grn/tf_activity_per_cell_type.csv` — full TF activity matrix (cell types × TFs)
+   - `tables/11_grn/tf_activity_pvals.csv` — corresponding p-values
+   - `figures/11_grn/tf_activity_heatmap.png` — clustered heatmap of top-N variable TFs across cell types
+
+**Config fields:**
+
+```python
+CFG.run_grn = True               # Enable/disable this step
+CFG.grn_method = "decoupler"     # Method ('decoupler' only for now; pySCENIC TBD)
+CFG.grn_species = "human"        # 'human' | 'mouse'
+CFG.grn_n_top_regulons = 50      # Number of top-variance TFs for heatmap
+CFG.grn_min_regulon_size = 5     # Minimum target genes per regulon
+CFG.grn_confidence_levels = ["A","B","C"]  # DoRothEA confidence levels (if using DoRothEA)
+```
+
+> 💡 **No external database downloads required.** decoupler fetches regulon networks online on first use and caches them locally. CollecTRI (default) covers more TFs than DoRothEA and is the recommended network.
 
 ---
 
@@ -635,7 +664,8 @@ results/
 │   ├── 03_integrated.h5ad         # After batch integration
 │   ├── 04_clustered.h5ad          # After clustering + UMAP
 │   ├── 05_annotated.h5ad          # After cell annotation ★
-│   └── 05_final.h5ad              # After trajectory analysis
+│   ├── 05_final.h5ad              # After trajectory analysis
+│   └── 11_grn.h5ad               # Pseudobulk + TF activities (GRN) ★
 │
 ├── figures/                       # Visualizations
 │   ├── pca_elbow.png              # PCA elbow plot
@@ -662,6 +692,8 @@ results/
     ├── cell_type_sizes.csv        # Cell type statistics
     ├── enrichment_ora.csv         # ORA summary
     ├── enrichment_gsea.csv        # GSEA summary
+    ├── 11_grn/                    # GRN analysis
+    │   └── tf_activity_per_cell_type.csv  # TF activity matrix
     └── enrichment/                # Detailed enrichment results
         ├── ora_*_summary.csv
         ├── prerank_*_summary.csv

@@ -126,6 +126,14 @@ CFG.de_stage_pairwise = True
 # CFG.enrichment_gene_sets = ['GO_Biological_Process_2023', 'KEGG_2021_Human']
 # CFG.enrichment_organism = 'human'
 
+# ── GRN 调控网络分析 (取消注释以启用) ──
+CFG.run_grn = True
+CFG.grn_method = "decoupler"           # 'decoupler' only for now (pySCENIC TBD)
+CFG.grn_species = "human"              # 'human' | 'mouse'
+CFG.grn_n_top_regulons = 50            # top N variable TFs for heatmap
+CFG.grn_min_regulon_size = 5           # minimum target genes per regulon
+# CFG.grn_confidence_levels = ["A", "B", "C"]  # DoRothEA confidence levels
+
 # ── AI 设置 (取消注释以启用) ──
 # CFG.ai.enabled = True
 # CFG.ai.api_base = 'https://api.deepseek.com/v1'
