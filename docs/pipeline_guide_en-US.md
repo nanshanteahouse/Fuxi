@@ -386,6 +386,8 @@ Transcription factor (TF) activity inference based on pseudobulk aggregation of 
    - `11_grn.h5ad` — pseudobulk AnnData (obs = cell types, var = genes) with `obsm['X_tf_activity']` containing TF activity scores
    - `tables/11_grn/tf_activity_per_cell_type.csv` — full TF activity matrix (cell types × TFs)
    - `tables/11_grn/tf_activity_pvals.csv` — corresponding p-values
+   - `tables/11_grn/tf_target_edges.csv` — TF→target gene edges for top-variance TFs
+   - `tables/11_grn/tf_target_counts.csv` — per-TF target gene count summary
    - `figures/11_grn/tf_activity_heatmap.png` — clustered heatmap of top-N variable TFs across cell types
 
 **Config fields:**
@@ -703,7 +705,10 @@ results/
     ├── enrichment_ora.csv         # ORA summary
     ├── enrichment_gsea.csv        # GSEA summary
     ├── 11_grn/                    # GRN analysis
-    │   └── tf_activity_per_cell_type.csv  # TF activity matrix
+    │   ├── tf_activity_per_cell_type.csv  # TF activity matrix
+    │   ├── tf_activity_pvals.csv          # TF activity p-values
+    │   ├── tf_target_edges.csv            # TF→target gene edges
+    │   └── tf_target_counts.csv           # Per-TF target gene counts
     └── enrichment/                # Detailed enrichment results
         ├── ora_*_summary.csv
         ├── prerank_*_summary.csv

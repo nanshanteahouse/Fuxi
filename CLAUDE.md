@@ -144,7 +144,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 | 08 | `08_trajectory.py` | trajectory h5ad |
 | 09 | `09_enrichment.py` | enrichment CSVs |
 | 10 | `10_exploratory.py` | summary figures + CSVs |
-| 11 | `11_grn.py` | 11_grn.h5ad + TF activity heatmap |
+| 11 | `11_grn.py` | 11_grn.h5ad + TF activity heatmap + TF target edge tables |
 
 ### ATAC Pipeline Steps
 

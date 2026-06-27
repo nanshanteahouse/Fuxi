@@ -386,6 +386,8 @@ python core/run_pipeline.py --modality rna --step 7 \
    - `11_grn.h5ad` — 伪细胞 AnnData（obs=细胞类型，var=基因），含 `obsm['X_tf_activity']`
    - `tables/11_grn/tf_activity_per_cell_type.csv` — 完整 TF 活性矩阵（细胞类型 × TF）
    - `tables/11_grn/tf_activity_pvals.csv` — 对应的 P 值矩阵
+   - `tables/11_grn/tf_target_edges.csv` — top-variance TF 的 TF→靶基因调控边表
+   - `tables/11_grn/tf_target_counts.csv` — 各 TF 的靶基因数量汇总
    - `figures/11_grn/tf_activity_heatmap.png` — 按方差选出的 top N 个 TF 的聚类热图
 
 **配置参数：**
@@ -703,7 +705,10 @@ results/
     ├── enrichment_ora.csv         # ORA 汇总
     ├── enrichment_gsea.csv        # GSEA 汇总
     ├── 11_grn/                    # GRN 调控网络分析
-    │   └── tf_activity_per_cell_type.csv  # TF 活性矩阵
+    │   ├── tf_activity_per_cell_type.csv  # TF 活性矩阵
+    │   ├── tf_activity_pvals.csv          # TF 活性 P 值
+    │   ├── tf_target_edges.csv            # TF→靶基因调控边表
+    │   └── tf_target_counts.csv           # 各 TF 靶基因数量汇总
     └── enrichment/                # 详细富集结果
         ├── ora_*_summary.csv
         ├── prerank_*_summary.csv
