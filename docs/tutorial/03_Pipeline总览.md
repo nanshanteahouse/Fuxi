@@ -122,9 +122,9 @@ results/
 | 文件 | 内容 | 最重要吗？ |
 |------|------|-----------|
 | `h5ad/05_annotated.h5ad` | 最终注释结果——每个细胞的细胞类型、亚型、置信度 | **是**——这是绝大多数分析的起点 |
-| `figures/04_umap_leiden_resolutions.pdf` | 18 种参数组合的 UMAP 对比 | 判断聚类是否合理 |
+| `figures/04_cluster/umap_param_grid_summary.png` | 多分辨率 UMAP 参数组合对比网格 | 判断聚类是否合理 |
 | `tables/marker_genes_per_group.csv` | 每类细胞的标记基因 | 用于论文表格/检查注释质量 |
-| `figures/05_celltype.pdf` | 按细胞类型着色的 UMAP | 最常出现在论文中的图 |
+| `figures/05_annotation/_05_celltype.pdf` | 按细胞类型着色的 UMAP | 最常出现在论文中的图 |
 
 ## 常见误区
 
