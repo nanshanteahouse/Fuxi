@@ -197,3 +197,7 @@ Core step scripts (`rna/steps/*.py`, `atac/steps/*.py`, `spatial/steps/*.py`) **
    - Whether the root cause should be fixed in the core script
 
 This keeps core scripts reference-stable and builds a searchable record of edge cases that inform future pipeline improvements. See the existing `notes/suggestions/` directory for examples.
+
+### 更新文档
+
+如果用户明确要求"更新文档"，先总结本次会话已完成的工作，然后通读 `CLAUDE.md`、`README.md`、`docs/`（含 tutorial）、`.claude/SKILL.md`，评估哪些内容需要更新。按照原有规范格式，删除/修改过时信息，补充新内容。**给出改动摘要让用户确认后再写入。**
