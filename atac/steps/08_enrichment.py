@@ -16,6 +16,7 @@ from core.utils import setup_logger, resolve_config, safe_plot
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 def peak_to_gene(peak_df, genome="hg38", gene_bed=None, max_distance=100000):
@@ -123,6 +124,23 @@ def peak_to_gene(peak_df, genome="hg38", gene_bed=None, max_distance=100000):
     return []
 
 
+def _enrichr_one_group(grp, genes, CFG, log):
+    """Run Enrichr ORA for a single group (used by ThreadPoolExecutor)."""
+    import gseapy as gp
+    try:
+        enr = gp.enrichr(
+            gene_list=genes,
+            gene_sets=CFG.enrichment_gene_sets,
+            organism=CFG.enrichment_organism,
+            outdir=None, no_plot=True,
+        )
+        enr.results['group'] = str(grp)
+        return (grp, enr.results)
+    except Exception as e:
+        log.debug("Enrichment failed for %s: %s", str(grp), e)
+        return (grp, None)
+
+
 def main():
     t0 = time.time()
     args_parser = argparse.ArgumentParser()
@@ -141,11 +159,11 @@ def main():
     markers_df = pd.read_csv(marker_csv)
     log.info("Loaded: %d rows", len(markers_df))
 
-    import gseapy as gp
-
     all_results = []
     group_col = 'group' if 'group' in markers_df.columns else None
 
+    # ── Build task list: gene list per group ──
+    tasks = []
     for grp in (markers_df[group_col].unique() if group_col else ['all']):
         if group_col:
             sub = markers_df[markers_df[group_col] == grp]
@@ -168,17 +186,20 @@ def main():
             continue
         genes = genes_clean
         log.info("Enrichment: %s (%d unique genes)", str(grp), len(genes))
-        try:
-            enr = gp.enrichr(
-                gene_list=genes,
-                gene_sets=CFG.enrichment_gene_sets,
-                organism=CFG.enrichment_organism,
-                outdir=None, no_plot=True,
-            )
-            enr.results['group'] = str(grp)
-            all_results.append(enr.results)
-        except Exception as e:
-            log.debug("Enrichment failed for %s: %s", str(grp), e)
+        tasks.append((grp, genes))
+
+    # ── Parallel Enrichr calls (like RNA-09) ──
+    if tasks:
+        max_workers = min(5, getattr(CFG, 'n_jobs', 4))
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_grp = {
+                executor.submit(_enrichr_one_group, grp, genes, CFG, log): grp
+                for grp, genes in tasks
+            }
+            for future in as_completed(future_to_grp):
+                grp, res = future.result()
+                if res is not None:
+                    all_results.append(res)
 
     if all_results:
         combined = pd.concat(all_results, ignore_index=True)

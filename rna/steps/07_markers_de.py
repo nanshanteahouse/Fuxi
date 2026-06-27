@@ -251,9 +251,20 @@ def main():
     primary_col = annotation_cols[0]
     log.info("Primary annotation column: %s", primary_col)
 
-    # Layer 1: 遍历所有注释层级进行标记基因检测
+    # Layer 1: 遍历所有注释层级进行标记基因检测 (parallel across annotation columns)
     all_markers = {}
-    for col in annotation_cols:
+    if len(annotation_cols) > 1:
+        n_jobs = min(getattr(CFG, 'n_jobs', 4) or os.cpu_count() or 1, len(annotation_cols))
+        log.info("Layer 1: parallel marker detection across %d annotation cols (n_jobs=%d)",
+                 len(annotation_cols), n_jobs)
+        parallel_layer1 = Parallel(n_jobs=n_jobs, prefer='threads')(
+            delayed(layer1_markers)(adata.copy(), CFG, log, col)
+            for col in annotation_cols
+        )
+        for col, result_df in zip(annotation_cols, parallel_layer1):
+            all_markers[col] = result_df
+    else:
+        col = annotation_cols[0]
         all_markers[col] = layer1_markers(adata, CFG, log, group_col=col)
 
     # 导出兼容文件 (使用主注释列)
