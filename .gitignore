@@ -81,5 +81,8 @@ coverage.xml
 # ── Internal notes (feature ideas, audits, research, suggestions) ──
 notes/
 
+# ── Wiki draft: walkthrough template (not ready yet) ──────────────
+docs/tutorial/B_Walkthrough.md
+
 # ── User workspace (project configs, batch scripts, reports) ──
 projects/

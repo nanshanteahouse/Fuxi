@@ -386,6 +386,8 @@ python core/run_pipeline.py --modality rna --step 7 \
    - `11_grn.h5ad` — 伪细胞 AnnData（obs=细胞类型，var=基因），含 `obsm['X_tf_activity']`
    - `tables/11_grn/tf_activity_per_cell_type.csv` — 完整 TF 活性矩阵（细胞类型 × TF）
    - `tables/11_grn/tf_activity_pvals.csv` — 对应的 P 值矩阵
+   - `tables/11_grn/tf_target_edges.csv` — top-variance TF 的 TF→靶基因调控边表
+   - `tables/11_grn/tf_target_counts.csv` — 各 TF 的靶基因数量汇总
    - `figures/11_grn/tf_activity_heatmap.png` — 按方差选出的 top N 个 TF 的聚类热图
 
 **配置参数：**
@@ -678,36 +680,60 @@ results/
 │   └── 11_grn.h5ad               # 伪细胞 + TF 活性 (GRN) ★
 │
 ├── figures/                       # 可视化图表
-│   ├── pca_elbow.png              # PCA 肘部图
-│   ├── harmony_comparison.png     # Harmony 校正前后对比
-│   ├── umap_leiden_resolutions.pdf # 多分辨率聚类对比
-│   ├── 05_celltype.pdf            # 按细胞类型着色的 UMAP
-│   ├── 07_marker_heatmap.pdf      # 标记基因热图
-│   ├── 07_dotplot.pdf             # 标记基因点图
-│   ├── 08_pseudotime.pdf          # 伪时间 UMAP
-│   ├── 08_paga_umap.pdf           # PAGA 轨迹图
-│   ├── 08_dev_genes_heatmap.pdf   # 发育基因沿伪时间热图
-│   ├── enrichment/                # 富集分析图表
-│   │   ├── ora_*_bubble.pdf       # ORA 气泡图
-│   │   └── prerank_*_bubble.pdf   # GSEA 气泡图
-│   └── 10_exploratory/            # 探索性分析图集
-│       ├── composition_by_stage_*.png  # 细胞组成堆叠图
-│       └── _06_marker_dotplot.pdf      # 标记基因点图
+│   ├── 02_qc/                     # QC 诊断图
+│   │   ├── nFeature_distribution.png
+│   │   ├── nCount_vs_nFeature.png
+│   │   └── pct_mito_distribution.png
+│   ├── 03_integrate/              # 批次整合
+│   │   ├── pca_elbow.png
+│   │   └── harmony_comparison.png
+│   ├── 04_cluster/                # 聚类 + UMAP
+│   │   ├── umap_param_grid_summary.png
+│   │   ├── umap_grid_n*_r*.png
+│   │   └── umap_leiden_n*_all_resolutions.pdf
+│   ├── 05_annotation/             # 细胞注释
+│   │   └── _05_celltype*.pdf
+│   ├── 06_subcluster/             # 亚群分析
+│   ├── 07_markers/                # 标记基因
+│   │   ├── _07_marker_heatmap.pdf
+│   │   └── _07_dotplot.pdf
+│   ├── 08_trajectory/             # 轨迹分析
+│   │   ├── _08_pseudotime.pdf
+│   │   ├── _08_paga_umap.pdf
+│   │   └── _08_dev_genes_heatmap.pdf
+│   ├── 09_enrichment/             # 富集分析
+│   │   ├── ora_*_bubble.pdf
+│   │   └── prerank_*_bubble.pdf
+│   ├── 10_exploratory/            # 探索性分析
+│   │   ├── composition_by_stage_*.png
+│   │   └── _06_marker_dotplot.pdf
+│   └── 11_grn/                    # GRN 调控网络
+│       └── tf_activity_heatmap.png
 │
 └── tables/                        # 数据表格
-    ├── marker_genes_per_group.csv # 标记基因（Layer 1）
-    ├── pairwise_stage_de.csv      # 阶段配对 DE（Layer 2）
-    ├── temporal_trend_genes.csv   # 时间趋势基因（Layer 3）
+    ├── marker_genes_per_group.csv # 标记基因
+    ├── param_grid_summary.csv     # 聚类参数网格
+    ├── cell_type_annotations.csv  # 细胞类型注释
+    ├── cell_metadata.csv          # 细胞元数据
+    ├── marker_genes_ai.csv        # AI 模式标记基因
+    ├── marker_genes_unified.csv   # 统一 KB 模式标记基因
+    ├── 05_annotation_quality.json # 注释质量评估
+    ├── pairwise_stage_de.csv      # 阶段配对差异表达
+    ├── temporal_trend_genes.csv   # 时间趋势基因
     ├── branch_deg.csv             # 分支 DEG
     ├── cell_type_sizes.csv        # 细胞类型统计
-    ├── enrichment_ora.csv         # ORA 汇总
-    ├── enrichment_gsea.csv        # GSEA 汇总
-    ├── 11_grn/                    # GRN 调控网络分析
-    │   └── tf_activity_per_cell_type.csv  # TF 活性矩阵
-    └── enrichment/                # 详细富集结果
-        ├── ora_*_summary.csv
-        ├── prerank_*_summary.csv
-        └── ai_interpretation.txt  # AI 生物学解读
+    ├── 09_enrichment/             # 富集分析
+    │   ├── ora_*_summary.csv
+    │   ├── prerank_*_summary.csv
+    │   ├── ai_interpretation.txt
+    │   └── ai_interpretation_summary.txt
+    ├── 10_exploratory/            # 探索性分析
+    │   └── composition_by_stage_*.csv
+    └── 11_grn/                    # GRN 调控网络
+        ├── tf_activity_per_cell_type.csv
+        ├── tf_activity_pvals.csv
+        ├── tf_target_edges.csv
+        └── tf_target_counts.csv
 ```
 
 > 💡 加 ★ 的 `05_annotated.h5ad` 是最重要的输出文件——它包含每个细胞的最终注释标签，是绝大多数下游分析（差异表达、轨迹、富集）的起点。

@@ -10,7 +10,7 @@ Step 09: GO/KEGG 富集分析
   Pre-ranked GSEA: 使用全部基因的 score 排序 → 无需 cutoff
 
 输出:
-  {table_dir}/enrichment/
+  {table_dir}/09_enrichment/
     ora_{gene_set}_{cluster}.csv          — ORA 结果表
     prerank_{gene_set}_{cluster}.csv      — GSEA 结果表
     ora_{gene_set}_summary.csv            — 汇总（所有聚类合并）
@@ -360,7 +360,7 @@ def save_results(
     log,
 ) -> None:
     """保存富集结果 CSV + 绘图"""
-    table_dir = os.path.join(CFG.table_dir, "enrichment")
+    table_dir = os.path.join(CFG.table_dir, "09_enrichment")
     fig_dir = os.path.join(CFG.figure_dir, "09_enrichment")
     os.makedirs(table_dir, exist_ok=True)
     os.makedirs(fig_dir, exist_ok=True)
@@ -606,7 +606,7 @@ def main():
                 from core.ai_caller import ai_query
                 interpretation = ai_query(system_prompt, user_prompt, cfg=CFG.ai)
 
-                interp_path = os.path.join(CFG.table_dir, "enrichment", "ai_interpretation.txt")
+                interp_path = os.path.join(CFG.table_dir, "09_enrichment", "ai_interpretation.txt")
                 os.makedirs(os.path.dirname(interp_path), exist_ok=True)
                 with open(interp_path, "w") as f:
                     f.write(interpretation)
@@ -615,7 +615,7 @@ def main():
                 summary_lines = [f"Biological Interpretation — {'scRNA-seq enrichment'}"]
                 summary_lines.append("=" * 60)
                 summary_lines.append(interpretation[:2000])
-                summary_path = os.path.join(CFG.table_dir, "enrichment", "ai_interpretation_summary.txt")
+                summary_path = os.path.join(CFG.table_dir, "09_enrichment", "ai_interpretation_summary.txt")
                 with open(summary_path, "w") as f:
                     f.write("\n".join(summary_lines))
         except Exception as e:

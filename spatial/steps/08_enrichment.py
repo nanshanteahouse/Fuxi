@@ -8,7 +8,7 @@ Step 08: GO/KEGG enrichment analysis
   Reuses core enrichment logic from the RNA pipeline.
 
 Input:  marker_genes_per_group.csv (Step 06 output)
-Output: enrichment/ directory with CSVs + bubble plots
+Output: 08_enrichment/ directory with CSVs + bubble plots
 """
 import sys, os, time, argparse, warnings
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
@@ -89,8 +89,8 @@ def main():
                 log.warning("GSEA enrichment not available")
 
     # ── Save results ──
-    table_dir = os.path.join(CFG.table_dir, "enrichment")
-    fig_dir = os.path.join(CFG.figure_dir, "enrichment")
+    table_dir = os.path.join(CFG.table_dir, "08_enrichment")
+    fig_dir = os.path.join(CFG.figure_dir, "08_enrichment")
     os.makedirs(table_dir, exist_ok=True)
     os.makedirs(fig_dir, exist_ok=True)
 

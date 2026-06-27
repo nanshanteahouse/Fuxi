@@ -386,6 +386,8 @@ Transcription factor (TF) activity inference based on pseudobulk aggregation of 
    - `11_grn.h5ad` — pseudobulk AnnData (obs = cell types, var = genes) with `obsm['X_tf_activity']` containing TF activity scores
    - `tables/11_grn/tf_activity_per_cell_type.csv` — full TF activity matrix (cell types × TFs)
    - `tables/11_grn/tf_activity_pvals.csv` — corresponding p-values
+   - `tables/11_grn/tf_target_edges.csv` — TF→target gene edges for top-variance TFs
+   - `tables/11_grn/tf_target_counts.csv` — per-TF target gene count summary
    - `figures/11_grn/tf_activity_heatmap.png` — clustered heatmap of top-N variable TFs across cell types
 
 **Config fields:**
@@ -678,36 +680,60 @@ results/
 │   └── 11_grn.h5ad               # Pseudobulk + TF activities (GRN) ★
 │
 ├── figures/                       # Visualizations
-│   ├── pca_elbow.png              # PCA elbow plot
-│   ├── harmony_comparison.png     # Before/after Harmony comparison
-│   ├── umap_leiden_resolutions.pdf # Multi-resolution clustering comparison
-│   ├── 05_celltype.pdf            # UMAP colored by cell type
-│   ├── 07_marker_heatmap.pdf      # Marker gene heatmap
-│   ├── 07_dotplot.pdf             # Marker gene dotplot
-│   ├── 08_pseudotime.pdf          # Pseudotime UMAP
-│   ├── 08_paga_umap.pdf           # PAGA trajectory overlay
-│   ├── 08_dev_genes_heatmap.pdf   # Developmental gene heatmap along pseudotime
-│   ├── enrichment/                # Enrichment figures
-│   │   ├── ora_*_bubble.pdf       # ORA bubble plot
-│   │   └── prerank_*_bubble.pdf   # GSEA bubble plot
-│   └── 10_exploratory/            # Exploratory analysis atlas
-│       ├── composition_by_stage_*.png  # Cell composition stacked bars
-│       └── _06_marker_dotplot.pdf      # Known marker dotplot
+│   ├── 02_qc/                     # QC diagnostics
+│   │   ├── nFeature_distribution.png
+│   │   ├── nCount_vs_nFeature.png
+│   │   └── pct_mito_distribution.png
+│   ├── 03_integrate/              # Batch integration
+│   │   ├── pca_elbow.png
+│   │   └── harmony_comparison.png
+│   ├── 04_cluster/                # Clustering + UMAP
+│   │   ├── umap_param_grid_summary.png
+│   │   ├── umap_grid_n*_r*.png
+│   │   └── umap_leiden_n*_all_resolutions.pdf
+│   ├── 05_annotation/             # Cell annotation
+│   │   └── _05_celltype*.pdf
+│   ├── 06_subcluster/             # Subcluster analysis
+│   ├── 07_markers/                # Marker genes
+│   │   ├── _07_marker_heatmap.pdf
+│   │   └── _07_dotplot.pdf
+│   ├── 08_trajectory/             # Trajectory analysis
+│   │   ├── _08_pseudotime.pdf
+│   │   ├── _08_paga_umap.pdf
+│   │   └── _08_dev_genes_heatmap.pdf
+│   ├── 09_enrichment/             # Enrichment analysis
+│   │   ├── ora_*_bubble.pdf
+│   │   └── prerank_*_bubble.pdf
+│   ├── 10_exploratory/            # Exploratory analysis
+│   │   ├── composition_by_stage_*.png
+│   │   └── _06_marker_dotplot.pdf
+│   └── 11_grn/                    # GRN analysis
+│       └── tf_activity_heatmap.png
 │
 └── tables/                        # Data tables
-    ├── marker_genes_per_group.csv # Marker genes (Layer 1)
-    ├── pairwise_stage_de.csv      # Stage-wise pairwise DE (Layer 2)
-    ├── temporal_trend_genes.csv   # Temporal trend genes (Layer 3)
+    ├── marker_genes_per_group.csv # Marker genes
+    ├── param_grid_summary.csv     # Clustering parameter grid
+    ├── cell_type_annotations.csv  # Cell type annotations
+    ├── cell_metadata.csv          # Cell metadata
+    ├── marker_genes_ai.csv        # AI mode marker genes
+    ├── marker_genes_unified.csv   # Unified KB mode marker genes
+    ├── 05_annotation_quality.json # Annotation quality metrics
+    ├── pairwise_stage_de.csv      # Stage-wise pairwise DE
+    ├── temporal_trend_genes.csv   # Temporal trend genes
     ├── branch_deg.csv             # Branch DEG
     ├── cell_type_sizes.csv        # Cell type statistics
-    ├── enrichment_ora.csv         # ORA summary
-    ├── enrichment_gsea.csv        # GSEA summary
-    ├── 11_grn/                    # GRN analysis
-    │   └── tf_activity_per_cell_type.csv  # TF activity matrix
-    └── enrichment/                # Detailed enrichment results
-        ├── ora_*_summary.csv
-        ├── prerank_*_summary.csv
-        └── ai_interpretation.txt  # AI biological interpretation
+    ├── 09_enrichment/             # Enrichment results
+    │   ├── ora_*_summary.csv
+    │   ├── prerank_*_summary.csv
+    │   ├── ai_interpretation.txt
+    │   └── ai_interpretation_summary.txt
+    ├── 10_exploratory/            # Exploratory results
+    │   └── composition_by_stage_*.csv
+    └── 11_grn/                    # GRN results
+        ├── tf_activity_per_cell_type.csv
+        ├── tf_activity_pvals.csv
+        ├── tf_target_edges.csv
+        └── tf_target_counts.csv
 ```
 
 > 💡 The starred ★ `05_annotated.h5ad` is the most important output — it contains the final annotation labels for every cell and serves as the starting point for most downstream analyses (DE, trajectory, enrichment).

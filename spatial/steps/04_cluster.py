@@ -57,6 +57,9 @@ def main():
     resolutions_grid = getattr(CFG, 'param_grid_resolutions', [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
     log.info("Grid: n_neighbors=%s, resolutions=%s", n_neighbors_grid, resolutions_grid)
 
+    fig_dir = os.path.join(CFG.figure_dir, '04_cluster')
+    os.makedirs(fig_dir, exist_ok=True)
+
     results_summary = []
 
     for n in n_neighbors_grid:
@@ -143,7 +146,7 @@ def main():
                 safe_plot(sc.pl.umap, adata, color=leiden_key, show=False,
                           title=f'UMAP (n_neighbors={n}, resolution={res})')
                 plt.savefig(
-                    os.path.join(CFG.figure_dir,
+                    os.path.join(fig_dir,
                                  f'umap_grid_n{n}_r{res}.png'),
                     dpi=150, bbox_inches='tight')
                 plt.close()
@@ -214,7 +217,7 @@ def main():
                             transform=ax.transAxes, fontsize=12)
                     ax.set_title(f'n={n}, r={res}')
         fig.tight_layout()
-        fig.savefig(os.path.join(CFG.figure_dir, 'umap_param_grid_summary.png'),
+        fig.savefig(os.path.join(fig_dir, 'umap_param_grid_summary.png'),
                     dpi=150, bbox_inches='tight')
         plt.close(fig)
     except Exception as e:

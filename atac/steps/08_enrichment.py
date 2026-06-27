@@ -159,6 +159,9 @@ def main():
     markers_df = pd.read_csv(marker_csv)
     log.info("Loaded: %d rows", len(markers_df))
 
+    table_dir = os.path.join(CFG.table_dir, "08_enrichment")
+    os.makedirs(table_dir, exist_ok=True)
+
     all_results = []
     group_col = 'group' if 'group' in markers_df.columns else None
 
@@ -203,7 +206,7 @@ def main():
 
     if all_results:
         combined = pd.concat(all_results, ignore_index=True)
-        combined.to_csv(os.path.join(CFG.table_dir, "enrichment_results.csv"), index=False)
+        combined.to_csv(os.path.join(table_dir, "enrichment_results.csv"), index=False)
         log.info("Saved enrichment_results.csv (%d rows)", len(combined))
 
         try:
@@ -221,7 +224,7 @@ def main():
         except Exception as e:
             log.warning("Barplot failed: %s", e)
     else:
-        pd.DataFrame().to_csv(os.path.join(CFG.table_dir, "enrichment_results.csv"), index=False)
+        pd.DataFrame().to_csv(os.path.join(table_dir, "enrichment_results.csv"), index=False)
 
     gc.collect()
     log.info("Step 08 complete, took %.1fs", time.time() - t0)

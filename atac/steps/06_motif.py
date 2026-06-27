@@ -72,7 +72,9 @@ def main():
                     genome_fasta=genome,
                 )
                 for grp, df in result.items():
-                    csv_out = os.path.join(CFG.table_dir, f"motif_enrichment_{grp}.csv")
+                    csv_out = os.path.join(CFG.table_dir, "06_motif", f"motif_enrichment_{grp}.csv")
+                    csv_dir = os.path.dirname(csv_out)
+                    os.makedirs(csv_dir, exist_ok=True)
                     df.write_csv(csv_out)
                     log.info("  Saved: %s", csv_out)
             except Exception as e:

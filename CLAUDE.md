@@ -29,6 +29,7 @@ export FUXI_DATA_ROOT=<path_to_geo_datasets>
 # List available steps for a modality
 python core/run_pipeline.py --modality rna --list
 python core/run_pipeline.py --modality atac --list
+python core/run_pipeline.py --modality spatial --list
 
 # Run full pipeline
 python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config_<GSE_ID>.py
@@ -43,8 +44,8 @@ python core/run_pipeline.py --modality rna --steps 1,3,5 --config ...
 # Resume from first incomplete checkpoint
 python core/run_pipeline.py --modality rna --resume --config ...
 
-# Run subclustering on a specific cell type (RNA Step 07)
-python core/run_pipeline.py --modality rna --step 7 --cell-type "Müller Glia" --config ...
+# Run subclustering on a specific cell type (RNA Step 06)
+python core/run_pipeline.py --modality rna --step 6 --cell-type "Müller Glia" --config ...
 ```
 
 ### Testing
@@ -86,7 +87,7 @@ core/               Shared infrastructure (no biology libs imported)
     superseries_detector.py SuperSeries detection + sub-series splitting
 
 rna/                scRNA-seq module (Scanpy 1.10+)
-  steps/             12 pipeline steps (00_load → 11_exploratory), each a standalone script
+  steps/             12 pipeline steps (00_load → 11_grn), each a standalone script
   utils/
     marker_scoring.py  Hypergeometric + cosine scoring of clusters against Knowledge Base
     evidence_fusion.py 5-tier decision engine merging marker scores, expert rules, AI
@@ -98,7 +99,8 @@ rna/                scRNA-seq module (Scanpy 1.10+)
 atac/               scATAC-seq module (Snapatac2 2.9+)
   steps/             10 pipeline steps (00_load → 09_integrate)
 
-spatial/            Placeholder for future spatial transcriptomics (Squidpy)
+spatial/            Spatial transcriptomics module (Squidpy)
+  steps/             10 pipeline steps (00_load → 09_exploratory)
 
 projects/           Dataset-specific configs, organized as projects/{modality}/{GSE_ID}/
 templates/          Config templates for different input formats
@@ -112,9 +114,9 @@ tests/              Test directory (mostly empty)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 ```
 
-**Config loading.** `resolve_config()` in `core/utils.py` uses `importlib.util` to dynamically load a config `.py` file as a module, then reads its `CFG` attribute. Config files mutate the global `CFG` singleton imported from `core.config`. The `Config` dataclass contains ALL fields for BOTH modalities in one flat namespace; the `modality` string discriminates.
+**Config loading.** `resolve_config()` in `core/utils.py` uses `importlib.util` to dynamically load a config `.py` file as a module, then reads its `CFG` attribute. Config files mutate the global `CFG` singleton imported from `core.config`. The `Config` dataclass contains ALL fields for ALL modalities (RNA / ATAC / Spatial) in one flat namespace; the `modality` string discriminates.
 
-**Checkpoint system.** Each step reads from a specific checkpoint file and optionally writes one. `run_pipeline.py` maintains step registries (`RNA_STEPS`, `ATAC_STEPS`) and checkpoint file mappings. Steps skip if their output checkpoint already exists. The `--resume` flag scans for the first missing checkpoint.
+**Checkpoint system.** Each step reads from a specific checkpoint file and optionally writes one. `run_pipeline.py` maintains step registries (`RNA_STEPS`, `ATAC_STEPS`, `SPATIAL_STEPS`) and checkpoint file mappings. Steps skip if their output checkpoint already exists. The `--resume` flag scans for the first missing checkpoint.
 
 **Three annotation modes for RNA Step 05:**
 1. **Unified KB mode** (if `CFG.tissue_kb` is set): Full pipeline — marker scoring → expert rules → evidence fusion → optional AI fallback for low-confidence clusters
@@ -142,6 +144,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 | 08 | `08_trajectory.py` | trajectory h5ad |
 | 09 | `09_enrichment.py` | enrichment CSVs |
 | 10 | `10_exploratory.py` | summary figures + CSVs |
+| 11 | `11_grn.py` | 11_grn.h5ad + TF activity heatmap + TF target edge tables |
 
 ### ATAC Pipeline Steps
 
@@ -158,6 +161,21 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 | 08 | `08_enrichment.py` | enrichment CSVs |
 | 09 | `09_integrate.py` | 09_integrated.h5ad (RNA+ATAC) |
 
+### Spatial Pipeline Steps
+
+| Step | Script | Key Output |
+|------|--------|-----------|
+| 00 | `00_load.py` | 00_raw.h5ad (coords + image) |
+| 01 | `01_qc.py` | 01_qc.h5ad |
+| 02 | `02_image.py` | 02_image.h5ad |
+| 03 | `03_normalize.py` | 03_processed.h5ad |
+| 04 | `04_cluster.py` | 04_clustered.h5ad |
+| 05 | `05_annotate.py` | 05_annotated.h5ad |
+| 06 | `06_spatial_de.py` | marker & SVG CSVs |
+| 07 | `07_trajectory.py` | 07_trajectory.h5ad |
+| 08 | `08_enrichment.py` | enrichment CSVs |
+| 09 | `09_exploratory.py` | spatial figures + CSVs |
+
 ### Import Path Hack
 
 Because this repo has no `pyproject.toml` or `setup.py`, step scripts cannot do `from fuxi.core import ...`. Instead every step prepends the repo root to `sys.path`:
@@ -168,10 +186,10 @@ This means `from core.utils import ...` works from any step script. The `annotat
 
 ### Modifying Scripts for a Dataset
 
-Core step scripts (`rna/steps/*.py`, `atac/steps/*.py`) **must not be edited in place**. When a dataset exposes a bug or requires a one-off adaptation:
+Core step scripts (`rna/steps/*.py`, `atac/steps/*.py`, `spatial/steps/*.py`) **must not be edited in place**. When a dataset exposes a bug or requires a one-off adaptation:
 
 1. Copy the script into the project directory: `projects/{modality}/{GSE_ID}/`
-2. Modify the copy — the original under `rna/steps/` or `atac/steps/` stays untouched
+2. Modify the copy — the original under `rna/steps/`, `atac/steps/`, or `spatial/steps/` stays untouched
 3. Run the copy directly instead of through `run_pipeline.py`
 4. After the run completes, write a note to `notes/suggestions/{modality}_{GSE_ID}.md` describing:
    - What broke and why
@@ -179,3 +197,7 @@ Core step scripts (`rna/steps/*.py`, `atac/steps/*.py`) **must not be edited in 
    - Whether the root cause should be fixed in the core script
 
 This keeps core scripts reference-stable and builds a searchable record of edge cases that inform future pipeline improvements. See the existing `notes/suggestions/` directory for examples.
+
+### 更新文档
+
+如果用户明确要求"更新文档"，先总结本次会话已完成的工作，然后通读 `CLAUDE.md`、`README.md`、`docs/`（含 tutorial）、`.claude/SKILL.md`，评估哪些内容需要更新。按照原有规范格式，删除/修改过时信息，补充新内容。**给出改动摘要让用户确认后再写入。**

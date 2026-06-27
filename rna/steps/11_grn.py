@@ -91,7 +91,8 @@ def filter_regulon_net(net: pd.DataFrame, min_genes: int = 5, log: object = None
 def run_grn(pseudo_df: pd.DataFrame, net: pd.DataFrame, log: object) -> tuple:
     """Run ULM enrichment on pseudobulk data.
 
-    Returns (estimates_df, pvals_df) where rows = groups, cols = TFs.
+    Returns (estimates_df, pvals_df, filtered_net) where rows = groups, cols = TFs.
+    filtered_net is the net filtered to available genes.
     """
     import decoupler as dc
 
@@ -107,7 +108,7 @@ def run_grn(pseudo_df: pd.DataFrame, net: pd.DataFrame, log: object) -> tuple:
     pval_df = pd.DataFrame(pvals, index=pseudo_df.index, columns=estimates.columns)
 
     log.info("  Activity matrix: %d cell types x %d TFs", est_df.shape[0], est_df.shape[1])
-    return est_df, pval_df
+    return est_df, pval_df, net
 
 
 def top_variable_tfs(estimates_df: pd.DataFrame, n_top: int, log: object) -> pd.DataFrame:
@@ -118,7 +119,7 @@ def top_variable_tfs(estimates_df: pd.DataFrame, n_top: int, log: object) -> pd.
     return estimates_df[top]
 
 
-def export_results(estimates_df, top_df, pvals_df, CFG, log):
+def export_results(estimates_df, top_df, pvals_df, net_top, CFG, log):
     """Save tables and checkpoint AnnData."""
     table_dir = os.path.join(CFG.table_dir, "11_grn")
     os.makedirs(table_dir, exist_ok=True)
@@ -130,6 +131,26 @@ def export_results(estimates_df, top_df, pvals_df, CFG, log):
     path = os.path.join(table_dir, "tf_activity_pvals.csv")
     pvals_df.to_csv(path)
     log.info("Exported: %s", path)
+
+    # Export TF-to-target edges for top-variance TFs
+    path = os.path.join(table_dir, "tf_target_edges.csv")
+    net_top.to_csv(path, index=False)
+    log.info("Exported: %s (%d edges)", path, len(net_top))
+
+    # Export per-TF target gene count summary
+    target_counts = (
+        net_top.groupby('source')['target']
+        .nunique()
+        .reset_index()
+        .rename(columns={'source': 'tf', 'target': 'n_targets'})
+        .sort_values('n_targets', ascending=False)
+    )
+    path = os.path.join(table_dir, "tf_target_counts.csv")
+    target_counts.to_csv(path, index=False)
+    log.info("Exported: %s (%d TFs)", path, len(target_counts))
+
+    if net_top.empty:
+        log.warning("Top-TF edge list is empty — no edges to export")
 
     adata_pb = sc.AnnData(
         X=np.expm1(top_df.values),
@@ -290,14 +311,19 @@ def main():
     net = filter_regulon_net(net, min_genes=min_size, log=log)
 
     # ---------- Run activity inference ----------
-    est_df, pval_df = run_grn(pseudo_df, net, log)
+    est_df, pval_df, net_filtered = run_grn(pseudo_df, net, log)
 
     # ---------- Select top TFs ----------
     n_top = min(getattr(CFG, 'grn_n_top_regulons', 50), est_df.shape[1])
     top_df = top_variable_tfs(est_df, n_top, log)
 
+    # ---------- Filter edge list to top-variance TFs ----------
+    top_tfs = set(top_df.columns)
+    net_top = net_filtered[net_filtered['source'].isin(top_tfs)].copy()
+    log.info("Top-TF edges: %d (from %d total filtered edges)", len(net_top), len(net_filtered))
+
     # ---------- Export ----------
-    export_results(est_df, top_df, pval_df, CFG, log)
+    export_results(est_df, top_df, pval_df, net_top, CFG, log)
     plot_heatmap(top_df, CFG, log)
 
     elapsed = time.time() - t0

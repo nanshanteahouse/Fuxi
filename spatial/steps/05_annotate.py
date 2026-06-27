@@ -256,7 +256,8 @@ def main():
         score_genes_mode(adata, CFG)
 
     # ── Spatial-aware UMAP visualization ──
-    sc.settings.figdir = CFG.figure_dir
+    sc.settings.figdir = os.path.join(CFG.figure_dir, '05_annotation')
+    os.makedirs(sc.settings.figdir, exist_ok=True)
     sc.settings.autoshow = False
 
     # Also compute spatial UMAPs
