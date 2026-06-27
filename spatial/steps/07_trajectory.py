@@ -112,7 +112,8 @@ def main():
         log.warning("DPT failed: %s", e)
 
     # ── 3. Visualizations ────────────────────────────────────────────────
-    sc.settings.figdir = CFG.figure_dir
+    sc.settings.figdir = os.path.join(CFG.figure_dir, '07_trajectory')
+    os.makedirs(sc.settings.figdir, exist_ok=True)
     sc.settings.autoshow = False
 
     plot_vars = ['dpt_pseudotime'] if 'dpt_pseudotime' in adata.obs else []

@@ -90,7 +90,7 @@ def main():
 
     # ── Save results ──
     table_dir = os.path.join(CFG.table_dir, "enrichment")
-    fig_dir = os.path.join(CFG.figure_dir, "enrichment")
+    fig_dir = os.path.join(CFG.figure_dir, "08_enrichment")
     os.makedirs(table_dir, exist_ok=True)
     os.makedirs(fig_dir, exist_ok=True)
 

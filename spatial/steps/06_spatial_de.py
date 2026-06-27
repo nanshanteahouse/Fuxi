@@ -117,6 +117,9 @@ def plot_top_svg(adata, moran_df, CFG, log):
     if not top_genes:
         return
 
+    fig_dir = os.path.join(CFG.figure_dir, '06_spatial_de')
+    os.makedirs(fig_dir, exist_ok=True)
+
     try:
         fig, axes = plt.subplots(
             max(1, (len(top_genes) + 2) // 3), min(3, len(top_genes)),
@@ -133,7 +136,7 @@ def plot_top_svg(adata, moran_df, CFG, log):
             axes[j // 3, j % 3].axis('off')
 
         fig.tight_layout()
-        fig.savefig(os.path.join(CFG.figure_dir, 'top_svg_spatial.png'),
+        fig.savefig(os.path.join(fig_dir, 'top_svg_spatial.png'),
                     dpi=150, bbox_inches='tight')
         plt.close(fig)
         log.info("Top SVG spatial plot saved")
@@ -190,6 +193,8 @@ def main():
             top_genes = [g for g in top_per_group['names'].unique().tolist()
                          if g in adata.var_names][:9]
             if top_genes:
+                fig_dir = os.path.join(CFG.figure_dir, '06_spatial_de')
+                os.makedirs(fig_dir, exist_ok=True)
                 fig, axes = plt.subplots(
                     max(1, (len(top_genes) + 2) // 3), min(3, len(top_genes)),
                     figsize=(5 * min(3, len(top_genes)), 5 * max(1, (len(top_genes) + 2) // 3)),
@@ -205,7 +210,7 @@ def main():
                 for j in range(len(top_genes), axes.size):
                     axes[j // 3, j % 3].axis('off')
                 fig.tight_layout()
-                fig.savefig(os.path.join(CFG.figure_dir, 'top_markers_umap.png'),
+                fig.savefig(os.path.join(fig_dir, 'top_markers_umap.png'),
                             dpi=150, bbox_inches='tight')
                 plt.close(fig)
                 log.info("Top marker UMAP plot saved")

@@ -28,12 +28,15 @@ def spatial_cell_type_plot(adata, CFG, log):
         log.warning("No '%s' column — skipping spatial cell type plot", group_col)
         return
 
+    fig_dir = os.path.join(CFG.figure_dir, '09_exploratory')
+    os.makedirs(fig_dir, exist_ok=True)
+
     try:
         safe_plot(sq.pl.spatial_scatter,
                   adata, color=group_col,
                   shape=None, size=1.5, show=False,
                   save='_09_spatial_celltype.png')
-        plt.savefig(os.path.join(CFG.figure_dir, 'spatial_cell_type.png'),
+        plt.savefig(os.path.join(fig_dir, 'spatial_cell_type.png'),
                     dpi=200, bbox_inches='tight')
         plt.close()
         log.info("Spatial cell type plot saved")
@@ -43,6 +46,9 @@ def spatial_cell_type_plot(adata, CFG, log):
 
 def spatial_gene_plots(adata, CFG, log):
     """Plot top marker genes on spatial coordinates."""
+    fig_dir = os.path.join(CFG.figure_dir, '09_exploratory')
+    os.makedirs(fig_dir, exist_ok=True)
+
     # Priority: SVGs > DE top markers > configured markers
     gene_candidates = []
 
@@ -95,7 +101,7 @@ def spatial_gene_plots(adata, CFG, log):
             axes[j // 3, j % 3].axis('off')
 
         fig.tight_layout()
-        fig.savefig(os.path.join(CFG.figure_dir, 'spatial_marker_genes.png'),
+        fig.savefig(os.path.join(fig_dir, 'spatial_marker_genes.png'),
                     dpi=200, bbox_inches='tight')
         plt.close(fig)
         log.info("Spatial gene expression plot saved")
@@ -179,7 +185,8 @@ def main():
     spatial_neighbors_summary(adata, CFG, log)
 
     # ── 5. UMAP summary plots ──
-    sc.settings.figdir = CFG.figure_dir
+    sc.settings.figdir = os.path.join(CFG.figure_dir, '09_exploratory')
+    os.makedirs(sc.settings.figdir, exist_ok=True)
     sc.settings.autoshow = False
 
     for col in ['cell_type', 'leiden', 'total_counts', 'n_genes_by_counts']:
