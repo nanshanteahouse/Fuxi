@@ -51,7 +51,7 @@ def main():
 
     try:
         safe_plot(snap.pl.heatmap, data, groupby=groupby, show=False,
-                  save=os.path.join(CFG.figure_dir, "marker_peaks_heatmap.png"))
+                  save=os.path.join(CFG.figure_dir, "05_marker_peaks", "marker_peaks_heatmap.png"))
     except Exception as e:
         log.warning("Heatmap failed: %s", e)
 

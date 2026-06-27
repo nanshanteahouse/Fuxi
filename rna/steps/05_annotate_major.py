@@ -268,7 +268,8 @@ def ai_annotate(adata, CFG, logger, std=None):
                     rec['state'], rec['subtype'], rec['confidence'])
 
     # ── j. UMAP 可视化 ────────────────────────────────────────────────
-    sc.settings.figdir = CFG.figure_dir
+    sc.settings.figdir = os.path.join(CFG.figure_dir, '05_annotation')
+    os.makedirs(sc.settings.figdir, exist_ok=True)
     sc.settings.autoshow = False
 
     # annot_label = cell_type (+ state 如果不为 N/A)
@@ -605,7 +606,8 @@ def unified_annotate(adata, CFG, logger):
         )
 
     # ── i. UMAP visualization ─────────────────────────────────────────────
-    sc.settings.figdir = CFG.figure_dir
+    sc.settings.figdir = os.path.join(CFG.figure_dir, '05_annotation')
+    os.makedirs(sc.settings.figdir, exist_ok=True)
     sc.settings.autoshow = False
 
     adata.obs['annot_label'] = adata.obs['cell_type'].astype(str)
@@ -771,7 +773,8 @@ def score_genes_mode(adata, CFG, logger):
         adata.obs['annot_confidence'] = adata.obs['annotation_confidence']
 
     # 可视化
-    sc.settings.figdir = CFG.figure_dir
+    sc.settings.figdir = os.path.join(CFG.figure_dir, '05_annotation')
+    os.makedirs(sc.settings.figdir, exist_ok=True)
     sc.settings.autoshow = False
     safe_plot(sc.pl.umap, adata, color='cell_type', show=False,
               save='_05_celltype.pdf', legend_loc='on data')

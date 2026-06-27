@@ -14,7 +14,7 @@ Step 09: GO/KEGG 富集分析
     ora_{gene_set}_{cluster}.csv          — ORA 结果表
     prerank_{gene_set}_{cluster}.csv      — GSEA 结果表
     ora_{gene_set}_summary.csv            — 汇总（所有聚类合并）
-  {figure_dir}/enrichment/
+  {figure_dir}/09_enrichment/
     ora_{gene_set}_bubble.pdf             — 气泡图
     ora_{gene_set}_dotplot.pdf            — 点图
 
@@ -361,7 +361,7 @@ def save_results(
 ) -> None:
     """保存富集结果 CSV + 绘图"""
     table_dir = os.path.join(CFG.table_dir, "enrichment")
-    fig_dir = os.path.join(CFG.figure_dir, "enrichment")
+    fig_dir = os.path.join(CFG.figure_dir, "09_enrichment")
     os.makedirs(table_dir, exist_ok=True)
     os.makedirs(fig_dir, exist_ok=True)
 

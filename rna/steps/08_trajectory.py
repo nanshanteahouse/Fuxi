@@ -219,7 +219,8 @@ def main():
     log.info("Loaded: %s — %d cells", input_path, adata.n_obs)
 
     # 设置图输出目录（必须在 plot 调用之前，否则 scanpy save= 默认写到 ./figures/）
-    sc.settings.figdir = CFG.figure_dir
+    sc.settings.figdir = os.path.join(CFG.figure_dir, '08_trajectory')
+    os.makedirs(sc.settings.figdir, exist_ok=True)
 
     # 当 marker_validation PASS 率极低时，退回到 leiden 聚类
     if 'marker_validation' in adata.obs and adata.n_obs > 0:

@@ -178,7 +178,8 @@ def layer3_temporal_trends(adata, CFG, log, primary_col=None):
     return results_df
 
 def generate_figures(adata, markers_df, CFG, log, primary_col=None):
-    sc.settings.figdir = CFG.figure_dir
+    sc.settings.figdir = os.path.join(CFG.figure_dir, '07_markers')
+    os.makedirs(sc.settings.figdir, exist_ok=True)
     sc.settings.autoshow = False
     group_col = primary_col if primary_col else ('cell_type' if 'cell_type' in adata.obs else 'leiden')
 
