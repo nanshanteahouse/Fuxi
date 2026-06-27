@@ -207,6 +207,8 @@ def main():
         log.info("Saved enrichment_results.csv (%d rows)", len(combined))
 
         try:
+            atac_fig_dir = os.path.join(CFG.figure_dir, "08_enrichment")
+            os.makedirs(atac_fig_dir, exist_ok=True)
             top = combined.sort_values('Adjusted P-value').head(20)
             fig, ax = plt.subplots(figsize=(10, 6))
             ax.barh(range(len(top)), -np.log10(top['Adjusted P-value'].values + 1e-10))
@@ -214,7 +216,7 @@ def main():
             ax.set_yticklabels(top['Term'].str[:50])
             ax.set_xlabel('-log10(Adjusted P-value)')
             plt.tight_layout()
-            plt.savefig(os.path.join(CFG.figure_dir, "enrichment_barplot.png"), dpi=150, bbox_inches='tight')
+            plt.savefig(os.path.join(atac_fig_dir, "enrichment_barplot.png"), dpi=150, bbox_inches='tight')
             plt.close()
         except Exception as e:
             log.warning("Barplot failed: %s", e)

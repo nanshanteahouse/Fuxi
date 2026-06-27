@@ -136,6 +136,8 @@ def main():
     log.info("  Cumulative variance ratio first 50 PCs: %.4f", var_ratio[:50].sum())
 
     # PCA elbow 图
+    fig_dir = os.path.join(CFG.figure_dir, '03_integrate')
+    os.makedirs(fig_dir, exist_ok=True)
     fig, ax = plt.subplots(figsize=(8, 4))
     ax.plot(range(1, CFG.n_pcs_full + 1), var_ratio, 'o-', ms=3)
     ax.axvline(CFG.n_pcs_use, color='red', linestyle='--', alpha=0.5,
@@ -143,7 +145,7 @@ def main():
     ax.set_xlabel('PC'); ax.set_ylabel('Variance ratio')
     ax.legend()
     fig.tight_layout()
-    fig.savefig(os.path.join(CFG.figure_dir, 'pca_elbow.png'), dpi=150)
+    fig.savefig(os.path.join(fig_dir, 'pca_elbow.png'), dpi=150)
     plt.close(fig)
     log.info("  PCA elbow plot saved")
 
@@ -180,7 +182,7 @@ def main():
             sc.pl.embedding(adata, basis='X_pca_harmony', color=batch_key,
                             ax=axes[1], show=False, title='Harmony-corrected')
             fig.tight_layout()
-            fig.savefig(os.path.join(CFG.figure_dir, 'harmony_comparison.png'), dpi=150)
+            fig.savefig(os.path.join(fig_dir, 'harmony_comparison.png'), dpi=150)
             plt.close(fig)
             log.info("  Harmony comparison plot saved")
     else:

@@ -53,7 +53,7 @@ def main():
 
     try:
         safe_plot(snap.pl.umap, data, color='pseudotime', cmap='viridis', show=False,
-                  save=os.path.join(CFG.figure_dir, "trajectory_pseudotime.png"))
+                  save=os.path.join(CFG.figure_dir, "07_trajectory", "trajectory_pseudotime.png"))
     except Exception:
         pass
 

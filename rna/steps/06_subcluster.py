@@ -329,7 +329,9 @@ def main():
             sub.obs['leiden'] = "0"
 
     # ── (i) Save UMAP plots ───────────────────────────────────────────
-    sc.settings.figdir = CFG.figure_dir
+    fig_dir = os.path.join(CFG.figure_dir, '06_subcluster')
+    os.makedirs(fig_dir, exist_ok=True)
+    sc.settings.figdir = fig_dir
     sc.settings.autoshow = False
     safe_cell_type = args.cell_type.replace(" ", "_").replace("/", "_")
     safe_filename = f"05_sub_{safe_cell_type}.h5ad"
@@ -358,7 +360,7 @@ def main():
         for j in range(i + 1, len(axes)):
             axes[j].axis('off')
         fig.tight_layout()
-        fig.savefig(os.path.join(CFG.figure_dir,
+        fig.savefig(os.path.join(fig_dir,
                                  f'umap_sub_{safe_cell_type}_resolutions.pdf'),
                     dpi=150, bbox_inches='tight')
         plt.close(fig)
