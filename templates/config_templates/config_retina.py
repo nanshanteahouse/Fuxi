@@ -8,8 +8,7 @@
     cp config_retina.py ../../config_myproject.py
     python ../../run_pipeline.py --config config_myproject.py
 """
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+import os
 from core.config import CFG
 
 # ── 数据格式 (CSV 矩阵) ──

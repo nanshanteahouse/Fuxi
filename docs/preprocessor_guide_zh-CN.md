@@ -229,7 +229,7 @@ from core.config import CFG
 
 CFG.data_format = '10X_mtx'
 CFG.mtx_prefix = 'GSE00001_Sample1_'
-CFG.mtx_dir = '.'
+CFG.mtx_dir = ''               # 留空则自动解析
 
 CFG.tissue = 'retina'        # ← 人工确认
 CFG.species = 'human'

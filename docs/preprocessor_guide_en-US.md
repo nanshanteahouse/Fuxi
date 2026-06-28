@@ -224,7 +224,7 @@ from core.config import CFG
 
 CFG.data_format = '10X_mtx'
 CFG.mtx_prefix = 'GSE00001_Sample1_'
-CFG.mtx_dir = '.'
+CFG.mtx_dir = ''               # Leave empty to auto-resolve
 
 CFG.tissue = 'retina'        # ← verify
 CFG.species = 'human'

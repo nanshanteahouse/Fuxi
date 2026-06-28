@@ -11,8 +11,7 @@ This template is for SpaceRanger output directories containing:
 Usage:
     python core/run_pipeline.py --modality spatial --config this_config.py
 """
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+import os
 from core.config import CFG
 
 # ── Modality ──

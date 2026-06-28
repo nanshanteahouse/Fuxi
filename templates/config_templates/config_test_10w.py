@@ -2,8 +2,7 @@
 """config_test_10w.py — 测试配置模板 (ATAC)"""
 
 from core.config import Config, CFG
-import os, sys
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+import os
 from core.utils import data_root
 
 # ── 数据路径 ──

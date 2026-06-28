@@ -14,8 +14,7 @@
     将所有 .h5 文件放在同一目录下（默认与 config 文件同级目录）。
     文件名示例: sample1_filtered_feature_bc_matrix.h5, sample2_filtered_feature_bc_matrix.h5
 """
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+import os
 from core.config import CFG
 
 # ── 数据格式 ──

@@ -221,7 +221,6 @@ def generate_config(gse_id: str,
 
     replacements = {
         'MTX_PREFIX': mtx_prefix,
-        'MTX_DIR': mtx_dir or '.',
         'MATRIX_FILE': matrix_file,
         'BARCODES_FILE': barcodes_file,
         'FEATURES_FILE': features_file,
@@ -229,7 +228,6 @@ def generate_config(gse_id: str,
         'TISSUE': tissue,
         'SPECIES': species,
         'GENOME': genome,
-        'H5_DIR': h5_dir or '.',
         'EXPRESSION_TYPE': expression_type,
     }
 

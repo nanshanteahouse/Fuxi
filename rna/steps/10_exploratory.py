@@ -86,7 +86,7 @@ def main():
     qc_metrics = [m for m in qc_metrics if m in adata.obs]
     if qc_metrics:
         safe_plot(sc.pl.umap, adata, color=qc_metrics, show=False,
-                  save='_06_qc_umap.pdf', vmax='p99', ncols=3)
+                  save='_10_qc_umap.pdf', vmax='p99', ncols=3)
 
     # 3. UMAP: 标记基因
     all_markers = []
@@ -99,13 +99,13 @@ def main():
         for batch_start in range(0, n_markers, batch_size):
             batch = all_markers[batch_start:batch_start + batch_size]
             safe_plot(sc.pl.umap, adata, color=batch, use_raw=True,
-                      show=False, save=f'_06_markers_{batch_start}.pdf',
+                      show=False, save=f'_10_markers_{batch_start}.pdf',
                       vmax='p99', ncols=4)
 
     # 4. 标记基因 dotplot
     if all_markers:
         safe_plot(sc.pl.dotplot, adata, var_names=all_markers,
-                  groupby='cell_type', show=False, save='_06_marker_dotplot.pdf')
+                  groupby='cell_type', show=False, save='_10_marker_dotplot.pdf')
 
     # 5. 聚类大小统计
     for group_col in ['cell_type', 'leiden']:

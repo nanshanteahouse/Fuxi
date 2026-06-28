@@ -15,8 +15,7 @@ Usage:
 
     python core/run_pipeline.py --modality rna --config this_config.py
 """
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+import os
 from core.config import CFG
 
 # ── Data format ──

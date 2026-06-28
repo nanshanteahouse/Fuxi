@@ -292,6 +292,11 @@ def main():
         print(f"[run] Error: config file not found: {config_path}")
         sys.exit(1)
 
+    # Ensure repo root is on sys.path (config files rely on `from core.config import CFG`)
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+
     import importlib.util
     spec = importlib.util.spec_from_file_location("pipeline_config", config_path)
     cfg_module = importlib.util.module_from_spec(spec)

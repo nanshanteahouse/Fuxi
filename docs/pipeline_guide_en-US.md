@@ -841,7 +841,7 @@ The configuration file (`config_{dataset_id}.py`) is a Python script that contro
 CFG.data_format = '10X_mtx'     # Options: 10X_h5, 10X_mtx, csv_matrix, h5ad, 10x_fragments, 10x_peak_h5
 
 # For 10X MTX format
-CFG.mtx_dir = '.'               # Directory containing MTX files
+CFG.mtx_dir = ''               # Leave empty to auto-resolve to $FUXI_DATA_ROOT/{dataset_id} (recommended)
 CFG.mtx_prefix = 'sample_'     # MTX file prefix
 
 # For CSV format

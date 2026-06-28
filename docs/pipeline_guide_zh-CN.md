@@ -841,7 +841,7 @@ python core/run_pipeline.py --modality spatial --config projects/spatial/{空间
 CFG.data_format = '10X_mtx'     # 选项: 10X_h5, 10X_mtx, csv_matrix, h5ad, 10x_fragments, 10x_peak_h5
 
 # 10X MTX 格式相关
-CFG.mtx_dir = '.'               # MTX 文件所在目录
+CFG.mtx_dir = ''               # 留空则自动解析为 $FUXI_DATA_ROOT/{数据集ID} (推荐)
 CFG.mtx_prefix = 'sample_'     # MTX 文件前缀
 
 # CSV 格式相关

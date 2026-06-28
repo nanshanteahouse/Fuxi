@@ -21,6 +21,14 @@ import os
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
+# ── Auto-load .env from repo root ────────────────────────────────────
+# This runs before any data_root() call, so FUXI_DATA_ROOT in .env
+# is available to the pipeline without manual sourcing.
+from dotenv import load_dotenv
+_env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+if os.path.isfile(_env_path):
+    load_dotenv(_env_path)
+
 
 @dataclass
 class AIConfig:
@@ -483,6 +491,12 @@ class Config:
     def resolve_paths(self):
         """解析所有路径。非绝对路径视为相对于 project_dir 或 config.py 所在目录。"""
         base = self.project_dir if self.project_dir else os.path.dirname(os.path.abspath(__file__))
+
+        # Treat '.' as "not set" — will fall back to data_dir below.
+        # Per-dataset configs should no longer hard-code '.' here.
+        if self.mtx_dir == '.':
+            self.mtx_dir = ""
+
         for attr in [
             "data_dir", "results_dir", "h5ad_dir",
             "figure_dir", "table_dir", "log_dir",
@@ -492,8 +506,16 @@ class Config:
             if val and not os.path.isabs(val):
                 setattr(self, attr, os.path.join(base, val))
 
+        # Auto-resolve data_dir from FUXI_DATA_ROOT + dataset_id.
+        # This eliminates the need to hard-code data paths in per-dataset configs.
         if not self.data_dir:
-            self.data_dir = base
+            _data_root = os.environ.get('FUXI_DATA_ROOT') or os.environ.get('SCRNA_DATA_ROOT')
+            if _data_root:
+                dataset_id = os.path.basename(self.project_dir or base)
+                self.data_dir = os.path.join(_data_root, dataset_id)
+            else:
+                self.data_dir = base
+
         if not self.mtx_dir:
             self.mtx_dir = self.data_dir
         if not self.h5_dir:
