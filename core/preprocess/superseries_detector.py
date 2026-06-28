@@ -305,27 +305,31 @@ def query_ncbi(accession: str) -> Optional[dict]:
         return None
 
     entry_type = entry.get('entrytype', '')
-    is_super = entry_type.upper() in ('GSE', 'SUPERSERIES')
 
+    # Query elink to detect SuperSeries via child-series links.
+    # This is the only reliable indicator: regular Series return no children;
+    # SuperSeries return child GSE accessions.  We cannot trust entry_type
+    # because all GEO Series (including SuperSeries) return entrytype 'GSE'.
     child_accessions: list[str] = []
-    if is_super:
+    time.sleep(0.34)
+    children = _ncbi_elink_superseries(uid)  # returns numeric UIDs
+    if children:
+        # Batch-resolve child UIDs to GSE accessions via esummary
+        child_uids = [str(c) for c in children]
         time.sleep(0.34)
-        children = _ncbi_elink_superseries(uid)  # returns numeric UIDs
-        if children:
-            # Batch-resolve child UIDs to GSE accessions via esummary
-            child_uids = [str(c) for c in children]
-            time.sleep(0.34)
-            child_data = _ncbi_esummary(','.join(child_uids))
-            if child_data and '_error' not in child_data:
-                # When batch-queried, the result dict has UID keys
-                for cuid in child_uids:
-                    ce = child_data.get(cuid, {})
-                    acc = ce.get('accession', '')
-                    if acc and acc not in child_accessions:
-                        child_accessions.append(acc)
-            # Fallback: just use what we got
-            if not child_accessions:
-                child_accessions.extend(str(c) for c in children)
+        child_data = _ncbi_esummary(','.join(child_uids))
+        if child_data and '_error' not in child_data:
+            # When batch-queried, the result dict has UID keys
+            for cuid in child_uids:
+                ce = child_data.get(cuid, {})
+                acc = ce.get('accession', '')
+                if acc and acc not in child_accessions:
+                    child_accessions.append(acc)
+        # Fallback: just use what we got
+        if not child_accessions:
+            child_accessions.extend(str(c) for c in children)
+
+    is_super = len(child_accessions) > 0
 
     result = {
         'is_superseries': is_super,
@@ -457,6 +461,7 @@ def detect_superseries(root_dir: str,
         'child_accessions': [],
         'title': '',
         'summary': '',
+        'species': '',
     }
 
     # Strategy 1: Directory structure
@@ -487,6 +492,7 @@ def detect_superseries(root_dir: str,
                     result['detected_by'] = 'ncbi'
             result['title'] = result['title'] or ncbi_result.get('title', '')
             result['summary'] = result['summary'] or ncbi_result.get('summary', '')
+            result['species'] = result.get('species') or ncbi_result.get('species', '')
             existing = set(result['child_accessions'])
             for acc in ncbi_result.get('child_accessions', []):
                 if acc not in existing:

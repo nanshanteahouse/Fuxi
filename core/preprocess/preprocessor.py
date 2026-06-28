@@ -132,6 +132,7 @@ def generate_config(gse_id: str,
                     output_dir: str,
                     data_root: Optional[str] = None,
                     input_dir_override: Optional[str] = None,
+                    superseries_info: Optional[dict] = None,
                     dry_run: bool = False,
                     force: bool = False) -> Optional[str]:
     """Generate a config_GSE_ID.py file.
@@ -158,6 +159,10 @@ def generate_config(gse_id: str,
 
     # Gather replacements
     species = fd.guess_species(file_list)
+    if species == 'unknown' and superseries_info:
+        ncbi_species = superseries_info.get('species', '')
+        if ncbi_species:
+            species = fd._normalise_species(ncbi_species)
     tissue = fd.guess_tissue(file_list)
     genome = fd.guess_genome(species) or 'hg38'
 
@@ -278,6 +283,10 @@ def generate_dataset_yaml(gse_id: str,
     Returns the path to the generated YAML, or None.
     """
     species = fd.guess_species(file_list)
+    if species == 'unknown' and superseries_info:
+        ncbi_species = superseries_info.get('species', '')
+        if ncbi_species:
+            species = fd._normalise_species(ncbi_species)
     species_key = species  # already normalised by guess_species()
     tissue = fd.guess_tissue(file_list)
     data_format = _detect_primary_format(classification, modality)
@@ -481,6 +490,11 @@ def _generate_parent_dataset_yaml(gse_id: str,
     Returns the path to the generated file, or None.
     """
     species = fd.guess_species(file_list)
+    if species == 'unknown' and superseries_info:
+        ncbi_species = superseries_info.get('species', '')
+        if ncbi_species:
+            species = fd._normalise_species(ncbi_species)
+    species_key = species  # already normalised by guess_species()
     tissue = fd.guess_tissue(file_list)
 
     # Determine data format from classification
@@ -830,6 +844,7 @@ def run_preprocess(gse_id: Optional[str] = None,
                     output_dir=child_proj_dir,
                     data_root=data_root,
                     input_dir_override=child_data_dir,
+                    superseries_info=superseries_info,
                     dry_run=dry_run,
                     force=force,
                 )
@@ -879,6 +894,7 @@ def run_preprocess(gse_id: Optional[str] = None,
                 output_dir=proj_dir,
                 data_root=data_root,
                 input_dir_override=input_dir,
+                superseries_info=superseries_info,
                 dry_run=dry_run,
                 force=force,
             )
@@ -892,7 +908,7 @@ def run_preprocess(gse_id: Optional[str] = None,
         print(f"  Type:         {'SuperSeries' if superseries_info.get('is_superseries') else 'SingleAccession'}")
         print(f"  Modality:     {detected_modality}")
         print(f"  Data format:  {_detect_primary_format(classification, detected_modality)}")
-        print(f"  Species:      {fd.guess_species(all_files)}")
+        print(f"  Species:      {fd.guess_species(all_files) if fd.guess_species(all_files) != 'unknown' else fd._normalise_species(superseries_info.get('species', 'unknown'))}")
         print(f"  Tissue:       {fd.guess_tissue(all_files)}")
         extracted = sum(1 for r in archive_results if r['status'] in ('extracted', 'skipped'))
         if extracted:
