@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use Fuxi in your research, please cite this repository."
+title: "Fuxi: Unified Single-Cell Multi-Omics Pipeline"
+authors:
+  - given-names: Mingpei
+    family-names: Lun
+    alias: nanshanteahouse
+repository-code: "https://github.com/nanshanteahouse/Fuxi"
+license: "GPL-3.0-or-later"
+keywords:
+  - single-cell
+  - multi-omics
+  - scRNA-seq
+  - scATAC-seq
+  - spatial-transcriptomics
+  - bioinformatics
+  - pipeline
+year: 2026

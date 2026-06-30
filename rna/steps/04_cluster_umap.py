@@ -18,6 +18,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import silhouette_score
 from joblib import Parallel, delayed
+from rna.utils.cluster_evaluation import select_best_params, select_best_umap_params
 
 
 def _evaluate_n_neighbor(adata, n, resolutions_grid, CFG, use_rep, log):
@@ -192,17 +193,30 @@ def main():
     # ── 自动选择最佳参数并生成最终 checkpoint ──
     df_summary = pd.DataFrame(results_summary)
 
-    if CFG.best_resolution is not None and any(r['resolution'] == CFG.best_resolution for r in results_summary):
-        best = [r for r in results_summary if r['resolution'] == CFG.best_resolution][0]
-        log.info("Using configured resolution=%.1f", CFG.best_resolution)
-    else:
-        # Auto-select: highest silhouette score
-        best = max(results_summary, key=lambda r: r['silhouette_score'] or 0)
-        log.info("Auto-selected params: n_neighbors=%d, resolution=%.1f (silhouette=%.4f)",
-                 best['n_neighbors'], best['resolution'], best['silhouette_score'] or 0)
+    if not results_summary:
+        log.critical("All neighbor/cluster computations failed — no parameter combination succeeded")
+        sys.exit(1)
 
-    best_n = best['n_neighbors']
-    best_r = best['resolution']
+    method = getattr(CFG, 'cluster_selection_method', 'pareto_elbow')
+
+    # Warn if best_resolution is explicitly set to non-default but will be ignored
+    if method is not None and (getattr(CFG, 'best_resolution', 1.0) != 1.0 or getattr(CFG, 'best_n_neighbors', 0) != 0):
+        log.warning(
+            "best_resolution=%.1f / best_n_neighbors=%d are set but cluster_selection_method=%r will ignore them. "
+            "Set cluster_selection_method=None to use manual mode.",
+            CFG.best_resolution, getattr(CFG, 'best_n_neighbors', 0), method,
+        )
+
+    best_n, best_r, method_name, reason = select_best_params(
+        results_summary,
+        method=method,
+        best_resolution=CFG.best_resolution if method is None else None,
+        best_n_neighbors=getattr(CFG, 'best_n_neighbors', 0) if method is None else 0,
+    )
+
+    log.info("Selected best params via %s: n_neighbors=%d, resolution=%.1f (%s)",
+             method_name, best_n, best_r, reason)
+
     leiden_col = f'leiden_{best_n}_{best_r}'
     umap_col = f'umap_{best_n}_{best_r}'
 
@@ -213,6 +227,66 @@ def main():
         log.info("Final checkpoint saved: %s (resolution=%.1f)", CFG.cluster_h5ad, best_r)
     else:
         log.warning("Selected param combination (%s, %s) not in results, skipping auto-lock", leiden_col, umap_col)
+
+    # ── UMAP 参数扫描 (min_dist × spread) ──────────────────────────────────
+    min_dist_grid = getattr(CFG, 'param_grid_min_dist', [0.3])
+    spread_grid = getattr(CFG, 'param_grid_spread', [1.0])
+    umap_method = getattr(CFG, 'umap_selection_method', 'convex_hull')
+    best_md, best_sp, umap_method_label, sweep_results = select_best_umap_params(
+        adata, best_n, min_dist_grid, spread_grid, umap_method, CFG, use_rep, log)
+
+    # Rebuild UMAP with selected params and re-save checkpoint
+    log.info("Rebuilding UMAP with selected params (min_dist=%.2f, spread=%.1f) [%s]...",
+             best_md, best_sp, umap_method_label)
+    try:
+        sc.tl.umap(adata, min_dist=best_md, spread=best_sp,
+                   random_state=CFG.random_seed)
+        safe_write(adata, CFG.cluster_h5ad, cfg=CFG)
+        log.info("Checkpoint saved with final UMAP: %s", CFG.cluster_h5ad)
+    except Exception as e:
+        log.warning("Final UMAP rebuild failed: %s", e)
+
+    if sweep_results:
+        # Summary CSV
+        try:
+            sweep_csv = os.path.join(CFG.table_dir, 'umap_min_dist_sweep_summary.csv')
+            pd.DataFrame(sweep_results).to_csv(sweep_csv, index=False)
+            log.info("UMAP sweep summary saved: %s", sweep_csv)
+        except Exception as e:
+            log.warning("UMAP sweep CSV save failed: %s", e)
+
+        # Comparison figure
+        try:
+            n_md = len(min_dist_grid) if min_dist_grid else 1
+            n_sp = len(spread_grid) if spread_grid else 1
+            n_total = n_md * n_sp
+            n_cols = min(3, n_total)
+            n_rows = int(np.ceil(n_total / n_cols))
+            fig, axes = plt.subplots(n_rows, n_cols,
+                                     figsize=(6 * n_cols, 5 * n_rows))
+            axes_flat = axes.ravel() if n_total > 1 else [axes]
+            for idx, r in enumerate(sweep_results):
+                ax = axes_flat[idx]
+                md = r['min_dist']
+                sp = r['spread']
+                try:
+                    sc.tl.umap(adata, min_dist=md, spread=sp,
+                               random_state=CFG.random_seed)
+                    sc.pl.umap(adata, color='leiden', ax=ax, show=False,
+                               legend_loc='on data', legend_fontsize=5,
+                               title=f'min_dist={md}, spread={sp}')
+                except Exception:
+                    ax.text(0.5, 0.5, 'Error', ha='center', va='center',
+                            transform=ax.transAxes)
+            for j in range(len(sweep_results), len(axes_flat)):
+                axes_flat[j].axis('off')
+            fig.tight_layout()
+            fig.savefig(os.path.join(fig_dir, 'umap_min_dist_comparison.png'),
+                        dpi=150, bbox_inches='tight')
+            plt.close(fig)
+            log.info("UMAP min_dist comparison plot saved")
+        except Exception as e:
+            log.warning("UMAP comparison plot generation failed: %s", e)
 
     # ── 网格汇总图: 所有参数组合对比 ──
     n_n = len(n_neighbors_grid)

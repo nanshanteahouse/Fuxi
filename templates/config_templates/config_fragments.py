@@ -50,6 +50,10 @@ CFG.n_spectral = 30
 CFG.n_neighbors = 15
 CFG.param_grid_n_neighbors = [15, 20, 30]
 CFG.param_grid_resolutions = [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
+# UMAP sweep (only meaningful for RNA/Spatial; ATAC umap is unexposed)
+CFG.umap_selection_method = "convex_hull"
+CFG.param_grid_min_dist = [0.1, 0.3, 0.5]
+CFG.param_grid_spread = [1.0]
 CFG.umap_min_dist = 0.3    # increase (e.g. 0.5) for more UMAP spread
 CFG.umap_spread = 1.0
 

@@ -87,11 +87,13 @@ core/               Shared infrastructure (no biology libs imported)
     superseries_detector.py SuperSeries detection + sub-series splitting
 
 rna/                scRNA-seq module (Scanpy 1.10+)
-  steps/             12 pipeline steps (00_load → 11_grn), each a standalone script
+  steps/             13 pipeline steps (00_load → 12_cell_interaction), each a standalone script
   utils/
     marker_scoring.py  Hypergeometric + cosine scoring of clusters against Knowledge Base
     evidence_fusion.py 5-tier decision engine merging marker scores, expert rules, AI
     annotation_patcher.py Safe annotation patch utility (v3.1.0+)
+    cluster_evaluation.py Pareto elbow + silhouette selection for grid search auto-param
+    cell_interaction.py  LIANA+ LR database loading, permutation testing, spatial bivariate metrics
   annotation_standardizer.py  6-tier name standardization for cell type annotations
   ortholog.py        Cross-species Ensembl→human gene symbol mapping
   tissue_ontologies/ Expert Knowledge Bases — currently retina only, with markers + synonyms
@@ -100,7 +102,7 @@ atac/               scATAC-seq module (Snapatac2 2.9+)
   steps/             10 pipeline steps (00_load → 09_integrate)
 
 spatial/            Spatial transcriptomics module (Squidpy)
-  steps/             10 pipeline steps (00_load → 09_exploratory)
+  steps/             11 pipeline steps (00_load → 10_cell_interaction)
 
 projects/           Dataset-specific configs, organized as projects/{modality}/{GSE_ID}/
 templates/          Config templates for different input formats
@@ -129,6 +131,22 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 
 **Path resolution.** `data_root()` reads `FUXI_DATA_ROOT` env var (with `SCRNA_DATA_ROOT` as legacy fallback). WSL paths are auto-detected. `Config.resolve_paths()` resolves all relative paths against `project_dir` and creates output directories.
 
+**Cluster selection method.** `CFG.cluster_selection_method` controls how the pipeline chooses the best (n_neighbors, resolution) from the parameter grid search in Step 04:
+- `"pareto_elbow"` (default): Computes the Pareto frontier over (n_clusters, silhouette_score), then picks the point closest to the ideal (min clusters, max silhouette) via normalized elbow detection. Penalizes marginal silhouette gains from over-clustering.
+- `"silhouette"`: Simple max silhouette score (old auto-select behavior, now explicit).
+- `None`: Manual mode — uses `CFG.best_resolution` and `CFG.best_n_neighbors` directly (backward compatible). Set `best_n_neighbors=0` to auto-pick the best silhouette at the given resolution.
+
+The implementation lives in `rna/utils/cluster_evaluation.py` (`select_best_params()`), shared by RNA, ATAC, and Spatial step scripts.
+
+**UMAP visualization sweep.** AFTER the best (n_neighbors, resolution) is selected, the pipeline optionally sweeps `min_dist` × `spread` to find the most spread-out UMAP layout. Unlike the cluster-parameter grid, this reuses the same KNN graph (cheap — ~3 UMAP runs × ~2 sec each). Controlled by:
+- `CFG.umap_selection_method`:
+  - `"convex_hull"` (default): auto-sweep `param_grid_min_dist` × `param_grid_spread`, pick largest convex-hull area.
+  - `None`: manual — use `CFG.umap_min_dist` / `CFG.umap_spread` directly.
+- `CFG.param_grid_min_dist` (default `[0.1, 0.3, 0.5]`): values to sweep in `"convex_hull"` mode.
+- `CFG.param_grid_spread` (default `[1.0]`): values to sweep in `"convex_hull"` mode.
+
+Does NOT affect clustering — only UMAP coordinates in the checkpoint. Outputs: `umap_min_dist_sweep_summary.csv` (ranked by convex-hull area) and `umap_min_dist_comparison.png` (multi-panel comparison). Implementation in `rna/utils/cluster_evaluation.py` (`select_best_umap_params()`), invoked from the RNA and Spatial Step 04 scripts.
+
 ### RNA Pipeline Steps
 
 | Step | Script | Key Output |
@@ -137,7 +155,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 | 01 | `01_doublet.py` | 01_doublet.h5ad |
 | 02 | `02_qc.py` | 02_qc.h5ad |
 | 03 | `03_integrate.py` | 03_integrated.h5ad |
-| 04 | `04_cluster_umap.py` | 04_clustered.h5ad |
+| 04 | `04_cluster_umap.py` | 04_clustered.h5ad | 使用 `cluster_selection_method` 选择最优参数 |
 | 05 | `05_annotate_major.py` | 05_annotated.h5ad |
 | 06 | `06_subcluster.py` | (requires --cell-type) |
 | 07 | `07_markers_de.py` | marker CSVs |
@@ -145,6 +163,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 | 09 | `09_enrichment.py` | enrichment CSVs |
 | 10 | `10_exploratory.py` | summary figures + CSVs |
 | 11 | `11_grn.py` | 11_grn.h5ad + TF activity heatmap + TF target edge tables |
+| 12 | `12_cell_interaction.py` | CCI tables + figures (LIANA+ permutation) |
 
 ### ATAC Pipeline Steps
 
@@ -175,6 +194,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 | 07 | `07_trajectory.py` | 07_trajectory.h5ad |
 | 08 | `08_enrichment.py` | enrichment CSVs |
 | 09 | `09_exploratory.py` | spatial figures + CSVs |
+| 10 | `10_cell_interaction.py` | spatial CCI tables + figures (LIANA+ bivariate) |
 
 ### Import Path Hack
 

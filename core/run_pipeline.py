@@ -62,6 +62,7 @@ RNA_STEPS = [
     ("09", "09_enrichment.py",          "GO/KEGG enrichment + AI interpretation"),
     ("10", "10_exploratory.py",         "Exploratory analysis (composition/QC/marker)"),
     ("11", "11_grn.py",                 "GRN regulatory network analysis (decoupler) → 11_grn.h5ad"),
+    ("12", "12_cell_interaction.py",   "CCI cell-cell interaction (LIANA+) → tables + figures"),
 ]
 
 RNA_CHECKPOINT_FILES = [
@@ -77,6 +78,7 @@ RNA_CHECKPOINT_FILES = [
     "marker_genes_per_group.csv",# step 09 (reads CSV from tables/)
     "05_annotated.h5ad",         # step 10 (reads 05_annotated)
     "11_grn.h5ad",               # step 11
+    "05_annotated.h5ad",         # step 12 (reads 05_annotated)
 ]
 
 RNA_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5, 11}
@@ -128,6 +130,7 @@ SPATIAL_STEPS = [
     ("07", "07_trajectory.py",     "Pseudotime analysis -> 07_trajectory.h5ad"),
     ("08", "08_enrichment.py",     "GO/KEGG enrichment -> enrichment CSVs"),
     ("09", "09_exploratory.py",    "Spatial visualization -> figures + CSVs"),
+    ("10", "10_cell_interaction.py",  "CCI spatial cell-cell interaction (LIANA+) -> tables + figures"),
 ]
 
 SPATIAL_CHECKPOINT_FILES = [
@@ -141,6 +144,7 @@ SPATIAL_CHECKPOINT_FILES = [
     "05_annotated.h5ad",     # step 07
     "05_annotated.h5ad",     # step 08
     "05_annotated.h5ad",     # step 09
+    "05_annotated.h5ad",     # step 10
 ]
 
 SPATIAL_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5}
@@ -211,6 +215,7 @@ def _get_step_dependency(step: int, steps, checkpoints, modality: str = "rna") -
             7: checkpoints[5],   # trajectory reads annotated
             8: checkpoints[6],   # enrichment reads DE CSVs
             9: checkpoints[5],   # exploratory reads annotated
+            10: checkpoints[5],  # CCI reads 05_annotated
         }
         return deps.get(step, checkpoints[step - 1] if step > 0 else "")
     # RNA dependencies
@@ -223,6 +228,7 @@ def _get_step_dependency(step: int, steps, checkpoints, modality: str = "rna") -
         9: checkpoints[5],
         10: checkpoints[5],
         11: checkpoints[5],
+        12: checkpoints[5],   # CCI reads 05_annotated
     }
     return deps.get(step, checkpoints[step - 1] if step > 0 else "")
 

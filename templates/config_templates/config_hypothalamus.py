@@ -65,7 +65,14 @@ CFG.n_pcs_use = 50
 
 # ── 聚类 ──
 CFG.leiden_resolutions = [0.3, 0.5, 0.8]
-CFG.best_resolution = 0.8
+CFG.best_resolution = 0.8   # Only used when cluster_selection_method is None
+CFG.best_n_neighbors = 0     # Only used when cluster_selection_method is None; 0 = auto-pick
+CFG.cluster_selection_method = "pareto_elbow"  # "pareto_elbow" | "silhouette" | None
+# UMAP visualization parameter sweep — tried AFTER best cluster params selected.
+# Selection method:  "convex_hull" (auto, default) | None (manual: use umap_min_dist/spread)
+CFG.umap_selection_method = "convex_hull"
+CFG.param_grid_min_dist = [0.1, 0.3, 0.5]  # values to sweep
+CFG.param_grid_spread = [1.0]
 CFG.umap_min_dist = 0.3    # 增大（如0.5）可增强 UMAP 散点延展性
 CFG.umap_spread = 1.0
 
@@ -119,6 +126,17 @@ CFG.grn_species = "human"              # 'human' | 'mouse'
 CFG.grn_n_top_regulons = 50            # 热图显示的方差最高 TF 数量
 CFG.grn_min_regulon_size = 5           # 每个 regulon 最少靶基因数
 # CFG.grn_confidence_levels = ["A", "B", "C"]  # DoRothEA 置信度等级
+
+# ── CCI 细胞通讯分析 (取消注释以启用) ──
+CFG.run_cci = True
+# CFG.cci_method = "liana"                  # 'liana' (LIANA+ rank_aggregate)
+# CFG.cci_lr_database = "consensus"         # 'consensus' | 'cellphonedb' | 'cellchat' | 'celltalkdb' | 'ramilowski'
+# CFG.cci_permutations = 1000               # permutation 迭代次数
+# CFG.cci_n_top_interactions = 50           # 热图展示的 top 互作对数量
+# CFG.cci_spatial_method = "liana_spatial"  # spatial 方法 (reserves 'commot')
+# CFG.cci_spatial_distance = 0.0            # 0 = use existing spatial_connectivities
+# CFG.cci_lr_cache_dir = ""                 # LIANA cache 目录; 空 = auto (~/.cache/liana)
+# # CFG.cci_multi_condition = False         # future: multi-condition CCI
 
 # ── AI 设置 (取消注释以启用) ──
 # CFG.ai.enabled = True

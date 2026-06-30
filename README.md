@@ -10,9 +10,9 @@ Fuxi is a unified monorepo for single-cell multi-omics analysis, merging the pre
 
 | Modality | Engine | Steps | Status |
 |----------|--------|:-----:|:------:|
-| `rna` | Scanpy 1.10+ | 11 (00-11) | ✅ Production |
+| `rna` | Scanpy 1.10+ | 12 (00-12) | ✅ Production |
 | `atac` | Snapatac2 2.9 | 10 (00-09) | ✅ Production |
-| `spatial` | Squidpy 1.8+ | 10 (00-09) | ✅ Production |
+| `spatial` | Squidpy 1.8+ | 11 (00-10) | ✅ Production |
 
 ### Supported Input Formats
 
@@ -33,7 +33,7 @@ Fuxi is a unified monorepo for single-cell multi-omics analysis, merging the pre
 fuxi/
 ├── core/              # Shared infrastructure (utils, ai_caller, config, run_pipeline)
 │   └── preprocess/    #   Preprocessing pipeline (format detect → extract → config gen)
-├── rna/               # scRNA-seq module (12 steps, utils, tissue_ontologies)
+│   ├── rna/               # scRNA-seq module (13 steps, utils, tissue_ontologies)
 ├── atac/              # scATAC-seq module (steps)
 ├── spatial/           # Spatial transcriptomics module (steps)
 ├── projects/          # Dataset-specific configs, organized by modality
@@ -115,7 +115,14 @@ CFG.resolve_paths()
 | `core/ai_caller.py` | Unified LLM calls with retry, thinking mode, disk caching, model auto-discovery |
 | `core/ai_prompts.py` | RNA + ATAC annotation prompts, interpretation templates |
 | `core/config.py` | Merged Config dataclass with all RNA + ATAC fields |
-| `core/run_pipeline.py` | Unified CLI with `--modality rna\|atac\|spatial` dispatch, 12 RNA / 10 ATAC / 10 spatial steps |
+| `core/run_pipeline.py` | Unified CLI with `--modality rna\|atac\|spatial` dispatch, 13 RNA / 10 ATAC / 11 spatial steps |
 | `core/dataset_schema.py` | Python model for dataset.yaml |
 | `core/dataset_detector.py` | Auto-detect modality from file patterns |
 | `core/preprocess/` | Preprocessing pipeline: format detection, archive extraction, config generation |
+
+## Citation
+
+If you use Fuxi in your research, please cite:
+
+> Lun, M. **Fuxi: Unified Single-Cell Multi-Omics Pipeline** (2026).
+> GitHub: https://github.com/nanshanteahouse/Fuxi

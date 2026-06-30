@@ -13,3 +13,4 @@ harmony-pytorch>=0.1.8
 leidenalg>=0.10.0
 gseapy>=1.1.0
 decoupler>=1.4.0
+liana>=1.0.0

@@ -41,6 +41,10 @@ CFG.n_spectral = 30
 CFG.n_neighbors = 15
 CFG.param_grid_n_neighbors = [15, 20]
 CFG.param_grid_resolutions = [0.3, 0.8, 1.5]
+# UMAP sweep (only meaningful for RNA/Spatial; ATAC umap is unexposed)
+CFG.umap_selection_method = "convex_hull"
+CFG.param_grid_min_dist = [0.1, 0.3, 0.5]
+CFG.param_grid_spread = [1.0]
 CFG.umap_min_dist = 0.3    # ATAC 也使用 UMAP
 CFG.umap_spread = 1.0
 
@@ -63,6 +67,13 @@ CFG.peak_gene_distance = 50000
 # CFG.enrichment_min_size = 15
 # CFG.enrichment_max_size = 500
 # CFG.enrichment_permutations = 1000
+
+# ── CCI 细胞通讯分析 (ATAC 暂无对应步骤，占位) ──
+# CFG.run_cci = True
+# CFG.cci_method = "liana"                  # 'liana' (LIANA+ rank_aggregate)
+# CFG.cci_lr_database = "consensus"         # 'consensus' | 'cellphonedb' | 'cellchat' | 'celltalkdb' | 'ramilowski'
+# CFG.cci_permutations = 1000               # permutation 迭代次数
+# CFG.cci_n_top_interactions = 50           # 热图展示的 top 互作对数量
 
 # ── RNA 整合 ──
 # CFG.rna_h5ad = ''

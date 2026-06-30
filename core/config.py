@@ -211,8 +211,25 @@ class Config:
     param_grid_n_neighbors: list = field(default_factory=lambda: [15, 20, 30])
     param_grid_resolutions: list = field(default_factory=lambda: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
     leiden_flavor: str = "igraph"
-    best_resolution: float = 1.0
-    umap_min_dist: float = 0.3
+    best_resolution: float = 1.0   # Only used when cluster_selection_method is None
+    best_n_neighbors: int = 0       # Only used when cluster_selection_method is None; 0 = auto-pick best silhouette at the given resolution
+
+    # ── Cluster parameter selection (from grid search) ──
+    # "pareto_elbow": Pareto frontier + normalized elbow (default, recommended)
+    # "silhouette":   Max silhouette score (old auto-select behavior)
+    # None:           Manual — specify both best_resolution + best_n_neighbors
+    #                   (0 = auto-pick best silhouette at given resolution)
+    cluster_selection_method: str | None = "pareto_elbow"
+
+    # ── UMAP visualization parameter sweep ──
+    # After best (n_neighbors, resolution) is selected, optionally sweep
+    # min_dist × spread (same KNN graph — cheap).  Selection method:
+    #   "convex_hull"  — pick combination with largest convex-hull area (default)
+    #   None           — manual: use umap_min_dist / umap_spread directly
+    umap_selection_method: str | None = "convex_hull"
+    param_grid_min_dist: list | None = field(default_factory=lambda: [0.1, 0.3, 0.5])
+    param_grid_spread: list | None = field(default_factory=lambda: [1.0])
+    umap_min_dist: float = 0.3    # manual fallback
     umap_spread: float = 1.0
 
     # ═══════════════════════════════════════════════════════════════════
@@ -384,6 +401,19 @@ class Config:
     grn_confidence_levels: list = field(
         default_factory=lambda: ["A", "B", "C"]
     )
+
+    # ═══════════════════════════════════════════════════════════════════
+    #  CCI: Cell-cell interaction analysis (RNA Step 12 / Spatial Step 10)
+    # ═══════════════════════════════════════════════════════════════════
+    run_cci: bool = True
+    cci_method: str = "liana"              # 'liana' (LIANA+ rank_aggregate)
+    cci_lr_database: str = "consensus"     # 'consensus' | 'cellphonedb' | 'cellchat' | 'celltalkdb' | 'ramilowski' | 'talklr'
+    cci_permutations: int = 1000           # permutation test iterations
+    cci_n_top_interactions: int = 50       # top N interactions for heatmap / dotplot
+    cci_spatial_method: str = "liana_spatial"  # (spatial) 'liana_spatial' — reserves 'commot' for future
+    cci_spatial_distance: float = 0.0      # (spatial) 0 = use existing spatial_connectivities
+    cci_lr_cache_dir: str = ""             # LIANA cache dir; empty = auto (~/.cache/liana)
+    # cci_multi_condition: bool = False    # future: multi-condition differential CCI
 
     # ═══════════════════════════════════════════════════════════════════
     #  执行环境（通用）

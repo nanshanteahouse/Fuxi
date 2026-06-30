@@ -18,6 +18,7 @@ import numpy as np
 import snapatac2 as snap
 from sklearn.metrics import silhouette_score
 from joblib import Parallel, delayed
+from rna.utils.cluster_evaluation import select_best_params
 
 
 def _evaluate_n_neighbor_atac(data, n, resolutions, CFG, log):
@@ -131,18 +132,27 @@ def main():
         sys.exit(1)
 
     # ── Keep only the best combination in obsm/obs (reduces saved file size) ──
-    best_res = getattr(CFG, 'best_resolution', None)
-    if best_res is not None and any(r['resolution'] == best_res for r in results_summary):
-        candidates = [r for r in results_summary if r['resolution'] == best_res]
-        best = max(candidates, key=lambda r: r['silhouette_score'] or 0)
-        log.info("Using configured resolution=%.1f", best_res)
-    else:
-        best = max(results_summary, key=lambda r: r['silhouette_score'] or 0)
-        log.info("Auto-selected: n=%d r=%.1f (sil=%.4f)",
-                 best['n_neighbors'], best['resolution'], best['silhouette_score'] or 0)
+    method = getattr(CFG, 'cluster_selection_method', 'pareto_elbow')
 
-    best_key = f"leiden_{best['n_neighbors']}_{best['resolution']}"
-    best_umap_key = f"X_umap_{best['n_neighbors']}"
+    if method is not None and (getattr(CFG, 'best_resolution', 1.0) != 1.0 or getattr(CFG, 'best_n_neighbors', 0) != 0):
+        log.warning(
+            "best_resolution=%.1f / best_n_neighbors=%d are set but cluster_selection_method=%r will ignore them. "
+            "Set cluster_selection_method=None to use manual mode.",
+            CFG.best_resolution, getattr(CFG, 'best_n_neighbors', 0), method,
+        )
+
+    best_n, best_r, method_name, reason = select_best_params(
+        results_summary,
+        method=method,
+        best_resolution=CFG.best_resolution if method is None else None,
+        best_n_neighbors=getattr(CFG, 'best_n_neighbors', 0) if method is None else 0,
+    )
+
+    log.info("Selected best params via %s: n_neighbors=%d, resolution=%.1f (%s)",
+             method_name, best_n, best_r, reason)
+
+    best_key = f"leiden_{best_n}_{best_r}"
+    best_umap_key = f"X_umap_{best_n}"
     if best_key in data.obs:
         data.obs['leiden'] = data.obs[best_key]
         # Set X_umap from the stored per-n copy
@@ -157,7 +167,12 @@ def main():
             if key.startswith('X_umap_') and key != 'X_umap':
                 del data.obsm[key]
         # Keep only the best UMAP in obsm
-        data.uns['cluster_params'] = best
+        data.uns['cluster_params'] = {
+            'n_neighbors': best_n,
+            'resolution': best_r,
+            'method': method_name,
+            'reason': reason,
+        }
 
     safe_write(data, CFG.clustered_h5ad, cfg=CFG, compression_override=None)
     log.info("Step 03 complete, took %.1fs", time.time() - t0)

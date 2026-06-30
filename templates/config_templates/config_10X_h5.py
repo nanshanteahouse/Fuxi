@@ -85,7 +85,14 @@ CFG.n_pcs_use = 50
 
 # ── 聚类 ──
 CFG.leiden_resolutions = [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
-CFG.best_resolution = 1.0
+CFG.best_resolution = 1.0   # Only used when cluster_selection_method is None
+CFG.best_n_neighbors = 0     # Only used when cluster_selection_method is None; 0 = auto-pick
+CFG.cluster_selection_method = "pareto_elbow"  # "pareto_elbow" | "silhouette" | None
+# UMAP visualization parameter sweep — tried AFTER best cluster params selected.
+# Selection method:  "convex_hull" (auto, default) | None (manual: use umap_min_dist/spread)
+CFG.umap_selection_method = "convex_hull"
+CFG.param_grid_min_dist = [0.1, 0.3, 0.5]  # values to sweep
+CFG.param_grid_spread = [1.0]
 CFG.umap_min_dist = 0.3    # 增大（如0.5）可增强 UMAP 散点延展性
 CFG.umap_spread = 1.0
 
@@ -137,6 +144,17 @@ CFG.grn_species = "human"              # 'human' | 'mouse'
 CFG.grn_n_top_regulons = 50            # top N variable TFs for heatmap
 CFG.grn_min_regulon_size = 5           # minimum target genes per regulon
 # CFG.grn_confidence_levels = ["A", "B", "C"]  # DoRothEA confidence levels
+
+# ── CCI cell-cell interaction analysis (uncomment to enable) ──
+CFG.run_cci = True
+# CFG.cci_method = "liana"                  # 'liana' (LIANA+ rank_aggregate)
+# CFG.cci_lr_database = "consensus"         # 'consensus' | 'cellphonedb' | 'cellchat' | 'celltalkdb' | 'ramilowski'
+# CFG.cci_permutations = 1000               # permutation test iterations
+# CFG.cci_n_top_interactions = 50           # top N interactions for heatmap
+# CFG.cci_spatial_method = "liana_spatial"  # spatial method (reserves 'commot')
+# CFG.cci_spatial_distance = 0.0            # 0 = use existing spatial_connectivities
+# CFG.cci_lr_cache_dir = ""                 # LIANA cache dir; empty = auto (~/.cache/liana)
+# # CFG.cci_multi_condition = False         # future: multi-condition CCI
 
 # ── AI 设置 (取消注释以启用) ──
 # CFG.ai.enabled = True

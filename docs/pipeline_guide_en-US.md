@@ -251,7 +251,7 @@ Performs a **multi-parameter grid search** to automatically find the optimal clu
 
 - Iterates over multiple `n_neighbors` values (default [15, 20, 30]) and Leiden resolutions (default [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
 - Computes UMAP and Leiden clustering for each combination
-- Uses **Silhouette score** as the objective metric to auto-select the best parameters
+- Uses **Pareto elbow algorithm** (Pareto frontier + normalized elbow detection) as the objective metric to auto-select the best parameters — balancing cluster count against silhouette score
 - Generates UMAP comparison plots (PDF) for all parameter combinations and a grid search summary table (CSV)
 
 > 💡 This step is computationally heavy because it tries 3×6=18 parameter combinations. But it's worth it — you never need to manually iterate on parameters.
@@ -403,6 +403,53 @@ CFG.grn_confidence_levels = ["A","B","C"]  # DoRothEA confidence levels (if usin
 
 > 💡 **No external database downloads required.** decoupler fetches regulon networks online on first use and caches them locally. CollecTRI (default) covers more TFs than DoRothEA and is the recommended network.
 
+### Step 12: Cell-Cell Interaction analysis (LIANA+)
+
+**Input**: `05_annotated.h5ad` | **Output**: CSV tables + heatmap/dotplot
+
+Ligand-receptor (LR) based cell-cell communication inference using permutation testing:
+
+1. **Consensus scoring**: `liana.mt.rank_aggregate` integrates 9 scoring methods (CellPhoneDB, CellChat, NATMI, etc.) via Robust Rank Aggregation (RRA) to produce a consensus interaction ranking
+2. **Output**:
+   - `tables/12_cell_interaction/cci_interactions.csv` — full LR interaction scores (source, target, ligand, receptor, magnitude_rank, etc.)
+   - `tables/12_cell_interaction/cci_top_interactions.csv` — top N significant pairs sorted by magnitude_rank
+   - `figures/12_cell_interaction/cci_heatmap.png` — source→target cell-type interaction count heatmap
+   - `figures/12_cell_interaction/cci_dotplot.png` — top LR pair dotplot
+
+**Config fields:**
+
+```python
+CFG.run_cci = True                 # Enable/disable this step
+CFG.cci_lr_database = "consensus"   # LR database: 'consensus' | 'cellphonedb' | 'cellchat' | ...
+CFG.cci_permutations = 1000         # Permutation test iterations
+CFG.cci_n_top_interactions = 50     # Top N interactions for output
+# CFG.cci_spatial_method = "liana_spatial"  # (spatial) reserves 'commot'
+# CFG.cci_multi_condition = False           # future: multi-condition differential CCI
+```
+
+> 💡 **The LR database (~200 MB) is auto-downloaded to ~/.cache/liana on first run and cached.** If var_names are Ensembl IDs, the pipeline automatically converts them to gene symbols via mygene.
+
+---
+
+### Spatial transcriptomics CCI (Spatial Step 10)
+
+The spatial pipeline additionally provides **spatially-constrained LR co-expression analysis** (`liana.mt.bivariate`) in Step 10:
+
+- **Local metric**: Spatially-weighted cosine similarity — detects whether ligand and receptor genes are co-expressed in neighboring spots
+- **Global metric**: Moran's R with permutation p-values — evaluates the spatial autocorrelation significance of each LR pair
+- **Output**:
+  - `tables/10_cell_interaction/cci_spatial_interactions.csv`
+  - `tables/10_cell_interaction/cci_spatial_top.csv`
+  - `figures/10_cell_interaction/cci_spatial_heatmap.png` — ligand×receptor heatmap (Moran's R)
+  - `figures/10_cell_interaction/cci_spatial_dotplot.png` — top LR pair bar chart
+
+**Spatial-specific config fields:**
+
+```python
+CFG.cci_spatial_method = "liana_spatial"  # Method (reserves 'commot')
+CFG.cci_spatial_distance = 0.0            # Spatial distance threshold (0 = use existing spatial_connectivities)
+```
+
 ---
 
 ## 5. scATAC-seq pipeline in detail
@@ -449,7 +496,7 @@ Supports three formats:
 
 **Input**: `02_processed.h5ad` | **Output**: `03_clustered.h5ad`
 
-Same multi-parameter grid search strategy as the RNA pipeline (iterating `n_neighbors` × `resolution`), with Silhouette score-based auto-selection in spectral embedding space.
+Same multi-parameter grid search strategy as the RNA pipeline (iterating `n_neighbors` × `resolution`), with Pareto elbow-based auto-selection in spectral embedding space.
 
 ### Step 04: AI chromatin state annotation
 
@@ -689,6 +736,7 @@ results/
 │   │   └── harmony_comparison.png
 │   ├── 04_cluster/                # Clustering + UMAP
 │   │   ├── umap_param_grid_summary.png
+│   │   ├── umap_min_dist_comparison.png   # min_dist sweep comparison
 │   │   ├── umap_grid_n*_r*.png
 │   │   └── umap_leiden_n*_all_resolutions.pdf
 │   ├── 05_annotation/             # Cell annotation
@@ -917,7 +965,16 @@ CFG.use_regress_out = False         # Whether to regress out total_counts and MT
 ```python
 CFG.n_neighbors_grid = [15, 20, 30]              # UMAP neighbor count candidates
 CFG.resolution_grid = [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]  # Leiden resolution candidates
-CFG.best_resolution = None                        # Set to a specific value to skip grid search
+CFG.best_resolution = None                        # Set to a specific value in manual mode
+CFG.best_n_neighbors = 0                           # Set to a specific value in manual mode (0 = auto)
+CFG.cluster_selection_method = "pareto_elbow"          # "pareto_elbow" (default) | "silhouette" | None
+
+# UMAP visualization sweep — runs AFTER best cluster params selected; reuses KNN graph (fast)
+CFG.umap_selection_method = "convex_hull"            # "convex_hull" (auto, default) | None (manual)
+CFG.param_grid_min_dist = [0.1, 0.3, 0.5]            # min_dist sweep values
+CFG.param_grid_spread = [1.0]                        # spread sweep values
+CFG.umap_min_dist = 0.3                              # fixed value in manual mode
+CFG.umap_spread = 1.0
 ```
 
 ### 8.7 Species & genome
