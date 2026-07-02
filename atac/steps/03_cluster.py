@@ -13,67 +13,102 @@ Output: 03_clustered.h5ad
 
 import sys, os, time, argparse
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
-from core.utils import setup_logger, resolve_config, safe_write, validate_adata
+from core.utils import setup_logger, resolve_config, safe_write
+from core.clustering import grid_search_clustering, select_best_params
 import numpy as np
 import snapatac2 as snap
 from sklearn.metrics import silhouette_score
 from joblib import Parallel, delayed
-from rna.utils.cluster_evaluation import select_best_params
+
+
+# ---------------------------------------------------------------------------
+#  ATAC-specific callables for the shared grid_search_clustering interface
+# ---------------------------------------------------------------------------
+
+
+def _atac_clusterer(adata, resolution=None, n_neighbors=None, random_seed=42, **kwargs):
+    """Run snapatac2 leiden and return the observation column key.
+
+    The key is constructed from n_neighbors and resolution so each
+    combination gets a unique column (e.g. ``leiden_15_0.5``).
+    """
+    key = f'leiden_{n_neighbors}_{resolution}'
+    snap.tl.leiden(adata, resolution=resolution, key_added=key, random_state=random_seed)
+    return key
+
+
+def _atac_neighbor_fn(adata, n_neighbors=None, **kwargs):
+    """Compute the KNN graph with snapatac2."""
+    snap.pp.knn(adata, n_neighbors=n_neighbors)
+
+
+def _atac_umap_fn(adata, random_seed=42, **kwargs):
+    """Compute the UMAP embedding with snapatac2."""
+    snap.tl.umap(adata, random_state=random_seed)
+
+
+def _atac_evaluation_fn(adata, cluster_key, random_seed=42, **kwargs):
+    """Silhouette score on the spectral embedding (sampled for large datasets)."""
+    X_spec = adata.obsm['X_spectral']
+    n_use = min(30, X_spec.shape[1])
+    if adata.n_obs > 10000:
+        rng = np.random.RandomState(random_seed)
+        idx = rng.choice(adata.n_obs, 10000, replace=False)
+        return float(silhouette_score(X_spec[idx, :n_use], adata.obs[cluster_key].values[idx]))
+    return float(silhouette_score(X_spec[:, :n_use], adata.obs[cluster_key].values))
 
 
 def _evaluate_n_neighbor_atac(data, n, resolutions, CFG, log):
     """Worker for parallel grid search (ATAC): evaluate one n_neighbors value.
 
-    Runs KNN → UMAP → serial Leiden over all resolutions on a copy.
+    Delegates the inner grid (KNN → resolutions × Leiden + silhouette) to the
+    shared ``grid_search_clustering`` on an in-memory copy of the data.
+
     Returns (n, results_summary_rows, umap_coords, leiden_cols_dict)
     or None on failure.
     """
     local = data.copy()
     try:
-        snap.pp.knn(local, n_neighbors=n)
+        results = grid_search_clustering(
+            local,
+            param_grid={'n_neighbors': [n], 'resolution': list(resolutions)},
+            clusterer=_atac_clusterer,
+            neighbor_fn=_atac_neighbor_fn,
+            umap_fn=_atac_umap_fn,
+            evaluation_fn=_atac_evaluation_fn,
+            group_key='n_neighbors',
+            random_seed=CFG.random_seed,
+        )
     except Exception as e:
-        log.error("KNN failed (n_neighbors=%d): %s", n, e)
+        log.error("Grid search failed (n_neighbors=%d): %s", n, e)
         return None
 
-    try:
-        snap.tl.umap(local, random_state=CFG.random_seed)
-        umap_coords = local.obsm['X_umap'].copy()
-    except Exception as e:
-        log.warning("UMAP failed for n=%d, skipping", n)
+    if not results:
         return None
 
-    X_spec = local.obsm['X_spectral']
-    n_use = min(30, X_spec.shape[1])
-    summary_rows = []
+    # Extract UMAP coordinates from the copy
+    umap_coords = local.obsm.get('X_umap').copy() if 'X_umap' in local.obsm else None
+
+    # Extract leiden labels from the copy before it goes out of scope
     leiden_cols = {}
+    for r in results:
+        ck = r.get('cluster_key')
+        if ck and ck in local.obs:
+            leiden_cols[ck] = local.obs[ck].values.copy()
 
-    for res in resolutions:
-        key = f'leiden_{n}_{res}'
-        try:
-            snap.tl.leiden(local, resolution=res, key_added=key,
-                           random_state=CFG.random_seed)
-            n_cl = int(local.obs[key].nunique())
-            sil = None
-            try:
-                if local.n_obs > 10000:
-                    rng = np.random.RandomState(CFG.random_seed)
-                    idx = rng.choice(local.n_obs, 10000, replace=False)
-                    sil = float(silhouette_score(X_spec[idx, :n_use],
-                                                 local.obs[key].values[idx]))
-                else:
-                    sil = float(silhouette_score(X_spec[:, :n_use],
-                                                 local.obs[key].values))
-            except Exception:
-                pass
-            sil_str = f", sil={sil:.4f}" if sil is not None else ""
-            log.info("  n=%d r=%.1f -> %d clusters%s", n, res, n_cl, sil_str)
-            summary_rows.append({
-                'n_neighbors': n, 'resolution': res,
-                'n_clusters': n_cl, 'silhouette_score': sil,
-            })
-            leiden_cols[key] = local.obs[key].values.copy()
-        except Exception as e:
-            log.warning("  Leiden failed (n=%d, r=%.1f): %s", n, res, e)
+    # Build summary rows in the format expected by select_best_params
+    summary_rows = []
+    for r in results:
+        sil = r.get('score')
+        sil_str = f", sil={sil:.4f}" if sil is not None else ""
+        log.info("  n=%d r=%.1f -> %d clusters%s",
+                 r['n_neighbors'], r['resolution'], r['n_clusters'], sil_str)
+        summary_rows.append({
+            'n_neighbors': r['n_neighbors'],
+            'resolution': r['resolution'],
+            'n_clusters': r['n_clusters'],
+            'silhouette_score': sil,
+        })
 
     return (n, summary_rows, umap_coords, leiden_cols)
 
@@ -123,7 +158,8 @@ def main():
         n, summary_rows, umap_coords, leiden_cols = r
         results_summary.extend(summary_rows)
         # Store UMAP coords per n_neighbors (overwrites for last, OK — kept only for grid summary)
-        data.obsm[f'X_umap_{n}'] = umap_coords
+        if umap_coords is not None:
+            data.obsm[f'X_umap_{n}'] = umap_coords
         for key, labels in leiden_cols.items():
             data.obs[key] = labels
 

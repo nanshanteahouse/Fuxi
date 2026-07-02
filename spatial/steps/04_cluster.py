@@ -18,7 +18,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.metrics import silhouette_score
-from rna.utils.cluster_evaluation import select_best_params, select_best_umap_params
+from core.clustering import grid_search_clustering, select_best_params
+from rna.utils.cluster_evaluation import select_best_umap_params
 
 
 def main():
@@ -61,81 +62,65 @@ def main():
     fig_dir = os.path.join(CFG.figure_dir, '04_cluster')
     os.makedirs(fig_dir, exist_ok=True)
 
-    results_summary = []
+    # ── Scanpy-specific callables for grid search ──
+    def _neighbors_fn(adata, n_neighbors=15, **kwargs):
+        sc.pp.neighbors(
+            adata, n_neighbors=n_neighbors,
+            n_pcs=CFG.n_pcs_use, use_rep=use_rep,
+            random_state=CFG.random_seed,
+        )
 
+    def _umap_fn(adata, **kwargs):
+        sc.tl.umap(adata, min_dist=0.3, spread=1.0,
+                   random_state=CFG.random_seed)
+
+    def _clusterer_fn(adata, resolution=1.0, n_neighbors=15, **kwargs):
+        leiden_key = f'leiden_{n_neighbors}_{resolution}'
+        umap_key = f'umap_{n_neighbors}_{resolution}'
+        sc.tl.leiden(
+            adata, resolution=resolution, key_added=leiden_key,
+            random_state=CFG.random_seed,
+            flavor=getattr(CFG, 'leiden_flavor', 'igraph'),
+        )
+        adata.obsm[umap_key] = adata.obsm['X_umap'].copy()
+        return leiden_key
+
+    def _evaluation_fn(adata, cluster_key, **kwargs):
+        labels = adata.obs[cluster_key].values
+        if adata.n_obs > 10000:
+            rng = np.random.RandomState(CFG.random_seed)
+            idx = rng.choice(adata.n_obs, 10000, replace=False)
+            return float(silhouette_score(
+                adata.obsm[use_rep][idx, :CFG.n_pcs_use],
+                labels[idx],
+            ))
+        else:
+            return float(silhouette_score(
+                adata.obsm[use_rep][:, :CFG.n_pcs_use],
+                labels,
+            ))
+
+    results_summary = grid_search_clustering(
+        adata,
+        param_grid={
+            'n_neighbors': n_neighbors_grid,
+            'resolution': resolutions_grid,
+        },
+        clusterer=_clusterer_fn,
+        neighbor_fn=_neighbors_fn,
+        umap_fn=_umap_fn,
+        evaluation_fn=_evaluation_fn,
+        group_key='n_neighbors',
+        random_seed=CFG.random_seed,
+    )
+
+    # Rename score → silhouette_score for select_best_params compatibility
+    for r in results_summary:
+        if 'score' in r:
+            r['silhouette_score'] = r.pop('score')
+
+    # ── Generate per-param UMAP plots ──
     for n in n_neighbors_grid:
-        # ── Neighbor graph ──
-        log.info("Computing neighbors (n_neighbors=%d)...", n)
-        try:
-            sc.pp.neighbors(
-                adata, n_neighbors=n,
-                n_pcs=CFG.n_pcs_use, use_rep=use_rep,
-                random_state=CFG.random_seed,
-            )
-        except Exception as e:
-            log.error("Neighbor computation failed (n_neighbors=%d): %s", n, e)
-            continue
-
-        # ── UMAP (once per n_neighbors) ──
-        log.info("  Computing UMAP...")
-        try:
-            sc.tl.umap(adata, min_dist=0.3, spread=1.0,
-                       random_state=CFG.random_seed)
-            umap_coords = adata.obsm['X_umap'].copy()
-        except Exception as e:
-            log.error("  UMAP failed: %s", e)
-            continue
-
-        # ── Leiden per resolution ──
-        log.info("  Running %d resolutions...", len(resolutions_grid))
-        for res in resolutions_grid:
-            umap_key = f'umap_{n}_{res}'
-            leiden_key = f'leiden_{n}_{res}'
-
-            adata.obsm[umap_key] = umap_coords
-
-            try:
-                sc.tl.leiden(
-                    adata, resolution=res, key_added=leiden_key,
-                    random_state=CFG.random_seed,
-                    flavor=getattr(CFG, 'leiden_flavor', 'igraph'),
-                )
-            except Exception as e:
-                log.error("  Leiden failed (n=%d, r=%.1f): %s", n, res, e)
-                continue
-
-            n_clusters = int(adata.obs[leiden_key].nunique())
-
-            # Silhouette score
-            sil_score = None
-            try:
-                labels = adata.obs[leiden_key].values
-                if adata.n_obs > 10000:
-                    rng = np.random.RandomState(CFG.random_seed)
-                    idx = rng.choice(adata.n_obs, 10000, replace=False)
-                    sil_score = float(silhouette_score(
-                        adata.obsm[use_rep][idx, :CFG.n_pcs_use],
-                        labels[idx],
-                    ))
-                else:
-                    sil_score = float(silhouette_score(
-                        adata.obsm[use_rep][:, :CFG.n_pcs_use],
-                        labels,
-                    ))
-            except Exception:
-                pass
-
-            score_str = f", silhouette={sil_score:.4f}" if sil_score is not None else ""
-            log.info("  n=%d, r=%.1f -> %d clusters%s", n, res, n_clusters, score_str)
-
-            results_summary.append({
-                'n_neighbors': n,
-                'resolution': res,
-                'n_clusters': n_clusters,
-                'silhouette_score': sil_score,
-            })
-
-        # ── Generate per-param UMAP plots ──
         for res in resolutions_grid:
             umap_key = f'umap_{n}_{res}'
             leiden_key = f'leiden_{n}_{res}'

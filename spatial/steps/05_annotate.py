@@ -243,7 +243,7 @@ def main():
     if CFG.tissue_kb:
         log.info("Unified KB mode — tissue_kb='%s'", CFG.tissue_kb)
         try:
-            from rna.steps import _run_unified_annotation as run_unified
+            from rna.annotation_engine import run_unified_annotation as run_unified
             annot_result = run_unified(adata, CFG, log)
         except Exception as e:
             log.warning("Unified KB annotation failed: %s", e)
