@@ -150,9 +150,6 @@ def main():
     # ── 自动选择最佳参数并生成最终 checkpoint ──
     df_summary = pd.DataFrame(results_summary)
 
-    if not results_summary:
-        log.critical("All neighbor/cluster computations failed — no parameter combination succeeded")
-        sys.exit(1)
 
     method = getattr(CFG, 'cluster_selection_method', 'pareto_elbow')
 
