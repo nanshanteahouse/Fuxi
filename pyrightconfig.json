@@ -1,0 +1,19 @@
+{
+  "include": [
+    "core",
+    "rna",
+    "atac",
+    "spatial",
+    "tests"
+  ],
+  "exclude": [
+    "projects",
+    "rna/data",
+    "rna/tissue_ontologies",
+    "**/__pycache__"
+  ],
+  "typeCheckingMode": "basic",
+  "reportMissingImports": "warning",
+  "reportMissingTypeStubs": "none",
+  "pythonVersion": "3.14"
+}

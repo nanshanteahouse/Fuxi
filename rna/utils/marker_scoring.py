@@ -178,7 +178,7 @@ def _looks_mapped_to_target(gene_names: List[str],
 # Common-name → scientific-name mappings used by _species_matches().
 # Extend this table as new species are added to the KB.
 # NOTE: scientific names MUST be kept in sync with rna/ortholog.py
-# (SPECIES_TO_REST_NAME / SPECIES_TO_DATASET).
+# (SPECIES_TO_CLASS).
 _SPECIES_SYNONYMS: Dict[str, str] = {
     "human": "Homo sapiens",
     "mouse": "Mus musculus",

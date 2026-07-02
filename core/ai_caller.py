@@ -83,7 +83,7 @@ def ai_query(system_prompt: str, user_prompt: str, cfg,
         os.makedirs(cache_dir, exist_ok=True)
         cache_key = hashlib.sha256(
             f"{cfg.model}:{system_prompt}:{user_prompt}".encode('utf-8')
-        ).hexdigest()[:16]
+        ).hexdigest()
         cache_path = os.path.join(cache_dir, f"{cache_key}.json")
         if os.path.exists(cache_path):
             try:
@@ -138,7 +138,19 @@ def ai_query(system_prompt: str, user_prompt: str, cfg,
 
         try:
             resp = client.chat.completions.create(**call_kwargs)
+        except openai.APIConnectionError:
+            if attempt < max_retries - 1:
+                wait = 2 ** attempt
+                print(f"[ai_caller] Connection error, retrying in {wait}s...", file=sys.stderr)
+                time.sleep(wait)
+            continue
         except openai.APIStatusError as e:
+            if e.status_code in (429, 503):
+                if attempt < max_retries - 1:
+                    wait = 2 ** attempt
+                    print(f"[ai_caller] HTTP {e.status_code}, retrying in {wait}s...", file=sys.stderr)
+                    time.sleep(wait)
+                continue
             if e.status_code in (404, 422):
                 models = _query_available_models(
                     api_base=cfg.api_base,
@@ -153,19 +165,11 @@ def ai_query(system_prompt: str, user_prompt: str, cfg,
             raise
         content = resp.choices[0].message.content
 
-        # ── JSON extraction (ATACseq compatibility) ──────────────────
-        if content is not None and content.strip() and expect_json:
-            content = content.strip()
-            if content.startswith("```"):
-                parts = content.split("```")
-                content = parts[1] if len(parts) > 1 else content
-                if content.startswith("json"):
-                    content = content[4:]
-                content = content.strip()
-            try:
-                json.loads(content)  # Validate
-            except json.JSONDecodeError:
-                pass  # Keep content as-is even if not valid JSON
+        # Check finish_reason: permanent errors should not be retried
+        finish_reason = getattr(resp.choices[0], 'finish_reason', None)
+        if finish_reason == 'content_filter':
+            log.warning("Content filtered (finish_reason=%s), not retrying", finish_reason)
+            break
 
         if content is not None and content.strip():
             # ── Write to cache on success ─────────────────────────────────

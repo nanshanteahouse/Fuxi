@@ -307,7 +307,6 @@ def main():
     spec = importlib.util.spec_from_file_location("pipeline_config", config_path)
     cfg_module = importlib.util.module_from_spec(spec)
     sys.modules["pipeline_config"] = cfg_module
-    sys.modules["config"] = cfg_module
     spec.loader.exec_module(cfg_module)
     CFG = cfg_module.CFG
     CFG.resolve_paths()

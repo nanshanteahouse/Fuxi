@@ -10,7 +10,8 @@ gene symbols via Ensembl 1:1 ortholog mapping.  This enables:
 2. Marker-dict cross-validation (KB uses human gene names)
 3. Cross-species KB scoring (marker overlap checks)
 
-Ortholog mappings are pre-downloaded via ``data/orthologs/fetch_all_orthologs.py``
+Ortholog mappings are pre-downloaded via ``data/orthologs/process_compara101.py``
+and ``data/orthologs/process_filtered.py``, cached as JSON files in ``data/orthologs/``.
 and cached as JSON files in ``data/orthologs/``.
 
 Usage::
@@ -39,43 +40,7 @@ logger = logging.getLogger(__name__)
 # ENS + 0-4 species prefix chars + G + 11 digits
 _ENSEMBL_PATTERN = re.compile(r'^ENS[A-Z]{0,4}G\d{11}$')
 
-# ── Species name → BioMart dataset (verified 2026-06-23) ───────────────
-SPECIES_TO_DATASET: Dict[str, str] = {
-    "cow":          "btaurus_gene_ensembl",
-    "ferret":       "mpfuro_gene_ensembl",
-    "lizard":       "acarolinensis_gene_ensembl",
-    "marmoset":     "cjacchus_gene_ensembl",
-    "opossum":      "mdomestica_gene_ensembl",
-    "peromyscus":   "pmbairdii_gene_ensembl",
-    "pig":          "sscrofa_gene_ensembl",
-    "rhabdomys":    None,  # not in Ensembl BioMart
-    "sheep":        "oaries_gene_ensembl",
-    "squirrel":     "itridecemlineatus_gene_ensembl",
-    "tree_shrew":   "tbelangeri_gene_ensembl",
-    "zebrafish":    "drerio_gene_ensembl",
-    "human":        "hsapiens_gene_ensembl",
-    "mouse":        "mmusculus_gene_ensembl",
-    "macaque":      "mfascicularis_gene_ensembl",
-}
 
-# ── Species name → Ensembl REST API species name ───────────────────────
-SPECIES_TO_REST_NAME: Dict[str, str] = {
-    "cow":          "bos_taurus",
-    "ferret":       "mustela_putorius_furo",
-    "lizard":       "anolis_sagrei",
-    "marmoset":     "callithrix_jacchus",
-    "opossum":      "monodelphis_domestica",
-    "peromyscus":   "peromyscus_maniculatus",
-    "pig":          "sus_scrofa",
-    "rhabdomys":    "rhabdomys_pumilio",
-    "sheep":        "ovis_aries",
-    "squirrel":     "ictidomys_tridecemlineatus",
-    "tree_shrew":   "tupaia_chinensis",
-    "zebrafish":    "danio_rerio",
-    "human":        "homo_sapiens",
-    "mouse":        "mus_musculus",
-    "macaque":      "macaca_fascicularis",
-}
 
 # ── Species name → taxonomic class (纲) ──────────────────────────────
 # Used by phylogenetic_weight() to penalise/reward cross-class matches.
@@ -95,7 +60,6 @@ SPECIES_TO_CLASS: Dict[str, str] = {
     "squirrel":     "Mammalia",
     "opossum":      "Mammalia",
     "peromyscus":   "Mammalia",
-    "rhabdomys":    "Mammalia",
     "lizard":       "Reptilia",
     "chicken":      "Aves",
     "frog":         "Amphibia",

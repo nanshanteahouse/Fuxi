@@ -261,9 +261,6 @@ def resolve_config(config_path: Optional[str] = None):
     spec = importlib.util.spec_from_file_location("pipeline_config", config_path)
     mod = importlib.util.module_from_spec(spec)
     sys.modules["pipeline_config"] = mod
-    # Also register as "config" for backward compatibility with scripts that do
-    # "from config import CFG" after calling resolve_config()
-    sys.modules["config"] = mod
     spec.loader.exec_module(mod)
 
     # Auto-detect project_dir from config file location if not explicitly set.

@@ -53,6 +53,12 @@ MODALITY_PATTERNS = [
     ('tpm.csv',                           ('bulk_RNA_seq', 'tpm_matrix')),
 ]
 
+_MODALITY_TO_KEY = {
+    'scRNA-seq': 'rna',
+    'scATAC-seq': 'atac',
+    'spatial_transcriptomics': 'spatial',
+    'bulk_RNA_seq': 'rna',
+}
 
 def detect_modality_from_files(file_list: list[str]) -> dict:
     """根据文件名列表推断组学类型。
@@ -134,6 +140,14 @@ def scan_directory(directory: str) -> dict:
         "unmatched_files": unmatched,
     }
 
+def _guess_modality(files):
+    for f in files:
+        fname = os.path.basename(f).lower()
+        for pat, (mod, _fmt) in MODALITY_PATTERNS:
+            if pat.lower() in fname:
+                return _MODALITY_TO_KEY.get(mod, "rna")
+    return "rna"
+
 
 def generate_skeleton(directory: str, geo_id: Optional[str] = None) -> str:
     """生成 dataset.yaml 骨架文本。
@@ -148,7 +162,7 @@ def generate_skeleton(directory: str, geo_id: Optional[str] = None) -> str:
     lines = [
         f"id: {geo_id}",
         f"title: \"\"",
-        f"species: homo_sapiens",
+        'species: ""',
         f"tissue: unknown",
         "",
         "modalities:",
@@ -166,8 +180,9 @@ def generate_skeleton(directory: str, geo_id: Optional[str] = None) -> str:
     for s in result["samples"]:
         lines.append(f"  - id: {s['id']}")
         lines.append(f"    label: \"\"")
+        modality = _guess_modality(s["files"])
         for f in s["files"]:
-            lines.append(f"    rna:")
+            lines.append(f"    {modality}:")
             lines.append(f"      - file: {f}")
             lines.append(f"        format: auto")
 
