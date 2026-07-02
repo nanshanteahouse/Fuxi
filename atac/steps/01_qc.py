@@ -10,10 +10,18 @@ Input:  00_raw.h5ad (fragment-level AnnData)
 Output: 01_filtered.h5ad (peak-by-cell matrix with qc flags)
 """
 
-import sys, os, time, argparse, tempfile
+import sys, os, time, argparse, tempfile, traceback
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 from core.utils import setup_logger, resolve_config, safe_write, validate_adata
 import snapatac2 as snap
+
+
+# Standard chromosome sets per species (autosomes + X + Y)
+CHROMOSOME_SETS = {
+    "human": {f'chr{i}' for i in range(1, 23)} | {'chrX', 'chrY'},
+    "mouse": {f'chr{i}' for i in range(1, 20)} | {'chrX', 'chrY'},
+    "rat": {f'chr{i}' for i in range(1, 21)} | {'chrX', 'chrY'},
+}
 
 
 def main():
@@ -55,7 +63,12 @@ def main():
         log.error("MACS3 returned empty peaks.")
         sys.exit(1)
     # Filter to standard chromosomes only (avoid alt/haplotype contigs)
-    standard_chroms = {f'chr{i}' for i in range(1, 23)} | {'chrX', 'chrY'}
+    species_lower = (CFG.species or '').strip().lower()
+    standard_chroms = CHROMOSOME_SETS.get(
+        species_lower,
+        # Default fallback: 22 autosomes + XY (human-like)
+        {f'chr{i}' for i in range(1, 23)} | {'chrX', 'chrY'}
+    )
     peaks = peaks.filter(pl.col('chrom').is_in(standard_chroms))
     if len(peaks) == 0:
         log.error("MACS3 returned no peaks on standard chromosomes.")
@@ -79,7 +92,9 @@ def main():
         log.info("  Doublets: %d (%.1f%%)", int(n_dbl),
                  100 * n_dbl / max(peak_data.n_obs, 1))
     except Exception as e:
-        log.warning("Scrublet failed (likely OOM), marking all cells as non-doublets: %s", e)
+        log.error("Scrublet failed: %s", e)
+        log.error("Traceback:\n%s", traceback.format_exc())
+        log.warning("Scrublet failed, marking all cells as non-doublets")
         peak_data.obs['predicted_doublet'] = False
 
     validate_adata(peak_data, stage_name="01_qc", logger=log)

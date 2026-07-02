@@ -21,6 +21,8 @@ import time
 import pandas as pd
 from typing import Optional
 
+MYGENE_CHUNK_SIZE: int = 1000
+
 
 def ensure_gene_symbols(adata, log: object = None, species: str = "human"):
     """Ensure AnnData var_names are gene symbols (not Ensembl IDs).
@@ -65,7 +67,7 @@ def ensure_gene_symbols(adata, log: object = None, species: str = "human"):
     # Batch query mygene.info in chunks of 1000
     ensembl_ids = adata.var_names[is_ensembl].tolist()
     results = {}
-    chunk_size = 1000
+    chunk_size = MYGENE_CHUNK_SIZE
     for i in range(0, len(ensembl_ids), chunk_size):
         chunk = ensembl_ids[i:i + chunk_size]
         try:

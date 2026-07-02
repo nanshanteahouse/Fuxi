@@ -148,18 +148,27 @@ def _select_pareto_elbow(valid):
     # Build (k, ss) array
     pts = np.array([(r['n_clusters'], r['silhouette_score']) for r in valid])
 
-    # -- Pareto frontier --
+    # -- Pareto frontier (O(n log n) sort+scan) --
     n = len(pts)
-    is_pareto = np.ones(n, dtype=bool)
+    # Sort by n_clusters asc, silhouette desc: for equal clusters the best silhouette comes first.
+    order = np.lexsort((-pts[:, 1], pts[:, 0]))
+    pts_sorted = pts[order]
+
+    is_pareto_sorted = np.zeros(n, dtype=bool)
+    best_s = -np.inf
+    best_k = -1
     for i in range(n):
-        for j in range(n):
-            if i == j:
-                continue
-            # j dominates i
-            if (pts[j, 0] <= pts[i, 0] and pts[j, 1] >= pts[i, 1]
-                    and (pts[j, 0] < pts[i, 0] or pts[j, 1] > pts[i, 1])):
-                is_pareto[i] = False
-                break
+        k, s = pts_sorted[i]
+        if s > best_s or (s == best_s and k == best_k):
+            # Not dominated: either better silhouette than any earlier point,
+            # or identical to an earlier Pareto point (no domination between equals)
+            is_pareto_sorted[i] = True
+            best_s = s
+            best_k = k
+
+    # Map Pareto flags back to original (unsorted) order
+    is_pareto = np.zeros(n, dtype=bool)
+    is_pareto[order] = is_pareto_sorted
 
     pareto_idx = np.where(is_pareto)[0]
     pareto_k = pts[pareto_idx, 0]

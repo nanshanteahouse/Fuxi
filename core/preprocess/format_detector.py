@@ -18,6 +18,7 @@ import os
 import re
 from collections import defaultdict
 from typing import Optional
+import statistics
 
 # ── Archive format patterns ─────────────────────────────────────────
 # Ordered so that compound extensions match before their components
@@ -751,6 +752,10 @@ def detect_expression_type(classification: dict, file_list: list[str],
                 if vals and all(v == int(v) for v in vals):
                     return 'raw_counts'
                 if vals and any(v < 1.0 and v > 0 for v in vals):
+                    # Distinguish CPM from TPM using median: CPM values tend
+                    # to have a higher central tendency than TPM values.
+                    if statistics.median(vals) > 1.0:
+                        return 'CPM'
                     return 'TPM'  # best guess for small positive floats
 
     # ── Fallback ──

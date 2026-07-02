@@ -207,7 +207,6 @@ def run_unified_annotation(adata, CFG, logger):
     _forced_unknown = 0
     for cl_str, reason in low_quality_clusters.items():
         if cl_str in decision_map and decision_map[cl_str].confidence != 'unknown':
-            old_ct = adata.obs['cell_type'].iloc[0] if cl_str == '0' else '—'
             decision_map[cl_str] = decision_map[cl_str]._replace(
                 cell_type='Unknown',
                 confidence='unknown',

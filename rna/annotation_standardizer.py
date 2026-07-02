@@ -20,6 +20,7 @@ import sys
 import os
 from typing import Any
 
+import logging
 # Add project root so imports (tissue_ontologies) resolve correctly
 # in both pip-installed and standalone usage.
 _script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -29,8 +30,11 @@ if _project_root not in sys.path:
 if _script_dir not in sys.path:
     sys.path.append(_script_dir)
 
+log = logging.getLogger(__name__)
+
 import scanpy as sc
 
+LEVENSHTEIN_THRESHOLD: float = 0.85
 
 class StandardOntology:
     """6-tier cell-type name standardizer backed by a tissue-specific
@@ -66,10 +70,16 @@ class StandardOntology:
 
     def __init__(self, tissue: str) -> None:
         if tissue not in self.SUPPORTED_TISSUES:
-            raise NotImplementedError(
-                f"Tissue '{tissue}' is not supported. "
-                f"Supported tissues: {self.SUPPORTED_TISSUES}"
+            log.warning(
+                f"Tissue '{tissue}' is not supported. Supported tissues: "
+                f"{self.SUPPORTED_TISSUES}. Using empty KB."
             )
+            self._synonyms = {}
+            self._kb = {}
+            self._tissue = tissue
+            self._syn_map = {}
+            self._canonical = {}
+            return
         self._tissue = tissue
         self._synonyms = self._load_synonyms(tissue)
         self._kb = self._load_kb(tissue)
@@ -300,13 +310,24 @@ class StandardOntology:
             return (key, self._canonical[key]["display_name"], "high")
 
         # Tier 4: contains match (synonym in name OR name in synonym, CI)
-        for key, info in self._canonical.items():
-            display_lower = info["display_name"].lower()
-            if name_lower in display_lower or display_lower in name_lower:
-                return (key, info["display_name"], "medium")
-        for synonym, keys in self._syn_map.items():
-            if name_lower in synonym or synonym in name_lower:
-                return (keys[0], self._canonical[keys[0]]["display_name"], "medium")
+        # Short names (<3 chars) skip substring matching to avoid false positives
+        tier4_candidates: list[tuple[str, str]] = []
+        if len(name_lower) >= 3:
+            for key, info in self._canonical.items():
+                display_lower = info["display_name"].lower()
+                if name_lower in display_lower or display_lower in name_lower:
+                    tier4_candidates.append((key, info["display_name"]))
+            for synonym, keys in self._syn_map.items():
+                if name_lower in synonym or synonym in name_lower:
+                    tier4_candidates.append((keys[0], self._canonical[keys[0]]["display_name"]))
+        if tier4_candidates:
+            if len(tier4_candidates) > 1:
+                log.warning(
+                    "Tier 4 substring match: %d candidates for '%s': %s",
+                    len(tier4_candidates), name, [c[1] for c in tier4_candidates],
+                )
+            key, display = tier4_candidates[0]
+            return (key, display, "medium")
 
         # Tier 5: Levenshtein ratio > 0.85
         best_score = 0.0
@@ -322,7 +343,7 @@ class StandardOntology:
             score = self._lev_similarity(name_lower, synonym)
             if score > best_score:
                 best_score, best_match = score, keys[0]
-        if best_score > 0.85 and best_match is not None:
+        if best_score > LEVENSHTEIN_THRESHOLD and best_match is not None:
             return (best_match, self._canonical[best_match]["display_name"], "medium")
 
         # Tier 6: fallback — return original name as-is

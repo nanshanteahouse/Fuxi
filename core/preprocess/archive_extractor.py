@@ -116,15 +116,6 @@ def _extract_dest_dir(archive_path: str) -> str:
     return os.path.join(parent, f'{stem}_extracted')
 
 
-# ── Path traversal protection ─────────────────────────────────────────
-
-def _is_safe_extraction(member_path: str, dest_dir: str) -> bool:
-    """Return True if *member_path* resolves inside *dest_dir*."""
-    dest_abs = os.path.abspath(dest_dir)
-    member_abs = os.path.abspath(os.path.join(dest_dir, member_path))
-    return os.path.commonpath([dest_abs, member_abs]) == dest_abs
-
-
 # ── Tar extraction ────────────────────────────────────────────────────
 
 def _extract_tar(archive_path: str, dest_dir: str, mode: str) -> int:

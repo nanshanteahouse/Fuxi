@@ -19,6 +19,7 @@ import numpy as np
 import snapatac2 as snap
 from sklearn.metrics import silhouette_score
 from joblib import Parallel, delayed
+from core.config import SILHOUETTE_SAMPLE_THRESHOLD
 
 
 # ---------------------------------------------------------------------------
@@ -51,9 +52,9 @@ def _atac_evaluation_fn(adata, cluster_key, random_seed=42, **kwargs):
     """Silhouette score on the spectral embedding (sampled for large datasets)."""
     X_spec = adata.obsm['X_spectral']
     n_use = min(30, X_spec.shape[1])
-    if adata.n_obs > 10000:
+    if adata.n_obs > SILHOUETTE_SAMPLE_THRESHOLD:
         rng = np.random.RandomState(random_seed)
-        idx = rng.choice(adata.n_obs, 10000, replace=False)
+        idx = rng.choice(adata.n_obs, SILHOUETTE_SAMPLE_THRESHOLD, replace=False)
         return float(silhouette_score(X_spec[idx, :n_use], adata.obs[cluster_key].values[idx]))
     return float(silhouette_score(X_spec[:, :n_use], adata.obs[cluster_key].values))
 

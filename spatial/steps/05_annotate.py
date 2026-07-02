@@ -88,96 +88,100 @@ def ai_annotate(adata, CFG):
 
     n_clusters = adata.obs['leiden'].nunique()
     suggested_max_tokens = min(max(4096, n_clusters * 300), 32768)
-    CFG.ai.max_tokens = max(getattr(CFG.ai, 'max_tokens', 4096), suggested_max_tokens)
-    log.info("Adaptive max_tokens: n_clusters=%d -> max_tokens=%d", n_clusters, suggested_max_tokens)
-
-    # Build marker CSV
-    marker_rows = []
-    for cl in sorted(adata.obs['leiden'].unique(), key=lambda x: int(x)):
-        df = sc.get.rank_genes_groups_df(adata, group=str(cl))
-        df['cluster'] = cl
-        marker_rows.append(df)
-    marker_df = pd.concat(marker_rows, ignore_index=True)
-    marker_csv = os.path.join(CFG.table_dir, 'marker_genes_ai.csv')
-    marker_df.to_csv(marker_csv, index=False)
-    log.info("Marker genes saved: %s", marker_csv)
-
-    # Build prompt
-    from core.ai_prompts import build_annotation_prompt
-    from core.ai_caller import ai_query
-
-    tissue = CFG.tissue
-    species = CFG.species
-    compact = n_clusters > 20
-
-    sys_prompt, user_prompt = build_annotation_prompt(
-        adata, tissue, species,
-        precomputed_rank=True,
-        extra_context=f"Spatial transcriptomics ({CFG.spatial_platform} platform)",
-        compact=compact,
-    )
-
-    # Call LLM
-    log.info("Calling LLM (model=%s)...", CFG.ai.model)
+    _saved_max_tokens = getattr(CFG.ai, 'max_tokens', 4096)
     try:
-        response = ai_query(sys_prompt, user_prompt, cfg=CFG.ai)
-    except Exception as exc:
-        log.warning("LLM query failed: %s", exc)
-        return None
+        CFG.ai.max_tokens = max(_saved_max_tokens, suggested_max_tokens)
+        log.info("Adaptive max_tokens: n_clusters=%d -> max_tokens=%d", n_clusters, suggested_max_tokens)
 
-    # Parse JSON
-    try:
-        annotations = json.loads(response)
-    except (json.JSONDecodeError, TypeError) as e:
-        log.warning("LLM response is not valid JSON (%s)", e)
-        return None
+        # Build marker CSV
+        marker_rows = []
+        for cl in sorted(adata.obs['leiden'].unique(), key=lambda x: int(x)):
+            df = sc.get.rank_genes_groups_df(adata, group=str(cl))
+            df['cluster'] = cl
+            marker_rows.append(df)
+        marker_df = pd.concat(marker_rows, ignore_index=True)
+        marker_csv = os.path.join(CFG.table_dir, 'marker_genes_ai.csv')
+        marker_df.to_csv(marker_csv, index=False)
+        log.info("Marker genes saved: %s", marker_csv)
 
-    # Validate
-    required_keys = {'cell_type', 'state', 'subtype', 'confidence', 'reasoning'}
-    for cid, ann in annotations.items():
-        if not isinstance(ann, dict):
-            return None
-        if required_keys - ann.keys():
-            log.warning("Cluster %s missing fields", cid)
+        # Build prompt
+        from core.ai_prompts import build_annotation_prompt
+        from core.ai_caller import ai_query
+
+        tissue = CFG.tissue
+        species = CFG.species
+        compact = n_clusters > 20
+
+        sys_prompt, user_prompt = build_annotation_prompt(
+            adata, tissue, species,
+            precomputed_rank=True,
+            extra_context=f"Spatial transcriptomics ({CFG.spatial_platform} platform)",
+            compact=compact,
+        )
+
+        # Call LLM
+        log.info("Calling LLM (model=%s)...", CFG.ai.model)
+        try:
+            response = ai_query(sys_prompt, user_prompt, cfg=CFG.ai)
+        except Exception as exc:
+            log.warning("LLM query failed: %s", exc)
             return None
 
-    log.info("LLM annotation: %d clusters parsed", len(annotations))
+        # Parse JSON
+        try:
+            annotations = json.loads(response)
+        except (json.JSONDecodeError, TypeError) as e:
+            log.warning("LLM response is not valid JSON (%s)", e)
+            return None
 
-    # Map to adata.obs
-    leiden_str = adata.obs['leiden'].astype(str)
-    adata.obs['cell_type'] = leiden_str.map(
-        {k: v['cell_type'] for k, v in annotations.items()}
-    ).astype('category')
-    adata.obs['cell_state'] = leiden_str.map(
-        {k: v['state'] for k, v in annotations.items()}
-    )
-    adata.obs['cell_subtype'] = leiden_str.map(
-        {k: v['subtype'] for k, v in annotations.items()}
-    )
-    adata.obs['annot_confidence'] = leiden_str.map(
-        {k: v['confidence'] for k, v in annotations.items()}
-    )
-    adata.obs['annot_reasoning'] = leiden_str.map(
-        {k: v['reasoning'] for k, v in annotations.items()}
-    )
+        # Validate
+        required_keys = {'cell_type', 'state', 'subtype', 'confidence', 'reasoning'}
+        for cid, ann in annotations.items():
+            if not isinstance(ann, dict):
+                return None
+            if required_keys - ann.keys():
+                log.warning("Cluster %s missing fields", cid)
+                return None
 
-    # Save annotation CSV
-    ann_records = []
-    for cid in sorted(annotations.keys(), key=lambda x: int(x)):
-        ann_records.append({
-            'cluster': cid,
-            'cell_type': annotations[cid]['cell_type'],
-            'subtype': annotations[cid]['subtype'],
-            'state': annotations[cid]['state'],
-            'confidence': annotations[cid]['confidence'],
-            'reasoning': annotations[cid]['reasoning'],
-        })
-    ann_df = pd.DataFrame(ann_records)
-    ann_csv = os.path.join(CFG.table_dir, 'cell_type_annotations.csv')
-    ann_df.to_csv(ann_csv, index=False)
-    log.info("Annotation table saved: %s", ann_csv)
+        log.info("LLM annotation: %d clusters parsed", len(annotations))
 
-    return annotations
+        # Map to adata.obs
+        leiden_str = adata.obs['leiden'].astype(str)
+        adata.obs['cell_type'] = leiden_str.map(
+            {k: v['cell_type'] for k, v in annotations.items()}
+        ).astype('category')
+        adata.obs['cell_state'] = leiden_str.map(
+            {k: v['state'] for k, v in annotations.items()}
+        )
+        adata.obs['cell_subtype'] = leiden_str.map(
+            {k: v['subtype'] for k, v in annotations.items()}
+        )
+        adata.obs['annot_confidence'] = leiden_str.map(
+            {k: v['confidence'] for k, v in annotations.items()}
+        )
+        adata.obs['annot_reasoning'] = leiden_str.map(
+            {k: v['reasoning'] for k, v in annotations.items()}
+        )
+
+        # Save annotation CSV
+        ann_records = []
+        for cid in sorted(annotations.keys(), key=lambda x: int(x)):
+            ann_records.append({
+                'cluster': cid,
+                'cell_type': annotations[cid]['cell_type'],
+                'subtype': annotations[cid]['subtype'],
+                'state': annotations[cid]['state'],
+                'confidence': annotations[cid]['confidence'],
+                'reasoning': annotations[cid]['reasoning'],
+            })
+        ann_df = pd.DataFrame(ann_records)
+        ann_csv = os.path.join(CFG.table_dir, 'cell_type_annotations.csv')
+        ann_df.to_csv(ann_csv, index=False)
+        log.info("Annotation table saved: %s", ann_csv)
+
+        return annotations
+    finally:
+        CFG.ai.max_tokens = _saved_max_tokens
 
 
 def main():
@@ -205,58 +209,62 @@ def main():
     # and merge them into CFG.marker_dict.  This enriches the score_genes
     # fallback without changing KB or AI mode behaviour.  User-configured
     # marker_dict entries take priority over auto-derived ones.
-    if getattr(CFG, 'rna_ref', ''):
-        from core.utils import find_rna_marker_csv, load_scRNA_markers
-        csv_path = find_rna_marker_csv(cfg=CFG, log=log)
-        if csv_path and os.path.exists(csv_path):
-            log.info("scRNA marker transfer: loading from %s", csv_path)
+    _saved_marker_dict = CFG.marker_dict
+    try:
+        if getattr(CFG, 'rna_ref', ''):
+            from core.utils import find_rna_marker_csv, load_scRNA_markers
+            csv_path = find_rna_marker_csv(cfg=CFG, log=log)
+            if csv_path and os.path.exists(csv_path):
+                log.info("scRNA marker transfer: loading from %s", csv_path)
+                try:
+                    scrna_markers = load_scRNA_markers(
+                        csv_path,
+                        top_n=getattr(CFG, 'rna_marker_top_n', 10),
+                        pval_threshold=getattr(CFG, 'rna_marker_pval_threshold', 0.05),
+                        logfc_min=getattr(CFG, 'rna_marker_logfc_min', 0.0),
+                        log=log,
+                    )
+                    # Merge: scRNA markers as base, user markers override
+                    merged = dict(scrna_markers)
+                    merged.update(CFG.marker_dict)
+                    log.info(
+                        "scRNA marker transfer: loaded %d cell types, "
+                        "merged with %d user-configured types -> %d total",
+                        len(scrna_markers), len(CFG.marker_dict), len(merged),
+                    )
+                    CFG.marker_dict = merged
+                except Exception as e:
+                    log.warning("scRNA marker transfer failed: %s - continuing", e)
+            else:
+                log.info("scRNA marker transfer: no marker CSV found for rna_ref='%s'",
+                         CFG.rna_ref)
+
+        # ── Three annotation modes ──────────────────────────────────────────
+        ai_enabled = getattr(CFG.ai, 'enabled', False)
+        ai_annot_on = getattr(CFG.ai, 'ai_annotation', False)
+
+        annot_result = None
+
+        # Mode 1: Unified KB mode (if tissue_kb is set)
+        if CFG.tissue_kb:
+            log.info("Unified KB mode - tissue_kb='%s'", CFG.tissue_kb)
             try:
-                scrna_markers = load_scRNA_markers(
-                    csv_path,
-                    top_n=getattr(CFG, 'rna_marker_top_n', 10),
-                    pval_threshold=getattr(CFG, 'rna_marker_pval_threshold', 0.05),
-                    logfc_min=getattr(CFG, 'rna_marker_logfc_min', 0.0),
-                    log=log,
-                )
-                # Merge: scRNA markers as base, user markers override
-                merged = dict(scrna_markers)
-                merged.update(CFG.marker_dict)
-                log.info(
-                    "scRNA marker transfer: loaded %d cell types, "
-                    "merged with %d user-configured types → %d total",
-                    len(scrna_markers), len(CFG.marker_dict), len(merged),
-                )
-                CFG.marker_dict = merged
+                from rna.annotation_engine import run_unified_annotation as run_unified
+                annot_result = run_unified(adata, CFG, log)
             except Exception as e:
-                log.warning("scRNA marker transfer failed: %s — continuing", e)
-        else:
-            log.info("scRNA marker transfer: no marker CSV found for rna_ref='%s'",
-                     CFG.rna_ref)
+                log.warning("Unified KB annotation failed: %s", e)
 
-    # ── Three annotation modes ──────────────────────────────────────────
-    ai_enabled = getattr(CFG.ai, 'enabled', False)
-    ai_annot_on = getattr(CFG.ai, 'ai_annotation', False)
+        # Mode 2: AI mode
+        elif ai_enabled and ai_annot_on:
+            log.info("AI mode - LLM-based annotation")
+            annot_result = ai_annotate(adata, CFG)
 
-    annot_result = None
-
-    # Mode 1: Unified KB mode (if tissue_kb is set)
-    if CFG.tissue_kb:
-        log.info("Unified KB mode — tissue_kb='%s'", CFG.tissue_kb)
-        try:
-            from rna.annotation_engine import run_unified_annotation as run_unified
-            annot_result = run_unified(adata, CFG, log)
-        except Exception as e:
-            log.warning("Unified KB annotation failed: %s", e)
-
-    # Mode 2: AI mode
-    elif ai_enabled and ai_annot_on:
-        log.info("AI mode — LLM-based annotation")
-        annot_result = ai_annotate(adata, CFG)
-
-    # Mode 3: Score_genes fallback
-    if annot_result is None:
-        log.info("Falling back to score_genes mode")
-        score_genes_mode(adata, CFG)
+        # Mode 3: Score_genes fallback
+        if annot_result is None:
+            log.info("Falling back to score_genes mode")
+            score_genes_mode(adata, CFG)
+    finally:
+        CFG.marker_dict = _saved_marker_dict
 
     # ── Spatial-aware UMAP visualization ──
     sc.settings.figdir = os.path.join(CFG.figure_dir, '05_annotation')

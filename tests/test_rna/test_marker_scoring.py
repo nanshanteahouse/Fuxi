@@ -132,3 +132,151 @@ class TestScoreClusterAgainstKB:
         assert sc.method == "none"
         assert sc.n_markers_found == 0
         assert not sc.negative_penalty
+
+
+class TestPhylogeneticWeighting:
+    """Phylogenetic weight integration via score_cluster_against_kb.
+
+    Verifies that ``target_class`` / ``target_order`` parameters produce
+    the correct multiplicative weight on the final score.
+
+    KB entries include taxonomic fields (class/order/classes) so the
+    phylogenetic weighting code path is exercised.
+    """
+
+    # Each cell type has **unique** markers (no cross-overlap),
+    # which makes the Fisher p-values easy to reason about.
+    # Extra markers outside the top-20 ensure a non-degenerate
+    # background (d > 0).
+    KB_WITH_TAXONOMY = {
+        "Mammal_Cell": {
+            "positive": ["M1", "M2", "M3", "M4", "M5"]
+                     + [f"Mm_extra_{i}" for i in range(10)],
+            "negative": [],
+            "species": ["human"],
+            "synonyms": [],
+            "parent": "Lymphocyte",
+            "marker_weights": {},
+            "consensus_levels": {},
+            "class": "Mammalia",
+            "order": "Primates",
+            "classes": ["Mammalia"],
+            "orders": ["Primates"],
+        },
+        "Bird_Cell": {
+            "positive": ["B1", "B2", "B3"]
+                     + [f"Bb_extra_{i}" for i in range(10)],
+            "negative": [],
+            "species": ["chicken"],
+            "synonyms": [],
+            "parent": "Lymphocyte",
+            "marker_weights": {},
+            "consensus_levels": {},
+            "class": "Aves",
+            "order": "Galliformes",
+            "classes": ["Aves"],
+            "orders": ["Galliformes"],
+        },
+    }
+
+    MARKER_DF = pd.DataFrame({
+        "names": ["M1", "M2", "M3", "M4", "M5", "B1", "B2", "B3"]
+                 + [f"X{i}" for i in range(12)],
+        "logfoldchanges": [3.0 - i * 0.1 for i in range(20)],
+        "pvals_adj": [1e-10] * 20,
+    })
+
+    def _unweighted_score(self, scores: dict) -> float:
+        """Return the raw score from a result dict without phylogenetic weight."""
+        raw = score_cluster_against_kb(
+            self.KB_WITH_TAXONOMY, self.MARKER_DF,
+        )
+        return raw[sorted(raw.keys())[0]].score
+
+    def test_same_class_weight(self) -> None:
+        """Same class (Mammalia -> Mammalia) → phylogenetic weight = 1.0.
+
+        The weighted score should equal the unweighted score.
+        """
+        unweighted = score_cluster_against_kb(
+            self.KB_WITH_TAXONOMY, self.MARKER_DF,
+        )["Mammal_Cell"].score
+        weighted = score_cluster_against_kb(
+            self.KB_WITH_TAXONOMY, self.MARKER_DF,
+            target_class="Mammalia",
+        )["Mammal_Cell"].score
+        assert weighted == pytest.approx(unweighted, rel=1e-6), (
+            f"Same-class weight {weighted} != unweighted {unweighted}"
+        )
+
+    def test_same_class_same_order_weight(self) -> None:
+        """Same class + same order (Primates -> Primates) → weight = 1.0.
+
+        Matching Mammalia + Primates gets the full unweighted score.
+        """
+        unweighted = score_cluster_against_kb(
+            self.KB_WITH_TAXONOMY, self.MARKER_DF,
+        )["Mammal_Cell"].score
+        weighted = score_cluster_against_kb(
+            self.KB_WITH_TAXONOMY, self.MARKER_DF,
+            target_class="Mammalia",
+            target_order="Primates",
+        )["Mammal_Cell"].score
+        assert weighted == pytest.approx(unweighted, rel=1e-6), (
+            f"Same-class+order weight {weighted} != unweighted {unweighted}"
+        )
+
+    def test_cross_class_weight_bird_to_mammal(self) -> None:
+        """Cross-class (Aves -> Mammalia) → weight < 1.0.
+
+        Bird_Cell (class Aves) scored against Mammalia target should
+        receive a phylogenetic penalty (weight = 0.6 for single-class
+        source in a different class).
+        """
+        unweighted = score_cluster_against_kb(
+            self.KB_WITH_TAXONOMY, self.MARKER_DF,
+        )["Bird_Cell"].score
+        weighted = score_cluster_against_kb(
+            self.KB_WITH_TAXONOMY, self.MARKER_DF,
+            target_class="Mammalia",
+        )["Bird_Cell"].score
+        assert weighted < unweighted, (
+            f"Cross-class weight {weighted} should be < unweighted {unweighted}"
+        )
+        # With single-class Aves -> Mammalia, weight = 0.6,
+        # so weighted should be exactly 0.6x unweighted.
+        assert weighted == pytest.approx(unweighted * 0.6, rel=1e-6), (
+            f"Cross-class weight {weighted} != {unweighted} * 0.6 = {unweighted * 0.6}"
+        )
+
+    def test_cross_class_weight_decreases_with_distance(self) -> None:
+        """Cross-class weight < same-class weight for the same input data.
+
+        Bird_Cell (Aves) against Mammalia target gets a lower score
+        than Mammal_Cell (Mammalia) against the same Mammalia target.
+        """
+        result = score_cluster_against_kb(
+            self.KB_WITH_TAXONOMY, self.MARKER_DF,
+            target_class="Mammalia",
+        )
+        mammal_score = result["Mammal_Cell"].score
+        bird_score = result["Bird_Cell"].score
+        assert bird_score < mammal_score, (
+            f"Bird_Cell ({bird_score:.4f}) should score lower than "
+            f"Mammal_Cell ({mammal_score:.4f}) under Mammalia target"
+        )
+
+    def test_no_target_class_no_phylogenetic_effect(self) -> None:
+        """With no target_class, phylogenetic weighting is skipped entirely.
+
+        Even with taxonomic fields in the KB, not setting target_class
+        means all scores are unweighted.
+        """
+        result = score_cluster_against_kb(
+            self.KB_WITH_TAXONOMY, self.MARKER_DF,
+        )
+        bird_score = result["Bird_Cell"].score
+        # Bird_Cell markers are in the top-20, so score should be > 0
+        assert bird_score > 0, (
+            f"Bird_Cell score should be > 0 without filtering, got {bird_score}"
+        )

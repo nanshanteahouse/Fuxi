@@ -29,6 +29,10 @@ _env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 if os.path.isfile(_env_path):
     load_dotenv(_env_path)
 
+# ── Named constants ───────────────────────────────────────────────────
+SILHOUETTE_SAMPLE_THRESHOLD: int = 10000
+
+
 
 @dataclass
 class AIConfig:
@@ -63,8 +67,212 @@ class AIConfig:
 
 
 @dataclass
+class RNAConfig:
+    """RNA-specific configuration fields."""
+
+    # ── RNA input formats ──
+    mtx_prefix: str = ""
+    mtx_dir: str = ""
+    matrix_file: str = ""
+    barcodes_file: str = ""
+    features_file: str = ""
+    csv_sep: Optional[str] = None
+    csv_decimal: str = '.'
+    gene_symbol_column: str = ''
+    input_h5ad: str = ""
+    backed: str = ""
+    h5_file_pattern: str = "*filtered_feature_bc_matrix.h5"
+    h5_dir: str = ""
+
+    # ── RNA sample metadata ──
+    sample_map: Dict[int, str] = field(default_factory=dict)
+    stage_map: Dict[int, str] = field(default_factory=dict)
+    stage_order: List[str] = field(default_factory=list)
+    meta_columns: Dict[str, str] = field(default_factory=dict)
+    barcode_parse_regex: str = ""
+    barcode_parse_groups: Dict[str, str] = field(default_factory=dict)
+
+    # ── RNA QC thresholds ──
+    min_genes: int = 500
+    max_genes: int = 7500
+    max_pct_mito: float = 20.0
+    mt_gene_pattern: str = "MT-"
+    mt_gene_list: List[str] = field(default_factory=list)
+    min_genes_per_umi: float = 0.7
+    min_cells_per_gene: int = 3
+    use_adaptive_thresholds: bool = False
+    mad_n_mads: float = 3.0
+    qc_ncount_max_mad: float = 5.0
+
+    # ── RNA Scrublet ──
+    run_scrublet: bool = True
+    scrublet_expected_doublet_rate: float | None = None
+    scrublet_batch_key: str = "sample"
+    scrublet_min_counts: int = 2
+    scrublet_min_cells: int = 3
+    scrublet_min_gene_var_pctl: int = 85
+    scrublet_n_prin_comps: int = 30
+
+    # ── RNA normalization & HVG ──
+    normalize_target_sum: float = 1e4
+    n_top_genes: int = 4000
+    hvg_flavor: str = "seurat_v3"
+    hvg_batch_key: str = "sample"
+    use_regress_out: bool = True
+
+    # ── RNA PCA ──
+    n_pcs_full: int = 100
+    n_pcs_use: int = 50
+
+    # ── RNA Harmony ──
+    use_harmony: bool = True
+    harmony_batch_key: str = "sample"
+    harmony_max_iter: int = 20
+
+    # ── RNA clustering & UMAP ──
+    n_neighbors: int = 30
+    leiden_resolutions: List[float] = field(
+        default_factory=lambda: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
+    )
+    param_grid_n_neighbors: list = field(default_factory=lambda: [15, 20, 30])
+    param_grid_resolutions: list = field(default_factory=lambda: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
+    leiden_flavor: str = "igraph"
+    best_resolution: float = 1.0
+    best_n_neighbors: int = 0
+    cluster_selection_method: str | None = "pareto_elbow"
+    umap_selection_method: str | None = "convex_hull"
+    param_grid_min_dist: list | None = field(default_factory=lambda: [0.1, 0.3, 0.5])
+    param_grid_spread: list | None = field(default_factory=lambda: [1.0])
+    umap_min_dist: float = 0.3
+    umap_spread: float = 1.0
+
+    # ── RNA cell type annotation ──
+    marker_dict: Dict[str, List[str]] = field(default_factory=dict)
+    subcluster_types: List[str] = field(default_factory=list)
+    subcluster_resolution: float = 0.4
+    min_cells_subcluster: int = 50
+    tissue_kb: str = ""
+    tissue_ontology: str = ""
+    target_class: str = ""
+    target_order: str = ""
+    expert_rule_strictness: str = "default"
+    expert_rule_top_n: int = 0
+    expert_rule_pval_cutoff: float = 0.0
+    marker_validation_n_top_genes: int = 15
+    marker_validation_min_overlap: float = 0.5
+    marker_validation_marginal_threshold: float = 0.25
+    marker_validation_pass_rate_min: float = 0.1
+
+    # ── RNA DE analysis ──
+    de_method: str = "wilcoxon"
+    de_n_genes: int = 50
+    de_pval_cutoff: float = 0.05
+    de_logfc_cutoff: float = 0.25
+    de_stage_pairwise: bool = True
+    de_auto_switch_on_low_quality: bool = False
+
+    # ── RNA trajectory ──
+    root_cell_types: List[str] = field(default_factory=list)
+    root_markers: List[str] = field(default_factory=list)
+    n_diffmap_comps: int = 15
+    n_branchings: int = 2
+
+    # ── RNA downsampling ──
+    downsample_target: Optional[int] = None
+    downsample_strategy: str = "stratified"
+    downsample_max_per_sample: Optional[int] = None
+    downsample_random_seed: int = 42
+
+    # ── RNA GRN ──
+    run_grn: bool = True
+    grn_method: str = "decoupler"
+    grn_species: str = "human"
+    grn_n_top_regulons: int = 50
+    grn_min_regulon_size: int = 5
+    grn_confidence_levels: list = field(
+        default_factory=lambda: ["A", "B", "C"]
+    )
+
+    # ── RNA CCI ──
+    run_cci: bool = True
+    cci_method: str = "liana"
+    cci_lr_database: str = "consensus"
+    cci_permutations: int = 1000
+    cci_n_top_interactions: int = 50
+    cci_spatial_method: str = "liana_spatial"
+    cci_spatial_distance: float = 0.0
+    cci_lr_cache_dir: str = ""
+
+
+@dataclass
+class ATACConfig:
+    """ATAC-specific configuration fields."""
+
+    # ── ATAC input ──
+    fragment_file: str = ""
+    barcodes_file: str = ""
+    genome: str = "hg38"
+    chrom_sizes: str = ""
+    blacklist_bed: str = ""
+    tss_bed: str = ""
+
+    # ── ATAC QC ──
+    min_fragments: int = 1000
+    max_fragments: int = 50000
+    min_tsse: float = 7.0
+    max_blacklist_ratio: float = 0.05
+    min_peak_region_fragments: int = 300
+
+    # ── ATAC peak calling ──
+    peak_qval: float = 0.05
+    peak_width: int = 500
+    use_macs3: bool = True
+
+    # ── ATAC dimensionality reduction ──
+    n_features: int = 50000
+    n_spectral: int = 30
+
+    # ── ATAC differential analysis ──
+    marker_peaks_log2fc: float = 0.5
+    marker_peaks_fdr: float = 0.05
+
+    # ── ATAC motif ──
+    motif_db: str = "JASPAR2024"
+
+    # ── ATAC trajectory ──
+    terminal_cell_types: List[str] = field(default_factory=list)
+
+    # ── ATAC misc ──
+    max_cells: Optional[int] = None
+
+
+@dataclass
+class SpatialConfig:
+    """Spatial-specific configuration fields."""
+
+    # ── Spatial platform & input ──
+    spatial_platform: str = "visium"
+    library_id: str = ""
+    img_path: str = ""
+    spot_diameter: float = 0.0
+
+    # ── Spatial image processing ──
+    crop_image: bool = True
+    img_rescale: float = 1.0
+
+    # ── Spatial graph ──
+    spatial_neighbors_n: int = 6
+    spatial_neighbors_radius: float = 0.0
+
+    # ── Spatial SVG ──
+    run_spatial_autocorr: bool = True
+    moran_percentile: int = 90
+    svg_n_top: int = 2000
+
+
+@dataclass
 class Config:
-    """Fuxi unified config — 包含 RNA + ATAC 所有字段"""
+    """Fuxi unified config — 包含 RNA + ATAC + Spatial 所有字段"""
 
     # ═══════════════════════════════════════════════════════════════════
     #  组学类型
@@ -111,7 +319,7 @@ class Config:
 
     # ── ATAC: 10X fragment 模式 ──
     fragment_file: str = ""
-    barcodes_file: str = ""
+    # barcodes_file already declared above
 
     # ═══════════════════════════════════════════════════════════════════
     #  RNA: 样本元数据映射
@@ -434,6 +642,13 @@ class Config:
     ai: AIConfig = field(default_factory=AIConfig)
 
     # ═══════════════════════════════════════════════════════════════════
+    #  Modality-specific nested configs
+    # ═══════════════════════════════════════════════════════════════════
+    rna: RNAConfig = field(default_factory=RNAConfig)
+    atac: ATACConfig = field(default_factory=ATACConfig)
+    spatial: SpatialConfig = field(default_factory=SpatialConfig)
+
+    # ═══════════════════════════════════════════════════════════════════
     #  ATAC: RNA 整合 (Step 09)
     # ═══════════════════════════════════════════════════════════════════
     rna_h5ad: str = ""
@@ -463,7 +678,7 @@ class Config:
 
     @property
     def norm_h5ad(self) -> str:
-        return os.path.join(self.h5ad_dir, "02_normalized.h5ad")
+        return os.path.join(self.h5ad_dir, "03_normalized.h5ad")
 
     @property
     def harmony_h5ad(self) -> str:
@@ -567,6 +782,30 @@ class Config:
     def has_rna_data(self) -> bool:
         """ATAC: check if RNA data is available for integration"""
         return bool(self.rna_h5ad) and os.path.exists(self.rna_h5ad)
+
+    def __getattr__(self, name: str):
+        """Fallback: delegate attribute access to the active modality's config.
+
+        This enables backward-compatible access to modality-specific fields
+        that may be moved to nested configs over time.  For example,
+        ``CFG.n_top_genes`` will resolve to ``CFG.rna.n_top_genes`` when
+        the active modality is ``"rna"``.
+        """
+        modality_map = {
+            "rna": "rna",
+            "atac": "atac",
+            "spatial": "spatial",
+        }
+        cfg_name = modality_map.get(self.modality)
+        if cfg_name is not None:
+            modality_cfg = object.__getattribute__(self, cfg_name)
+            try:
+                return object.__getattribute__(modality_cfg, name)
+            except AttributeError:
+                pass
+        raise AttributeError(
+            f"'{type(self).__name__}' object has no attribute '{name}'"
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════

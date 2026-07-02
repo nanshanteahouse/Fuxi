@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.metrics import silhouette_score
+from core.config import SILHOUETTE_SAMPLE_THRESHOLD
 from core.clustering import grid_search_clustering, select_best_params
 from rna.utils.cluster_evaluation import select_best_umap_params
 
@@ -87,9 +88,9 @@ def main():
 
     def _evaluation_fn(adata, cluster_key, **kwargs):
         labels = adata.obs[cluster_key].values
-        if adata.n_obs > 10000:
+        if adata.n_obs > SILHOUETTE_SAMPLE_THRESHOLD:
             rng = np.random.RandomState(CFG.random_seed)
-            idx = rng.choice(adata.n_obs, 10000, replace=False)
+            idx = rng.choice(adata.n_obs, SILHOUETTE_SAMPLE_THRESHOLD, replace=False)
             return float(silhouette_score(
                 adata.obsm[use_rep][idx, :CFG.n_pcs_use],
                 labels[idx],

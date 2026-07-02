@@ -52,8 +52,7 @@ def run_annotation(adata, marker_dict, logger):
 
     # 每个聚类取最高分的类型
     score_cols = [f'score_{ct}' for ct in cell_types]
-    groupby_kw = {'observed': True} if hasattr(pd.Categorical, 'observed') else {}
-    cluster_scores = adata.obs.groupby('leiden', **groupby_kw)[score_cols].mean()
+    cluster_scores = adata.obs.groupby('leiden', observed=True)[score_cols].mean()
     best_match = cluster_scores.idxmax(axis=1)
     best_ct = best_match.str.replace('score_', '')
 

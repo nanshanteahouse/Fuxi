@@ -418,6 +418,175 @@ def _build_kb_lookup(kb: Dict[str, Any],
 # ═══════════════════════════════════════════════════════════════════════
 
 
+
+def _compute_fisher_consensus(
+    positive_set: set[str],
+    top_in_bg: set[str],
+    n_top_in_bg: int,
+    background_size: int,
+    consensus_levels: dict[str, str],
+) -> tuple[float, float, int, str]:
+    """Compute Fisher's exact (hypergeometric) score with optional consensus weighting.
+
+    Parameters
+    ----------
+    positive_set : set[str]
+        Positive marker genes for a cell type.
+    top_in_bg : set[str]
+        Intersection of top-N cluster markers and KB background.
+    n_top_in_bg : int
+        Number of top-N markers in KB background.
+    background_size : int
+        Total unique KB markers across all types.
+    consensus_levels : dict[str, str]
+        Gene \u2192 consensus level mapping (gold/high/medium/low).
+
+    Returns
+    -------
+    tuple[float, float, int, str]
+        ``(hypergeometric_score, raw_p_value, n_markers_found, fisher_source)``.
+    """
+    a = len(positive_set & top_in_bg)          # type markers in top-N (raw)
+    b = len(positive_set) - a                  # type markers NOT in top-N
+    c = n_top_in_bg - a                         # non-type KB markers in top-N
+    d = max(background_size - a - b - c, 1)     # remaining KB markers
+
+    # Consensus-weighted variant
+    _a_weighted = 0.0
+    for _gene in (positive_set & top_in_bg):
+        _level = consensus_levels.get(_gene, "low")
+        _a_weighted += _CONSENSUS_WEIGHTS.get(_level, 1.0)
+    a_w = int(round(_a_weighted))
+
+    fisher_source = "raw"
+    if a_w > a and a_w > 0 and (b - (a_w - a)) >= 0:
+        b_w = b - (a_w - a)
+        c_w = c
+        d_w = max(background_size - a_w - b_w - c_w, 1)
+        if d_w > 0:
+            try:
+                _r = fisher_exact([[a_w, b_w], [c_w, d_w]], alternative='greater')
+                _w_p = float(str(_r[1]))
+                _w_score = 1.0 - _w_p
+                if _w_score > 0 and _w_p < 0.999:
+                    raw_p = _w_p
+                    hypergeometric_score = _w_score
+                    fisher_source = "consensus_weighted"
+                else:
+                    fisher_source = "raw_fallback"
+                    if a > 0 and b >= 0 and c >= 0 and d > 0:
+                        _r = fisher_exact([[a, b], [c, d]], alternative='greater')
+                        raw_p = float(str(_r[1]))
+                    else:
+                        raw_p = 1.0
+                    hypergeometric_score = 1.0 - raw_p
+            except ValueError:
+                fisher_source = "raw_fallback"
+                if a > 0 and b >= 0 and c >= 0 and d > 0:
+                    _r = fisher_exact([[a, b], [c, d]], alternative='greater')
+                    raw_p = float(str(_r[1]))
+                else:
+                    raw_p = 1.0
+                hypergeometric_score = 1.0 - raw_p
+    elif a > 0 and b >= 0 and c >= 0 and d > 0:
+        _r = fisher_exact([[a, b], [c, d]], alternative='greater')
+        raw_p = float(str(_r[1]))
+        hypergeometric_score = 1.0 - raw_p
+    else:
+        raw_p = 1.0
+        hypergeometric_score = 1.0 - raw_p
+
+    return hypergeometric_score, raw_p, a, fisher_source
+
+
+def _apply_phylogenetic_weight(
+    score: float,
+    target_class: str,
+    target_order: str,
+    kb: Dict[str, Any],
+    type_key: str,
+) -> float:
+    """Apply phylogenetic weight based on taxonomic distance.
+
+    When *target_class* is empty, *score* is returned unchanged.
+
+    Parameters
+    ----------
+    score : float
+        Current composite score.
+    target_class : str
+        Desired taxonomic class (empty = no filtering).
+    target_order : str
+        Desired taxonomic order.
+    kb : dict
+        Raw knowledge base with taxonomic metadata.
+    type_key : str
+        Cell type key in the KB.
+
+    Returns
+    -------
+    float
+        Score multiplied by the phylogenetic weight.
+    """
+    if not target_class:
+        return score
+
+    type_data_raw = _type_data(kb, type_key)
+    source_cls = type_data_raw.get("class", "") if type_data_raw else ""
+    source_ord = type_data_raw.get("order", "") if type_data_raw else ""
+    source_classes = type_data_raw.get("classes", []) if type_data_raw else []
+    p_weight = phylogenetic_weight(
+        source_cls, target_class,
+        target_order=target_order,
+        source_order=source_ord,
+        source_classes_contrib=source_classes,
+    )
+    return score * p_weight
+
+
+def _merge_evidence_scores(
+    hypergeometric_score: float,
+    cos_sim: float,
+    fisher_source: str,
+    n_type_markers: int,
+) -> tuple[float, str]:
+    """Merge hypergeometric and cosine scores with confidence multiplier.
+
+    Parameters
+    ----------
+    hypergeometric_score : float
+        Score from Fisher's exact test.
+    cos_sim : float
+        Cosine similarity between cluster and cell-type marker vectors.
+    fisher_source : str
+        Which Fisher variant was used ("raw", "consensus_weighted", etc.).
+    n_type_markers : int
+        Number of positive markers for this cell type.
+
+    Returns
+    -------
+    tuple[float, str]
+        ``(final_score, method)`` where method is one of
+        ``"hypergeometric"``, ``"hypergeometric_weighted"``, or ``"cosine"``.
+    """
+    if n_type_markers > 5:
+        conf_mult = 1.0
+    elif n_type_markers >= 3:
+        conf_mult = 0.8
+    else:
+        conf_mult = 0.5
+
+    if hypergeometric_score >= cos_sim:
+        base_method = "hypergeometric"
+        if fisher_source == "consensus_weighted":
+            base_method = "hypergeometric_weighted"
+        base_score = hypergeometric_score
+    else:
+        base_method = "cosine"
+        base_score = cos_sim
+
+    return base_score * conf_mult, base_method
+
 def score_cluster_against_kb(kb: Dict[str, Any],
                              cluster_markers: pd.DataFrame,
                              species: Optional[str] = None,
@@ -526,74 +695,12 @@ def score_cluster_against_kb(kb: Dict[str, Any],
             continue
 
         positive_set = set(positive_markers)
+        consensus_levels = entry.get("consensus_levels", {})
 
         # ── 1. Hypergeometric (Fisher's exact) score ────────────────
-        # Contingency table over the KB background genes:
-        #                  | In top-20 | Not in top-20
-        # -----------------|-----------|--------------
-        # Is type marker   | a         | b
-        # Not type marker  | c         | d
-        #
-        # Consensus-weighted variant: each marker hit contributes its
-        # consensus weight instead of a flat 1, so gold markers (5+ sources)
-        # count 3× and low markers (1 source) count 1×.  The unweighted
-        # raw hit-count is also preserved for backward-compatible reporting.
-        consensus_levels = entry.get("consensus_levels", {})
-        _a_weighted = 0.0
-        for _gene in (positive_set & top_in_bg):
-            _level = consensus_levels.get(_gene, "low")
-            _a_weighted += _CONSENSUS_WEIGHTS.get(_level, 1.0)
-
-        a = len(positive_set & top_in_bg)   # type markers in top-20 (raw)
-        a_w = int(round(_a_weighted))        # consensus-weighted hits
-
-        b = len(positive_set) - a           # type markers NOT in top-20
-        c = n_top_in_bg - a                  # non-type KB markers in top-20
-        d = max(background_size - a - b - c, 1)  # remaining KB markers
-
-        # Try weighted first (when it makes a material difference);
-        # fall back to raw counts.
-        _fisher_source = "raw"
-        if a_w > a and a_w > 0 and (b - (a_w - a)) >= 0:
-            b_w = b - (a_w - a)  # adjust 'not-in-top' to balance
-            c_w = c
-            d_w = max(background_size - a_w - b_w - c_w, 1)
-            if d_w > 0:
-                try:
-                    _r = fisher_exact([[a_w, b_w], [c_w, d_w]], alternative='greater')
-                    _w_p = float(str(_r[1]))
-                    _w_score = 1.0 - _w_p
-                    # Only keep weighted result if it improves the score
-                    # and doesn't explode p-value to 1.0.
-                    if _w_score > 0 and _w_p < 0.999:
-                        raw_p = _w_p
-                        hypergeometric_score = _w_score
-                        _fisher_source = "consensus_weighted"
-                    else:
-                        # Weighted table degraded — stick with raw.
-                        _fisher_source = "raw_fallback"
-                        if a > 0 and b >= 0 and c >= 0 and d > 0:
-                            _r = fisher_exact([[a, b], [c, d]], alternative='greater')
-                            raw_p = float(str(_r[1]))
-                        else:
-                            raw_p = 1.0
-                        hypergeometric_score = 1.0 - raw_p
-                except ValueError:
-                    _fisher_source = "raw_fallback"
-                    if a > 0 and b >= 0 and c >= 0 and d > 0:
-                        _r = fisher_exact([[a, b], [c, d]], alternative='greater')
-                        raw_p = float(str(_r[1]))
-                    else:
-                        raw_p = 1.0
-                    hypergeometric_score = 1.0 - raw_p
-        elif a > 0 and b >= 0 and c >= 0 and d > 0:
-            table = [[a, b], [c, d]]
-            _r = fisher_exact(table, alternative='greater')
-            raw_p = float(str(_r[1]))
-            hypergeometric_score = 1.0 - raw_p
-        else:
-            raw_p = 1.0
-            hypergeometric_score = 1.0 - raw_p
+        hypergeometric_score, raw_p, a, fisher_source = _compute_fisher_consensus(
+            positive_set, top_in_bg, n_top_in_bg, background_size, consensus_levels,
+        )
 
         # ── 2. Cosine similarity score ──────────────────────────────
         all_genes = list(set(top_markers["names"].tolist() + positive_markers))
@@ -603,52 +710,23 @@ def score_cluster_against_kb(kb: Dict[str, Any],
         type_vec = np.array(
             [1.0 if g in positive_set else 0.0 for g in all_genes]
         )
-
         cluster_norm = np.linalg.norm(cluster_vec)
         type_norm = np.linalg.norm(type_vec)
-
         if cluster_norm > 0 and type_norm > 0:
             cos_sim = float(np.dot(cluster_vec, type_vec)
                             / (cluster_norm * type_norm))
         else:
             cos_sim = 0.0
 
-        # ── 3. Confidence multiplier ────────────────────────────────
-        n_type_markers = len(positive_markers)
-        if n_type_markers > 5:
-            conf_mult = 1.0
-        elif n_type_markers >= 3:
-            conf_mult = 0.8
-        else:
-            conf_mult = 0.5
+        # ── 3. Merge evidence scores ────────────────────────────────
+        final_score, base_method = _merge_evidence_scores(
+            hypergeometric_score, cos_sim, fisher_source, len(positive_markers),
+        )
 
-        # ── 4. Combine ──────────────────────────────────────────────
-        if hypergeometric_score >= cos_sim:
-            base_method = "hypergeometric"
-            if _fisher_source == "consensus_weighted":
-                base_method = "hypergeometric_weighted"
-            base_score = hypergeometric_score
-        else:
-            base_method = "cosine"
-            base_score = cos_sim
-
-        final_score = base_score * conf_mult
-
-        # ── 4b. Phylogenetic weight ─────────────────────────────────
-        if target_class:
-            # Read class/order/classes from the raw KB if available;
-            # fall back to the lookup entry.
-            type_data_raw = _type_data(kb, type_key)
-            source_cls = type_data_raw.get("class", "") if type_data_raw else ""
-            source_ord = type_data_raw.get("order", "") if type_data_raw else ""
-            source_classes = type_data_raw.get("classes", []) if type_data_raw else []
-            p_weight = phylogenetic_weight(
-                source_cls, target_class,
-                target_order=target_order,
-                source_order=source_ord,
-                source_classes_contrib=source_classes,
-            )
-            final_score *= p_weight
+        # ── 4. Phylogenetic weight ──────────────────────────────────
+        final_score = _apply_phylogenetic_weight(
+            final_score, target_class, target_order, kb, type_key,
+        )
 
         # ── 5. Negative-marker penalty ──────────────────────────────
         neg_penalty = _negative_marker_penalty(

@@ -96,8 +96,12 @@ def ai_query(system_prompt: str, user_prompt: str, cfg,
     from openai import OpenAI
     import openai
 
+    api_key = cfg.api_key or os.getenv("LLM_API_KEY") or None
+    if api_key is None:
+        raise ValueError("LLM_API_KEY not set")
+
     client = OpenAI(
-        api_key=cfg.api_key or os.getenv("LLM_API_KEY", "not-needed"),
+        api_key=api_key,
         base_url=cfg.api_base,
     )
 
@@ -138,7 +142,7 @@ def ai_query(system_prompt: str, user_prompt: str, cfg,
             if e.status_code in (404, 422):
                 models = _query_available_models(
                     api_base=cfg.api_base,
-                    api_key=cfg.api_key or os.environ.get('LLM_API_KEY', ''),
+                    api_key=cfg.api_key or os.environ.get('LLM_API_KEY') or None,
                 )
                 if models:
                     msg = '[ai_caller] Model ' + repr(cfg.model) + ' not found. Available models: ' + str(models)
