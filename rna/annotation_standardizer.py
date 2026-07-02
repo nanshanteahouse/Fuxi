@@ -109,7 +109,7 @@ class StandardOntology:
             If **tissue** has no synonyms module.
         """
         if tissue == "retina":
-            from tissue_ontologies.retina.synonyms import RETINA_SYNONYMS
+            from rna.tissue_ontologies.retina.synonyms import RETINA_SYNONYMS
             return RETINA_SYNONYMS
         raise NotImplementedError(f"No synonyms for tissue: {tissue}")
 
@@ -132,7 +132,7 @@ class StandardOntology:
         NotImplementedError
             If the tissue KB is not available.
         """
-        from tissue_ontologies import load_kb
+        from rna.tissue_ontologies import load_kb
         try:
             return load_kb(tissue)
         except ValueError as exc:

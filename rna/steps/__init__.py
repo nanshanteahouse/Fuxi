@@ -12,14 +12,6 @@ Usage::
 
 import os, sys, importlib.util
 
-# ═════════════════════════════════════════════════════════════════════════════
-# Ensure ``rna/`` is on sys.path so that cross-modality callers of
-# unified_annotate() can resolve ``from tissue_ontologies import load_kb``
-# (tissue_ontologies lives under rna/, not at repo root).
-# ═════════════════════════════════════════════════════════════════════════════
-_rna_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _rna_dir not in sys.path:
-    sys.path.insert(0, _rna_dir)
 
 
 def _load_step_module(filename: str, mod_name: str):

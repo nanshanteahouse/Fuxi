@@ -2,7 +2,7 @@
 
 Usage::
 
-    from tissue_ontologies import load_kb
+    from rna.tissue_ontologies import load_kb
     kb = load_kb("retina")
 """
 
@@ -27,7 +27,7 @@ def load_kb(tissue_name: str):
         If the tissue name is not supported.
     """
     if tissue_name == "retina":
-        from tissue_ontologies.retina import retina_expert_kb
+        from .retina import retina_expert_kb
         return retina_expert_kb
 
     raise ValueError(
