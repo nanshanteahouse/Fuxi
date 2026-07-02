@@ -144,7 +144,7 @@ def main():
     # Early exit when neither --cell-type nor CFG.subcluster_types is configured
     if args.cell_type is None and not CFG.subcluster_types:
         log.info("subcluster_types not configured, skipping.")
-        return
+        sys.exit(2)
 
     # ── (a) Load annotated data ───────────────────────────────────────
     input_path = os.path.join(CFG.h5ad_dir, "05_annotated.h5ad")
@@ -367,7 +367,7 @@ def main():
         log.info("Multi-resolution UMAP saved for %s", safe_cell_type)
 
     # ── Save intermediate results before AI annotation ─────────────────
-    safe_write(sub, output_path)
+    safe_write(sub, output_path, cfg=cfg)
     log.info("Intermediate results saved (pre-AI): %s", output_path)
 
     # ── (j) AI-based subcluster annotation ────────────────────────────
@@ -468,7 +468,7 @@ def main():
     sub.obs['leiden'] = sub.obs['leiden'].astype('category')
 
     # ── (k) Save subcluster result ────────────────────────────────────
-    safe_write(sub, output_path)
+    safe_write(sub, output_path, cfg=cfg)
     log.info("Saved: %s", output_path)
 
     # ── (k2) Auto-writeback into 05_annotated.h5ad ───────────────────

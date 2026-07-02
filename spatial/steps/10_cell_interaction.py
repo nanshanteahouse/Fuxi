@@ -226,7 +226,7 @@ def main():
     )
 
     # ── Ensure gene symbols (LIANA uses HGNC symbols) ───────────────────
-    adata = ensure_gene_symbols(adata, log=log)
+    adata = ensure_gene_symbols(adata, species=CFG.species, log=log)
 
     lr_res = run_cci_spatial(
         adata,
@@ -246,6 +246,7 @@ def main():
         lr_res,
         n_top=CFG.cci_n_top_interactions,
         pval_col=sort_col,
+        ascending=False,
         log=log,
     )
 

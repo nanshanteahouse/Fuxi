@@ -229,7 +229,7 @@ def main():
     )
 
     # ── Ensure gene symbols (LIANA uses HGNC symbols) ───────────────────
-    adata = ensure_gene_symbols(adata, log=log)
+    adata = ensure_gene_symbols(adata, species=CFG.species, log=log)
 
     lr_res = run_cci_permutation(
         adata,

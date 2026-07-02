@@ -416,11 +416,12 @@ def main():
             )
         elapsed = time.time() - step_t0
 
+        if result.returncode == 2:
+            print(f"[run] Step [{num}] skipped (no --cell-type for pipeline mode)")
+            step_times.append((num, desc, 0))
+            continue
+
         if result.returncode != 0:
-            if args.modality == "rna" and i == 6 and not args.cell_type:
-                print(f"\n[run] Step [{num}] skipped (no --cell-type for pipeline mode)")
-                step_times.append((num, desc, 0))
-                continue
             print(f"\n[run] Step [{num}] failed (exit code={result.returncode})")
             print(f"[run] To continue after fixing the issue:")
             print(f"      python {__file__} --modality {args.modality} --resume --config {args.config}")

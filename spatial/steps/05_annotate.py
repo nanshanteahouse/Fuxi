@@ -43,7 +43,10 @@ def score_genes_mode(adata, CFG):
 
     for ct in cell_types:
         genes = marker_dict[ct]
-        genes_present = [g for g in genes if g in adata.raw.var_names]
+        var_names = adata.raw.var_names if adata.raw is not None else adata.var_names
+        if adata.raw is None:
+            log.warning("adata.raw is None; falling back to adata.var_names")
+        genes_present = [g for g in genes if g in var_names]
         if not genes_present:
             log.warning("  %s: no marker genes found in data", ct)
             adata.obs[f'score_{ct}'] = 0.0

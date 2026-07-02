@@ -86,7 +86,7 @@ def main():
         if str(c) in markers:
             top_peaks = list(markers[str(c)][:10])
         cluster_summary.append({
-            'cluster': int(c),
+            'cluster': int(c) if str(c).isdigit() else str(c),
             'n_cells': int(mask.sum()),
             'top_peaks': top_peaks,
         })
@@ -118,6 +118,12 @@ def main():
                 )
                 response = ai_query(ATAC_ANNOTATION_SYSTEM_PROMPT, user_prompt, cfg=CFG.ai, log=log)
                 annotations = json.loads(response)
+                if not isinstance(annotations, dict) or not all(
+                    isinstance(v, dict) and "cell_type" in v for v in annotations.values()
+                ):
+                    log.warning("LLM response has invalid structure: %s", response)
+                    annotations = {}
+
                 if use_cache and ck:
                     _save_cache(cache_dir, ck, annotations)
             except Exception as e:

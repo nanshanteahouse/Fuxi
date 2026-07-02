@@ -892,7 +892,7 @@ def main():
                  len(validation_results))
         validation_map = {r['cluster']: r['status'] for r in validation_results}
         adata.obs['marker_validation'] = adata.obs['leiden'].astype(str).map(lambda c: validation_map.get(c, "NO_ONTOLOGY"))
-    safe_write(adata, CFG.annotated_h5ad)
+    safe_write(adata, CFG.annotated_h5ad, cfg=CFG)
     log.info("Step 05 (score_genes mode) complete, took %.1fs", time.time() - t0)
 
 

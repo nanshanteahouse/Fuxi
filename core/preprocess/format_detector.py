@@ -665,17 +665,17 @@ def guess_tissue(file_list: list[str]) -> str:
 def guess_genome(species: str) -> str:
     """Return a reference genome identifier for a given species name."""
     _map = {
-        'homo_sapiens':           'hg38',
-        'mus_musculus':           'mm10',
-        'rattus_norvegicus':      'rn6',
-        'danio_rerio':            'danRer11',
-        'bos_taurus':             'bosTau9',
-        'sus_scrofa':             'susScr11',
-        'macaca_mulatta':         'rheMac10',
-        'gallus_gallus':          'galGal6',
-        'drosophila_melanogaster': 'dm6',
-        'caenorhabditis_elegans': 'ce11',
-        'xenopus_tropicalis':     'xenTro10',
+        'human':           'hg38',
+        'mouse':           'mm10',
+        'rat':             'rn6',
+        'zebrafish':       'danRer11',
+        'cow':             'bosTau9',
+        'pig':             'susScr11',
+        'macaque':         'rheMac10',
+        'chicken':         'galGal6',
+        'drosophila':      'dm6',
+        'c_elegans':       'ce11',
+        'frog':            'xenTro10',
     }
     return _map.get(species, '')
 

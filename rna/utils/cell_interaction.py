@@ -22,7 +22,7 @@ import pandas as pd
 from typing import Optional
 
 
-def ensure_gene_symbols(adata, log: object = None):
+def ensure_gene_symbols(adata, log: object = None, species: str = "human"):
     """Ensure AnnData var_names are gene symbols (not Ensembl IDs).
 
     LIANA resources use HGNC gene symbols.  When var_names contain
@@ -37,6 +37,8 @@ def ensure_gene_symbols(adata, log: object = None):
         Input data (may have mixed Ensembl ID / gene symbol var_names).
     log : object, optional
         Logger.
+    species : str
+        Species key for mygene query (default: "human").
 
     Returns
     -------
@@ -46,7 +48,7 @@ def ensure_gene_symbols(adata, log: object = None):
     """
     import numpy as np
 
-    is_ensembl = adata.var_names.str.match(r"^ENSG\d+")
+    is_ensembl = adata.var_names.str.match(r"^ENS[A-Z]{0,4}G\d{11}$")
     n_ensembl = is_ensembl.sum()
     if n_ensembl == 0:
         if log:
@@ -68,7 +70,7 @@ def ensure_gene_symbols(adata, log: object = None):
         chunk = ensembl_ids[i:i + chunk_size]
         try:
             batch = mg.querymany(chunk, scopes="ensembl.gene", fields="symbol",
-                                 species="human", as_dataframe=True)
+                                 species=species, as_dataframe=True)
         except Exception:
             continue
         for eid, row in batch.iterrows():
@@ -329,12 +331,13 @@ def format_cci_results(
     lr_res: pd.DataFrame,
     n_top: int = 50,
     pval_col: str = "magnitude_rank",
+    ascending: bool = True,
     log: object = None,
 ) -> pd.DataFrame:
     """Filter, sort and format CCI interaction results.
 
-    Sorts by the given rank/significance column (lower = more significant),
-    selects top N interactions, and adds a readable interaction label.
+    Sorts by the given rank/significance column and selects top N interactions,
+    then adds a readable interaction label.
 
     Parameters
     ----------
@@ -344,6 +347,9 @@ def format_cci_results(
         Number of top interactions to retain.
     pval_col : str
         Column to sort by (default 'magnitude_rank').
+    ascending : bool
+        Whether to sort ascending (default True).  Pass False when sorting
+        by a column where higher values are better (e.g. Moran's I).
     log : object, optional
         Logger with .info() method.
 
@@ -371,14 +377,14 @@ def format_cci_results(
 
     # Sort by significance
     if pval_col in cols:
-        top_df = lr_res.sort_values(pval_col, ascending=True).head(n_top)
+        top_df = lr_res.sort_values(pval_col, ascending=ascending).head(n_top)
         if log:
             log.info("Top %d interactions selected by %s", n_top, pval_col)
     else:
         # Fallback: sort by the first available rank column
         rank_cols = [c for c in cols if "rank" in c.lower()]
         if rank_cols:
-            top_df = lr_res.sort_values(rank_cols[0], ascending=True).head(n_top)
+            top_df = lr_res.sort_values(rank_cols[0], ascending=ascending).head(n_top)
         else:
             top_df = lr_res.head(n_top)
         if log:

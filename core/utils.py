@@ -23,7 +23,7 @@ import time as _time
 import threading
 import subprocess as _sp
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
@@ -147,8 +147,7 @@ def safe_write(adata, target: str,
         tmpdir = getattr(cfg, 'h5ad_tempdir', tmpdir)
 
     # WSL /mnt mounts require tmp+mv to avoid h5py file locking issues.
-    _wsl = (target.startswith("/mnt/")
-            and os.environ.get("HDF5_USE_FILE_LOCKING", "").upper() != "FALSE")
+    _wsl = target.startswith("/mnt/")
     logging.getLogger(__name__).info("Writing %s ...", os.path.basename(target))
     if _wsl:
         os.makedirs(tmpdir, exist_ok=True)
@@ -619,3 +618,100 @@ def monitor_performance(step_name: str = "", log=None):
             log.info("[perf] wall=%.1fs cpu=%.1fs mem=%.1fMB cpu%%=%.1f%% gpu=%.0fMB",
                      report.wall_sec, report.cpu_sec, report.peak_rss_mb,
                      report.avg_cpu_pct, report.gpu_mem_mb)
+
+
+# ── Cross-step data flow validation ──────────────────────────────────
+
+_STEP_REQUIREMENTS = {
+    "rna": {
+        "01": {"obs": ["doublet_scores", "predicted_doublet"]},
+        "02": {"obs": ["doublet_scores", "predicted_doublet"]},
+        "04": {"obsm": ["X_pca"]},
+        "05": {"obs": ["leiden"], "obsm": ["X_umap", "X_pca"]},
+        "06": {"obs": ["cell_type"], "obsm": ["X_umap"]},
+        "07": {"obs": ["cell_type", "leiden"]},
+        "08": {"obs": ["cell_type"], "obsm": ["X_pca", "X_umap"]},
+        "10": {"obs": ["cell_type"], "obsm": ["X_umap"]},
+        "11": {"obs": ["cell_type"], "obsm": ["X_umap"]},
+        "12": {"obs": ["cell_type"], "obsm": ["X_umap"]},
+    },
+    "atac": {
+        "02": {"obs": ["predicted_doublet"]},
+        "04": {"obs": ["leiden"], "obsm": ["X_umap"]},
+        "05": {"obs": ["cell_type"], "obsm": ["X_umap"]},
+        "06": {"obs": ["cell_type"]},
+        "07": {"obs": ["cell_type"]},
+        "08": {"obs": ["cell_type"]},
+        "09": {"obs": ["cell_type"]},
+    },
+    "spatial": {
+        "04": {"obsm": ["X_pca"]},
+        "05": {"obs": ["leiden"], "obsm": ["X_umap"]},
+        "06": {"obs": ["cell_type"], "obsp": ["spatial_connectivities"]},
+        "07": {"obs": ["cell_type"], "obsm": ["X_umap"]},
+        "09": {"obs": ["cell_type"], "obsm": ["X_umap"]},
+        "10": {"obs": ["cell_type"]},
+    },
+}
+
+
+def validate_pipeline_state(adata: Any, step: str, modality: str = "rna") -> None:
+    """Assert that required obs/obsm/obsp columns exist at a step boundary.
+
+    Parameters
+    ----------
+    adata : AnnData
+        The current AnnData object to validate.
+    step : str
+        Step number (e.g. "00", "01", "02").
+    modality : str
+        One of "rna", "atac", or "spatial".
+
+    Raises
+    ------
+    AssertionError
+        If any required column is missing, with a clear message.
+    """
+    logger = logging.getLogger(__name__)
+
+    # Normalise step key: try as-is first, then zero-padded to two digits.
+    mod_reqs = _STEP_REQUIREMENTS.get(modality, {})
+    step_key = step if step in mod_reqs else step.zfill(2)
+
+    req = mod_reqs.get(step_key)
+    if req is None:
+        logger.debug(
+            "[step=%s modality=%s] No requirements defined — skipping validation",
+            step, modality,
+        )
+        return
+
+    missing: list[str] = []
+
+    for col in req.get("obs", []):
+        if col not in adata.obs:
+            missing.append(f"obs['{col}']")
+
+    for col in req.get("obsm", []):
+        if col not in adata.obsm:
+            missing.append(f"obsm['{col}']")
+
+    for col in req.get("obsp", []):
+        if col not in adata.obsp:
+            missing.append(f"obsp['{col}']")
+
+    if missing:
+        msg = (
+            f"Pipeline state validation failed at step {step} ({modality}):\n"
+            + "\n".join(f"  - Missing: {m}" for m in missing)
+        )
+        raise AssertionError(msg)
+
+    logger.debug(
+        "[step=%s modality=%s] All required columns present: "
+        "obs=%s obsm=%s obsp=%s",
+        step, modality,
+        sorted(req.get("obs", [])),
+        sorted(req.get("obsm", [])),
+        sorted(req.get("obsp", [])),
+    )

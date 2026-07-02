@@ -27,12 +27,15 @@ core/label_transfer.py — 可复用的 Label Transfer 验证工具
 
 import json
 import os
+import logging
 from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
 import pandas as pd
 import scanpy as sc
+
+logger = logging.getLogger(__name__)
 
 
 # ── Public data structures ────────────────────────────────────────────
@@ -344,13 +347,16 @@ def run_label_transfer(
     ref = sc.read(ref_h5ad)
     query = sc.read(query_h5ad)
     print(f"Reference: {ref.n_obs}c × {ref.n_vars}g")
-    print(f"Query:     {query.n_obs}c × {query.n_vars}g (raw={query.raw.n_vars}g)")
+    has_raw = query.raw is not None
+    if not has_raw:
+        logger.warning("query.raw is None; falling back to query.var_names / query.copy()")
+    print(f"Query:     {query.n_obs}c × {query.n_vars}g (raw={query.raw.n_vars if has_raw else 0}g)")
 
     # ── 2. 共有基因子集 ──────────────────────────────────────────────
-    common = np.intersect1d(ref.var_names, query.raw.var_names)
+    common = np.intersect1d(ref.var_names, query.raw.var_names if has_raw else query.var_names)
     print(f"Common genes: {len(common)}")
 
-    query_raw = query.raw.to_adata()
+    query_raw = query.raw.to_adata() if has_raw else query.copy()
     query_raw = query_raw[:, common].copy()
     ref_sub = ref[:, common].copy()
 
