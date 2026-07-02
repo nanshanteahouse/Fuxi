@@ -26,3 +26,8 @@ python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config
 - Config loaded dynamically: `CFG = resolve_config(args.config)`
 - `data_root()` requires `FUXI_DATA_ROOT` env var (no hardcoded defaults)
 - Import pattern: `from core.utils import ...`, `from core.ai_caller import ...`
+
+## Commit message discipline
+
+- Commit message 中的每条 `Cx`/`Mx`/`Nx`/`mx`/`Sx` 声明必须在 `git show <commit> --stat` 或 diff 中**直接验证**
+- 若某 commit message 中包含的声明确实未实现，应在该 commit 的 `git notes` 中标记 `UNFIXED`
