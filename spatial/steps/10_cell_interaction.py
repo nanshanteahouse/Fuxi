@@ -218,6 +218,18 @@ def main():
     if group_col in adata.obs.columns:
         adata.obs["cci_label"] = adata.obs[group_col].astype(str)
 
+    # ── Load anatomical adjacency (v4.0+) ────────────────────────────
+    from core.anatomy import load_adjacency
+    adj_tissue = getattr(CFG, "cci_tissue", "") or CFG.tissue
+    adj_file = getattr(CFG, "cci_adjacency_file", "")
+    adjacency_df = load_adjacency(tissue=adj_tissue, custom_file=adj_file, log=log)
+    adj_mode = getattr(CFG, "cci_adjacency", "off")
+    if adj_mode != "off":
+        log.info(
+            "CCI adjacency constraint: mode=%s, tissue=%s, %d adjacency pairs",
+            adj_mode, adj_tissue, len(adjacency_df),
+        )
+
     # ── Run CCI spatial analysis ────────────────────────────────────────
     from rna.utils.cell_interaction import (
         ensure_gene_symbols,
@@ -248,6 +260,8 @@ def main():
         pval_col=sort_col,
         ascending=False,
         log=log,
+        adjacency=adjacency_df if adj_mode != "off" else None,
+        adjacency_mode=adj_mode,
     )
 
     export_spatial_results(lr_res, top_df, CFG, log)

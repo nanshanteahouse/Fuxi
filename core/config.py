@@ -616,7 +616,7 @@ class Config:
     )
 
     # ═══════════════════════════════════════════════════════════════════
-    #  CCI: Cell-cell interaction analysis (RNA Step 12 / Spatial Step 10)
+    #  CCI: Cell-cell interaction analysis (RNA Step 12 / Spatial Step 10 / adjacency filter v4.0+)
     # ═══════════════════════════════════════════════════════════════════
     run_cci: bool = True
     cci_method: str = "liana"              # 'liana' (LIANA+ rank_aggregate)
@@ -626,6 +626,11 @@ class Config:
     cci_spatial_method: str = "liana_spatial"  # (spatial) 'liana_spatial' — reserves 'commot' for future
     cci_spatial_distance: float = 0.0      # (spatial) 0 = use existing spatial_connectivities
     cci_lr_cache_dir: str = ""             # LIANA cache dir; empty = auto (~/.cache/liana)
+    # ── CCI 解剖学约束（v4.0+） ──
+    cci_adjacency: str = "off"          # 'off' | 'soft' | 'hard'
+    cci_tissue: str = ""                # 组织名（为空自动使用 CFG.tissue）
+    cci_adjacency_file: str = ""        # 自定义 CSV 路径（非空时覆盖 KB）
+    cci_adjacency_types: list = field(default_factory=lambda: [])
     # cci_multi_condition: bool = False    # future: multi-condition differential CCI
 
     # ═══════════════════════════════════════════════════════════════════

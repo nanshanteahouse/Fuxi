@@ -335,6 +335,8 @@ def format_cci_results(
     pval_col: str = "magnitude_rank",
     ascending: bool = True,
     log: object = None,
+    adjacency: pd.DataFrame = None,
+    adjacency_mode: str = "off",
 ) -> pd.DataFrame:
     """Filter, sort and format CCI interaction results.
 
@@ -354,6 +356,11 @@ def format_cci_results(
         by a column where higher values are better (e.g. Moran's I).
     log : object, optional
         Logger with .info() method.
+    adjacency : pd.DataFrame, optional
+        Anatomical adjacency table (columns: source, target, adjacency_type).
+        If provided and adjacency_mode != "off", applies adjacency filter.
+    adjacency_mode : str
+        ``"off"`` (default), ``"soft"`` (annotate), or ``"hard"`` (filter).
 
     Returns
     -------
@@ -375,6 +382,15 @@ def format_cci_results(
         lr_res["interaction"] = (
             lr_res["ligand_complex"].astype(str) + "_" +
             lr_res["receptor_complex"].astype(str)
+        )
+
+    # ── Apply anatomical adjacency filter (v4.0+) ──
+    if adjacency is not None and adjacency_mode != "off":
+        from core.anatomy import filter_cci_by_adjacency
+        lr_res = filter_cci_by_adjacency(
+            lr_res, adjacency, mode=adjacency_mode,
+            adjacency_types=[],   # empty = all types pass
+            log=log,
         )
 
     # Sort by significance
