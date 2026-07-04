@@ -22,13 +22,25 @@ from joblib import Parallel, delayed
 import gc
 
 def layer1_markers(adata, CFG, log, group_col):
-    """全细胞类型标记基因 (Wilcoxon, each vs rest) for a given annotation column"""
+    """全细胞类型标记基因 (Wilcoxon, each vs rest) for a given annotation column
+    Returns (filtered_df, unfiltered_df).
+    """
     log.info("[Layer 1] Marker gene detection: groupby=%s", group_col)
     sc.tl.rank_genes_groups(
         adata, groupby=group_col, method='wilcoxon',
         n_genes=CFG.de_n_genes * 2, use_raw=True, pts=True,
         random_state=CFG.random_seed,
     )
+
+    # Step A: export unfiltered (full markers for downstream Steps 09/10)
+    result_all = sc.get.rank_genes_groups_df(adata, group=None)
+    if CFG.de_pval_cutoff is not None:
+        result_all = result_all[result_all['pvals_adj'] < CFG.de_pval_cutoff]
+    out_path = os.path.join(CFG.table_dir, f'marker_genes_per_group_{group_col}.csv')
+    result_all.to_csv(out_path, index=False)
+    log.info("  Exported (unfiltered): %s (%d rows)", out_path, len(result_all))
+
+    # Step B: apply specificity filter for visualization
     sc.tl.filter_rank_genes_groups(
         adata,
         min_in_group_fraction=0.4,
@@ -37,18 +49,16 @@ def layer1_markers(adata, CFG, log, group_col):
     )
     result = sc.get.rank_genes_groups_df(adata, group=None, key='rank_genes_groups_filtered')
     result = result.dropna(subset=['names'])
-    if CFG.de_pval_cutoff is not None:
-        result = result[result['pvals_adj'] < CFG.de_pval_cutoff]
-    out_path = os.path.join(CFG.table_dir, f'marker_genes_per_group_{group_col}.csv')
-    result.to_csv(out_path, index=False)
-    log.info("  Exported: %s (%d rows)", out_path, len(result))
+    filtered_path = os.path.join(CFG.table_dir, f'marker_genes_per_group_{group_col}_filtered.csv')
+    result.to_csv(filtered_path, index=False)
+    log.info("  Exported (filtered): %s (%d rows)", filtered_path, len(result))
 
+    # Step C: log filtered top5
     for group in adata.obs[group_col].cat.categories:
         top5 = result[result['group'] == group].head(5)
         if len(top5) > 0:
             log.info("  %s top5: %s", group, ', '.join(top5['names'].values))
-    return result
-
+    return result, result_all
 
 def _layer2_one_pair(ct, s1, s2, adata, ct_col, CFG, log):
     """Worker for parallel Layer 2 paired DE (one cell type, one stage pair)."""
@@ -282,16 +292,21 @@ def main():
             delayed(layer1_markers)(adata.copy(), CFG, log, col)
             for col in annotation_cols
         )
-        for col, result_df in zip(annotation_cols, parallel_layer1):
+        for col, (result_df, _unused) in zip(annotation_cols, parallel_layer1):
             all_markers[col] = result_df
-    else:
         col = annotation_cols[0]
-        all_markers[col] = layer1_markers(adata, CFG, log, group_col=col)
+        all_markers[col], _ = layer1_markers(adata, CFG, log, group_col=col)
 
-    # 导出兼容文件 (使用主注释列)
+    # 导出兼容文件 — unfiltered (Step 09/10 输入，路径不变)
     combined_path = os.path.join(CFG.table_dir, 'marker_genes_per_group.csv')
-    all_markers[primary_col].to_csv(combined_path, index=False)
-    log.info("  Exported (compat): %s (%d rows)", combined_path, len(all_markers[primary_col]))
+    unfiltered_path = os.path.join(CFG.table_dir, f'marker_genes_per_group_{primary_col}.csv')
+    pd.read_csv(unfiltered_path).to_csv(combined_path, index=False)
+    log.info("  Exported (compat unfiltered): %s", combined_path)
+
+    # 导出兼容文件 — filtered (可视化用)
+    filtered_combined_path = os.path.join(CFG.table_dir, 'marker_genes_per_group_filtered.csv')
+    all_markers[primary_col].to_csv(filtered_combined_path, index=False)
+    log.info("  Exported (compat filtered): %s (%d rows)", filtered_combined_path, len(all_markers[primary_col]))
 
     # Layer 2 & 3: 使用主注释列
     layer2_pairwise_de(adata, CFG, log, primary_col=primary_col)
