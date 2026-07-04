@@ -427,6 +427,21 @@ CFG.cci_n_top_interactions = 50     # Top N interactions for output
 # CFG.cci_multi_condition = False           # future: multi-condition differential CCI
 ```
 
+**Anatomical adjacency constraint (v4.0+):** Optional CCI post-filter. When enabled, only anatomically adjacent cell-type pairs are retained (hard) or annotated (soft) in the CCI results, filtering out false-positive interactions with no anatomical basis.
+
+```python
+CFG.cci_adjacency = "off"         # 'off' | 'soft' | 'hard'
+CFG.cci_tissue = ""              # Tissue name (empty → uses CFG.tissue, e.g. "retina")
+CFG.cci_adjacency_file = ""      # Custom CSV path (overrides KB when non-empty)
+CFG.cci_adjacency_types = []      # Adjacency type whitelist (empty = all types pass)
+```
+
+- **off** (default): Not applied, behavior identical to previous versions
+- **soft**: Adds `adjacent` (bool) and `adjacency_type` (str) columns to results, annotating each interaction's anatomical basis without filtering any rows
+- **hard**: Retains only interactions between cell-type pairs that appear in the adjacency table
+- Built-in retina adjacency (27 classical pairs: synaptic, gap junction, glial ensheathment); new tissues can be added via custom CSV
+
+
 > 💡 **The LR database (~200 MB) is auto-downloaded to ~/.cache/liana on first run and cached.** If var_names are Ensembl IDs, the pipeline automatically converts them to gene symbols via mygene.
 
 ---
@@ -449,6 +464,18 @@ The spatial pipeline additionally provides **spatially-constrained LR co-express
 CFG.cci_spatial_method = "liana_spatial"  # Method (reserves 'commot')
 CFG.cci_spatial_distance = 0.0            # Spatial distance threshold (0 = use existing spatial_connectivities)
 ```
+
+**Anatomical adjacency constraint (v4.0+):** Same as RNA CCI. The spatial CCI step also supports anatomical adjacency filtering as a post-filter. Configuration fields are identical to RNA CCI:
+
+```python
+CFG.cci_adjacency = "off"         # 'off' | 'soft' | 'hard'
+CFG.cci_tissue = ""              # Tissue name (empty → uses CFG.tissue)
+CFG.cci_adjacency_file = ""      # Custom CSV path
+CFG.cci_adjacency_types = []      # Adjacency type whitelist
+```
+
+Since spatial CCI already enforces physical proximity via `cci_spatial_distance`, it is recommended to use `soft` mode for adjacency in spatial analysis, to avoid double hard-filtering.
+
 
 ---
 

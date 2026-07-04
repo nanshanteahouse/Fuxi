@@ -427,6 +427,21 @@ CFG.cci_n_top_interactions = 50     # top N 互作对
 # CFG.cci_multi_condition = False           # future: 多条件差异 CCI
 ```
 
+**解剖学邻接约束（v4.0+）：** 可选的 CCI 后过滤器。启用后，只有物理上相邻的细胞类型之间的 LR 互作会被保留（hard）或标注（soft），从而剔除无解剖学依据的假阳性互作。
+
+```python
+CFG.cci_adjacency = "off"         # 'off' | 'soft' | 'hard'
+CFG.cci_tissue = ""              # 组织名（为空自动使用 CFG.tissue，如 "retina"）
+CFG.cci_adjacency_file = ""      # 自定义 CSV 路径（非空时覆盖 KB）
+CFG.cci_adjacency_types = []      # 连接类型白名单（空 = 全部放行）
+```
+
+- **off**（默认）：不启用，行为与先前版本完全一致
+- **soft**：在结果中新增 `adjacent`（bool）和 `adjacency_type`（str）列，标注每条互作是否有解剖学依据，不删除任何行
+- **hard**：只保留邻接表中存在的细胞类型对的互作，其余过滤掉
+- 内置视网膜邻接表（27 对经典突触/缝隙连接/胶质包裹连接），新组织可通自定义 CSV 扩展
+
+
 > 💡 **首次运行会自动下载 LR 数据库（~200MB）至 ~/.cache/liana 并缓存。**如果 var_names 是 Ensembl ID 格式，管线会自动通过 mygene 转换为 gene symbol。
 
 ---
@@ -449,6 +464,18 @@ CFG.cci_n_top_interactions = 50     # top N 互作对
 CFG.cci_spatial_method = "liana_spatial"  # 方法（reserves 'commot'）
 CFG.cci_spatial_distance = 0.0            # 空间距离阈值（0 = 使用已有 spatial_connectivities）
 ```
+
+**解剖学邻接约束（v4.0+）：** 同上。空间 CCI 同样支持 anatomical adjacency 过滤，在空间距离约束之上叠加解剖学约束。配置字段与 RNA CCI 完全一致：
+
+```python
+CFG.cci_adjacency = "off"         # 'off' | 'soft' | 'hard'
+CFG.cci_tissue = ""              # 组织名（为空自动使用 CFG.tissue）
+CFG.cci_adjacency_file = ""      # 自定义 CSV 路径
+CFG.cci_adjacency_types = []      # 连接类型白名单
+```
+
+由于空间 CCI 已有 `cci_spatial_distance` 约束物理邻近性，建议在 soft 模式下启用邻接约束以标注而非过滤，避免双重硬过滤丢失过多信号。
+
 
 ---
 

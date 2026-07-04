@@ -181,6 +181,7 @@ fuxi/
 │   ├── dataset_detector.py  # Auto-detect modality from file patterns
 │   ├── path_validation.py   # Safe path traversal guards
 │   ├── clustering.py        # Shared grid-search clustering interface
+│   │   ├── anatomy.py          # Anatomical adjacency loading & CCI filtering
 │   └── preprocess/          # Preprocessing pipeline
 │       ├── preprocessor.py      # Orchestrator
 │       ├── metadata_parser.py   # Phase 4: dataset.yaml generation
