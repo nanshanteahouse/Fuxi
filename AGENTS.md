@@ -29,8 +29,23 @@ python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config
 
 ## Commit message discipline
 
-- Commit message 中的每条 `Cx`/`Mx`/`Nx`/`mx`/`Sx` 声明必须在 `git show <commit> --stat` 或 diff 中**直接验证**
-- 若某 commit message 中包含的声明确实未实现，应在该 commit 的 `git notes` 中标记 `UNFIXED`
+使用 [Conventional Commits](https://www.conventionalcommits.org/) 规范：
+
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+常用 `<type>`：`feat` / `fix` / `docs` / `refactor` / `perf` / `test` / `chore` / `style` / `ci`
+`<scope>` 选填，用语义名（如 `enrichment`、`config`），**不要** 用流水线序号（如 `09_enrichment`）
+subject 用祈使语气、首字母小写、不超过 72 字符
+body 回答「为什么」而非「做了什么」
+
+历史遗留的 `Cx`/`Mx`/`Nx`/`mx`/`Sx` 前缀不再用于新 commit；
+若已有声明未实现，在该 commit 的 `git notes` 中标记 `UNFIXED`
 
 ## Code organization
 
