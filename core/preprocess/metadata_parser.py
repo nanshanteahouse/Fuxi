@@ -57,7 +57,8 @@ def generate_dataset_yaml(gse_id: str,
                           data_root: Optional[str],
                           input_dir_override: Optional[str] = None,
                           dry_run: bool = False,
-                          force: bool = False) -> Optional[str]:
+                          force: bool = False,
+                          ncbi_assay_type: Optional[str] = None) -> Optional[str]:
     """Generate a dataset.yaml metadata file.
 
     Returns the path to the generated YAML, or None.
@@ -107,6 +108,7 @@ def generate_dataset_yaml(gse_id: str,
         format=data_format,
         file_count=len(file_list),
         total_size_gb=0.0,
+        assay_type=ncbi_assay_type,
     )
 
     # ── Build SampleEntry list ──
@@ -182,6 +184,7 @@ def generate_dataset_yaml(gse_id: str,
         samples=samples,
         subseries=subseries,
         comparisons=[],
+        assay_type=ncbi_assay_type,
         resources=Resources(
             genome=fd.guess_genome(species),
             technology='10x Genomics' if '10X' in data_format or '10x' in data_format else '',
