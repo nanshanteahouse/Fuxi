@@ -29,7 +29,14 @@ def layer1_markers(adata, CFG, log, group_col):
         n_genes=CFG.de_n_genes * 2, use_raw=True, pts=True,
         random_state=CFG.random_seed,
     )
-    result = sc.get.rank_genes_groups_df(adata, group=None)
+    sc.tl.filter_rank_genes_groups(
+        adata,
+        min_in_group_fraction=0.4,
+        max_out_group_fraction=0.3,
+        min_fold_change=1.0,
+    )
+    result = sc.get.rank_genes_groups_df(adata, group=None, key='rank_genes_groups_filtered')
+    result = result.dropna(subset=['names'])
     if CFG.de_pval_cutoff is not None:
         result = result[result['pvals_adj'] < CFG.de_pval_cutoff]
     out_path = os.path.join(CFG.table_dir, f'marker_genes_per_group_{group_col}.csv')
@@ -183,15 +190,28 @@ def generate_figures(adata, markers_df, CFG, log, primary_col=None):
     sc.settings.autoshow = False
     group_col = primary_col if primary_col else ('cell_type' if 'cell_type' in adata.obs else 'leiden')
 
-    # Heatmap: 每个类型 top5 标记
+    # Heatmap: each type top5 markers by specificity score
     top5_per_group = (
-        markers_df[markers_df['pvals_adj'] < 0.01]
+        markers_df
         .groupby('group', observed=True)
-        .apply(lambda x: x.nsmallest(5, 'pvals_adj'))
+        .apply(lambda x: x.nlargest(5, 'scores'))
         .reset_index(drop=True)
     )
-    top_genes = top5_per_group['names'].unique().tolist()
-    top_genes = [g for g in top_genes if g in adata.raw.var_names][:30]
+
+    # Dedup: cross-group genes keep only highest-score occurrence
+    top5_per_group = (top5_per_group
+        .sort_values('scores', ascending=False)
+        .drop_duplicates(subset='names')
+        .sort_values(['group', 'scores'], ascending=[True, False])
+    )
+
+    # Filter out non-named/Ensembl-style IDs for heatmap display only
+    is_named = ~top5_per_group['names'].str.match(
+        r'^(AC|AL|AP|RP)[0-9]+\.[0-9]+$', na=False
+    )
+    top5_per_group = top5_per_group[is_named]
+
+    top_genes = top5_per_group['names'].unique().tolist()[:30]
     if len(top_genes) >= 5:
         safe_plot(sc.pl.heatmap, adata, var_names=top_genes,
                   groupby=group_col, show=False, save='_07_marker_heatmap.pdf')
