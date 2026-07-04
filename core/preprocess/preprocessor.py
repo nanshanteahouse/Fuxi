@@ -103,7 +103,8 @@ def _generate_parent_dataset_yaml(gse_id: str,
                                    data_root: Optional[str],
                                    input_dir_override: Optional[str] = None,
                                    dry_run: bool = False,
-                                   force: bool = False) -> Optional[str]:
+                                   force: bool = False,
+                                   ncbi_assay_type: Optional[str] = None) -> Optional[str]:
     """Generate a parent-level dataset.yaml for a SuperSeries.
 
     This YAML serves as an index/placeholder — it records the SuperSeries
@@ -160,6 +161,7 @@ def _generate_parent_dataset_yaml(gse_id: str,
         samples=[],
         subseries=subseries,
         comparisons=[],
+        assay_type=ncbi_assay_type,
         resources=Resources(
             genome=fd.guess_genome(species),
         ),
@@ -332,7 +334,6 @@ def run_preprocess(gse_id: Optional[str] = None,
     else:
         if not quiet:
             print("  Not a SuperSeries (single accession).")
-
     # ── Phase 3: Format detection ──────────────────────────────────────
     if not quiet:
         print("\n[Phase 3] Detecting file formats...")
@@ -355,6 +356,14 @@ def run_preprocess(gse_id: Optional[str] = None,
         detected_modality = _infer_modality(classification)
     if not quiet:
         print(f"  Inferred modality: {detected_modality}")
+
+    # ── Extract assay_type from NCBI metadata ─────────────────────────
+    ncbi_assay_type = superseries_info.get('assay_type')
+    # Multiome special case: 10x Multiome is nucleus-based
+    if ncbi_assay_type is None and detected_modality == 'multiome':
+        ncbi_assay_type = 'snRNAseq'
+        if not quiet:
+            print(f"  [INFO] Multiome detected — auto-set assay_type=snRNAseq")
 
     # List unsupported files
     unsupported = classification.get('unsupported', [])
@@ -456,6 +465,7 @@ def run_preprocess(gse_id: Optional[str] = None,
                     input_dir_override=child_data_dir,
                     dry_run=dry_run,
                     force=force,
+                    ncbi_assay_type=ncbi_assay_type,
                 )
 
                 # config.py in projects/
@@ -486,6 +496,7 @@ def run_preprocess(gse_id: Optional[str] = None,
             input_dir_override=input_dir or gse_dir,
             dry_run=dry_run,
             force=force,
+            ncbi_assay_type=ncbi_assay_type,
         )
     else:
         # ── Single-accession original flow ────────────────────────────────
@@ -504,6 +515,7 @@ def run_preprocess(gse_id: Optional[str] = None,
                 input_dir_override=input_dir,
                 dry_run=dry_run,
                 force=force,
+                ncbi_assay_type=ncbi_assay_type,
             )
 
         if not quiet:
