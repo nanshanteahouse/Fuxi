@@ -367,7 +367,7 @@ def main():
         log.info("Multi-resolution UMAP saved for %s", safe_cell_type)
 
     # ── Save intermediate results before AI annotation ─────────────────
-    safe_write(sub, output_path, cfg=cfg)
+    safe_write(sub, output_path, cfg=CFG)
     log.info("Intermediate results saved (pre-AI): %s", output_path)
 
     # ── (j) AI-based subcluster annotation ────────────────────────────
@@ -468,7 +468,7 @@ def main():
     sub.obs['leiden'] = sub.obs['leiden'].astype('category')
 
     # ── (k) Save subcluster result ────────────────────────────────────
-    safe_write(sub, output_path, cfg=cfg)
+    safe_write(sub, output_path, cfg=CFG)
     log.info("Saved: %s", output_path)
 
     # ── (k2) Auto-writeback into 05_annotated.h5ad ───────────────────
