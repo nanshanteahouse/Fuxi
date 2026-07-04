@@ -48,6 +48,10 @@ python core/run_pipeline.py --modality rna --resume --config ...
 python core/run_pipeline.py --modality rna --step 6 --cell-type "Müller Glia" --config ...
 ```
 
+# Run subset pipeline (filter cells by sample/obs criteria, auto-output to *_subset/)
+python core/run_pipeline.py --modality rna --config config_pcw8.py
+#   config 中设置 CFG.sample_keep=["SCR205"] or CFG.obs_filter="stage=='PCW8'"
+
 ### Testing
 
 There is no test runner or linting configuration in this repo. The `tests/` directory exists but contains only `__init__.py` files. There is no `pyproject.toml`, `setup.py`, `Makefile`, or CI configuration.
@@ -120,6 +124,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 
 **Checkpoint system.** Each step reads from a specific checkpoint file and optionally writes one. `run_pipeline.py` maintains step registries (`RNA_STEPS`, `ATAC_STEPS`, `SPATIAL_STEPS`) and checkpoint file mappings. Steps skip if their output checkpoint already exists. The `--resume` flag scans for the first missing checkpoint.
 
+**Subset filtering.** Step 00 supports config-driven cell filtering before downsample (`core/downsample.py:filter_by_config()`). Set `CFG.sample_keep` (sample name whitelist) or `CFG.obs_filter` (pandas query string on `adata.obs`) to process only a subset of cells through the full pipeline. When active, output directories auto-append `_subset` suffix to avoid overwriting full results. Config fields: `sample_keep`, `obs_filter`, `subset_suffix` — all default to empty/falsy for backward compatibility.
+
 **Three annotation modes for RNA Step 05:**
 1. **Unified KB mode** (if `CFG.tissue_kb` is set): Full pipeline — marker scoring → expert rules → evidence fusion → optional AI fallback for low-confidence clusters
 2. **AI mode** (if `CFG.ai.enabled` + `CFG.ai.ai_annotation`): LLM-based annotation with `StandardOntology` normalization
@@ -170,7 +176,7 @@ Does NOT affect clustering — only UMAP coordinates in the checkpoint. Outputs:
 
 | Step | Script | Key Output |
 |------|--------|-----------|
-| 00 | `00_load.py` | 00_raw.h5ad (可选内联降采样) |
+|| 00 | `00_load.py` | 00_raw.h5ad (可选细胞过滤 + 内联降采样) |
 | 01 | `01_doublet.py` | 01_doublet.h5ad |
 | 02 | `02_qc.py` | 02_qc.h5ad |
 | 03 | `03_integrate.py` | 03_integrated.h5ad |
