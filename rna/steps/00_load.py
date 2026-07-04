@@ -293,8 +293,9 @@ def main():
         adata.X = adata.X.astype('float32', copy=False) if sp.issparse(adata.X) else adata.X
         log.info("X precision converted to float32")
 
-    # ── 可选降采样（config-driven） ──
-    from core.downsample import downsample_by_config
+    # ── 可选细胞过滤 + 降采样（config-driven） ──
+    from core.downsample import downsample_by_config, filter_by_config
+    adata = filter_by_config(adata, CFG, log)
     adata = downsample_by_config(adata, CFG, log)
 
     # ── 保存 ──

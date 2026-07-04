@@ -807,6 +807,16 @@ class Config:
         if not self.h5_dir:
             self.h5_dir = self.data_dir
 
+        # ── Subset filter: auto-append suffix to output dirs ──
+        if self.sample_keep or (self.obs_filter and self.obs_filter.strip()):
+            suffix = self.subset_suffix if self.subset_suffix else "_subset"
+            self.h5ad_dir = self.h5ad_dir.rstrip('/\\') + suffix
+            self.figure_dir = self.figure_dir.rstrip('/\\') + suffix
+            self.table_dir = self.table_dir.rstrip('/\\') + suffix
+            self.log_dir = self.log_dir.rstrip('/\\') + suffix
+            print(f"[Config] Subset active → output dir suffix: '{suffix}'")
+
+
         for d in [self.results_dir, self.h5ad_dir,
                   self.figure_dir, self.table_dir, self.log_dir]:
             os.makedirs(d, exist_ok=True)
