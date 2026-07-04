@@ -78,13 +78,13 @@ core/               Shared infrastructure (no biology libs imported)
   ai_caller.py        LLM client (OpenAI SDK) — retry, caching, model discovery
   ai_prompts.py       RNA + ATAC annotation prompt templates + build_annotation_prompt()
   utils.py            safe_write, safe_plot, setup_logger, resolve_config, validate_adata, data_root()
-  dataset_schema.py   Python model for dataset.yaml files
+  dataset_schema.py   Python model for dataset.yaml files (now includes assay_type field for scRNA/snRNA detection)
   dataset_detector.py Auto-detect modality from file patterns
   preprocess/         Preprocessing pipeline (format detect, archive extract, config gen)
     preprocessor.py     Main entry point — GEO download → ready-to-run
     format_detector.py  Extended format detection (archives, 10X dir structure)
     archive_extractor.py Archive extraction (tar.gz, zip, gz, bz2)
-    superseries_detector.py SuperSeries detection + sub-series splitting
+    superseries_detector.py SuperSeries detection + sub-series splitting + assay_type auto-detection (NCBI keyword matching)
 
 rna/                scRNA-seq module (Scanpy 1.10+)
   steps/             13 pipeline steps (00_load → 12_cell_interaction), each a standalone script
@@ -137,6 +137,25 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 - `None`: Manual mode — uses `CFG.best_resolution` and `CFG.best_n_neighbors` directly (backward compatible). Set `best_n_neighbors=0` to auto-pick the best silhouette at the given resolution.
 
 The implementation lives in `rna/utils/cluster_evaluation.py` (`select_best_params()`), shared by RNA, ATAC, and Spatial step scripts.
+
+**snRNA-seq detection & QC adaptation.** The pipeline auto-detects single-nucleus RNA-seq (snRNA-seq) vs single-cell RNA-seq (scRNA-seq) from NCBI GEO metadata keywords:
+
+- `core/preprocess/superseries_detector.py._classify_assay_type(title, summary)` — pure function that matches snRNA-seq/scRNA-seq keywords in GEO title+summary text. Returns `"snRNAseq"`, `"scRNAseq"`, `"ambiguous"`, or `None`.
+- Integrated into `detect_superseries()` returned dict as `'assay_type'` key.
+- `dataset.yaml` `assay_type` field on both `DatasetMeta` and `ModalityEntry`.
+- Preprocessor auto-detects assay_type when `--query-ncbi` is passed. Multiome modality defaults to `snRNAseq` (10x Multiome protocol is nucleus-based).
+- `core/utils.py.resolve_config()` auto-fills `Config.is_nuclei` from `dataset.yaml` (searches project_dir then data_dir). Respects explicit user config (scans config.py source for `is_nuclei` string).
+
+**Config fields for snRNA-seq:**
+- `Config.is_nuclei: bool = False` — set to True for snRNA-seq (delegated to `RNAConfig` via `__getattr__`)
+- `Config.max_pct_mito_nuclei: float = 3.0` — mitochondrial cap for snRNA-seq (vs `max_pct_mito=20.0` for scRNA-seq)
+
+**QC adaptation in `rna/steps/02_qc.py`:**
+- `_mad_thresholds()`: uses MAD multiplier 1.5× (vs 3.0×) and caps at `max_pct_mito_nuclei` when `is_nuclei=True`
+- `_hard_thresholds()`: uses `max_pct_mito_nuclei` instead of `max_pct_mito` when `is_nuclei=True`
+- `compute_qc_metrics()` and `_plot_qc_diagnostics()`: log/annotate snRNA-seq mode with interpretive message (mito reads = cytoplasmic residue, not cell stress)
+
+In snRNA-seq, mitochondrial reads indicate incomplete cytoplasmic stripping during nuclei isolation — NOT cell death. Thresholds are much stricter: machine-assisted <0.5%, gradient 1-3%, column 2-4%. The pipeline defaults to 3.0% (conservative). Three-layer priority: config.py explicit > dataset.yaml auto-fill > NCBI auto-detect.
 
 **UMAP visualization sweep.** AFTER the best (n_neighbors, resolution) is selected, the pipeline optionally sweeps `min_dist` × `spread` to find the most spread-out UMAP layout. Unlike the cluster-parameter grid, this reuses the same KNN graph (cheap — ~3 UMAP runs × ~2 sec each). Controlled by:
 - `CFG.umap_selection_method`:

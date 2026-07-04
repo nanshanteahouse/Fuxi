@@ -83,6 +83,7 @@ python core/preprocess/preprocessor.py --gse GSE00001 --query-ncbi
 | 数据集标题 | ✅ 从 NCBI API 获取 |
 | SuperSeries 检测 | ✅ NCBI + 目录结构 + Series Matrix |
 | `dataset.yaml` | ✅ 完整生成 |
+| assay_type（scRNA-seq / snRNA-seq） | ✅ 自动检测 |
 | `config_*.py` | ✅ 完整生成 |
 
 **运行后的输出示例：**
@@ -104,6 +105,7 @@ Data root: /data/geo_datasets
 
 [Phase 4] Generating dataset.yaml...
   Written: projects/rna/GSE00001/dataset.yaml
+  Assay type: scRNAseq
 
 [Phase 5] Generating config file...
   Written: projects/rna/GSE00001/config_GSE00001.py
@@ -203,6 +205,7 @@ modalities:
     format: 10X_mtx
     file_count: 5
     total_size_gb: 0.0
+    assay_type: scRNAseq             # ← 自动检测：scRNAseq / snRNAseq / null
 samples:
   - id: all
     label: ''
@@ -221,6 +224,7 @@ samples:
 | `title` | 从 GEO 页面粘贴论文标题 |
 | `species` | 若为 `unknown`，手工填写（如 `mus_musculus`） |
 | `tissue` | 若为 `unknown`，手工填写（如 `retina`、`brain`） |
+| `assay_type` | 自动检测。如需修正，改为 `snRNAseq` / `scRNAseq`（留空表示不启用） |
 
 ### 4.2 `config_GSE00001.py` — Pipeline 配置文件
 

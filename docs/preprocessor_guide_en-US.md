@@ -81,6 +81,7 @@ python core/preprocess/preprocessor.py --gse GSE00001 --query-ncbi
 | Dataset title | ✅ From NCBI API |
 | SuperSeries detection | ✅ NCBI + directory structure + Series Matrix |
 | `dataset.yaml` | ✅ Fully generated |
+| Assay type (scRNA-seq / snRNA-seq) | ✅ Auto-detected |
 | `config_*.py` | ✅ Fully generated |
 
 **Example output:**
@@ -102,6 +103,7 @@ Data root: /data/geo_datasets
 
 [Phase 4] Generating dataset.yaml...
   Written: projects/rna/GSE00001/dataset.yaml
+  Assay type: scRNAseq
 
 [Phase 5] Generating config file...
   Written: projects/rna/GSE00001/config_GSE00001.py
@@ -198,6 +200,7 @@ modalities:
     format: 10X_mtx
     file_count: 5
     total_size_gb: 0.0
+    assay_type: scRNAseq             # ← auto-detected: scRNAseq / snRNAseq / null
 samples:
   - id: all
     label: ''
@@ -216,6 +219,7 @@ samples:
 | `title` | Paste the paper title from GEO website |
 | `species` | If `unknown`, fill in manually (e.g. `mus_musculus`) |
 | `tissue` | If `unknown`, fill in manually (e.g. `retina`, `brain`) |
+| `assay_type` | Auto-detected. Override to `snRNAseq` / `scRNAseq` if needed (blank = disabled) |
 
 ### 4.2 `config_GSE00001.py` — pipeline configuration
 

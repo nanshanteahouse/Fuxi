@@ -48,6 +48,31 @@
 Fuxi 目前内置的 Knowledge Base 只覆盖了**视网膜**组织。如果你研究的是其他组织：
 
 - **KB 模式不可用**（因为没有对应组织的 KB）
+- 需要手动设置 `CFG.marker_dict` 来定义已知标记基因
+
+如果你的组织在 `rna/tissue_ontologies/` 中有 KB 目录，只需设置 `CFG.tissue_kb = "retina"`，`marker_dict` 会被自动替换。
+
+### 5. scRNA-seq 还是 snRNA-seq？
+
+这是影响 QC 的重要决策。snRNA-seq（单细胞核测序）的线粒体信号与 scRNA-seq 有本质不同：
+
+| 对比 | scRNA-seq | snRNA-seq |
+|------|-----------|-----------|
+| 线粒体信号含义 | 细胞死亡 / 应激 | 细胞质剥离不彻底（技术因素） |
+| 默认线粒体上限 | `CFG.max_pct_mito = 20.0%` | `CFG.max_pct_mito_nuclei = 3.0%` |
+| MAD 自适应乘数 | 3.0× | 1.5×（更严格） |
+
+**自动检测**：使用 `--query-ncbi` 预处理时，Fuxi 会从 GEO 标题/摘要的关键词自动判断数据类型（如 `snRNA-seq`、`single-nucleus` 等），并将结果写入 `dataset.yaml` 的 `assay_type` 字段。管道启动时自动读取并设置 `CFG.is_nuclei`。
+
+**手动设置**（如自动检测不正确）：
+
+```python
+# 在 config_*.py 中
+CFG.is_nuclei = True                      # 启用核数据模式
+CFG.max_pct_mito_nuclei = 5.0             # 可选：自定义核数据线粒体上限
+```
+
+> **结论**：大多数情况下不需要手动设置。预处理用 `--query-ncbi` 会自动识别。如果知道你的数据是 snRNA-seq 但自动检测未识别（如本地数据），手动设置 `CFG.is_nuclei = True` 即可。
 - **备选方案 1：AI 模式**——如果启用了 AI（需要 API Key），LLM 可以直接根据标记基因注释
 - **备选方案 2：Score_genes 模式**——在配置文件中的 `marker_dict` 里手动输入已知标记基因
 
