@@ -70,11 +70,13 @@ def _mad_thresholds(adata, cfg, log):
     vals = adata.obs['pct_counts_mt'].values.astype(np.float64)
     med = np.median(vals)
     mad = median_abs_deviation(vals, scale='normal')
-    hi_mad = med + cfg.mad_n_mads * mad
-    hi = min(hi_mad, cfg.max_pct_mito)
+    _mito_mad_factor = 1.5 if cfg.is_nuclei else cfg.mad_n_mads
+    hi_mad = med + _mito_mad_factor * mad
+    _mito_cap = cfg.max_pct_mito_nuclei if cfg.is_nuclei else cfg.max_pct_mito
+    hi = min(hi_mad, _mito_cap)
     thresholds['pct_counts_mt'] = (None, hi)
-    log.info("  pct_counts_mt:      median=%.2f%%, MAD=%.2f%% →  hi=%.2f%%  [adaptive]",
-             med, mad, hi)
+    log.info("  pct_counts_mt:      median=%.2f%%, MAD=%.2f%% ->  hi=%.2f%%  [adaptive, factor=%.1f]%s",
+             med, mad, hi, _mito_mad_factor, " [snRNA-seq]" if cfg.is_nuclei else "")
 
     # ---- log_genes_per_umi (complexity) ----
     # 非 raw_counts 数据下复杂度指标无解释力，跳过
@@ -101,7 +103,7 @@ def _hard_thresholds(cfg, log):
     thresholds = {
         'n_genes_by_counts': (cfg.min_genes, cfg.max_genes),
         'total_counts':      (None, None),                     # raw_counts 下也未启用硬上限
-        'pct_counts_mt':     (None, cfg.max_pct_mito),
+        'pct_counts_mt':     (None, cfg.max_pct_mito_nuclei if cfg.is_nuclei else cfg.max_pct_mito),
         'log_genes_per_umi': (cfg.min_genes_per_umi, None) if is_native else (None, None),
     }
     log.info("  Using hard thresholds from config:")
@@ -120,7 +122,7 @@ def _hard_thresholds(cfg, log):
 #  诊断图
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, log):
+def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, cfg, log):
     """生成 3 张 QC 诊断图，标注当前使用的阈值线。
 
     参数:
@@ -128,6 +130,7 @@ def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, log):
         thresholds: _mad_thresholds() 或 _hard_thresholds() 返回的 dict
         fig_dir:    输出目录 (如 results/figures/02_qc)
         mode_label: "adaptive (MAD)" 或 "hard"
+        cfg:        Config (用于 snRNA-seq 模式判断)
         log:        logger
     """
     os.makedirs(fig_dir, exist_ok=True)
@@ -205,8 +208,9 @@ def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, log):
                        label=f'hi={hi:.2f}%')
         _ax.set_xlabel('pct_counts_mt (% Mito)')
         _ax.set_ylabel('Number of cells')
+        _suffix = " (snRNA-seq: residual cytoplasm)" if cfg.is_nuclei else ""
         _ax.set_title(f'% Mito distribution (N={len(vals)}, '
-                     f'median={np.median(vals):.2f}%, mode={mode_label})')
+                     f'median={np.median(vals):.2f}%, mode={mode_label}){_suffix}')
         if hi is not None:
             _ax.legend(fontsize=9)
         _fig.tight_layout()
@@ -239,6 +243,8 @@ def compute_qc_metrics(adata, cfg, log):
     log.info("  Median genes/cell: %.0f", adata.obs['n_genes_by_counts'].median())
     log.info("  Median UMIs/cell: %.0f", adata.obs['total_counts'].median())
     log.info("  Median mito%%:    %.2f%%", adata.obs['pct_counts_mt'].median())
+    if cfg.is_nuclei:
+        log.info("  [snRNA-seq mode] Mitochondrial reads reflect cytoplasmic residue, not cell stress.")
     log.info("  Median complexity: %.3f", adata.obs['log_genes_per_umi'].median())
 
 
@@ -338,7 +344,7 @@ def main():
 
     # 3. 生成诊断图 (在任何过滤之前，展示原始分布 + 阈值线)
     fig_dir = os.path.join(CFG.figure_dir, '02_qc')
-    _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, log)
+    _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, CFG, log)
 
     # 4. 过滤
     adata = filter_cells(adata, thresholds, CFG, log)

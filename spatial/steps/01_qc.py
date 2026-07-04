@@ -43,6 +43,8 @@ def compute_qc_metrics(adata, cfg, log):
     log.info("  Median counts/spot: %.0f", adata.obs['total_counts'].median())
     log.info("  Median genes/spot:  %.0f", adata.obs['n_genes_by_counts'].median())
     log.info("  Median mito%%:       %.2f%%", adata.obs['pct_counts_mt'].median())
+    if cfg.is_nuclei:
+        log.info("  [snRNA-seq mode] Mitochondrial reads reflect cytoplasmic residue, not cell stress.")
     log.info("  Median complexity:   %.3f", adata.obs['log_genes_per_umi'].median())
 
 
@@ -59,7 +61,7 @@ def filter_spots(adata, cfg, log):
     log.info("Applying QC filtering...")
     min_g = cfg.min_genes
     max_g = cfg.max_genes
-    max_m = cfg.max_pct_mito
+    max_m = cfg.max_pct_mito_nuclei if cfg.is_nuclei else cfg.max_pct_mito
     min_cpx = cfg.min_genes_per_umi
 
     f_genes_low  = adata.obs['n_genes_by_counts'] < min_g

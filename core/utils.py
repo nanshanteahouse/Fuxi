@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import scanpy as sc
 import scipy.sparse as sp
+from core.dataset_schema import load_dataset
 
 
 # ── WSL h5py file locking auto-detection ────────────────────────────
@@ -239,6 +240,27 @@ def setup_logger(name: str, log_file: str,
 
     return logger
 
+# ── Dataset.yaml helpers ───────────────────────────────────────────
+
+
+def _find_dataset_yaml(cfg) -> Optional[str]:
+    """Search project_dir → data_dir for dataset.yaml."""
+    for base in [cfg.project_dir, cfg.data_dir]:
+        if base:
+            path = os.path.join(base, 'dataset.yaml')
+            if os.path.exists(path):
+                return path
+    return None
+
+
+def _has_explicit_is_nuclei(config_path: str) -> bool:
+    """Check if config.py explicitly references 'is_nuclei'."""
+    try:
+        with open(config_path) as f:
+            return 'is_nuclei' in f.read()
+    except OSError:
+        return False
+
 
 def resolve_config(config_path: Optional[str] = None):
     """
@@ -277,6 +299,19 @@ def resolve_config(config_path: Optional[str] = None):
         mod.CFG.n_jobs = os.cpu_count() or 1
 
     mod.CFG.resolve_paths()
+
+    # ── Auto-fill is_nuclei from dataset.yaml ──────────────────
+    if not _has_explicit_is_nuclei(config_path):
+        _yaml = _find_dataset_yaml(mod.CFG)
+        if _yaml:
+            try:
+                _ds = load_dataset(_yaml)
+                if getattr(_ds, 'assay_type', None) == 'snRNAseq' and not mod.CFG.is_nuclei:
+                    mod.CFG.is_nuclei = True
+                    print(f"[Config] Auto-set is_nuclei=True from {_yaml}")
+            except Exception:
+                pass  # Graceful: no crash on invalid yaml
+
 
     # ── Species sanity check ───────────────────────────────────────────
     # Warn early when the species string won't match any KB entry, rather
