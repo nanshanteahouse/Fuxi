@@ -310,7 +310,7 @@ def fuse_evidence(
         Output of :func:`utils.marker_scoring.score_cluster_against_kb`.
         Maps ``type_key → Score`` (or bare ``float`` in simplified contexts).
     expert_rule_result : str or None
-        Output of :func:`utils.marker_scoring.apply_expert_rules`.
+        Output of :func:`utils.marker_expert_rules.apply_expert_rules`.
     kb : dict or None
         Full KB dict (reserved for explanation enrichment).
     cluster_markers : pd.DataFrame or None

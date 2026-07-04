@@ -6,10 +6,12 @@ import pytest
 from rna.utils.marker_scoring import (
     score_cluster_against_kb,
     Score,
-    resolve_expert_rule_params,
-    apply_expert_rules,
     detect_low_quality_cluster,
     _negative_marker_penalty,
+)
+from rna.utils.marker_expert_rules import (
+    resolve_expert_rule_params,
+    apply_expert_rules,
 )
 
 

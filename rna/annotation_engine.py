@@ -59,9 +59,12 @@ def run_unified_annotation(adata, CFG, logger):
 
     # ── d. Full marker scoring + expert rules per cluster ─────────────────
     from rna.utils.marker_scoring import (
-        score_cluster_against_kb, apply_expert_rules,
-        annotate_all_clusters, resolve_expert_rule_params,
+        score_cluster_against_kb,
+        annotate_all_clusters,
         detect_low_quality_cluster,
+    )
+    from rna.utils.marker_expert_rules import (
+        apply_expert_rules, resolve_expert_rule_params,
     )
     from rna.utils.evidence_fusion import fuse_all_clusters
 
