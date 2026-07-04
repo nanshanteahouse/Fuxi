@@ -104,6 +104,10 @@ class RNAConfig:
     mad_n_mads: float = 3.0
     qc_ncount_max_mad: float = 5.0
 
+
+    # ── RNA snRNA-seq ──
+    is_nuclei: bool = False
+    max_pct_mito_nuclei: float = 3.0
     # ── RNA Scrublet ──
     run_scrublet: bool = True
     scrublet_expected_doublet_rate: float | None = None
@@ -351,6 +355,7 @@ class Config:
     use_adaptive_thresholds: bool = False
     mad_n_mads: float = 3.0
     qc_ncount_max_mad: float = 5.0
+    # ── RNA snRNA-seq delegated via __getattr__ to RNAConfig ──
 
     # ═══════════════════════════════════════════════════════════════════
     #  ATAC: 参考基因组

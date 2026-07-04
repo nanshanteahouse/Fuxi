@@ -53,6 +53,7 @@ class ModalityEntry:
     format: str
     file_count: int = 0
     total_size_gb: float = 0.0
+    assay_type: Optional[str] = None   # "scRNAseq" | "snRNAseq" | None
     subseries: Optional[str] = None
     note: Optional[str] = None
 
@@ -103,6 +104,7 @@ class DatasetMeta:
     description: Optional[str] = None
     pubmed_id: Optional[str] = None
     parent_superseries: Optional[str] = None
+    assay_type: Optional[str] = None
 
     modalities: list = field(default_factory=list)      # list[ModalityEntry]
     samples: list = field(default_factory=list)          # list[SampleEntry]
@@ -126,6 +128,7 @@ def load_dataset(yaml_path: str) -> DatasetMeta:
             format=m.get('format', ''),
             file_count=m.get('file_count', 0),
             total_size_gb=m.get('total_size_gb', 0.0),
+            assay_type=m.get('assay_type'),
             subseries=m.get('subseries'),
             note=m.get('note'),
         ))
@@ -187,6 +190,7 @@ def load_dataset(yaml_path: str) -> DatasetMeta:
         description=data.get('description'),
         pubmed_id=data.get('pubmed_id'),
         parent_superseries=data.get('parent_superseries'),
+        assay_type=data.get('assay_type'),
         modalities=modalities,
         samples=samples,
         subseries=data.get('subseries', []),
@@ -244,6 +248,8 @@ def save_dataset(ds: DatasetMeta, yaml_path: str) -> None:
         data["pubmed_id"] = ds.pubmed_id
     if ds.parent_superseries is not None:
         data["parent_superseries"] = ds.parent_superseries
+    if ds.assay_type is not None:
+        data["assay_type"] = ds.assay_type
 
     data["modalities"] = [
         {
@@ -252,6 +258,7 @@ def save_dataset(ds: DatasetMeta, yaml_path: str) -> None:
             "format": m.format,
             "file_count": m.file_count,
             "total_size_gb": m.total_size_gb,
+            "assay_type": m.assay_type,
         }
         for m in ds.modalities
     ]

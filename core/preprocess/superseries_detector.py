@@ -430,6 +430,63 @@ def group_files_by_accession(file_list: list[str],
     return groups
 
 
+# ── Assay type classification ─────────────────────────────────────
+
+def _classify_assay_type(title: str, summary: str) -> str | None:
+    """Classify single-cell assay type from title and summary text.
+
+    Uses keyword scoring to distinguish snRNA-seq vs scRNA-seq.
+    Pure function — no I/O, reads only its two string arguments.
+
+    Args:
+        title:   GEO dataset title string.
+        summary: GEO dataset summary string.
+
+    Returns:
+        "snRNAseq"   — single-nucleus RNA-seq keywords dominate.
+        "scRNAseq"   — single-cell RNA-seq keywords dominate.
+        "ambiguous"  — both snRNA-seq and scRNA-seq keywords detected.
+        None          — neither keyword group matched.
+    """
+    text = (title + ' ' + summary).lower()
+
+    # High-confidence snRNA-seq patterns (1 point each)
+    HIGH_SN = [
+        r'\bsn(?:rna)?[-\s]*(?:seq|rnaseq)\b',
+        r'\bsingle[-\s]?nucleus\b',
+        r'\bsingle[-\s]?nuclei\b',
+        r'\bsnuc[-\s]?seq\b',
+    ]
+    # Medium-confidence snRNA-seq patterns (0.5 point each)
+    MED_SN = [
+        r'\bnuclear[-\s]?(?:suspension|prep|isolat|extract)',
+    ]
+    # High-confidence scRNA-seq patterns (1 point each)
+    HIGH_SC = [
+        r'\bsc(?:rna)?[-\s]*(?:seq|rnaseq)\b',
+        r'\bwhole[-\s]?cell\b',
+        r'\bsingle[-\s]?cell[-\s]rna\b',
+    ]
+
+    score_sn = 0.0
+    for pat in HIGH_SN:
+        score_sn += len(re.findall(pat, text)) * 1.0
+    for pat in MED_SN:
+        score_sn += len(re.findall(pat, text)) * 0.5
+
+    score_sc = 0.0
+    for pat in HIGH_SC:
+        score_sc += len(re.findall(pat, text)) * 1.0
+
+    if score_sn >= 1 and score_sc >= 1:
+        return 'ambiguous'
+    if score_sn >= 1:
+        return 'snRNAseq'
+    if score_sc >= 1:
+        return 'scRNAseq'
+    return None
+
+
 # ── Top-level detection orchestrator ──────────────────────────────────
 
 def detect_superseries(root_dir: str,
@@ -444,7 +501,6 @@ def detect_superseries(root_dir: str,
         gse_id:     GEO accession ID (e.g. 'GSE12345').
         query_ncbi_flag:  If True, also query NCBI E-utilities.
 
-    Returns:
         {
             'is_superseries': bool,
             'detected_by': str or None,   # 'dirs' | 'series_matrix' | 'ncbi' | None
@@ -452,6 +508,7 @@ def detect_superseries(root_dir: str,
             'child_accessions': [str],    # accession IDs (from matrix or NCBI)
             'title': '',
             'summary': '',
+            'assay_type': str or None,    # 'snRNAseq' | 'scRNAseq' | 'ambiguous' | None
         }
     """
     result: dict = {
@@ -462,6 +519,7 @@ def detect_superseries(root_dir: str,
         'title': '',
         'summary': '',
         'species': '',
+        'assay_type': None,
     }
 
     # Strategy 1: Directory structure
@@ -514,5 +572,11 @@ def detect_superseries(root_dir: str,
             for acc in filename_children:
                 if acc not in existing:
                     result['child_accessions'].append(acc)
+
+    # Classify assay type from title/summary (if available)
+    result['assay_type'] = _classify_assay_type(
+        result.get('title', ''), result.get('summary', ''),
+    )
+
 
     return result
