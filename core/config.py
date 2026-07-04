@@ -181,6 +181,12 @@ class RNAConfig:
     n_diffmap_comps: int = 15
     n_branchings: int = 2
 
+    # ── Pseudotime gene selection ──
+    pseudotime_genes: List[str] = field(default_factory=list)
+    pseudotime_n_branch_de: int = 10
+    pseudotime_n_correlated: int = 10
+    pseudotime_cor_pval: float = 0.05
+
     # ── RNA downsampling ──
     downsample_target: Optional[int] = None
     downsample_strategy: str = "stratified"

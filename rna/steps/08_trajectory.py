@@ -19,6 +19,10 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 from scipy.sparse import issparse
+from typing import Optional, List
+from scipy.stats import spearmanr
+from statsmodels.stats.multitest import multipletests
+from rna.tissue_ontologies import load_kb
 
 def recompute_neighbors(adata, CFG, log):
     """确保邻居图和 UMAP 存在"""
@@ -125,7 +129,7 @@ def compute_dpt(adata, root_mask, CFG, log):
     safe_plot(sc.pl.diffmap, adata, color='dpt_pseudotime', show=False,
               save='_08_pseudotime_diffmap.pdf', cmap='plasma')
 
-def branch_analysis(adata, CFG, log):
+def branch_analysis(adata, CFG, log) -> Optional[pd.DataFrame]:
     """分支间差异表达 (分支间配对比较策略)"""
     if 'cell_type' not in adata.obs:
         log.info("No cell_type annotation, skipping branch analysis.")
@@ -181,29 +185,212 @@ def branch_analysis(adata, CFG, log):
         out_path = os.path.join(CFG.table_dir, 'branch_deg.csv')
         combined.to_csv(out_path, index=False)
         log.info("  Branch DEG exported: %s (%d rows)", out_path, len(combined))
+        return combined
 
-def gene_trends(adata, CFG, log):
-    """基因表达沿伪时间趋势"""
+    return None
+
+def _select_pseudotime_correlated(adata, CFG) -> List[str]:
+    """Select top genes correlated with dpt_pseudotime via Spearman correlation.
+
+    Pre-filters to expressed genes and top HVGs, applies BH correction,
+    balances positive and negative correlations.
+    """
+    if adata.raw is None:
+        return []
+
+    # 1. Pre-filter: expressed in >=1% of cells
+    if issparse(adata.raw.X):
+        expr_frac = np.array((adata.raw.X > 0).mean(axis=0)).ravel()
+    else:
+        expr_frac = (adata.raw.X > 0).mean(axis=0)
+
+    expressed_mask = expr_frac >= 0.01
+
+    # Restrict to HVGs if available, else top 3000 by mean expression
+    if 'highly_variable' in adata.raw.var:
+        hvgs = adata.raw.var['highly_variable'].values
+        candidate_mask = expressed_mask & hvgs
+    else:
+        expr_mean = np.array(adata.raw.X.mean(axis=0)).ravel()
+        top_n = min(3000, int(expressed_mask.sum()))
+        if top_n == 0:
+            return []
+        expr_mean_sorted_idx = np.argsort(-expr_mean)
+        top_idx = set(expr_mean_sorted_idx[:top_n * 3])
+        candidate_mask = np.array([i in top_idx for i in range(adata.raw.n_vars)]) & expressed_mask
+
+    candidate_indices = np.where(candidate_mask)[0]
+    if len(candidate_indices) == 0:
+        return []
+
+    # 2. Extract pseudotime (drop NaN)
+    pseudotime = adata.obs['dpt_pseudotime'].values
+    pt_mask = ~np.isnan(pseudotime)
+    if pt_mask.sum() < 2:
+        return []
+    pseudotime_clean = pseudotime[pt_mask]
+
+    # 3. Compute Spearman correlation per candidate gene
+    rhos: List[float] = []
+    pvals: List[float] = []
+    gene_names: List[str] = []
+    for idx in candidate_indices:
+        # Extract expression values as float array
+        if issparse(adata.raw.X):
+            raw_values: np.ndarray = adata.raw.X[:, idx].toarray().ravel()
+        else:
+            raw_values = np.asarray(adata.raw.X[:, idx], dtype=float)
+        expr = np.asarray(raw_values, dtype=float)[pt_mask]
+
+        if np.var(expr) == 0:
+            continue
+
+        result = spearmanr(expr, pseudotime_clean)
+        rho: float = result.statistic  # type: ignore[assignment]
+        pval: float = result.pvalue  # type: ignore[assignment]
+        if np.isnan(rho) or np.isnan(pval):
+            continue
+
+        rhos.append(rho)
+        pvals.append(pval)
+        gene_names.append(adata.raw.var_names[idx])
+
+    if len(rhos) == 0:
+        return []
+
+    # 4. BH correction
+    _pvals_adj = multipletests(pvals, method='fdr_bh')  # type: ignore[var-annotated]
+    _, pvals_adj, _, _ = _pvals_adj
+
+    # 5. Filter by adjusted p-value and correlation strength
+    selected = []
+    for i in range(len(gene_names)):
+        if pvals_adj is not None and pvals_adj[i] < CFG.pseudotime_cor_pval and abs(rhos[i]) > 0.2:
+            selected.append((gene_names[i], rhos[i]))
+
+    # 6. Sort by |rho| descending
+    selected.sort(key=lambda x: abs(x[1]), reverse=True)
+
+    # 7. Balanced split: up to half from each sign
+    n = CFG.pseudotime_n_correlated
+    half_n = n // 2
+    pos = [(g, r) for g, r in selected if r > 0]
+    neg = [(g, r) for g, r in selected if r < 0]
+
+    result = []
+    result.extend(g for g, _ in pos[:half_n])
+    result.extend(g for g, _ in neg[:half_n])
+    return result
+def gene_trends(adata, CFG, log, branch_results: Optional[pd.DataFrame] = None):
+    """基因表达沿伪时间趋势——四源数据驱动选择"""
+    # Guard A: DPT exists and has variance
     if 'dpt_pseudotime' not in adata.obs:
         log.info("No DPT, skipping gene trends.")
         return
+    if adata.obs['dpt_pseudotime'].dropna().nunique() < 2:
+        log.info("DPT has insufficient variance, skipping gene trends.")
+        return
 
-    dev_genes = ['SOX2', 'HES1', 'MKI67', 'PAX6', 'DCX', 'STMN2',
-                 'RBFOX3', 'NEUROD1', 'GFAP', 'PDGFRA', 'MBP']
-    dev_genes = [g for g in dev_genes if g in adata.raw.var_names]
-    log.info("Gene trends along pseudotime (%d genes)...", len(dev_genes))
+    # Guard B: raw data exists
+    if adata.raw is None:
+        log.info("No raw data, skipping gene trends.")
+        return
 
-    # 前 6 个: 散点图
-    for gene in dev_genes[:6]:
+    selected_genes = []
+    source_counts = {}
+
+    # Source 1: Branch DE
+    if branch_results is not None and not branch_results.empty:
+        try:
+            if all(c in branch_results.columns for c in ['names', 'scores', 'pvals_adj']):
+                branch_de = branch_results.sort_values('scores', ascending=False)
+                branch_top = branch_de['names'].drop_duplicates().head(CFG.pseudotime_n_branch_de).tolist()
+                branch_top = [g for g in branch_top if g in adata.raw.var_names]
+                selected_genes.extend(branch_top)
+                source_counts['branch_DE'] = len(branch_top)
+            else:
+                log.warning("branch_results has unexpected columns, skipping branch DE source")
+        except Exception as e:
+            log.warning("Failed to extract branch DE genes: %s", e)
+
+    # Source 2: Pseudotime correlation
+    try:
+        corr_genes = _select_pseudotime_correlated(adata, CFG)
+        selected_genes.extend(corr_genes)
+        source_counts['pseudotime_correlation'] = len(corr_genes)
+    except Exception as e:
+        log.warning("Failed to compute pseudotime correlation: %s", e)
+
+    # Source 3: CFG override
+    if CFG.pseudotime_genes:
+        override = [g for g in CFG.pseudotime_genes if g in adata.raw.var_names]
+        excluded = set(CFG.pseudotime_genes) - set(override)
+        if excluded:
+            log.warning("CFG.pseudotime_genes excluded (not in var_names): %s", excluded)
+        selected_genes.extend(override)
+        source_counts['CFG_override'] = len(override)
+
+    # Source 4: KB markers
+    if CFG.tissue_kb:
+        try:
+            kb = load_kb(CFG.tissue_kb)
+            kb_genes = set()
+            for cell_type, info in kb.items():
+                if cell_type in ('expert_rules', '_meta'):
+                    continue
+                if 'markers' in info:
+                    for cat in ('confirm', 'add'):
+                        if cat in info['markers']:
+                            kb_genes.update(info['markers'][cat].keys())
+            kb_genes = [g for g in kb_genes if g in adata.raw.var_names]
+            selected_genes.extend(kb_genes)
+            source_counts['KB_markers'] = len(kb_genes)
+        except ValueError as e:
+            log.warning("Unsupported tissue_kb '%s': %s. Skipping KB markers.", CFG.tissue_kb, e)
+        except Exception as e:
+            log.warning("Failed to load KB markers: %s", e)
+
+    # Union: deduplicate preserving first occurrence (priority order 1->2->3->4)
+    seen = set()
+    union_genes = []
+    for g in selected_genes:
+        if g not in seen:
+            seen.add(g)
+            union_genes.append(g)
+
+    # Cap total
+    max_genes = CFG.pseudotime_n_correlated * 2
+    union_genes = union_genes[:max_genes]
+
+    log.info(
+        "Gene trends along pseudotime (%d unique genes from %s)...",
+        len(union_genes),
+        source_counts,
+    )
+
+    if not union_genes:
+        log.warning("No genes selected for pseudotime trends from any source.")
+        return
+
+    # Scatter plots: first 6 genes
+    for gene in union_genes[:6]:
         safe_plot(sc.pl.scatter, adata, x='dpt_pseudotime', y=gene,
                   use_raw=True, show=False, save=f'_08_trend_{gene}.pdf')
 
-    # 热图
-    if len(dev_genes) >= 5:
-        safe_plot(sc.pl.heatmap,
-                  adata[adata.obs['dpt_pseudotime'].notna()].copy(),
-                  var_names=dev_genes, groupby='dpt_pseudotime',
-                  show=False, save='_08_dev_genes_heatmap.pdf')
+    # Heatmap: if >=5 genes, with binned pseudotime
+    if len(union_genes) >= 5:
+        n_bins = min(10, int(adata.obs['dpt_pseudotime'].dropna().nunique() - 1))
+        if n_bins >= 2:
+            adata_sub = adata[adata.obs['dpt_pseudotime'].notna()].copy()
+            adata_sub.obs['dpt_pseudotime_bin'] = pd.qcut(
+                adata_sub.obs['dpt_pseudotime'], q=n_bins, duplicates='drop'
+            ).astype(str)  # type: ignore[union-attr]
+            safe_plot(sc.pl.heatmap,
+                      adata_sub,
+                      var_names=union_genes, groupby='dpt_pseudotime_bin',
+                      use_raw=True, show=False, save='_08_dev_genes_heatmap.pdf')
+        else:
+            log.info("Not enough unique pseudotime values (%d) for heatmap binning.", n_bins)
 
 def main():
     t0 = time.time()
@@ -265,8 +452,8 @@ def main():
     run_paga(adata, CFG, log)
     root_mask = find_root_cells(adata, CFG, log)
     compute_dpt(adata, root_mask, CFG, log)
-    branch_analysis(adata, CFG, log)
-    gene_trends(adata, CFG, log)
+    branch_results = branch_analysis(adata, CFG, log)
+    gene_trends(adata, CFG, log, branch_results=branch_results)
 
     # 最终可视化 (figdir 已在上面设置)
     for color in ['stage', 'cell_type', 'cell_type_sub', 'dpt_pseudotime']:
