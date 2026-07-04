@@ -276,9 +276,9 @@ def ai_annotate(adata, CFG, logger, std=None):
     )
 
     safe_plot(sc.pl.umap, adata, color='cell_type', show=False,
-              save='_05_celltype_ai.pdf', legend_loc='on data')
+              save='_05_celltype_ai.pdf')
     safe_plot(sc.pl.umap, adata, color='annot_label', show=False,
-              save='_05_annot_label_ai.pdf', legend_loc='on data')
+              save='_05_annot_label_ai.pdf')
 
     meta_dict = {
         'barcode': adata.obs_names,
@@ -333,9 +333,9 @@ def score_genes_mode(adata, CFG, logger):
     os.makedirs(sc.settings.figdir, exist_ok=True)
     sc.settings.autoshow = False
     safe_plot(sc.pl.umap, adata, color='cell_type', show=False,
-              save='_05_celltype.pdf', legend_loc='on data')
+              save='_05_celltype.pdf')
     safe_plot(sc.pl.umap, adata, color='annot_label', show=False,
-              save='_05_annot_label.pdf', legend_loc='on data')
+              save='_05_annot_label.pdf')
     if 'annotation_confidence' in adata.obs:
         safe_plot(sc.pl.umap, adata, color='annotation_confidence', show=False,
                   save='_05_confidence.pdf', cmap='viridis')

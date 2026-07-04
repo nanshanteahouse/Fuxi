@@ -340,7 +340,7 @@ def main():
     # Leiden at best resolution
     safe_plot(sc.pl.umap, sub, color='leiden', show=False,
               save=f'_06_sub_{safe_cell_type}_leiden.pdf',
-              legend_loc='on data', title=f'{args.cell_type} — leiden')
+              title=f'{args.cell_type} — leiden')
 
     # Multi-resolution comparison
     res_keys = [f'sub_leiden_r{r}' for r in CFG.leiden_resolutions
@@ -355,7 +355,7 @@ def main():
         axes = axes.ravel() if n_res > 1 else [axes]
         for i, key in enumerate(res_keys):
             sc.pl.umap(sub, color=key, ax=axes[i], show=False,
-                       legend_loc='on data', legend_fontsize=6,
+                       legend_fontsize=8,
                        title=f'{safe_cell_type} — {key}')
         for j in range(i + 1, len(axes)):
             axes[j].axis('off')
@@ -450,7 +450,7 @@ def main():
                 # Save AI-annotated UMAP
                 safe_plot(sc.pl.umap, sub, color='sub_ai_label', show=False,
                           save=f'_06_sub_{safe_cell_type}_ai.pdf',
-                          legend_loc='on data',
+                          title=f'{args.cell_type} — AI subcluster')
                           title=f'{args.cell_type} — AI subcluster')
 
         except Exception as e:

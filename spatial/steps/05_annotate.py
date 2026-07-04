@@ -270,7 +270,7 @@ def main():
     if 'cell_type' in adata.obs:
         try:
             safe_plot(sc.pl.umap, adata, color='cell_type', show=False,
-                      save='_05_celltype.png', legend_loc='on data')
+                      save='_05_celltype.png')
         except Exception as e:
             log.warning("UMAP cell_type plot failed: %s", e)
 

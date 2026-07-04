@@ -310,9 +310,9 @@ def run_unified_annotation(adata, CFG, logger):
     adata.obs['annot_label'] = adata.obs['cell_type'].astype(str)
 
     safe_plot(sc.pl.umap, adata, color='cell_type', show=False,
-              save='_05_celltype_unified.pdf', legend_loc='on data')
+              save='_05_celltype_unified.pdf')
     safe_plot(sc.pl.umap, adata, color='annot_label', show=False,
-              save='_05_annot_label_unified.pdf', legend_loc='on data')
+              save='_05_annot_label_unified.pdf')
     safe_plot(sc.pl.umap, adata, color='annot_confidence', show=False,
               save='_05_confidence_unified.pdf')
 

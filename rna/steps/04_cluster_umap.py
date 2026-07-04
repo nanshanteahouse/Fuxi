@@ -240,7 +240,7 @@ def main():
                     sc.tl.umap(adata, min_dist=md, spread=sp,
                                random_state=CFG.random_seed)
                     sc.pl.umap(adata, color='leiden', ax=ax, show=False,
-                               legend_loc='on data', legend_fontsize=5,
+                               legend_fontsize=8,
                                title=f'min_dist={md}, spread={sp}')
                 except Exception:
                     ax.text(0.5, 0.5, 'Error', ha='center', va='center',
@@ -272,7 +272,7 @@ def main():
                     try:
                         adata.obsm['X_umap'] = adata.obsm[umap_key].copy()
                         sc.pl.umap(adata, color=leiden_key, ax=ax,
-                                   show=False, legend_loc='on data',
+                                   legend_fontsize=8,
                                    legend_fontsize=5,
                                    title=f'n={n}, r={res}')
                     except Exception as e_sub:
@@ -308,7 +308,7 @@ def main():
                 axes = axes.ravel() if n_res > 1 else [axes]
                 for i, key in enumerate(res_keys):
                     sc.pl.umap(adata, color=key, ax=axes[i], show=False,
-                               legend_loc='on data', legend_fontsize=6,
+                               legend_fontsize=8,
                                title=key)
                 for j in range(len(res_keys), len(axes)):
                     axes[j].axis('off')
