@@ -124,6 +124,23 @@ CFG.root_markers = ['VSX2', 'PAX6', 'SOX2', 'HES1', 'NOTCH1']
 # CFG.enrichment_gene_sets = ['GO_Biological_Process_2023', 'KEGG_2021_Human']
 # CFG.enrichment_organism = 'human'
 
+# 组织特异性基因集库（v4.0+）:
+# 可用库: CellMarker_Augmented_2021, PanglaoDB_Augmented_2021,
+#         Tabula_Sapiens, Azimuth_Cell_Types, Allen_Brain_Atlas
+# CFG.enrichment_gene_sets_tissue = [
+#     'CellMarker_Augmented_2021',
+#     'PanglaoDB_Augmented_2021',
+# ]
+
+# 组织感知排序/过滤（v4.0+）:
+#   'off'  = 纯统计排序（默认，当前行为）
+#   'soft' = 标注 tissue_relevant 列 + 输出 _tissue_relevant.csv，不过滤
+#   'hard' = 只保留组织相关通路
+# CFG.enrichment_tissue_mode = "soft"
+# CFG.enrichment_use_kb_relevance = True
+# CFG.enrichment_redundancy_cluster = True
+# (视网膜场景推荐启用)
+
 # ── GRN 调控网络分析 (取消注释以启用) ──
 CFG.run_grn = True
 CFG.grn_method = "decoupler"           # 目前仅 'decoupler' (pySCENIC 待定)

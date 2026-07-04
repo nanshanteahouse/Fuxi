@@ -587,6 +587,29 @@ class Config:
     enrichment_min_size: int = 10
     enrichment_max_size: int = 500
     enrichment_permutations: int = 1000
+
+    # ═══════════════════════════════════════════════════════════════════
+    #  富集分析：组织/发育生物学感知（v4.0+）
+    # ═══════════════════════════════════════════════════════════════════
+    enrichment_tissue_mode: str = "off"
+        # 'off' | 'soft' | 'hard'
+        # off: 纯统计排序（当前行为）
+        # soft: 标注 tissue_relevant 列，不过滤任何行
+        # hard: 只保留 tissue_relevant=True 的通路
+    enrichment_tissue_pathways_whitelist: list = field(default_factory=lambda: [])
+        # 显式通路白名单（优先级最高），如 ["Phototransduction"]
+    enrichment_tissue_pathways_blacklist: list = field(default_factory=lambda: [])
+        # 显式通路黑名单（优先级第二），如 ["Ribosome", "Oxidative Phosphorylation"]
+    enrichment_redundancy_cluster: bool = False
+        # 是否对冗余通路做聚类合并（默认为 False，不改动现有行为）
+    enrichment_redundancy_threshold: float = 0.6
+        # 通路 Jaccard 相似度阈值（0-1），> 此值视为冗余
+    enrichment_use_kb_relevance: bool = False
+        # 是否使用 KB 标记基因计算通路组织相关度
+    enrichment_gene_sets_tissue: list = field(default_factory=lambda: [])
+        # 组织特异性基因集库名称列表，如 ['CellMarker_Augmented_2021', 'PanglaoDB_Augmented_2021']
+    enrichment_background_restrict: bool = False
+        # 是否限制背景为数据中检测到的基因（Phase 2 预留，暂未实现）
     peak_gene_distance: int = 100000    # ATAC: peak-to-gene 映射距离
     gene_annotation_bed: str = ""       # ATAC: gene TSS BED (chr,start,end,gene_name,strand)
 

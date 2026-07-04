@@ -94,6 +94,60 @@ def main():
     os.makedirs(table_dir, exist_ok=True)
     os.makedirs(fig_dir, exist_ok=True)
 
+    # ── Tissue-aware post-processing (v4.0+) ──
+    tissue_mode = getattr(CFG, 'enrichment_tissue_mode', 'off')
+    do_redundancy = getattr(CFG, 'enrichment_redundancy_cluster', False)
+    do_kb = getattr(CFG, 'enrichment_use_kb_relevance', False)
+
+    if tissue_mode != 'off' or do_redundancy or do_kb:
+        from core.enrichment_tissue import (
+            compute_pathway_relevance,
+            cluster_redundant_pathways,
+            filter_enrichment_by_tissue,
+        )
+
+        # 加载 KB markers
+        kb_markers = None
+        if do_kb and CFG.tissue:
+            from rna.tissue_ontologies import load_kb
+            kb = load_kb(CFG.tissue)
+            kb_markers = set()
+            for ct, entry in kb.items():
+                if isinstance(entry, dict) and 'markers' in entry:
+                    for tier in ('confirm', 'add'):
+                        kb_markers.update(entry['markers'].get(tier, {}).keys())
+
+        # 加载通路元数据
+        pathway_whitelist = list(getattr(CFG, 'enrichment_tissue_pathways_whitelist', []))
+        pathway_blacklist = list(getattr(CFG, 'enrichment_tissue_pathways_blacklist', []))
+        if do_kb and CFG.tissue:
+            from rna.tissue_ontologies import load_pathway_relevance
+            pr = load_pathway_relevance(CFG.tissue)
+            if pr:
+                if not getattr(CFG, 'enrichment_tissue_pathways_whitelist', []):
+                    pathway_whitelist = pr.get('key_pathways', [])
+                if not getattr(CFG, 'enrichment_tissue_pathways_blacklist', []):
+                    pathway_blacklist = pr.get('generic_pathways', [])
+
+        for results_dict in [ora_results, prerank_results]:
+            for gs_name, df in results_dict.items():
+                if df.empty:
+                    continue
+                if do_kb and kb_markers:
+                    df = compute_pathway_relevance(df, kb_markers, log)
+                if do_redundancy and 'Overlap' in df.columns:
+                    df = cluster_redundant_pathways(
+                        df, 'Term', 'Overlap',
+                        getattr(CFG, 'enrichment_redundancy_threshold', 0.6),
+                    )
+                if tissue_mode != 'off':
+                    df = filter_enrichment_by_tissue(
+                        df, tissue_mode,
+                        pathway_whitelist, pathway_blacklist,
+                        log=log,
+                    )
+                results_dict[gs_name] = df
+
     for gs_name, df in ora_results.items():
         path = os.path.join(table_dir, f"ora_{gs_name}_summary.csv")
         df.to_csv(path, index=False)
@@ -107,6 +161,43 @@ def main():
     total_ora = sum(len(df) for df in ora_results.values())
     total_gsea = sum(len(df) for df in prerank_results.values())
     log.info("Enrichment results: ORA %d rows, GSEA %d rows", total_ora, total_gsea)
+
+    # ── Tissue-aware filtered copies (v4.0+) ──
+    if tissue_mode != 'off':
+        for gs_name, df in ora_results.items():
+            if df.empty or 'tissue_relevant' not in df.columns:
+                continue
+            relevant = df[df['tissue_relevant'] == True]
+            if not relevant.empty:
+                path = os.path.join(table_dir, f"ora_{gs_name}_tissue_relevant.csv")
+                relevant.to_csv(path, index=False)
+                log.info("  Tissue-relevant ORA: %s (%d/%d rows)",
+                         path, len(relevant), len(df))
+
+        for gs_name, df in prerank_results.items():
+            if df.empty or 'tissue_relevant' not in df.columns:
+                continue
+            relevant = df[df['tissue_relevant'] == True]
+            if not relevant.empty:
+                path = os.path.join(table_dir, f"prerank_{gs_name}_tissue_relevant.csv")
+                relevant.to_csv(path, index=False)
+                log.info("  Tissue-relevant GSEA: %s (%d/%d rows)",
+                         path, len(relevant), len(df))
+
+        total_relevant = 0
+        total_all = 0
+        for df in ora_results.values():
+            if 'tissue_relevant' in df.columns:
+                total_all += len(df)
+                total_relevant += df['tissue_relevant'].sum()
+        for df in prerank_results.values():
+            if 'tissue_relevant' in df.columns:
+                total_all += len(df)
+                total_relevant += df['tissue_relevant'].sum()
+        if total_all > 0:
+            log.info("Tissue-aware enrichment: mode=%s, %d/%d (%.0f%%) pathways marked relevant",
+                     tissue_mode, total_relevant, total_all,
+                     total_relevant / total_all * 100)
 
     log.info("Step 08 complete, took %.1fs", time.time() - t0)
 

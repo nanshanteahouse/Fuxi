@@ -62,3 +62,36 @@ def load_adjacency(tissue_name: str) -> pd.DataFrame:
     except ImportError:
         pass
     return pd.DataFrame(columns=["source", "target", "adjacency_type"])
+
+
+def load_pathway_relevance(tissue_name: str) -> dict:
+    """Load tissue-specific pathway relevance metadata.
+
+    Parameters
+    ----------
+    tissue_name : str
+        Tissue identifier (e.g. ``"retina"``).
+
+    Returns
+    -------
+    dict
+        Dict with keys:
+        - key_pathways (list[str]): 该组织关键通路白名单
+        - generic_pathways (list[str]): 在该组织场景下通用的通路黑名单
+        - kb_pathway_markers (dict[str, list[str]]): 通路→标记基因映射
+    Returns empty dict (never crashes) for unsupported tissues.
+    """
+    try:
+        if tissue_name == "retina":
+            from .retina.pathway_relevance import (
+                RETINA_KEY_PATHWAYS, RETINA_GENERIC_PATHWAYS,
+                RETINA_KB_PATHWAY_MARKERS,
+            )
+            return {
+                "key_pathways": list(RETINA_KEY_PATHWAYS),
+                "generic_pathways": list(RETINA_GENERIC_PATHWAYS),
+                "kb_pathway_markers": dict(RETINA_KB_PATHWAY_MARKERS),
+            }
+    except ImportError:
+        pass
+    return {}
