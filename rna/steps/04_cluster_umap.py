@@ -186,6 +186,18 @@ def main():
     min_dist_grid = getattr(CFG, 'param_grid_min_dist', [0.3])
     spread_grid = getattr(CFG, 'param_grid_spread', [1.0])
     umap_method = getattr(CFG, 'umap_selection_method', 'convex_hull')
+    use_paga = getattr(CFG, 'umap_paga_init', False)
+
+    # If PAGA init is enabled, compute PAGA backbone first
+    if use_paga:
+        log.info("Computing PAGA backbone for UMAP initialization...")
+        sc.tl.paga(adata, groups='leiden')
+        sc.pl.paga(adata, show=False)
+        plt.savefig(os.path.join(fig_dir, 'paga_backbone.png'),
+                    dpi=150, bbox_inches='tight')
+        plt.close()
+        log.info("  PAGA backbone computed and saved")
+
     best_md, best_sp, umap_method_label, sweep_results = select_best_umap_params(
         adata, best_n, min_dist_grid, spread_grid, umap_method, CFG, use_rep, log)
 
@@ -194,6 +206,7 @@ def main():
              best_md, best_sp, umap_method_label)
     try:
         sc.tl.umap(adata, min_dist=best_md, spread=best_sp,
+                   init_pos='paga' if use_paga else 'spectral',
                    random_state=CFG.random_seed)
         safe_write(adata, CFG.cluster_h5ad, cfg=CFG)
         log.info("Checkpoint saved with final UMAP: %s", CFG.cluster_h5ad)

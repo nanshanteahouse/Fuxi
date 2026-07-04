@@ -262,6 +262,8 @@ def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, C
     import numpy as np
     import pandas as pd
 
+    use_paga = getattr(CFG, 'umap_paga_init', False)
+
     # ── Manual mode ──
     if method is None:
         md = getattr(CFG, 'umap_min_dist', 0.3)
@@ -316,6 +318,7 @@ def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, C
         for sp in spread_grid:
             try:
                 sc.tl.umap(adata, min_dist=md, spread=sp,
+                           init_pos='paga' if use_paga else 'spectral',
                            random_state=CFG.random_seed)
                 coords = adata.obsm['X_umap']
                 hull = ConvexHull(coords)
