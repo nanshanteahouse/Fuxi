@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 from scipy.sparse import issparse
-from typing import Optional, List
+from typing import Optional, List, Tuple
 from scipy.stats import spearmanr
 from statsmodels.stats.multitest import multipletests
 from rna.tissue_ontologies import load_kb
@@ -189,14 +189,14 @@ def branch_analysis(adata, CFG, log) -> Optional[pd.DataFrame]:
 
     return None
 
-def _select_pseudotime_correlated(adata, CFG) -> List[str]:
+def _select_pseudotime_correlated(adata, CFG) -> Tuple[List[str], pd.DataFrame]:
     """Select top genes correlated with dpt_pseudotime via Spearman correlation.
 
     Pre-filters to expressed genes and top HVGs, applies BH correction,
     balances positive and negative correlations.
     """
     if adata.raw is None:
-        return []
+        return [], pd.DataFrame(columns=('gene', 'rho', 'pval_raw', 'pval_adj'))  # type: ignore[arg-type]
 
     # 1. Pre-filter: expressed in >=1% of cells
     if issparse(adata.raw.X):
@@ -214,20 +214,20 @@ def _select_pseudotime_correlated(adata, CFG) -> List[str]:
         expr_mean = np.array(adata.raw.X.mean(axis=0)).ravel()
         top_n = min(3000, int(expressed_mask.sum()))
         if top_n == 0:
-            return []
+            return [], pd.DataFrame(columns=('gene', 'rho', 'pval_raw', 'pval_adj'))  # type: ignore[arg-type]
         expr_mean_sorted_idx = np.argsort(-expr_mean)
         top_idx = set(expr_mean_sorted_idx[:top_n * 3])
         candidate_mask = np.array([i in top_idx for i in range(adata.raw.n_vars)]) & expressed_mask
 
     candidate_indices = np.where(candidate_mask)[0]
     if len(candidate_indices) == 0:
-        return []
+        return [], pd.DataFrame(columns=('gene', 'rho', 'pval_raw', 'pval_adj'))  # type: ignore[arg-type]
 
     # 2. Extract pseudotime (drop NaN)
     pseudotime = adata.obs['dpt_pseudotime'].values
     pt_mask = ~np.isnan(pseudotime)
     if pt_mask.sum() < 2:
-        return []
+        return [], pd.DataFrame(columns=('gene', 'rho', 'pval_raw', 'pval_adj'))  # type: ignore[arg-type]
     pseudotime_clean = pseudotime[pt_mask]
 
     # 3. Compute Spearman correlation per candidate gene
@@ -256,11 +256,18 @@ def _select_pseudotime_correlated(adata, CFG) -> List[str]:
         gene_names.append(adata.raw.var_names[idx])
 
     if len(rhos) == 0:
-        return []
+        return [], pd.DataFrame(columns=('gene', 'rho', 'pval_raw', 'pval_adj'))  # type: ignore[arg-type]
 
     # 4. BH correction
     _pvals_adj = multipletests(pvals, method='fdr_bh')  # type: ignore[var-annotated]
     _, pvals_adj, _, _ = _pvals_adj
+
+    full_df = pd.DataFrame({
+        'gene': gene_names,
+        'rho': rhos,
+        'pval_raw': pvals,
+        'pval_adj': pvals_adj if pvals_adj is not None else [1.0] * len(gene_names),
+    })
 
     # 5. Filter by adjusted p-value and correlation strength
     selected = []
@@ -280,7 +287,7 @@ def _select_pseudotime_correlated(adata, CFG) -> List[str]:
     result = []
     result.extend(g for g, _ in pos[:half_n])
     result.extend(g for g, _ in neg[:half_n])
-    return result
+    return result, full_df
 def gene_trends(adata, CFG, log, branch_results: Optional[pd.DataFrame] = None):
     """基因表达沿伪时间趋势——四源数据驱动选择"""
     # Guard A: DPT exists and has variance
@@ -298,6 +305,7 @@ def gene_trends(adata, CFG, log, branch_results: Optional[pd.DataFrame] = None):
 
     selected_genes = []
     source_counts = {}
+    branch_top: List[str] = []
 
     # Source 1: Branch DE
     if branch_results is not None and not branch_results.empty:
@@ -313,9 +321,11 @@ def gene_trends(adata, CFG, log, branch_results: Optional[pd.DataFrame] = None):
         except Exception as e:
             log.warning("Failed to extract branch DE genes: %s", e)
 
+    corr_genes: List[str] = []
+    corr_df: pd.DataFrame = pd.DataFrame(columns=('gene', 'rho', 'pval_raw', 'pval_adj'))  # type: ignore[arg-type]
     # Source 2: Pseudotime correlation
     try:
-        corr_genes = _select_pseudotime_correlated(adata, CFG)
+        corr_genes, corr_df = _select_pseudotime_correlated(adata, CFG)
         selected_genes.extend(corr_genes)
         source_counts['pseudotime_correlation'] = len(corr_genes)
     except Exception as e:
@@ -330,6 +340,7 @@ def gene_trends(adata, CFG, log, branch_results: Optional[pd.DataFrame] = None):
         selected_genes.extend(override)
         source_counts['CFG_override'] = len(override)
 
+    kb_genes = []
     # Source 4: KB markers
     if CFG.tissue_kb:
         try:
@@ -362,6 +373,25 @@ def gene_trends(adata, CFG, log, branch_results: Optional[pd.DataFrame] = None):
     max_genes = CFG.pseudotime_n_correlated * 2
     union_genes = union_genes[:max_genes]
 
+    # Export Spearman correlation full results
+    if not corr_df.empty:
+        corr_csv = os.path.join(CFG.table_dir, 'pseudotime_trend_genes.csv')
+        corr_df.to_csv(corr_csv, index=False)
+        log.info("  Pseudotime trend genes exported: %s (%d rows)", corr_csv, len(corr_df))
+
+    # Export selected union with source annotation
+    source_map = {}
+    for g in union_genes:
+        if g in branch_top: source_map.setdefault(g, set()).add('branch_DE')
+        if g in corr_genes: source_map.setdefault(g, set()).add('pseudotime_correlation')
+        if g in CFG.pseudotime_genes: source_map.setdefault(g, set()).add('CFG_override')
+        if g in kb_genes: source_map.setdefault(g, set()).add('KB_markers')
+    sel_df = pd.DataFrame(
+        {'gene': list(source_map.keys()), 'source': ['+'.join(sorted(v)) for v in source_map.values()]},
+    )
+    sel_csv = os.path.join(CFG.table_dir, 'pseudotime_trend_genes_selected.csv')
+    sel_df.to_csv(sel_csv, index=False)
+    log.info("  Selected pseudotime trend genes exported: %s (%d rows)", sel_csv, len(sel_df))
     log.info(
         "Gene trends along pseudotime (%d unique genes from %s)...",
         len(union_genes),

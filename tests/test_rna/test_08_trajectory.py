@@ -43,6 +43,7 @@ class MockCFG:
     pseudotime_cor_pval: float = 0.05
     pseudotime_genes: List[str] = field(default_factory=list)
     tissue_kb: str = ""
+    table_dir: str = "/tmp"
 
 
 # ── Test helpers ──────────────────────────────────────────────────────────
@@ -92,6 +93,7 @@ class TestGeneTrends:
             pseudotime_n_correlated=10,
             pseudotime_cor_pval=0.05,
             pseudotime_genes=["GENE_0", "GENE_1"],
+            table_dir=str(tmp_path),
         )
 
         log = logging.getLogger("test_gene_trends_happy")
@@ -108,6 +110,9 @@ class TestGeneTrends:
         # should keep them once each.
         assert "pseudotime_correlation" in caplog.text, (
             "Expected log to mention pseudotime correlation source"
+        )
+        assert "Pseudotime trend genes exported" in caplog.text, (
+            "Expected log message about CSV export of pseudotime trend genes"
         )
 
     def test_gene_trends_no_dpt(
@@ -168,7 +173,7 @@ class TestSelectPseudotimeCorrelated:
         adata.raw.X[:, :3] = pseudotime[:, None] * 10
 
         cfg = MockCFG(pseudotime_n_correlated=10, pseudotime_cor_pval=0.05)
-        result = _select_pseudotime_correlated(adata, cfg)
+        result, corr_df = _select_pseudotime_correlated(adata, cfg)
 
         assert isinstance(result, list), f"Expected list, got {type(result)}"
         assert len(result) > 0, "Expected at least one correlated gene"
@@ -176,6 +181,13 @@ class TestSelectPseudotimeCorrelated:
             assert f"GENE_{i}" in result, (
                 f"Expected perfectly correlated GENE_{i} in result, got {result}"
             )
+
+        assert isinstance(corr_df, pd.DataFrame), f"Expected DataFrame, got {type(corr_df)}"
+        expected_cols = ['gene', 'rho', 'pval_raw', 'pval_adj']
+        assert list(corr_df.columns) == expected_cols, (
+            f"Unexpected columns: {list(corr_df.columns)}"
+        )
+        assert len(corr_df) > 0, "Expected non-empty DataFrame"
 
     def test_select_correlated_constant_pseudotime(self) -> None:
         """Constant pseudotime -> empty list (Spearman requires variance)."""
@@ -189,12 +201,15 @@ class TestSelectPseudotimeCorrelated:
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", ConstantInputWarning)
-            result = _select_pseudotime_correlated(adata, cfg)
+            result, corr_df = _select_pseudotime_correlated(adata, cfg)
 
         assert isinstance(result, list), f"Expected list, got {type(result)}"
         assert len(result) == 0, (
             f"Expected empty result for constant pseudotime, got {result}"
         )
+
+        assert isinstance(corr_df, pd.DataFrame), f"Expected DataFrame, got {type(corr_df)}"
+        assert corr_df.empty, f"Expected empty DataFrame, got {len(corr_df)} rows"
 
 
 # ── Test: gene deduplication priority order ───────────────────────────────
@@ -233,6 +248,7 @@ class TestGenePriorityOrder:
             pseudotime_cor_pval=0.05,
             pseudotime_genes=["TOP"],  # Source 3 — same gene as source 1
             tissue_kb="",               # Skip KB source
+            table_dir=str(tmp_path),
         )
 
         log = logging.getLogger("test_gene_priority_order")
@@ -274,6 +290,7 @@ class TestHeatmapBinning:
             pseudotime_n_branch_de=10,
             pseudotime_n_correlated=10,
             pseudotime_cor_pval=0.05,
+            table_dir=str(tmp_path),
         )
         log = logging.getLogger("test_heatmap_binning")
         gene_trends(adata, cfg, log, branch_results=branch_results)
