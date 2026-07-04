@@ -31,3 +31,22 @@ python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config
 
 - Commit message 中的每条 `Cx`/`Mx`/`Nx`/`mx`/`Sx` 声明必须在 `git show <commit> --stat` 或 diff 中**直接验证**
 - 若某 commit message 中包含的声明确实未实现，应在该 commit 的 `git notes` 中标记 `UNFIXED`
+
+## Code organization
+
+**拆分/合并原则**：按代码逻辑与调度边界决策，不按硬性行数指标强行拆。内容高度内聚、单一职责的文件，即使较长也优于强行拆散后相互依赖的碎片。一组总是一起 import 的微型文件可考虑合并。
+
+**按文件类型的行数参考上限**（软性指引，不是硬规则）：
+
+| 文件类型 | 参考上限 | 说明 |
+|---------|---------|------|
+| 核心模块 (`core/*.py`) | 500 LOC | 跨模态共享逻辑，允许较大但应保持内聚 |
+| 步骤脚本 (`steps/*.py`) | 500 LOC | Pipeline 顺序逻辑，天然长，不鼓励拆分 |
+| 工具函数集 (`*_utils/*.py`) | 400 LOC | 纯函数集合，按主题分组；超出时拆分独立模块 |
+| 测试文件 | 不限 | 覆盖率优先，行数不是质量指标 |
+| KB 知识库 (`sources/*.py`) | 不限 | 数据驱动，无逻辑复杂度 |
+| Config 文件 | 不限 | 字段声明集中管理更易维护 |
+
+> **算法模块注意**：如果文件路径虽含 `utils` 但内容是完整的算法引擎（如 `rna/utils/marker_scoring.py`、`rna/utils/evidence_fusion.py`），应适用核心模块上限（500 LOC）而非工具函数上限。分类看**职责**，不只看路径。
+
+**数值依据**：基于 194 个 Python 文件（~38,921 LOC）的实际规模分布（中位数 161，P75=284，P90=431）。各类型上限落在对应 P90 附近或略上方，保留合理缓冲，避免对正常代码产生持续噪声。
