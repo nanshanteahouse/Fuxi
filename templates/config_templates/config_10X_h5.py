@@ -203,3 +203,9 @@ CFG.random_seed = 42
 # ── 降采样 (可选) ──
 # CFG.downsample_target = 5000         # 每样本最多保留 N 细胞
 # CFG.downsample_strategy = 'sample'   # 'sample' | 'random'
+
+# ── 子集过滤（只跑部分样本/细胞，输出自动追加后缀）──
+# CFG.sample_keep = ["GSM9292434_SCR205", "GSM9292436_SCR206"]
+# CFG.obs_filter = "stage == 'PCW8'"
+# CFG.subset_suffix = "_pcw8"   # 自定义后缀；留空自动 _subset
+

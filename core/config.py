@@ -186,6 +186,10 @@ class RNAConfig:
     downsample_strategy: str = "stratified"
     downsample_max_per_sample: Optional[int] = None
     downsample_random_seed: int = 42
+    # ── RNA sample/cell subset filtering ──
+    sample_keep: List[str] = field(default_factory=list)
+    obs_filter: str = ""
+    subset_suffix: str = ""
 
     # ── RNA GRN ──
     run_grn: bool = True
@@ -620,6 +624,10 @@ class Config:
     downsample_strategy: str = "stratified"
     downsample_max_per_sample: Optional[int] = None
     downsample_random_seed: int = 42
+    # ── RNA 样本/细胞子集过滤（子集 pipeline）──
+    sample_keep: List[str] = field(default_factory=list)
+    obs_filter: str = ""
+    subset_suffix: str = ""
 
     # ═══════════════════════════════════════════════════════════════════
     #  ATAC: 降采样

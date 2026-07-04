@@ -6,6 +6,7 @@ downsample.py — 细胞降采样核心逻辑 (config-driven + 手动 CLI 共同
   - downsample_by_config(adata, cfg, logger) → AnnData   # 主要入口
   - downsample_random / downsample_stratified / downsample_max_per_sample  # 可直接调用
   - estimate_memory_gb
+  - filter_by_config
   - _check_sample_col
 """
 
@@ -140,6 +141,33 @@ def estimate_memory_gb(adata: sc.AnnData) -> float:
     return total / (1024 ** 3)
 
 
+def filter_by_config(adata: sc.AnnData, cfg, logger) -> sc.AnnData:
+    """根据 config 设置过滤细胞 (sample_keep / obs_filter)。
+
+    Args:
+        adata: 需要过滤的 AnnData。
+        cfg: Fuxi Config 对象（读取 sample_keep / obs_filter 字段）。
+        logger: logging.Logger 实例。
+    Returns:
+        过滤后的 AnnData（如果没有过滤条件则返回原始对象）。
+    """
+    sample_keep = getattr(cfg, 'sample_keep', None) or []
+    obs_filter = getattr(cfg, 'obs_filter', None) or ''
+
+    if not sample_keep and not obs_filter:
+        return adata
+
+    if sample_keep:
+        n_before = adata.n_obs
+        adata = adata[adata.obs['sample'].isin(sample_keep)].copy()
+        logger.info("sample_keep filter: %d → %d cells", n_before, adata.n_obs)
+
+    if obs_filter:
+        n_before = adata.n_obs
+        adata = adata[adata.obs.query(obs_filter).index].copy()
+        logger.info("obs_filter filter: %d → %d cells", n_before, adata.n_obs)
+
+    return adata
 def downsample_by_config(adata: sc.AnnData, cfg, logger) -> sc.AnnData:
     """根据 config 设置对 adata 降采样。作为 pipeline 内联调用入口。
 
