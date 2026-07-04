@@ -9,6 +9,8 @@ Changelog:
   validation warning in resolve_config() (core/utils.py); expanded retina config
   template marker_dict with 7 non-neuronal types (Microglia, Astrocytes, Pericytes,
   RPE, Endothelial, Oligodendrocytes, Fibroblast).
+  ; renamed PRPC→Proliferating_RPC (non-standard abbreviation); added NRPC synonym entry;
+  added Retinal_Ganglion_Cell to RGC synonyms for canonical Tier 3 matching.
 - 3.0.0: Added taxonomic classification (class/order) to all source_meta entries;
   merge engine now propagates class/order per cell type with _meta top-level KV;
   marker_scoring.py gains phylogenetic_weight() for taxonomic distance weighting;

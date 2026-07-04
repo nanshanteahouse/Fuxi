@@ -1,5 +1,5 @@
 """
-tissue_ontologies/retina/synonyms.py — Human-readable synonyms for 32 retina KB cell types.
+tissue_ontologies/retina/synonyms.py — Human-readable synonyms for 38 retina KB cell types.
 
 This module provides comprehensive synonym dictionaries covering case variants,
 abbreviations, full forms, singular/plural, punctuation variants, alternative
@@ -489,6 +489,15 @@ RETINA_SYNONYMS: dict[str, dict[str, str | list[str]]] = {
             "Proliferating retinal progenitor cells",
             "proliferating retinal progenitor cells",
             "Proliferating RPC cell",
+            "Proliferating Retinal Progenitor Cell",
+            "PRPC",
+            "Retinal Progenitor Cell (proliferating)",
+            "early RPC",
+            "Early RPC",
+            "cycling RPC",
+            "Cycling RPC",
+            "RPC-proliferating",
+            "PRPCs",
         ],
     },
 
@@ -508,6 +517,7 @@ RETINA_SYNONYMS: dict[str, dict[str, str | list[str]]] = {
             "RetinalGanglionCell",
             "Retinal Ganglion Cells",
             "rgc",
+            "Retinal_Ganglion_Cell",
         ],
     },
 
@@ -591,23 +601,19 @@ RETINA_SYNONYMS: dict[str, dict[str, str | list[str]]] = {
     # Developmental / Progenitor types (v3.0.0+, zuo2024 + hahn2023)
     # ═══════════════════════════════════════════════════════════════════════
 
-    "PRPC": {
-        "display_name": "Proliferating Retinal Progenitor Cell",
+    "NRPC": {
+        "display_name": "Neurogenic RPC",
         "synonyms": [
-            "Proliferating Retinal Progenitor Cell",
-            "PRPC",
-            "proliferating RPC",
-            "Proliferating RPC",
-            "Retinal Progenitor Cell (proliferating)",
-            "early RPC",
-            "Early RPC",
-            "cycling RPC",
-            "Cycling RPC",
-            "Retinal Progenitor",
-            "retinal progenitor cell",
-            "proliferating retinal progenitor",
-            "RPC-proliferating",
-            "PRPCs",
+            "NRPC",
+            "Neurogenic RPC",
+            "neurogenic RPC",
+            "Neurogenic retinal progenitor",
+            "neurogenic retinal progenitor",
+            "Neurogenic Retinal Progenitor Cell",
+            "neurogenic retinal progenitor cell",
+            "Neurogenic Retinal Progenitor Cells",
+            "nrpc",
+            "NRPCs",
         ],
     },
 

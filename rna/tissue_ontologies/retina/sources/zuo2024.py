@@ -36,8 +36,8 @@ source_meta = {
 }
 
 markers = {
-    # ── PRPC: Proliferating Retinal Progenitor Cells ────────────────
-    "PRPC": {
+    # ── Proliferating_RPC: Proliferating Retinal Progenitor Cells ──
+    "Proliferating_RPC": {
         "confirm": {
             "VSX2": ["39117640"],
             "SOX2": ["39117640"],
@@ -355,7 +355,7 @@ markers = {
 
 novel_types = [
     {
-        "name": "PRPC",
+        "name": "Proliferating_RPC",
         "parent": "RPC",
         "markers": ["VSX2", "SOX2", "PAX6", "MKI67", "ASPM", "MXD3", "NPAS3",
                     "ZNF367", "PROX1", "CDK6", "GLI3", "SORCS1"],
@@ -383,7 +383,7 @@ expert_rules = [
             },
             "markers_absent": ["ATOH7", "OTX2"],
         },
-        "action": "PRPC",
+        "action": "Proliferating_RPC",
         "source": "zuo2024",
         "notes": "VSX2+SOX2+MKI67 without neurogenic TFs specifies proliferating RPCs",
     },
