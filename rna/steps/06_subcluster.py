@@ -451,7 +451,6 @@ def main():
                 safe_plot(sc.pl.umap, sub, color='sub_ai_label', show=False,
                           save=f'_06_sub_{safe_cell_type}_ai.pdf',
                           title=f'{args.cell_type} — AI subcluster')
-                          title=f'{args.cell_type} — AI subcluster')
 
         except Exception as e:
             log.warning("AI subcluster annotation failed: %s", e)

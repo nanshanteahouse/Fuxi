@@ -34,14 +34,16 @@ def safe_write(adata, target: str,
     if cfg is not None:
         tmpdir = getattr(cfg, 'h5ad_tempdir', tmpdir)
 
-    # WSL /mnt mounts require tmp+mv to avoid h5py file locking issues.
+    # WSL /mnt mounts: use explicit copy+unlink instead of shutil.move
+    # to avoid "Invalid cross-device link" on DrvFs (Windows mounts).
     _wsl = target.startswith("/mnt/")
     logging.getLogger(__name__).info("Writing %s ...", os.path.basename(target))
     if _wsl:
         os.makedirs(tmpdir, exist_ok=True)
         tmp_path = os.path.join(tmpdir, os.path.basename(target))
         adata.write(tmp_path, compression=compression)
-        shutil.move(tmp_path, target)
+        shutil.copy2(tmp_path, target)
+        os.unlink(tmp_path)
     else:
         adata.write(target, compression=compression)
 

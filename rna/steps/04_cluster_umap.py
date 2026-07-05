@@ -272,7 +272,6 @@ def main():
                     try:
                         adata.obsm['X_umap'] = adata.obsm[umap_key].copy()
                         sc.pl.umap(adata, color=leiden_key, ax=ax,
-                                   legend_fontsize=8,
                                    legend_fontsize=5,
                                    title=f'n={n}, r={res}')
                     except Exception as e_sub:
