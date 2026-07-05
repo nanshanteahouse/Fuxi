@@ -207,6 +207,11 @@ class RNAConfig:
         default_factory=lambda: ["A", "B", "C"]
     )
 
+    # ── GRN tissue awareness ──
+    grn_tissue_mode: str = "off"
+    grn_use_kb_relevance: bool = False
+    grn_export_filtered: bool = False
+
     # ── RNA CCI ──
     run_cci: bool = True
     cci_method: str = "liana"
@@ -651,6 +656,11 @@ class Config:
     grn_confidence_levels: list = field(
         default_factory=lambda: ["A", "B", "C"]
     )
+
+    # ── GRN tissue awareness ──
+    grn_tissue_mode: str = "off"
+    grn_use_kb_relevance: bool = False
+    grn_export_filtered: bool = False
 
     # ═══════════════════════════════════════════════════════════════════
     #  CCI: Cell-cell interaction analysis (RNA Step 12 / Spatial Step 10 / adjacency filter v4.0+)

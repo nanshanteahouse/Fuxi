@@ -5,8 +5,10 @@ Usage::
     from rna.tissue_ontologies import load_kb
     kb = load_kb("retina")
 """
+import logging
 import pandas as pd
 
+_log = logging.getLogger(__name__)
 
 
 def load_kb(tissue_name: str):
@@ -36,6 +38,39 @@ def load_kb(tissue_name: str):
         f"Unsupported tissue KB: '{tissue_name}'. "
         f"Available: retina"
     )
+
+
+def load_all_kb_markers(tissue_name: str) -> set[str]:
+    """Extract a flat set of all marker gene symbols from a tissue KB structure.
+
+    Parameters
+    ----------
+    tissue_name : str
+        Tissue identifier (e.g. ``"retina"``).
+
+    Returns
+    -------
+    set[str]
+        Flat set of all marker gene symbols (UPPERCASE).
+        Returns empty set if tissue is unsupported or KB module is missing.
+    """
+    try:
+        if tissue_name == "retina":
+            from .retina import retina_expert_kb
+        else:
+            raise ValueError(
+                f"Unsupported tissue KB: '{tissue_name}'. Available: retina"
+            )
+        markers: set[str] = set()
+        for entry in retina_expert_kb.values():
+            if isinstance(entry, dict) and "markers" in entry:
+                for key in ("confirm", "add", "refine"):
+                    markers.update(entry["markers"].get(key, {}).keys())
+        return {g.upper() for g in markers}
+    except (ValueError, ImportError):
+        _log.warning("Could not load KB markers for %s", tissue_name)
+        return set()
+
 
 def load_adjacency(tissue_name: str) -> pd.DataFrame:
     """Load the anatomical adjacency matrix for a given tissue.
