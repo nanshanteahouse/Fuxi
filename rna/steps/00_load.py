@@ -283,10 +283,16 @@ def main():
         sys.exit(1)
 
     # ── 统一稀疏格式: CSR (行优先) ──
-    if getattr(CFG, 'force_csr', True) and sp.issparse(adata.X):
-        if not sp.isspmatrix_csr(adata.X):
-            adata.X = adata.X.tocsr()
-            log.info("X format converted to CSR")
+    force_csr = getattr(CFG, 'force_csr', True)
+    if force_csr:
+        if sp.issparse(adata.X):
+            if not sp.isspmatrix_csr(adata.X):
+                adata.X = adata.X.tocsr()
+                log.info("X format converted to CSR")
+        else:
+            log.info("Converting dense X (shape=%s) to CSR sparse...", adata.X.shape)
+            adata.X = sp.csr_matrix(adata.X)
+            log.info("  CSR conversion complete")
 
     # ── 可选 float32 精度 ──
     if getattr(CFG, 'use_float32', False):
