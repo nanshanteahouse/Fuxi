@@ -282,20 +282,28 @@ def main():
     primary_col = annotation_cols[0]
     log.info("Primary annotation column: %s", primary_col)
 
-    # Layer 1: 遍历所有注释层级进行标记基因检测 (parallel across annotation columns)
+    # Layer 1: 遍历所有注释层级进行标记基因检测
     all_markers = {}
+    # Primary column 始终串行（用原始 adata，修改 .uns 供下游使用）
+    col = annotation_cols[0]
+    all_markers[col], _ = layer1_markers(adata, CFG, log, group_col=col)
+
+    # 非主列并行（仅在有多列时）
     if len(annotation_cols) > 1:
-        n_jobs = min(getattr(CFG, 'n_jobs', 4) or os.cpu_count() or 1, len(annotation_cols))
+        non_primary_cols = annotation_cols[1:]
+        n_jobs = min(getattr(CFG, 'n_jobs', 4) or os.cpu_count() or 1, len(non_primary_cols))
         log.info("Layer 1: parallel marker detection across %d annotation cols (n_jobs=%d)",
-                 len(annotation_cols), n_jobs)
+                 len(non_primary_cols), n_jobs)
         parallel_layer1 = Parallel(n_jobs=n_jobs, prefer='threads')(
             delayed(layer1_markers)(adata.copy(), CFG, log, col)
-            for col in annotation_cols
+            for col in non_primary_cols
         )
-        for col, (result_df, _unused) in zip(annotation_cols, parallel_layer1):
-            all_markers[col] = result_df
-        col = annotation_cols[0]
-        all_markers[col], _ = layer1_markers(adata, CFG, log, group_col=col)
+        if parallel_layer1 is None:
+            log.error("Parallel layer1_markers returned None ", 
+                      "— skipping non-primary columns")
+        else:
+            for col, (result_df, _unused) in zip(non_primary_cols, parallel_layer1):
+                all_markers[col] = result_df
 
     # 导出兼容文件 — unfiltered (Step 09/10 输入，路径不变)
     combined_path = os.path.join(CFG.table_dir, 'marker_genes_per_group.csv')

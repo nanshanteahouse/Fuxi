@@ -8,11 +8,12 @@ Step 03: 归一化 + HVG 选择 + PCA + Harmony 批次校正（整合版）
   1. raw counts → 找 HVG (seurat_v3, batch-aware)
   2. 保存全基因表达副本用于 .raw
   3. X 只保留 HVG 用于下游降维
-  4. regress_out (total_counts, pct_counts_mt) on HVG 子集 ← 内存优化
-  5. normalize_total → log1p on HVG 子集
-  6. normalize_total → log1p on 全基因副本, 赋值 .raw
-  7. PCA (n_pcs_full, elbow 图)
-  8. Harmony 批次校正
+  4. normalize_total → log1p on HVG 子集和全基因副本
+  5. [可选] score_genes_cell_cycle on 全基因副本, 复制 scores 到 HVG 子集
+  6. regress_out (cell cycle scores 或 pct_counts_mt) on HVG 子集 ← normalize 后
+  7. 全基因副本赋值 .raw
+  8. PCA (n_pcs_full, elbow 图)
+  9. Harmony 批次校正
 
 输入: 02_qc.h5ad
 输出: 03_integrated.h5ad (X = log1p(normalized) on HVGs, .raw = 全基因,
@@ -25,6 +26,25 @@ import scanpy as sc
 import matplotlib.pyplot as plt
 import scipy.sparse as sp
 import numpy as np
+
+# Cell cycle gene lists (Tirosh et al., 2016) for sc.tl.score_genes_cell_cycle
+_S_GENES = [
+    'MCM5','PCNA','TYMS','FEN1','MCM2','MCM4','RRM1','UNG','GINS2','MCM6',
+    'CDCA7','DTL','PRIM1','UHRF1','MLF1IP','HELLS','RFC2','RPA2','NASP',
+    'RAD51AP1','GMNN','WDR76','SLBP','CCNE2','UBR7','PIR51','MCM10',
+    'RFWD3','FANCI','TK1','CDC45','CDC6','DSCC1','EXO1','TIPIN','E2F8',
+    'GINS4','CASP8AP2','GMPS','BRIP1','CLSPN','HAT1','RRM2','RAD51',
+    'RPA3','BRCA1',
+]
+_G2M_GENES = [
+    'HMGB2','CDK1','NUSAP1','UBE2C','BIRC5','TPX2','TOP2A','NDC80','CKS2',
+    'NUF2','CKS1B','MKI67','TMPO','CENPF','TACC3','FAM64A','SMC4','CCNB2',
+    'CKAP2L','CKAP2','AURKB','BUB1','KIF11','ANP32E','TUBB4B','GTSE1',
+    'KIF20B','HJURP','CDCA3','HN1','CDC20','TTK','CDC25C','KIF2C','RANGAP1',
+    'NCAPD2','DLGAP5','CDCA2','CDCA8','ECT2','KIF23','HMMR','AURKA','PSRC1',
+    'ANLN','LBR','CKAP5','CENPE','CTCF','NEK2','G2E3','GAS2L3','CBX5','CENPA',
+]
+
 
 def main():
     t0 = time.time()
@@ -82,31 +102,6 @@ def main():
     adata = adata[:, adata.var['highly_variable']].copy()
     log.info("X subset to HVGs: %s", adata.shape)
 
-    # ── Regress out 技术变异 (HVG 子集) ──
-    # 在 HVG 子集上回归 total_counts 和 pct_counts_mt，移除非特异技术噪音
-    # 某些数据集可能没有 pct_counts_mt，用 try/except 兜底
-    if CFG.use_regress_out:
-        try:
-            log.info("Regressing technical covariates: total_counts, pct_counts_mt ...")
-            sc.pp.regress_out(adata, ['total_counts', 'pct_counts_mt'])
-            log.info("  regress_out complete")
-        except Exception as e:
-            log.warning("regress_out failed (skipped): %s", e)
-    else:
-        log.info("use_regress_out=False — skipping regress_out (suitable for TPM etc.)")
-
-    # ── regress_out 后降回 float32（regress_out 会产生 float64 中间体） ──
-    if getattr(CFG, 'use_float32', False):
-        if sp.issparse(adata.X):
-            adata.X = adata.X.astype('float32', copy=False)
-        else:
-            adata.X = adata.X.astype('float32', copy=False)
-        log.info("  X precision restored to float32")
-
-    # ── 数据完整性检查：regress_out 后 ──
-    if CFG.use_regress_out:
-        validate_adata(adata, stage_name="regress_out", logger=log)
-
     # ── 归一化 (HVG 子集) ──
     log.info("Normalizing (target_sum=%.0f) + log1p...", CFG.normalize_target_sum)
     sc.pp.normalize_total(adata, target_sum=CFG.normalize_target_sum)
@@ -115,9 +110,53 @@ def main():
     # ── 数据完整性检查：归一化后 ──
     validate_adata(adata, stage_name="normalize+log1p", logger=log)
 
-    # ── 归一化全基因副本并保留到 .raw ──
+    # ── 归一化全基因副本（用于细胞周期打分和 .raw）──
     sc.pp.normalize_total(adata_full, target_sum=CFG.normalize_target_sum)
     sc.pp.log1p(adata_full)
+
+    # ── 可选: 细胞周期打分 ──
+    if CFG.score_cell_cycle:
+        log.info("Scoring cell cycle (S / G2M) on full gene reference...")
+        try:
+            sc.tl.score_genes_cell_cycle(adata_full, s_genes=_S_GENES, g2m_genes=_G2M_GENES)
+            adata.obs['S_score'] = adata_full.obs['S_score'].copy()
+            adata.obs['G2M_score'] = adata_full.obs['G2M_score'].copy()
+            adata.obs['phase'] = adata_full.obs['phase'].copy()
+            log.info("Cell cycle phases: %s", adata.obs['phase'].value_counts().to_dict())
+        except Exception as e:
+            log.warning("Cell cycle scoring failed (skipped): %s", e)
+
+    # ── 回归技术变异 / 细胞周期分数 (HVG 子集, normalize+log1p 后) ──
+    if CFG.score_cell_cycle:
+        try:
+            log.info("Regressing cell cycle scores: S_score, G2M_score ...")
+            sc.pp.regress_out(adata, ['S_score', 'G2M_score'])
+            log.info("  regress_out complete")
+        except Exception as e:
+            log.warning("regress_out (cell cycle) failed (skipped): %s", e)
+    elif CFG.use_regress_out:
+        try:
+            log.info("Regressing technical covariates: pct_counts_mt ...")
+            sc.pp.regress_out(adata, ['pct_counts_mt'])
+            log.info("  regress_out complete")
+        except Exception as e:
+            log.warning("regress_out (pct_counts_mt) failed (skipped): %s", e)
+    else:
+        log.info("Cell cycle scoring disabled, use_regress_out=False — skipping regress_out")
+
+    # ── regress_out 后降回 float32（regress_out 会产生 float64 中间体）──
+    if getattr(CFG, 'use_float32', False):
+        if sp.issparse(adata.X):
+            adata.X = adata.X.astype('float32', copy=False)
+        else:
+            adata.X = adata.X.astype('float32', copy=False)
+        log.info("  X precision restored to float32")
+
+    # ── 数据完整性检查：regress_out 后 ──
+    if CFG.score_cell_cycle or CFG.use_regress_out:
+        validate_adata(adata, stage_name="regress_out", logger=log)
+
+    # ── 保存全基因副本到 .raw ──
     adata.raw = adata_full
     log.info(".raw saved (full genes: %d vars)", adata_full.n_vars)
 

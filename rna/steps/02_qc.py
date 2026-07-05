@@ -47,6 +47,14 @@ def _mad_thresholds(adata, cfg, log):
     hi_mad = med + cfg.mad_n_mads * mad
     # 硬阈值做地板/天花板
     lo = max(lo_mad, cfg.min_genes)
+    # Safety clamp: MAD 下界不应超过用户硬阈值（参考 ddqc, Subramanian 2022）
+    if lo > cfg.min_genes:
+        lo_orig = lo
+        lo = cfg.min_genes
+        log.warning(
+            '  MAD lower bound (%.0f) exceeds min_genes (%.0f) — clamping to min_genes. MAD is unreliable for this distribution; consider use_adaptive_thresholds=False.',
+            lo_orig, cfg.min_genes,
+        )
     hi = min(hi_mad, cfg.max_genes)
     thresholds['n_genes_by_counts'] = (lo, hi)
     log.info("  n_genes_by_counts: median=%.0f, MAD=%.0f  →  (lo=%.0f, hi=%.0f)  [adaptive]",
@@ -87,6 +95,14 @@ def _mad_thresholds(adata, cfg, log):
         mad = median_abs_deviation(finite, scale='normal')
         lo_mad = max(med - cfg.mad_n_mads * mad, 0)
         lo = max(lo_mad, cfg.min_genes_per_umi)
+        # Safety clamp: MAD 下界不应超过用户硬阈值
+        if lo > cfg.min_genes_per_umi:
+            lo_orig = lo
+            lo = cfg.min_genes_per_umi
+            log.warning(
+                '  MAD lower bound (%.4f) exceeds min_genes_per_umi (%.4f) — clamping.',
+                lo_orig, cfg.min_genes_per_umi,
+            )
         thresholds['log_genes_per_umi'] = (lo, None)
         log.info("  log_genes_per_umi:  median=%.4f, MAD=%.4f →  lo=%.4f  [adaptive]",
                  med, mad, lo)

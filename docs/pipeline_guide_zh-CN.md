@@ -984,7 +984,9 @@ CFG.qc_ncount_max_mad = 5.0            # nCount 上限的 MAD 倍数（更宽，
 ```python
 CFG.use_harmony = True              # 启用 Harmony 批次校正
 CFG.harmony_batch_key = "sample"    # 按哪个列做批次校正
-CFG.use_regress_out = False         # 是否回归 total_counts 和 MT%
+CFG.use_regress_out = False         # 是否回归 pct_counts_mt（normalize+log1p 后）
+CFG.score_cell_cycle = False        # 可选: 回归 S/G2M 细胞周期分数
+# CFG.harmony_max_iter = 10          # Harmony 最大迭代次数
 ```
 
 ### 8.6 聚类参数

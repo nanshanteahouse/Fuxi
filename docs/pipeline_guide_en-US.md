@@ -984,7 +984,9 @@ CFG.qc_ncount_max_mad = 5.0            # Wider MAD multiplier for nCount upper b
 ```python
 CFG.use_harmony = True              # Enable Harmony batch correction
 CFG.harmony_batch_key = "sample"    # Column to use as batch key
-CFG.use_regress_out = False         # Whether to regress out total_counts and MT%
+CFG.use_regress_out = False         # Whether to regress out pct_counts_mt (after normalize+log1p)
+CFG.score_cell_cycle = False        # Optional: regress S/G2M cell cycle scores instead
+# CFG.harmony_max_iter = 10          # Harmony max iterations
 ```
 
 ### 8.6 Clustering parameters

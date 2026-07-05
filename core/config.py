@@ -123,6 +123,8 @@ class RNAConfig:
     hvg_flavor: str = "seurat_v3"
     hvg_batch_key: str = "sample"
     use_regress_out: bool = True
+    score_cell_cycle: bool = False   # 可选: 在 normalize+log1p 后回归 S/G2M 分数
+
 
     # ── RNA PCA ──
     n_pcs_full: int = 100
@@ -415,6 +417,8 @@ class Config:
     hvg_flavor: str = "seurat_v3"
     hvg_batch_key: str = "sample"
     use_regress_out: bool = True
+    score_cell_cycle: bool = False   # 可选: 在 normalize+log1p 后回归 S/G2M 分数
+
 
     # ═══════════════════════════════════════════════════════════════════
     #  RNA: PCA

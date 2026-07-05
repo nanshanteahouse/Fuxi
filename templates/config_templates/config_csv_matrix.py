@@ -73,7 +73,7 @@ CFG.min_genes_per_umi = 0.7       # complexity filter — only applied when expr
 CFG.n_top_genes = 4000
 CFG.hvg_batch_key = 'sample'
 CFG.hvg_flavor = 'seurat_v3'
-# CFG.use_regress_out = False     # regress out cell cycle, n_counts, etc.
+# CFG.use_regress_out = False     # 可选: regress out pct_counts_mt after normalize+log1p
 
 # ── Batch correction / Harmony ──
 CFG.harmony_batch_key = 'sample'

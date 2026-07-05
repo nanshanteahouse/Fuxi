@@ -50,7 +50,7 @@ CFG.run_scrublet = True
 CFG.n_top_genes = 5000
 CFG.hvg_batch_key = 'sample'
 CFG.hvg_flavor = 'seurat_v3'
-# CFG.use_regress_out = False
+# CFG.use_regress_out = False     # 可选: 回归 pct_counts_mt（normalize+log1p 后）
 
 # ── 批次校正 / Harmony ──
 CFG.harmony_batch_key = 'age'
