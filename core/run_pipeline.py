@@ -43,7 +43,7 @@ try:
 except ImportError:
     _HAVE_MONITOR = False
     from contextlib import nullcontext as _nullcontext
-    def monitor_performance(*a, **kw): return _nullcontext()
+    def monitor_performance(step_name: str = "", log=None, child_pid=None): return _nullcontext()
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -242,6 +242,35 @@ def parse_step_range(spec: str) -> list:
         return [int(s) for s in spec.split(",")]
 
 
+def _get_checkpoint_shape(ckpt_path: str) -> tuple:
+    """Fast-read h5ad shape via backed mode or CSV row count.
+
+    Returns (n_obs, n_vars) for h5ad, (n_rows, 0) for CSV,
+    or (0, 0) on any failure.
+    """
+    if not ckpt_path:
+        return (0, 0)
+    if '*' in ckpt_path:
+        import glob
+        files = glob.glob(ckpt_path)
+        if not files:
+            return (0, 0)
+        ckpt_path = files[0]
+    if not os.path.exists(ckpt_path):
+        return (0, 0)
+    try:
+        if ckpt_path.endswith('.h5ad'):
+            import anndata
+            ad = anndata.read_h5ad(ckpt_path, backed='r')
+            return (ad.n_obs, ad.n_vars)
+        elif ckpt_path.endswith('.csv'):
+            with open(ckpt_path) as f:
+                n_rows = sum(1 for _ in f) - 1  # minus header
+            return (n_rows, 0)
+    except Exception:
+        pass
+    return (0, 0)
+
 def main():
     parser = argparse.ArgumentParser(
         description="Fuxi (伏羲) — Unified single-cell multi-omics pipeline",
@@ -382,6 +411,17 @@ def main():
     else:
         step_indices = list(range(len(STEPS)))
 
+    if getattr(CFG, 'perf_monitoring', True):
+        from core.utils import PerformanceSummary
+        pipeline_summary = PerformanceSummary()
+        pipeline_summary.pipeline_info = {
+            "modality": args.modality,
+            "config_path": config_path,
+            "n_jobs": CFG.n_jobs,
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        }
+    else:
+        pipeline_summary = None
     # ── Execute steps ────────────────────────────────────────────────
     step_times = []
     for i in step_indices:
@@ -404,16 +444,19 @@ def main():
             extra_args.extend(["--cell-type", args.cell_type])
 
         step_t0 = time.time()
-        if _HAVE_MONITOR:
-            with monitor_performance(f"Step[{num}]", log=None) as perf:
-                result = subprocess.run(
-                    [python_exe, script_path] + extra_args,
-                )
+        step_proc = subprocess.Popen(
+            [python_exe, script_path] + extra_args,
+            stdout=None, stderr=None,
+        )
+        _perf_report = None
+        if _HAVE_MONITOR and getattr(CFG, 'perf_monitoring', True):
+            with monitor_performance(f"Step[{num}]", child_pid=step_proc.pid) as perf:
+                step_proc.wait()
+                _perf_report = perf
         else:
-            result = subprocess.run(
-                [python_exe, script_path] + extra_args,
-            )
+            step_proc.wait()
         elapsed = time.time() - step_t0
+        result = step_proc
 
         if result.returncode == 2:
             print(f"[run] Step [{num}] skipped (no --cell-type for pipeline mode)")
@@ -425,6 +468,24 @@ def main():
             print(f"[run] To continue after fixing the issue:")
             print(f"      python {__file__} --modality {args.modality} --resume --config {args.config}")
             sys.exit(1)
+        if pipeline_summary is not None and _HAVE_MONITOR and _perf_report is not None:
+            # Read output checkpoint shape
+            ckpt_file = CHECKPOINT_FILES[i]
+            ckpt_path = os.path.join(CFG.h5ad_dir, ckpt_file) if ckpt_file else ""
+            n_cells, n_genes = _get_checkpoint_shape(ckpt_path)
+            if n_cells == 0 and n_genes == 0:
+                dep_file = _get_step_dependency(i, STEPS, CHECKPOINT_FILES, modality=args.modality)
+                if dep_file:
+                    dep_path = os.path.join(CFG.h5ad_dir, dep_file)
+                    if dep_path != ckpt_path:
+                        n_cells, n_genes = _get_checkpoint_shape(dep_path)
+
+            _perf_report.n_cells = n_cells
+            _perf_report.n_genes = n_genes
+            ckpt_size = os.path.getsize(ckpt_path) / 1e6 if ckpt_path and os.path.exists(ckpt_path) and '*' not in ckpt_path else 0.0
+            _perf_report.checkpoint_mb = round(ckpt_size, 1)
+
+            pipeline_summary.add_step(num, desc, _perf_report)
 
         # ── Optional checkpoint cleanup ──────────────────────────────
         if args.cleanup or getattr(CFG, 'cleanup_intermediates', False):
@@ -442,6 +503,8 @@ def main():
         step_times.append((num, desc, elapsed))
 
     total_elapsed = sum(t for _, _, t in step_times)
+    if pipeline_summary is not None:
+        pipeline_summary.pipeline_info["total_wall_sec"] = total_elapsed
     print(f"\n{'=' * 60}")
     print(f"[run] Fuxi {args.modality.upper()}-seq pipeline execution finished.")
     print(f"{'=' * 60}")
@@ -451,6 +514,15 @@ def main():
     print(f"  {'─' * 50}")
     print(f"  [Total] {total_elapsed:7.1f}s  {len(step_times)} steps total")
     print(f"{'=' * 60}")
+    if pipeline_summary is not None:
+        pipeline_summary.print_terminal_summary(
+            n_jobs=CFG.n_jobs,
+            modality=args.modality.upper(),
+            config_path=config_path,
+        )
+        report_path = os.path.join(CFG.results_dir, "perf_report.json")
+        pipeline_summary.save_json(report_path)
+        print(f"[run] Performance report saved: {report_path}")
 
 
 if __name__ == "__main__":
