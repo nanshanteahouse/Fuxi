@@ -23,7 +23,8 @@ import pandas as pd
 import scanpy as sc
 import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import linkage, dendrogram
-
+from rna.tissue_ontologies import load_all_kb_markers
+from core.grn_tissue import compute_tf_relevance
 
 def _as_dense(adata, use_raw: bool = False):
     """Return a dense (obs x var) expression matrix."""
@@ -111,18 +112,107 @@ def run_grn(pseudo_df: pd.DataFrame, net: pd.DataFrame, log: object) -> tuple:
     return est_df, pval_df, net
 
 
-def top_variable_tfs(estimates_df: pd.DataFrame, n_top: int, log: object) -> pd.DataFrame:
-    """Select top N TFs by activity variance across cell types."""
+def top_variable_tfs(estimates_df: pd.DataFrame, n_top: int, log: object,
+                     mode: str = "off",
+                     tf_annotation: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Select top N TFs by activity variance across cell types.
+
+    Parameters
+    ----------
+    estimates_df : pd.DataFrame
+        TF activity matrix (cell types x TFs).
+    n_top : int
+        Number of top TFs to select.
+    log : object
+        Logger.
+    mode : str
+        One of "off", "soft", "hard".
+        - "off": variance-based ranking (default, existing behavior).
+        - "soft": variance-based ranking + KB overlap logging.
+        - "hard": multi-axis ranking (variance + KB overlap).
+    tf_annotation : pd.DataFrame or None
+        TF annotation table from compute_tf_relevance. Must have columns
+        "tf" and "kb_overlap_ratio". Required for "soft" and "hard" modes.
+
+    Returns
+    -------
+    pd.DataFrame
+        Top N TFs subset of estimates_df.
+    """
+    # ── off mode: variance-based ranking (default, existing behavior) ──
+    if mode == "off":
+        var = estimates_df.var(axis=0)
+        top = var.nlargest(n_top).index
+        log.info("Top %d TFs by variance: %s", n_top, ', '.join(top[:20].tolist()))
+        return estimates_df[top]
+
+    # ── soft mode: variance-based ranking with KB overlap logging ─────
+    if mode == "soft":
+        var = estimates_df.var(axis=0)
+        top = var.nlargest(n_top).index
+        log.info("Top %d TFs by variance: %s", n_top, ', '.join(top[:20].tolist()))
+
+        if tf_annotation is not None:
+            top_tf_set = set(top)
+            overlap_count = tf_annotation[
+                tf_annotation['tf'].isin(top_tf_set) & (tf_annotation['kb_overlap_ratio'] > 0)
+            ].shape[0]
+            log.info("soft mode: %d/%d top TFs have KB marker overlap",
+                     overlap_count, len(top))
+        else:
+            log.warning("soft mode: tf_annotation not provided — skipping KB overlap logging")
+
+        return estimates_df[top]
+
+    # ── hard mode: multi-axis ranking (variance + KB overlap) ────────
+    if mode == "hard":
+        if tf_annotation is None:
+            log.warning("tf_annotation not provided for hard mode — falling back to off mode")
+            var = estimates_df.var(axis=0)
+            top = var.nlargest(n_top).index
+            log.info("Top %d TFs by variance: %s", n_top, ', '.join(top[:20].tolist()))
+            return estimates_df[top]
+
+        # Variance rank (1 = highest variance)
+        var = estimates_df.var(axis=0)
+        var_rank = var.rank(ascending=False)
+
+        # KB-weighted rank: kb_overlap_ratio * mean(|activity|)
+        tf_ratio_map = dict(zip(tf_annotation['tf'], tf_annotation['kb_overlap_ratio']))
+        kb_metric = pd.Series({
+            tf: tf_ratio_map.get(tf, 0.0) * estimates_df[tf].abs().mean()
+            for tf in estimates_df.columns
+        })
+        kb_rank = kb_metric.rank(ascending=False)
+
+        # Combined score (rank sum — smaller is better)
+        combined = var_rank + kb_rank
+        top = combined.nsmallest(n_top).index
+
+        log.info("hard mode: selecting top %d TFs by combined variance+KB rank", n_top)
+        log.info("Top %d TFs (hard mode): %s", n_top, ', '.join(top[:20].tolist()))
+
+        return estimates_df[top]
+
+    # ── Fallback (shouldn't reach here due to main() validation) ─────
+    log.warning("Unknown mode '%s' — falling back to off mode", mode)
     var = estimates_df.var(axis=0)
     top = var.nlargest(n_top).index
-    log.info("Top %d TFs by variance: %s", n_top, ', '.join(top[:20].tolist()))
     return estimates_df[top]
 
 
-def export_results(estimates_df, top_df, pvals_df, net_top, CFG, log):
+def export_results(estimates_df, top_df, pvals_df, net_top, CFG, log, kb_markers=None):
     """Save tables and checkpoint AnnData."""
     table_dir = os.path.join(CFG.table_dir, "11_grn")
     os.makedirs(table_dir, exist_ok=True)
+
+    # ── KB-aware TF annotation ──────────────────────────────────────
+    if kb_markers is not None:
+        _, tf_ann = compute_tf_relevance(estimates_df, net_top, kb_markers, log)
+        # Export TF annotation table
+        ann_path = os.path.join(table_dir, "tf_annotation_table.csv")
+        tf_ann.to_csv(ann_path, index=False)
+        log.info("Exported: %s (%d TFs)", ann_path, len(tf_ann))
 
     path = os.path.join(table_dir, "tf_activity_per_cell_type.csv")
     estimates_df.to_csv(path)
@@ -148,6 +238,11 @@ def export_results(estimates_df, top_df, pvals_df, net_top, CFG, log):
     path = os.path.join(table_dir, "tf_target_counts.csv")
     target_counts.to_csv(path, index=False)
     log.info("Exported: %s (%d TFs)", path, len(target_counts))
+
+    # ── Dual CSV: top-regulon subset for heatmap ─────────────────────
+    top_regulon_path = os.path.join(table_dir, "tf_activity_top_regulons.csv")
+    top_df.to_csv(top_regulon_path)
+    log.info("Exported: %s (%d cell types x %d TFs)", top_regulon_path, *top_df.shape)
 
     if net_top.empty:
         log.warning("Top-TF edge list is empty — no edges to export")
@@ -313,17 +408,48 @@ def main():
     # ---------- Run activity inference ----------
     est_df, pval_df, net_filtered = run_grn(pseudo_df, net, log)
 
-    # ---------- Select top TFs ----------
+    # ── Load KB markers for tissue-aware TF ranking ────────────────
+    kb_markers = None
     n_top = min(getattr(CFG, 'grn_n_top_regulons', 50), est_df.shape[1])
-    top_df = top_variable_tfs(est_df, n_top, log)
+    if getattr(CFG, 'grn_use_kb_relevance', False):
+        tissue = getattr(CFG, 'tissue', '') or ''
+        if tissue and tissue != "unknown":
+            kb_markers = load_all_kb_markers(tissue)
+            if kb_markers:
+                log.info("Loaded %d KB markers for tissue '%s'", len(kb_markers), tissue)
+            else:
+                log.info("No KB markers found for tissue '%s'", tissue)
+        else:
+            log.info("No tissue configured, skipping KB marker loading")
 
-    # ---------- Filter edge list to top-variance TFs ----------
+    # ── Mode gating ──────────────────────────────────────────────────
+    grn_mode = getattr(CFG, 'grn_tissue_mode', 'off')
+    if grn_mode not in {"off", "soft", "hard"}:
+        raise ValueError(f"Invalid grn_tissue_mode: '{grn_mode}'. Must be off, soft, or hard.")
+
+    # For mode "soft" or "hard": compute_tf_relevance BEFORE top_variable_tfs
+    if grn_mode in ("soft", "hard") and kb_markers is not None:
+        annotated_activity_df, tf_ann = compute_tf_relevance(est_df, net_filtered, kb_markers, log)
+    else:
+        annotated_activity_df = None
+        tf_ann = None
+
+    # Select top TFs (mode-aware)
+    top_df = top_variable_tfs(est_df, n_top, log, mode=grn_mode, tf_annotation=tf_ann)
+
+    # Filter edge list to top TFs
     top_tfs = set(top_df.columns)
     net_top = net_filtered[net_filtered['source'].isin(top_tfs)].copy()
     log.info("Top-TF edges: %d (from %d total filtered edges)", len(net_top), len(net_filtered))
 
+    # In hard mode with grn_export_filtered, also filter to tissue-relevant TFs only
+    if grn_mode == "hard" and tf_ann is not None and getattr(CFG, 'grn_export_filtered', False):
+        relevant_tfs = set(tf_ann[tf_ann['kb_overlap_ratio'] > 0]['tf'])
+        top_df = top_df[[c for c in top_df.columns if c in relevant_tfs]]
+        log.info("hard+export_filtered: reduced to %d tissue-relevant TFs", top_df.shape[1])
+
     # ---------- Export ----------
-    export_results(est_df, top_df, pval_df, net_top, CFG, log)
+    export_results(est_df, top_df, pval_df, net_top, CFG, log, kb_markers=kb_markers)
     plot_heatmap(top_df, CFG, log)
 
     elapsed = time.time() - t0
