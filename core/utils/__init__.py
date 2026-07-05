@@ -9,7 +9,7 @@ Sub-modules (private, import through this package):
   _logging        — setup_logger
   _config         — resolve_config, species validation, dataset.yaml helpers
   _cross_modality — find_rna_h5ad, find_rna_marker_csv, load_scRNA_markers
-  _perf           — PerformanceReport, monitor_performance
+  _perf           — PerformanceReport, PerformanceSummary, monitor_performance
   _validation     — validate_adata, validate_pipeline_state
 """
 
@@ -46,7 +46,7 @@ from core.utils._config import (
 from core.utils._cross_modality import (
     find_rna_h5ad, find_rna_marker_csv, load_scRNA_markers,
 )
-from core.utils._perf import PerformanceReport, monitor_performance
+from core.utils._perf import PerformanceReport, PerformanceSummary, monitor_performance
 from core.utils._validation import (
     validate_adata, _STEP_REQUIREMENTS, validate_pipeline_state,
 )

@@ -696,6 +696,7 @@ class Config:
     h5ad_compression: str = "gzip"       # 'gzip' | 'lzf' | 'zstd'
     h5ad_tempdir: str = "/tmp/Fuxi"      # safe_write 临时目录
     cleanup_intermediates: bool = False  # ATAC: 自动删除上游中间 checkpoint
+    perf_monitoring: bool = True  # 是否启用性能监控（CPU/内存/形状追踪）
 
     # ═══════════════════════════════════════════════════════════════════
     #  AI 配置（通用）
