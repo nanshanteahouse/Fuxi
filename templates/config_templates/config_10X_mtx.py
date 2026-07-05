@@ -149,6 +149,11 @@ CFG.grn_species = "human"            # 'human' | 'mouse'
 CFG.grn_n_top_regulons = 50          # top N variable TFs for heatmap
 CFG.grn_min_regulon_size = 5         # minimum target genes per regulon
 # CFG.grn_confidence_levels = ["A", "B", "C"]  # DoRothEA confidence levels
+#
+# ── GRN tissue awareness (requires CFG.tissue to be set) ──
+# CFG.grn_tissue_mode = "off"          # 'off' | 'soft' | 'hard'
+# CFG.grn_use_kb_relevance = False     # enable KB marker overlap scoring
+# CFG.grn_export_filtered = False      # in hard mode, only export tissue-relevant TFs
 
 # ── CCI 细胞通讯分析 (取消注释以启用) ──
 CFG.run_cci = True

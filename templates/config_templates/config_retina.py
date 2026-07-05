@@ -149,6 +149,11 @@ CFG.grn_n_top_regulons = 50            # 热图显示的方差最高 TF 数量
 CFG.grn_min_regulon_size = 5           # 每个 regulon 最少靶基因数
 # CFG.grn_confidence_levels = ["A", "B", "C"]  # DoRothEA 置信度等级
 
+# ── GRN tissue awareness (retina-specific) ──
+CFG.grn_tissue_mode = "soft"          # mark tissue-relevant TFs in heatmap
+CFG.grn_use_kb_relevance = True       # use retina KB markers
+# CFG.grn_export_filtered = False     # keep all TFs; only annotate
+
 # ── CCI 细胞通讯分析 (取消注释以启用) ──
 CFG.run_cci = True
 # CFG.cci_method = "liana"                  # 'liana' (LIANA+ rank_aggregate)
