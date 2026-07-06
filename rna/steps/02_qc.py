@@ -314,8 +314,9 @@ def _plot_nfeature_kde(adata, fig_dir, mode_label, cfg, log):
         _ax.plot(x_range, density, color='steelblue', linewidth=1.5)
         _ax.fill_between(x_range, density, alpha=0.15, color='steelblue')
 
+        y_offset = density.max() * 0.03
         for px, py in zip(peaks_x, peaks_y):
-            _ax.scatter(px, py, marker='^', s=80, color='darkorange',
+            _ax.scatter(px, py + y_offset, marker='^', s=80, color='darkorange',
                        edgecolors='black', linewidths=0.5, zorder=5,
                        label=f'Peak at {px:.0f} genes')
 
