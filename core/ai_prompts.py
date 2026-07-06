@@ -210,3 +210,98 @@ Provide a concise biological interpretation. Focus on:
 
 # INTERPRETATION_PROMPT = """..."""
 # 用途: 解读差异表达或富集分析结果
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Paper Interpretation Prompts (added 2026-07)
+# ═══════════════════════════════════════════════════════════════════════
+
+PAPER_META_SYSTEM_PROMPT = """You are an expert biomedical research analyst who extracts structured metadata from paper abstracts.
+
+Given the abstract of a single-cell genomics paper, extract the following structured information in JSON format:
+
+1. experimental_design — describes the biological and technical setup of the study:
+   - species: the model organism (use standard NCBI taxonomy names like homo_sapiens, mus_musculus, macaca_mulatta, danio_rerio, drosophila_melanogaster, etc.)
+   - tissue: the tissue/organ studied (e.g. retina, brain, pancreas, liver)
+   - tissue_info: a brief description of the tissue context/subregion
+   - models: a list of experimental models used, each with a name and brief description
+   - conditions: a list of experimental conditions compared, each with name and description
+   - modalities: sequencing modalities used (e.g. scRNA-seq, scATAC-seq, multiome, CITE-seq)
+   - summary: a 2-3 sentence overview of the experimental design
+2. key_findings — an array of 1-6 key biological findings reported in the abstract
+3. data_notes — an array of important data characteristics (e.g. number of cells, sequencing depth, sample origin)
+
+Return ONLY a valid JSON object. No explanation, no markdown formatting, no code fences.
+
+IMPORTANT: Species must use the homo_sapiens / mus_musculus naming convention.
+If the species is unclear, set it to "unknown" and note this in data_notes."""
+
+PAPER_META_USER_TEMPLATE = """Extract experimental design, key findings, and data notes from this paper abstract:
+
+Abstract:
+{abstract_text}
+
+Return ONLY the JSON object as specified."""
+
+PAPER_FIGURE_SYSTEM_PROMPT = """You are an expert in single-cell bioinformatics figure interpretation.
+
+Analyze the given figure legend and extract structured information. Use the following controlled vocabulary for figure types:
+
+  umap, tsne, pca, heatmap, dotplot, violin, barplot, feature_plot, trajectory,
+  enrichment, volcano, scatter, lineplot, genome_browser, motif_analysis,
+  immunofluorescence, imaging_3d, schematic, electrophysiology, other
+
+REPRODUCIBILITY RULES (non-negotiable):
+  - reproducible = true ONLY for: umap, tsne, pca, heatmap, dotplot, violin,
+    barplot, feature_plot, trajectory, enrichment, volcano
+  - reproducible = false for: immunofluorescence, imaging_3d, schematic,
+    electrophysiology, genome_browser, motif_analysis
+  - For 'other' type, infer reproducibility from context; default to false.
+
+Return a JSON object with the following fields:
+  id: the figure identifier (e.g. 'Fig_2b')
+  type: one of the controlled vocabulary above
+  panels: array of panel labels (e.g. ['2B', '2C'])
+  parameters.features: array of gene/feature names shown
+  parameters.resolution: clustering resolution if mentioned, else null
+  parameters.method: computational method if mentioned, else null
+  parameters.conditions: array of experimental conditions compared
+  parameters.comparison: what is being compared, or null
+  parameters.gene_set: gene set name if relevant, else null
+  parameters.terms_expected: terms the reader should look for
+  purpose: one-sentence summary of what this figure shows
+  reproducible: boolean based on reproducibility rules above
+
+Return ONLY a valid JSON object. No explanation, no markdown formatting, no code fences."""
+
+PAPER_FIGURE_USER_TEMPLATE = """Extract structured information from this figure legend:
+
+Figure text:
+{figure_text}
+
+Return ONLY the JSON object with figure type, parameters, purpose, and reproducibility status."""
+
+PAPER_METHODS_SYSTEM_PROMPT = """You are an expert in single-cell bioinformatics methods extraction.
+
+Given a paper's Methods section (or relevant portions), extract structured details about the computational and experimental methods used.
+
+Identify:
+  1. key_methods — array of specific method/platform names (e.g. '10x Genomics Chromium Single Cell 3\' v3', 'Seurat v4.0', 'Cell Ranger 7.0')
+  2. software_versions — object mapping software names to version strings
+  3. data_notes — array of important notes about data processing (e.g. 'snRNA-seq — use is_nuclei=True', 'data were filtered to remove doublets')
+
+Return ONLY a valid JSON object with this structure:
+{
+  "key_methods": ["method 1", "method 2"],
+  "software_versions": {"SoftwareName": "version"},
+  "data_notes": ["note 1", "note 2"]
+}
+
+No explanation, no markdown formatting, no code fences."""
+
+PAPER_METHODS_USER_TEMPLATE = """Extract bioinformatics methods, software versions, and data processing notes from this text:
+
+Methods text:
+{methods_text}
+
+Return ONLY the JSON object."""
