@@ -25,6 +25,7 @@ CFG.img_path = ''                    # Auto-detected from Visium directory
 
 # ── Dataset metadata ──
 CFG.tissue = '{{TISSUE}}'   # TODO: verify tissue type
+# CFG.tissue_maturity = "unknown"   # "developing" | "adult" | "unknown"
 CFG.species = '{{SPECIES}}'
 
 # ── QC ──

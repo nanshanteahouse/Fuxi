@@ -28,6 +28,7 @@ CFG.genome = '{{GENOME}}'   # TODO: verify
 
 # ── Dataset metadata ──
 CFG.tissue = '{{TISSUE}}'   # TODO: verify tissue type
+# CFG.tissue_maturity = "unknown"   # "developing" | "adult" | "unknown"
 CFG.species = '{{SPECIES}}'
 
 # ── QC ──

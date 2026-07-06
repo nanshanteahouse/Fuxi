@@ -59,8 +59,8 @@ Fuxi 目前内置的 Knowledge Base 只覆盖了**视网膜**组织。如果你�
 | 对比 | scRNA-seq | snRNA-seq |
 |------|-----------|-----------|
 | 线粒体信号含义 | 细胞死亡 / 应激 | 细胞质剥离不彻底（技术因素） |
-| 默认线粒体上限 | `CFG.max_pct_mito = 20.0%` | `CFG.max_pct_mito_nuclei = 3.0%` |
-| MAD 自适应乘数 | 3.0× | 1.5×（更严格） |
+|| 默认线粒体上限 | `CFG.max_pct_mito = 20.0%` | `CFG.max_pct_mito_nuclei = 5.0%` |
+|| MAD 模式逻辑 | 基于 MAD 计算阈值 | **跳过 MAD，直接使用固定上限** |
 
 **自动检测**：使用 `--query-ncbi` 预处理时，Fuxi 会从 GEO 标题/摘要的关键词自动判断数据类型（如 `snRNA-seq`、`single-nucleus` 等），并将结果写入 `dataset.yaml` 的 `assay_type` 字段。管道启动时自动读取并设置 `CFG.is_nuclei`。
 

@@ -21,7 +21,33 @@ import scanpy as sc
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from scipy.stats import median_abs_deviation
+from scipy.stats import median_abs_deviation, gaussian_kde
+from scipy.signal import find_peaks
+
+
+
+def _detect_peaks(vals):
+    """Detect peaks in nFeature distribution via KDE + peak finding.
+
+    Returns: (n_peaks, peaks_x, peaks_y, x_range, density, is_multimodal)
+    """
+    vals = vals[np.isfinite(vals)]
+    if len(vals) < 100:
+        return 0, [], [], np.array([]), np.array([]), False
+    try:
+        kde = gaussian_kde(vals)
+        x_range = np.linspace(vals.min(), vals.max(), 500)
+        density = kde(x_range)
+        peaks, props = find_peaks(density, prominence=density.max() * 0.02, distance=20)
+        n_peaks = len(peaks)
+        if n_peaks >= 2:
+            peak_genes = x_range[peaks]
+            is_multimodal = np.max(np.diff(np.sort(peak_genes))) > 500
+        else:
+            is_multimodal = False
+        return n_peaks, x_range[peaks].tolist(), density[peaks].tolist(), x_range, density, is_multimodal
+    except Exception:
+        return 0, [], [], np.array([]), np.array([]), False
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -39,12 +65,36 @@ def _mad_thresholds(adata, cfg, log):
     """
     thresholds = {}
 
+    # ── 分布可靠性检测：MAD 假设单峰、中位数足够的分布 ──
+    _nf = adata.obs['n_genes_by_counts'].values.astype(np.float64)
+    _nf = _nf[np.isfinite(_nf)]
+    _med = np.median(_nf)
+    _, _, _, _, _, _multimodal = _detect_peaks(_nf)
+    _p10 = np.percentile(_nf, 10)
+    _p90 = np.percentile(_nf, 90)
+
+    _fallback = False
+    _reason = ""
+    if _multimodal and _med < 2000:
+        _fallback = True
+        _reason = f"bimodal distribution (median={_med:.0f} < 2000)"
+    elif (_p90 - _p10) > 2000 and _med < 1500:
+        _fallback = True
+        _reason = f"wide unimodal (P10={_p10:.0f}, P90={_p90:.0f}, median={_med:.0f} < 1500)"
+
+    if _fallback:
+        log.warning("MAD reliability check FAILED: %s", _reason)
+        log.warning("Falling back to hard thresholds — median too low for MAD normality assumption.")
+        return _hard_thresholds(cfg, log)
+
+
     # ---- n_genes_by_counts (nFeature_RNA) ----
     vals = adata.obs['n_genes_by_counts'].values.astype(np.float64)
     med = np.median(vals)
     mad = median_abs_deviation(vals, scale='normal')
-    lo_mad = max(med - cfg.mad_n_mads * mad, 0)
-    hi_mad = med + cfg.mad_n_mads * mad
+    _maturity_mad = {"developing": 5.0}.get(cfg.tissue_maturity, cfg.mad_n_mads)
+    lo_mad = max(med - _maturity_mad * mad, 0)
+    hi_mad = med + _maturity_mad * mad
     # 硬阈值做地板/天花板
     lo = max(lo_mad, cfg.min_genes)
     # Safety clamp: MAD 下界不应超过用户硬阈值（参考 ddqc, Subramanian 2022）
@@ -55,10 +105,24 @@ def _mad_thresholds(adata, cfg, log):
             '  MAD lower bound (%.0f) exceeds min_genes (%.0f) — clamping to min_genes. MAD is unreliable for this distribution; consider use_adaptive_thresholds=False.',
             lo_orig, cfg.min_genes,
         )
-    hi = min(hi_mad, cfg.max_genes)
+    _safe_floor = cfg.min_mad_upper_genes_nuclei if cfg.is_nuclei else cfg.min_mad_upper_genes
+    hi = min(max(hi_mad, _safe_floor), cfg.max_genes)
     thresholds['n_genes_by_counts'] = (lo, hi)
-    log.info("  n_genes_by_counts: median=%.0f, MAD=%.0f  →  (lo=%.0f, hi=%.0f)  [adaptive]",
-             med, mad, lo, hi)
+    log.info("  n_genes_by_counts: median=%.0f, MAD=%.0f  →  (lo=%.0f, hi=%.0f)  [adaptive ×%.1f, %s]",
+             med, mad, lo, hi, _maturity_mad, cfg.tissue_maturity)
+
+    # ── 分布检测 ──
+    try:
+        vals_nf = adata.obs['n_genes_by_counts'].values.astype(np.float64)
+        n_peaks, _, _, _, _, is_multimodal = _detect_peaks(vals_nf)
+        # Also report P10/P90 for context
+        p10 = np.percentile(vals_nf[np.isfinite(vals_nf)], 10)
+        p90 = np.percentile(vals_nf[np.isfinite(vals_nf)], 90)
+        log.info("  nFeature distribution: %d KDE peak%s (P10=%.0f, P90=%.0f)%s",
+                 n_peaks, "" if n_peaks == 1 else "s", p10, p90,
+                 " — MULTIMODAL: MAD may over-filter the high-expression population" if is_multimodal else "")
+    except Exception:
+        pass
 
     # ---- total_counts (nCount_RNA) ----
     # 非 raw_counts 数据不设 total_counts 上限
@@ -75,16 +139,18 @@ def _mad_thresholds(adata, cfg, log):
         log.info("  total_counts:       (skipped — expression_type=%s)", cfg.expression_type)
 
     # ---- pct_counts_mt ----
-    vals = adata.obs['pct_counts_mt'].values.astype(np.float64)
-    med = np.median(vals)
-    mad = median_abs_deviation(vals, scale='normal')
-    _mito_mad_factor = 1.5 if cfg.is_nuclei else cfg.mad_n_mads
-    hi_mad = med + _mito_mad_factor * mad
-    _mito_cap = cfg.max_pct_mito_nuclei if cfg.is_nuclei else cfg.max_pct_mito
-    hi = min(hi_mad, _mito_cap)
+    if cfg.is_nuclei:
+        hi = cfg.max_pct_mito_nuclei
+        log.info("  pct_counts_mt:      hi=%.2f%%  [snRNA-seq: fixed threshold, MAD skipped]", hi)
+    else:
+        vals = adata.obs['pct_counts_mt'].values.astype(np.float64)
+        med = np.median(vals)
+        mad = median_abs_deviation(vals, scale='normal')
+        hi_mad = med + cfg.mad_n_mads * mad
+        hi = min(hi_mad, cfg.max_pct_mito)
+        log.info("  pct_counts_mt:      median=%.2f%%, MAD=%.2f%% ->  hi=%.2f%%  [adaptive, factor=%.1f]",
+                 med, mad, hi, cfg.mad_n_mads)
     thresholds['pct_counts_mt'] = (None, hi)
-    log.info("  pct_counts_mt:      median=%.2f%%, MAD=%.2f%% ->  hi=%.2f%%  [adaptive, factor=%.1f]%s",
-             med, mad, hi, _mito_mad_factor, " [snRNA-seq]" if cfg.is_nuclei else "")
 
     # ---- log_genes_per_umi (complexity) ----
     # 非 raw_counts 数据下复杂度指标无解释力，跳过
@@ -93,7 +159,7 @@ def _mad_thresholds(adata, cfg, log):
         finite = vals[np.isfinite(vals)]
         med = np.median(finite)
         mad = median_abs_deviation(finite, scale='normal')
-        lo_mad = max(med - cfg.mad_n_mads * mad, 0)
+        lo_mad = max(med - _maturity_mad * mad, 0)
         lo = max(lo_mad, cfg.min_genes_per_umi)
         # Safety clamp: MAD 下界不应超过用户硬阈值
         if lo > cfg.min_genes_per_umi:
@@ -104,8 +170,8 @@ def _mad_thresholds(adata, cfg, log):
                 lo_orig, cfg.min_genes_per_umi,
             )
         thresholds['log_genes_per_umi'] = (lo, None)
-        log.info("  log_genes_per_umi:  median=%.4f, MAD=%.4f →  lo=%.4f  [adaptive]",
-                 med, mad, lo)
+        log.info("  log_genes_per_umi:  median=%.4f, MAD=%.4f →  lo=%.4f  [adaptive ×%.1f, %s]",
+                 med, mad, lo, _maturity_mad, cfg.tissue_maturity)
     else:
         thresholds['log_genes_per_umi'] = (None, None)
         log.info("  log_genes_per_umi:  (skipped — expression_type=%s)", cfg.expression_type)
@@ -235,6 +301,51 @@ def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, cfg, log):
         log.info("  Plot saved: pct_mito_distribution.png")
     except Exception as e:
         log.warning("pct_mito distribution plot failed: %s", e)
+def _plot_nfeature_kde(adata, fig_dir, mode_label, cfg, log):
+    """Panel D: nFeature KDE density with peak markers."""
+    try:
+        vals = adata.obs['n_genes_by_counts'].values.astype(np.float64)
+        n_peaks, peaks_x, peaks_y, x_range, density, is_multimodal = _detect_peaks(vals)
+        if len(x_range) == 0:
+            log.info("  KDE plot: skipped (too few cells)")
+            return
+
+        _fig, _ax = plt.subplots(figsize=(8, 5))
+        _ax.plot(x_range, density, color='steelblue', linewidth=1.5)
+        _ax.fill_between(x_range, density, alpha=0.15, color='steelblue')
+
+        for px, py in zip(peaks_x, peaks_y):
+            _ax.scatter(px, py, marker='^', s=80, color='darkorange',
+                       edgecolors='black', linewidths=0.5, zorder=5,
+                       label=f'Peak at {px:.0f} genes')
+
+        # Threshold lines
+        _ax.axvline(cfg.min_genes, color='red', linestyle='--', linewidth=1.0,
+                   label=f'lo={cfg.min_genes:.0f}')
+        _ax.axvline(cfg.max_genes, color='red', linestyle='--', linewidth=1.0,
+                   label=f'hi={cfg.max_genes:.0f}')
+
+        assessment = 'BIMODAL' if is_multimodal else ('MULTIPEAK' if n_peaks >= 2 else 'UNIMODAL')
+        assess_color = '#c0392b' if is_multimodal else ('#e67e22' if n_peaks >= 2 else '#27ae60')
+
+        _ax.set_xlabel('n_genes_by_counts (nFeature_RNA)')
+        _ax.set_ylabel('Density')
+        _peak_label = "s" if n_peaks != 1 else ""
+        _ax.set_title(f'nFeature KDE density ({n_peaks} peak{_peak_label}, mode={mode_label})')
+        _ax.legend(fontsize=8, loc='upper right')
+
+        _ax.annotate(f'{assessment}', xy=(0.02, 0.08), xycoords='axes fraction',
+                    fontsize=12, fontweight='bold', color=assess_color,
+                    ha='left', va='bottom',
+                    bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
+
+        _fig.tight_layout()
+        _fig.savefig(os.path.join(fig_dir, 'nFeature_KDE_density.png'), dpi=150)
+        plt.close(_fig)
+        log.info("  Plot saved: nFeature_KDE_density.png (%s)", assessment)
+    except Exception as e:
+        log.warning("nFeature KDE plot failed: %s", e)
+        log.warning("pct_mito distribution plot failed: %s", e)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -361,6 +472,10 @@ def main():
     # 3. 生成诊断图 (在任何过滤之前，展示原始分布 + 阈值线)
     fig_dir = os.path.join(CFG.figure_dir, '02_qc')
     _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, CFG, log)
+
+    # 3a. 生成 nFeature KDE 密度峰图
+    _fig_dir = os.path.join(CFG.figure_dir, '02_qc')
+    _plot_nfeature_kde(adata, _fig_dir, mode_label, CFG, log)
 
     # 4. 过滤
     adata = filter_cells(adata, thresholds, CFG, log)

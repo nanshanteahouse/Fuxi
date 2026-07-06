@@ -39,6 +39,7 @@ CFG.features_file = '{{FEATURES_FILE}}'
 
 # ── Dataset metadata ──
 CFG.tissue = '{{TISSUE}}'   # TODO: verify tissue type
+# CFG.tissue_maturity = "unknown"   # "developing" | "adult" | "unknown"
 CFG.species = '{{SPECIES}}'
 CFG.expression_type = '{{EXPRESSION_TYPE}}'   # raw_counts | TPM | log1p_counts | CPM | FPKM
 # TPM/FPKM/CPM: total_counts & complexity filters are auto-skipped.
@@ -66,7 +67,7 @@ CFG.min_genes_per_umi = 0.7       # complexity filter — only applied when expr
 # ── 单细胞 vs 单细胞核 (snRNA-seq) ──────────────────────────
 # CFG.is_nuclei = True           # 核数据 (snRNA-seq)
 #                                # 自动从 dataset.yaml 的 assay_type 字段填充
-# CFG.max_pct_mito_nuclei = 3.0  # 核数据默认线粒体上限（全细胞默认 max_pct_mito=20.0）
+# CFG.max_pct_mito_nuclei = 5.0  # 核数据默认线粒体上限（全细胞默认 max_pct_mito=20.0）
 #                                # 核数据中高线粒体比例反映细胞质残留，而非细胞应激
 
 # ── HVG ──

@@ -107,7 +107,7 @@ class RNAConfig:
 
     # ── RNA snRNA-seq ──
     is_nuclei: bool = False
-    max_pct_mito_nuclei: float = 3.0
+    max_pct_mito_nuclei: float = 5.0
     # ── RNA Scrublet ──
     run_scrublet: bool = True
     scrublet_expected_doublet_rate: float | None = None
@@ -356,6 +356,7 @@ class Config:
     #  数据集元信息（通用）
     # ═══════════════════════════════════════════════════════════════════
     tissue: str = "unknown"
+    tissue_maturity: str = "unknown"     # "developing" | "adult" | "unknown"
     species: str = "human"
     expression_type: str = "raw_counts"  # raw_counts | log1p_counts | TPM | CPM | FPKM
 
@@ -372,6 +373,8 @@ class Config:
     use_adaptive_thresholds: bool = False
     mad_n_mads: float = 3.0
     qc_ncount_max_mad: float = 5.0
+    min_mad_upper_genes: int = 4000         # n_genes MAD 上限安全地板（全细胞）
+    min_mad_upper_genes_nuclei: int = 3000  # n_genes MAD 上限安全地板（核）
     # ── RNA snRNA-seq delegated via __getattr__ to RNAConfig ──
 
     # ═══════════════════════════════════════════════════════════════════

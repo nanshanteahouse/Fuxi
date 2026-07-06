@@ -210,7 +210,7 @@ scRNA-seq 管线包含 12 个步骤（编号 00-11），数据依次流转：
 ### Step 02：质量控制（QC）
 
 **输入**：`01_doublet.h5ad` | **输出**：`02_qc.h5ad`<br>
-**诊断图**：`{figure_dir}/02_qc/` — `nFeature_distribution.png`、`nCount_vs_nFeature.png`、`pct_mito_distribution.png`
+**诊断图**：`{figure_dir}/02_qc/` — `nFeature_distribution.png`、`nCount_vs_nFeature.png`、`pct_mito_distribution.png`、`nFeature_KDE_density.png`
 
 两种模式，由 `use_adaptive_thresholds` 控制：
 
@@ -227,7 +227,7 @@ scRNA-seq 管线包含 12 个步骤（编号 00-11），数据依次流转：
 4. **nCount 上限**（仅 raw_counts）：对 `total_counts` 做上界过滤，TPM/FPKM/CPM 下自动跳过
 5. **复杂度过滤**（仅 raw_counts）：`log10(基因数)/log10(总UMI)` 下界过滤，TPM/FPKM/CPM 下自动跳过
 
-**始终生成 3 张诊断图**，标注实际使用的阈值线（硬阈值或 MAD），无需人工看图决策即可提供可溯源的审计追踪。
+**始终生成 4 张诊断图**，标注实际使用的阈值线（硬阈值或 MAD），含 KDE 密度峰图辅助判断分布形态，无需人工看图决策即可提供可溯源的审计追踪。
 
 ### Step 03：归一化与批次整合
 
@@ -974,9 +974,14 @@ CFG.max_genes = 7500                   # 细胞最多检测基因数（去除双
 CFG.max_pct_mito = 20.0                # 最大线粒体百分比
 CFG.min_genes_per_umi = 0.70           # 复杂度阈值 — 仅在 raw_counts 下生效
 CFG.min_cells_per_gene = 3             # 基因在最少几个细胞中表达
-CFG.use_adaptive_thresholds = False    # True → 基于 MAD 的阈值（自动适应数据分布）
-CFG.mad_n_mads = 3.0                   # MAD 倍数
-CFG.qc_ncount_max_mad = 5.0            # nCount 上限的 MAD 倍数（更宽，因为 nCount 有重尾）
+CFG.use_adaptive_thresholds = True     # True → 基于 MAD 的阈值（自动适应数据分布）
+CFG.tissue_maturity = "developing"    # "developing" | "adult" | "unknown" — 发育数据放宽 MAD 倍数
+CFG.mad_n_mads = 3.0                   # MAD 倍数（基础值，会被 tissue_maturity 覆盖）
+CFG.qc_ncount_max_mad = 5.0            # nCount 上限的 MAD 倍数
+# CFG.is_nuclei = True                 # snRNA-seq 核模式 — mito% 用固定 5.0% 而非 MAD
+# CFG.max_pct_mito_nuclei = 5.0        # 核 mito% 上限（默认 5.0%）
+# CFG.min_mad_upper_genes = 4000       # n_genes MAD 上限安全地板（全细胞）
+# CFG.min_mad_upper_genes_nuclei = 3000 # n_genes MAD 上限安全地板（核）
 ```
 
 ### 8.5 批次校正

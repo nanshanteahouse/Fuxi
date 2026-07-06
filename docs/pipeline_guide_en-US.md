@@ -210,7 +210,7 @@ Output: `doublet_scores` (doublet probability score) and `predicted_doublet` (bo
 ### Step 02: Quality control (QC)
 
 **Input**: `01_doublet.h5ad` | **Output**: `02_qc.h5ad`<br>
-**Plots**: `{figure_dir}/02_qc/` — `nFeature_distribution.png`, `nCount_vs_nFeature.png`, `pct_mito_distribution.png`
+**Plots**: `{figure_dir}/02_qc/` — `nFeature_distribution.png`, `nCount_vs_nFeature.png`, `pct_mito_distribution.png`, `nFeature_KDE_density.png`
 
 Two modes, controlled by `use_adaptive_thresholds`:
 
@@ -227,7 +227,7 @@ Filter dimensions (all expressed as `(lo, hi)` in a thresholds dict):
 4. **nCount filter** (raw_counts only): Upper-bound on `total_counts`. Skipped automatically for TPM/FPKM/CPM
 5. **Complexity filter** (raw_counts only): `log10(n_genes) / log10(total_counts)` lower-bound. Skipped automatically for TPM/FPKM/CPM
 
-**3 diagnostic plots are always generated**, annotated with the actual threshold lines (hard or MAD), providing a permanent audit trail without requiring manual inspection.
+**4 diagnostic plots are always generated**, annotated with the actual threshold lines (hard or MAD), including a KDE density plot with peak markers to aid distribution assessment, providing a permanent audit trail without requiring manual inspection.
 
 ### Step 03: Normalization & batch integration
 
@@ -974,9 +974,14 @@ CFG.max_genes = 7500                   # Maximum detected genes per cell (catche
 CFG.max_pct_mito = 20.0                # Maximum mitochondrial percentage
 CFG.min_genes_per_umi = 0.70           # Complexity threshold — only for raw_counts
 CFG.min_cells_per_gene = 3             # Minimum cells expressing a gene
-CFG.use_adaptive_thresholds = False    # True → MAD-based thresholds (auto-adapt to data)
-CFG.mad_n_mads = 3.0                   # N × MAD for adaptive thresholds
+CFG.use_adaptive_thresholds = True     # True → MAD-based thresholds (auto-adapt to data)
+CFG.tissue_maturity = "developing"    # "developing" | "adult" | "unknown" — relax MAD for developmental data
+CFG.mad_n_mads = 3.0                   # N × MAD for adaptive thresholds (base, overridden by tissue_maturity)
 CFG.qc_ncount_max_mad = 5.0            # Wider MAD multiplier for nCount upper bound
+# CFG.is_nuclei = True                 # snRNA-seq: mito% uses fixed 5.0% instead of MAD
+# CFG.max_pct_mito_nuclei = 5.0        # Nuclear mito% ceiling (default 5.0%)
+# CFG.min_mad_upper_genes = 4000       # n_genes MAD upper safe floor (whole-cell)
+# CFG.min_mad_upper_genes_nuclei = 3000 # n_genes MAD upper safe floor (nuclei)
 ```
 
 ### 8.5 Batch correction

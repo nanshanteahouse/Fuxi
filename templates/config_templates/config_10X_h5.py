@@ -51,6 +51,7 @@ CFG.stage_order = []  # 阶段顺序，用于图例排序
 
 # ── 数据集元信息 ──
 CFG.tissue = "unknown"   # 组织类型: brain, retina, liver, etc.
+# CFG.tissue_maturity = "unknown"   # "developing" | "adult" | "unknown"
 CFG.species = "human"    # 物种: human, mouse, rat
 CFG.expression_type = "raw_counts"   # 10X H5 默认是 raw UMI counts
 # raw_counts | log1p_counts | TPM | CPM | FPKM
@@ -70,7 +71,7 @@ CFG.min_genes_per_umi = 0.7       # complexity filter — only applied when expr
 # ── 单细胞 vs 单细胞核 (snRNA-seq) ──────────────────────────
 # CFG.is_nuclei = True           # 核数据 (snRNA-seq)
 #                                # 自动从 dataset.yaml 的 assay_type 字段填充
-# CFG.max_pct_mito_nuclei = 3.0  # 核数据默认线粒体上限（全细胞默认 max_pct_mito=20.0）
+# CFG.max_pct_mito_nuclei = 5.0  # 核数据默认线粒体上限（全细胞默认 max_pct_mito=20.0）
 #                                # 核数据中高线粒体比例反映细胞质残留，而非细胞应激
 
 # ── HVG ──

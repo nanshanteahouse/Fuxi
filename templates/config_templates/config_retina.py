@@ -10,6 +10,7 @@
 """
 import os
 from core.config import CFG
+# CFG.tissue_maturity = "unknown"   # "developing" | "adult" | "unknown"
 
 # ── 数据格式 (CSV 矩阵) ──
 CFG.data_format = 'csv_matrix'
@@ -43,7 +44,7 @@ CFG.run_scrublet = True
 # ── 单细胞 vs 单细胞核 (snRNA-seq) ──────────────────────────
 # CFG.is_nuclei = True           # 核数据 (snRNA-seq)
 #                                # 自动从 dataset.yaml 的 assay_type 字段填充
-# CFG.max_pct_mito_nuclei = 3.0  # 核数据默认线粒体上限（全细胞默认 max_pct_mito=20.0）
+# CFG.max_pct_mito_nuclei = 5.0  # 核数据默认线粒体上限（全细胞默认 max_pct_mito=20.0）
 #                                # 核数据中高线粒体比例反映细胞质残留，而非细胞应激
 
 # ── HVG ──
