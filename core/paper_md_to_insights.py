@@ -17,7 +17,9 @@ import argparse
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Union
+
+from urllib.error import HTTPError, URLError
 
 
 # Ensure repo root is on sys.path for standalone CLI usage
@@ -34,6 +36,8 @@ from core.ai_prompts import (
     PAPER_METHODS_SYSTEM_PROMPT,
     PAPER_METHODS_USER_TEMPLATE,
 )
+
+from core.paper_converter import PaperSource, PmcXmlSource, MarkdownSource, Pymupdf4llmSource
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +59,11 @@ class _LLMConfig:
 
 
 def _parse_filename_meta(md_path: str) -> dict:
-    """Parse year/author/journal from filename pattern {year}_{author}_{journal}_{title}."""
+    """Parse year/author/journal from filename pattern {year}_{author}_{journal}_{title}.
+
+    .. deprecated:: paper-module
+       Use ``PaperSource.get_metadata()`` instead.
+    """
     stem = Path(md_path).stem
     parts = stem.split('_')
     meta: dict = {
@@ -235,7 +243,7 @@ class PaperMdToInsights:
         return _safe_json_parse(raw, "methods")
 
     @staticmethod
-    def merge_to_insights(meta: dict, figures: list[dict], methods: dict, md_path: str) -> dict:
+    def merge_to_insights(meta: dict, figures: list[dict], methods: dict, paper_meta: dict) -> dict:
         """Combine all extracted data into final insights dict.
 
         Deduplicates figures by id, sorts them, merges data notes from meta and methods.
@@ -255,7 +263,7 @@ class PaperMdToInsights:
         methods_notes = list(methods.get("data_notes", [])) if methods else []
 
         return {
-            "paper_meta": _parse_filename_meta(md_path),
+            "paper_meta": paper_meta,
             "experimental_design": meta.get("experimental_design", {}) if meta else {},
             "key_findings": list(meta.get("key_findings", [])) if meta else [],
             "data_notes": meta_notes + [n for n in methods_notes if n not in meta_notes],
@@ -268,24 +276,25 @@ class PaperMdToInsights:
             },
         }
 
-    def run(self, md_path: str, cfg, output_path: str | None = None, force: bool = False) -> str:
+    def run(self, source: Union[PaperSource, str], cfg, output_path: str | None = None, force: bool = False) -> str:
         """Full pipeline: read, split, extract, merge, write.
 
         Returns path to written file, or "SKIPPED" if output exists and not force.
 
         Auto-creates subdirectory for output if needed.
         """
-        md_obj = Path(md_path)
+        if isinstance(source, str):
+            source = MarkdownSource(source)
         if output_path:
             out_path = Path(output_path)
         else:
-            out_path = md_obj.parent / md_obj.stem / "insights.yaml"
+            out_path = Path("projects/papers") / source.get_paper_name() / "insights.yaml"
 
         if out_path.exists() and not force:
             logger.info("Output exists at %s, skipping (use --force to overwrite)", out_path)
             return "SKIPPED"
 
-        md_text = md_obj.read_text(encoding="utf-8")
+        md_text = source.get_text()
         sections = self.split_sections(md_text)
         logger.info("Found sections: %s", [k for k, v in sections.items() if v])
 
@@ -309,31 +318,73 @@ class PaperMdToInsights:
             logger.info("Extracting methods...")
             methods = self.extract_methods(sections["methods"], cfg)
 
-        insights = self.merge_to_insights(meta, figures, methods, md_path)
+        insights = self.merge_to_insights(meta, figures, methods, source.get_metadata())
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text('\n'.join(_yaml_dump(insights)) + '\n', encoding="utf-8")
         logger.info("Wrote insights to %s", out_path)
         return str(out_path)
 
+def _resolve_source(args) -> PaperSource:
+    """Determine PaperSource from CLI arguments."""
+    if args.source == "pmc":
+        if not (args.pmid or args.doi or args.xml):
+            raise ValueError("--source pmc requires --pmid, --doi, or --xml")
+        return PmcXmlSource(pmid=args.pmid, doi=args.doi, xml_path=args.xml)
+
+    elif args.source == "pdf":
+        if not args.pdf:
+            raise ValueError("--source pdf requires --pdf <path>")
+        return Pymupdf4llmSource(args.pdf)
+
+    elif args.source == "md":
+        if not args.positional:
+            raise ValueError("--source md requires a positional .md file argument")
+        return MarkdownSource(args.positional)
+
+    # --source auto (default): PMC -> PDF -> MD fallback
+    if args.pmid or args.doi or args.xml:
+        try:
+            return PmcXmlSource(pmid=args.pmid, doi=args.doi, xml_path=args.xml)
+        except (RuntimeError, ValueError, HTTPError, URLError) as e:
+            logger.warning("PMC source failed: %s. Trying fallback...", e)
+
+    if args.pdf:
+        try:
+            return Pymupdf4llmSource(args.pdf)
+        except ImportError:
+            logger.warning("pymupdf4llm not installed, skipping PDF fallback")
+
+    if args.positional:
+        return MarkdownSource(args.positional)
+
+    raise ValueError("No valid source found. Provide --pmid/--doi/--xml/--pdf or a positional .md file")
+
 
 def main() -> None:
     """CLI entry point for paper_md_to_insights."""
     parser = argparse.ArgumentParser(description="Extract structured paper insights using AI.")
-    parser.add_argument("md_file", type=str, help="Paper markdown file")
-    parser.add_argument("--output", "-o", type=str, default=None, help="Output path (default: <md_dir>/<stem>/insights.yaml)")
+    parser.add_argument("positional", nargs="?", type=str, help="Paper markdown file (optional if --pmid/--doi/--xml/--pdf given)")
+    parser.add_argument("--pmid", type=str, default=None, help="PubMed ID")
+    parser.add_argument("--doi", type=str, default=None, help="DOI")
+    parser.add_argument("--xml", type=str, default=None, help="Local PMC XML file path")
+    parser.add_argument("--pdf", type=str, default=None, help="PDF file path")
+    parser.add_argument("--source", type=str, default="auto", choices=["auto", "pmc", "pdf", "md"], help="Source selection strategy")
+    parser.add_argument("--output", "-o", type=str, default=None, help="Output path")
     parser.add_argument("--force", "-f", action="store_true", default=False, help="Overwrite existing output")
     parser.add_argument("--verbose", "-v", action="store_true", default=False, help="Enable debug logging")
     args = parser.parse_args()
 
+    if args.pmid and args.xml:
+        parser.error("--pmid and --xml are mutually exclusive")
+
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(levelname)s [%(name)s] %(message)s", stream=sys.stderr)
 
-    # Use env-based config (LLM_API_KEY, LLM_API_BASE, LLM_MODEL)
     cfg = _build_cfg_from_env()
     logger.info("Using env-based LLM config")
 
-    result = PaperMdToInsights().run(md_path=args.md_file, cfg=cfg, output_path=args.output, force=args.force)
+    source = _resolve_source(args)
+    result = PaperMdToInsights().run(source=source, cfg=cfg, output_path=args.output, force=args.force)
     print("SKIPPED" if result == "SKIPPED" else f"Done: {result}")
-
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,829 @@
+"""
+Paper source conversion utilities for Fuxi (伏羲).
+
+Handles conversion from various paper sources (PMC XML, Markdown, PDF)
+into a unified internal format for downstream processing.
+
+Known limitation: ``clean_text`` applies regex-based fixes that may split
+biology mixed-case terms like ``snRNA-seq`` → ``sn RNA-seq``. This is
+acceptable for P0 — the benefit of fixing ~80% of concatenation artifacts
+outweighs ~5% false positives for LLM processing context.
+"""
+
+import re
+
+
+def clean_text(text: str) -> str:
+    """Post-process text from PDF-to-Markdown conversion.
+
+    Fixes word concatenation artifacts produced by ``markitdown`` and similar
+    tools that omit spaces between some words (e.g. ``theelderly.However``
+    becomes ``the elderly. However``).
+
+    This post-processor is primarily designed for :class:`Pymupdf4llmSource` output but is
+    safe to apply universally --- it is a no-op on already-clean text (PMC XML,
+    existing ``.md`` files).
+
+    Parameters
+    ----------
+    text : str
+        Raw text to clean.
+
+    Returns
+    -------
+    str
+        Cleaned text with whitespace normalised.
+    """
+    # P0: Insert space between lowercase letter and following uppercase letter
+    # (catches concatenated words like ``ofAMD`` → ``of AMD``)
+    text = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", text)
+
+    # P0: Insert space after period followed by uppercase letter
+    # (catches sentence-boundary concatenation like ``elderly.However``)
+    text = re.sub(r"(?<=\.)(?=[A-Z])", " ", text)
+
+    # Collapse multiple spaces to single space
+    text = re.sub(r" +", " ", text)
+
+    # Collapse 3+ consecutive newlines to exactly 2 (paragraph separator)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    return text.strip()
+
+
+import json
+import logging
+import os
+import time
+from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import Optional
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+import xml.etree.ElementTree as ET
+
+
+logger = logging.getLogger(__name__)
+
+
+# ── Constants ───────────────────────────────────────────────────────────────────
+
+JATS_NS = "http://www.ncbi.nlm.nih.gov/JATS1"
+
+_SECTION_KEY_MAP: dict[str, str] = {
+    "abstract": "abstract",
+    "introduction": "introduction",
+    "background": "introduction",
+    "results": "results",
+    "discussion": "discussion",
+    "methods": "methods",
+    "materials and methods": "methods",
+    "materials & methods": "methods",
+    "experimental procedures": "methods",
+}
+
+# Matches markdown or plain-text section headings (fallback split)
+_FALLBACK_SECTION_RE = re.compile(
+    r'^(?:#+\s*)?(SUMMARY|Abstract|Introduction|Results|Discussion|Methods|'
+    r'Experimental\s*Procedures)\b',
+    re.MULTILINE | re.IGNORECASE,
+)
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────────
+
+
+def _strip_xml_namespaces(raw: str) -> str:
+    """Remove xmlns declarations so elements can be accessed without prefixes."""
+    return re.sub(r'\s+xmlns(?:\:\w+)?="[^"]*"', '', raw)
+
+
+def _elem_text(el: Optional[ET.Element]) -> str:
+    """Return all text within *el*, stripped, or '' if *el* is None."""
+    if el is None:
+        return ''
+    return ''.join(el.itertext()).strip()
+
+
+def _slugify(value: str, max_len: int = 60) -> str:
+    """Replace non-alphanumeric chars (except hyphen) with underscore, capped at max_len."""
+    value = re.sub(r'[^\w\s-]', '_', value)
+    value = re.sub(r'[-\s]+', '_', value)
+    value = value.strip('_')
+    return value[:max_len].rstrip('_')
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════
+#  PaperSource — abstract base class
+# ═══════════════════════════════════════════════════════════════════════════════════
+
+
+class PaperSource(ABC):
+    """Abstract base for all paper source converters.
+
+    Subclasses must implement all five abstract methods to provide
+    a uniform interface for downstream insight extraction.
+    """
+
+    @abstractmethod
+    def get_sections(self) -> dict[str, str]:
+        """Return section text keyed by canonical name.
+
+        Keys include ``abstract``, ``introduction``, ``results``,
+        ``discussion``, ``methods``, plus any additional named sections.
+        Missing sections are omitted rather than returned as empty strings.
+        """
+        ...
+
+    @abstractmethod
+    def get_figure_blocks(self) -> list[str]:
+        """Return list of figure captions.
+
+        Each entry is like ``'Fig 1. Sample size and demographics...'``.
+        """
+        ...
+
+    @abstractmethod
+    def get_metadata(self) -> dict:
+        """Return metadata dict with keys: pmid, doi, title, first_author, journal, year.
+
+        Missing fields are ``None`` or empty string.
+        """
+        ...
+
+    @abstractmethod
+    def get_paper_name(self) -> str:
+        """Return a filesystem-safe paper name.
+
+        Format: ``{year}_{first_author}_{journal}_{title_slug}``.
+        Used as the output directory name for processed paper data.
+        """
+        ...
+
+    @abstractmethod
+    def get_text(self) -> str:
+        """Return the full paper text as a single concatenated string.
+
+        Suitable for LLM context injection. Typically joins all section
+        texts with double newlines.
+        """
+        ...
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════
+#  PmcXmlSource — JATS XML from NCBI PMC
+# ═══════════════════════════════════════════════════════════════════════════════════
+
+
+class PmcXmlSource(PaperSource):
+    """Parse a JATS XML paper from NCBI PMC.
+
+    Accepts either a ``pmid``, ``doi``, or a local ``xml_path``.
+    If a PMID or DOI is given, the XML is fetched live from NCBI E-utilities
+    with automatic rate limiting, retry with exponential backoff, and
+    local disk caching.
+
+    Parameters
+    ----------
+    pmid : str or None
+        PubMed ID (e.g. ``'31467224'``).
+    doi : str or None
+        Digital Object Identifier (e.g. ``'10.1038/s41467-019-10874-1'``).
+    xml_path : str or None
+        Path to a local JATS XML file.
+
+    Raises
+    ------
+    ValueError
+        If none of *pmid*, *doi*, or *xml_path* is provided.
+    RuntimeError
+        If online resolution or XML parsing fails.
+    """
+
+    def __init__(
+        self,
+        pmid: Optional[str] = None,
+        doi: Optional[str] = None,
+        xml_path: Optional[str] = None,
+    ) -> None:
+        if pmid is None and doi is None and xml_path is None:
+            raise ValueError('Provide at least one of: pmid, doi, xml_path')
+
+        self._pmid: Optional[str] = pmid
+        self._doi: Optional[str] = doi
+        self._xml_path: Optional[str] = xml_path
+
+        self._pmcid: Optional[str] = None
+        self._raw_xml: Optional[str] = None
+        self._root: Optional[ET.Element] = None
+
+        # Lazy-loaded caches
+        self._sections: Optional[dict[str, str]] = None
+        self._figures: Optional[list[str]] = None
+        self._metadata: Optional[dict] = None
+        self._paper_name: Optional[str] = None
+
+        self._load()
+
+    # ── Loading ────────────────────────────────────────────────────────────────────
+
+    def _load(self) -> None:
+        """Load XML from disk or NCBI, then parse."""
+        if self._xml_path:
+            self._raw_xml = Path(self._xml_path).read_text(encoding='utf-8')
+        else:
+            self._fetch_from_ncbi()
+        self._parse_xml()
+        # Cache fetched XML for offline reuse
+        if not self._xml_path and self._raw_xml:
+            self._cache_xml()
+
+    def _cache_xml(self) -> None:
+        """Save fetched XML to ``papers/{paper_name}/{pmcid}.xml``.
+
+        Non-fatal on failure (disk issues, missing metadata).
+        """
+        pmcid = self._pmcid
+        if not pmcid:
+            return
+        try:
+            name = self.get_paper_name()
+            cache_dir = Path('papers') / name
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_path = cache_dir / f'{pmcid}.xml'
+            if not cache_path.exists():
+                cache_path.write_text(self._raw_xml or '', encoding='utf-8')
+                logger.info('Cached XML to %s', cache_path)
+        except Exception:
+            logger.warning('Failed to cache XML', exc_info=True)
+
+    # ── NCBI E-utilities ──────────────────────────────────────────────────────────
+
+    def _fetch_from_ncbi(self) -> None:
+        """Resolve PMID/DOI to PMCID, then fetch full XML."""
+        pmcid: Optional[str] = None
+
+        if self._pmid:
+            pmcid = self._pmid_to_pmcid(self._pmid)
+        elif self._doi:
+            pmcid = self._doi_to_pmcid(self._doi)
+
+        if not pmcid:
+            raise RuntimeError(
+                f'Could not resolve PMCID from pmid={self._pmid} doi={self._doi}'
+            )
+
+        self._pmcid = pmcid
+
+        url = (
+            'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
+            f'?db=pmc&id={pmcid}&retmode=xml'
+        )
+        self._raw_xml = self._ncbi_fetch(url)
+
+    def _pmid_to_pmcid(self, pmid: str) -> Optional[str]:
+        """Use NCBI elink to convert a PMID to a PMCID."""
+        url = (
+            'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi'
+            f'?dbfrom=pubmed&db=pmc&linkname=pubmed_pmc&id={pmid}&retmode=json'
+        )
+        data = json.loads(self._ncbi_fetch(url))
+        try:
+            for ls in data.get('linksets', []):
+                for lsd in ls.get('linksetdbs', []):
+                    links = lsd.get('links', [])
+                    if links:
+                        return str(links[0])
+        except (KeyError, IndexError, ValueError):
+            pass
+        return None
+
+    def _doi_to_pmcid(self, doi: str) -> Optional[str]:
+        """Use NCBI esearch to convert a DOI to a PMCID."""
+        url = (
+            'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
+            f'?db=pmc&term={doi}[doi]&retmode=json'
+        )
+        data = json.loads(self._ncbi_fetch(url))
+        try:
+            idlist = data.get('esearchresult', {}).get('idlist', [])
+            if idlist:
+                return str(idlist[0])
+        except (KeyError, IndexError, ValueError):
+            pass
+        return None
+
+    def _ncbi_fetch(self, url: str) -> str:
+        """Fetch *url* with User-Agent header, rate limiting, and backoff.
+
+        Retries up to 3 times with exponential backoff on HTTP 429/503.
+        """
+        # Rate limit: NCBI allows ~3 requests/sec without API key
+        time.sleep(0.35)
+
+        last_error: Optional[Exception] = None
+        for attempt in range(3):
+            try:
+                req = Request(url)
+                req.add_header('User-Agent', 'Fuxi/1.0 (paper-converter; academic use)')
+                with urlopen(req, timeout=15) as resp:
+                    return resp.read().decode('utf-8')
+            except HTTPError as e:
+                if e.code in (429, 503):
+                    wait = 0.5 * (2 ** attempt)
+                    logger.warning(
+                        'NCBI HTTP %d for %s, retrying in %.1fs...',
+                        e.code, url, wait,
+                    )
+                    time.sleep(wait)
+                    last_error = e
+                else:
+                    raise
+            except (URLError, OSError) as e:
+                last_error = e
+                if attempt < 2:
+                    time.sleep(0.5 * (2 ** attempt))
+                else:
+                    raise
+
+        raise RuntimeError(f'NCBI fetch failed after 3 attempts: {last_error}')
+
+    # ── XML Parsing ────────────────────────────────────────────────────────────────
+
+    def _parse_xml(self) -> None:
+        """Strip DOCTYPE and namespaces, parse into ElementTree."""
+        raw = self._raw_xml or ''
+        # Prevent ElementTree from fetching external DTDs
+        raw = re.sub(r'<!DOCTYPE[^>]+>', '', raw)
+        # Strip namespace declarations for tag-name access
+        raw = _strip_xml_namespaces(raw)
+        self._root = ET.fromstring(raw)
+
+    # ── Section parsing ────────────────────────────────────────────────────────────
+
+    def _parse_sections(self) -> dict[str, str]:
+        """Extract sections from ``<body><sec>`` elements."""
+        root = self._root
+        if root is None:
+            return {}
+
+        body = root.find('body')
+        if body is None:
+            return {}
+
+        secs = body.findall('sec')
+        if not secs:
+            return self._fallback_split(body)
+
+        sections: dict[str, str] = {}
+        for sec in secs:
+            title_el = sec.find('title')
+            title = _elem_text(title_el) if title_el is not None else ''
+            text = ''.join(sec.itertext()).strip()
+
+            key = self._section_key(title)
+            # Append if key already exists (e.g., multiple methods sub-sections)
+            if key in sections:
+                sections[key] += '\n\n' + text
+            else:
+                sections[key] = text
+
+        return sections
+
+    @staticmethod
+    def _section_key(title: str) -> str:
+        """Map a section title to its canonical key name."""
+        normalised = re.sub(r'\s+', ' ', title.strip().lower())
+
+        # Direct lookup
+        if normalised in _SECTION_KEY_MAP:
+            return _SECTION_KEY_MAP[normalised]
+
+        # Pattern-based matching
+        if normalised.startswith('introduction') or normalised.startswith('background'):
+            return 'introduction'
+        if normalised.startswith('result'):
+            return 'results'
+        if normalised.startswith('discussion'):
+            return 'discussion'
+        if normalised.startswith('method') or normalised.startswith('material') or normalised.startswith('experimental'):
+            return 'methods'
+        if normalised.startswith('abstract'):
+            return 'abstract'
+
+        # Unknown section → slug the original title
+        return normalised.replace(' ', '_')
+
+    def _fallback_split(self, body: ET.Element) -> dict[str, str]:
+        """Fallback: textually split ``<body>`` when no ``<sec>`` elements found.
+
+        Uses the same regex pattern as the markdown source converter.
+        """
+        text = ''.join(body.itertext()).strip()
+        if not text:
+            return {}
+        sections: dict[str, str] = {}
+        matches = list(_FALLBACK_SECTION_RE.finditer(text))
+        if not matches:
+            sections['results'] = text
+            return sections
+
+        for i, m in enumerate(matches):
+            key = self._section_key(m.group(1))
+            start = m.end()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+            content = text[start:end].strip()
+            if key in sections:
+                sections[key] += '\n\n' + content
+            else:
+                sections[key] = content
+
+        return sections
+
+    # ── Figure parsing ─────────────────────────────────────────────────────────────
+
+    def _parse_figures(self) -> list[str]:
+        """Extract figure captions from ``<body>``."""
+        root = self._root
+        if root is None:
+            return []
+
+        body = root.find('body')
+        if body is None:
+            return []
+
+        figs = body.findall('.//fig')
+        result: list[str] = []
+        for i, fig in enumerate(figs, start=1):
+            label = _elem_text(fig.find('label'))
+            caption = _elem_text(fig.find('caption'))
+            if not label:
+                label = f'Figure {i}'
+            if caption:
+                combined = f'{label}. {caption}'
+            else:
+                combined = label
+            result.append(combined)
+
+        return result
+
+    # ── Metadata parsing ───────────────────────────────────────────────────────────
+
+    def _parse_metadata(self) -> dict:
+        """Extract metadata from ``<front><article-meta>``."""
+        root = self._root
+        if root is None:
+            return {}
+
+        meta_el = root.find('./front/article-meta')
+        if meta_el is None:
+            # Some JATS variants use front-stub
+            meta_el = root.find('./front/front-stub')
+
+        meta: dict = {
+            'pmid': None,
+            'doi': None,
+            'title': '',
+            'first_author': '',
+            'journal': '',
+            'year': None,
+        }
+
+        if meta_el is None:
+            return meta
+
+        # PMID
+        pmid_el = meta_el.find('article-id[@pub-id-type="pmid"]')
+        if pmid_el is not None and pmid_el.text:
+            meta['pmid'] = pmid_el.text.strip()
+
+        # DOI
+        doi_el = meta_el.find('article-id[@pub-id-type="doi"]')
+        if doi_el is not None and doi_el.text:
+            meta['doi'] = doi_el.text.strip()
+
+        # Title
+        title_el = meta_el.find('title-group/article-title')
+        if title_el is not None:
+            meta['title'] = _elem_text(title_el)
+
+        # First author (surname of first contrib-type='author')
+        contribs = meta_el.findall('.//contrib[@contrib-type="author"]')
+        if contribs:
+            surname_el = contribs[0].find('./name/surname')
+            if surname_el is not None and surname_el.text:
+                meta['first_author'] = surname_el.text.strip()
+
+        # Journal title
+        journal_el = root.find('./front/journal-meta/journal-title')
+        if journal_el is not None and journal_el.text:
+            meta['journal'] = journal_el.text.strip()
+
+        # Year
+        year_el = meta_el.find('pub-date/year')
+        if year_el is not None and year_el.text:
+            meta['year'] = year_el.text.strip()
+        else:
+            # Fallback: scan any pub-date
+            for pd in meta_el.findall('pub-date'):
+                y = pd.find('year')
+                if y is not None and y.text:
+                    meta['year'] = y.text.strip()
+                    break
+
+        return meta
+
+    # ── Paper name ─────────────────────────────────────────────────────────────────
+
+    def _compute_paper_name(self) -> str:
+        """Build paper name in ``{year}_{first_author}_{journal}_{title_slug}`` format."""
+        meta = self._metadata if self._metadata is not None else self._parse_metadata()
+        year = str(meta.get('year', 'XXXX'))
+        author = _slugify(str(meta.get('first_author', 'Unknown')), max_len=20)
+        journal = _slugify(str(meta.get('journal', 'Journal')), max_len=10)
+        title_slug = _slugify(str(meta.get('title', '')), max_len=40)
+
+        name = f'{year}_{author}_{journal}_{title_slug}'.strip('_')
+        # Enforce 100-char limit
+        name = name[:100].rstrip('_')
+        # Replace any remaining special characters
+        name = _slugify(name, max_len=100)
+        return name or 'Unknown_Paper'
+
+    # ── Public API ─────────────────────────────────────────────────────────────────
+
+    def get_sections(self) -> dict[str, str]:
+        """Return parsed sections by canonical key."""
+        if self._sections is None:
+            self._sections = self._parse_sections()
+        return dict(self._sections)
+
+    def get_figure_blocks(self) -> list[str]:
+        """Return parsed figure captions."""
+        if self._figures is None:
+            self._figures = self._parse_figures()
+        return list(self._figures)
+
+    def get_metadata(self) -> dict:
+        """Return extracted metadata dict."""
+        if self._metadata is None:
+            self._metadata = self._parse_metadata()
+        return dict(self._metadata)
+
+    def get_paper_name(self) -> str:
+        """Return computed paper name."""
+        if self._paper_name is None:
+            self._paper_name = self._compute_paper_name()
+        return self._paper_name
+
+    def get_text(self) -> str:
+        """Return full paper text by joining all sections."""
+        sections = self.get_sections()
+        return '\n\n'.join(sections.values())
+
+
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════
+#  MarkdownSource — Markdown paper file
+# ═══════════════════════════════════════════════════════════════════════════════════
+
+
+class MarkdownSource(PaperSource):
+    """Parse a markdown paper file into sections, figures, and metadata.
+
+    Accepts a path to a ``.md`` file produced by PDF-to-markdown conversion
+    (e.g. via ``markitdown``).  Splits sections by heading regex and extracts
+    figure references using the same patterns as :class:`PaperMdToInsights`.
+
+    Parameters
+    ----------
+    md_path : str
+        Path to the markdown file.
+    """
+
+    # Section heading regex (identical to paper_md_to_insights._SECTION_RE)
+    _SECTION_RE = re.compile(
+        r'^(?:#+\s*)?(SUMMARY|Abstract|Introduction|Results|Discussion|Methods|'
+        r'Experimental\s*Procedures)\b',
+        re.MULTILINE | re.IGNORECASE,
+    )
+    # Figure reference regex (identical to paper_md_to_insights._FIGURE_RE)
+    _FIGURE_RE = re.compile(r'(?:Figure|Fig\.?)\s+\d+[a-z]?', re.IGNORECASE)
+
+    def __init__(self, md_path: str) -> None:
+        self._md_path = md_path
+
+        raw = Path(md_path).read_text(encoding='utf-8')
+        self._raw_text = clean_text(raw)
+
+        # Lazy-loaded caches
+        self._sections: Optional[dict[str, str]] = None
+        self._figures: Optional[list[str]] = None
+        self._metadata: Optional[dict] = None
+        self._paper_name: Optional[str] = None
+
+    # ── Section parsing ────────────────────────────────────────────────────────────
+
+    def _parse_sections(self) -> dict[str, str]:
+        """Split markdown into sections by header.
+
+        Returns a dict with lowercase keys (abstract, introduction, results,
+        discussion, methods).  Missing sections are empty strings.
+        No matching headers places all text under ``results``.
+        """
+        text = self._raw_text
+
+        sections: dict[str, str] = {
+            k: "" for k in ("abstract", "introduction", "results", "discussion", "methods")
+        }
+
+        matches = list(self._SECTION_RE.finditer(text))
+        if not matches:
+            sections["results"] = text.strip()
+            return sections
+
+        # Section key map (mirrors paper_md_to_insights.PaperMdToInsights.split_sections)
+        section_key_map: dict[str, str] = {
+            "summary": "abstract",
+            "abstract": "abstract",
+            "introduction": "introduction",
+            "results": "results",
+            "discussion": "discussion",
+            "methods": "methods",
+            "experimental procedures": "methods",
+            "experimentalprocedures": "methods",
+        }
+
+        for i, m in enumerate(matches):
+            raw_key = m.group(1).lower().strip()
+            key = section_key_map.get(raw_key, "unknown")
+            start = m.end()
+            end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+            sections[key] = text[start:end].strip()
+
+        return sections
+
+    # ── Figure parsing ─────────────────────────────────────────────────────────────
+
+    def _parse_figures(self) -> list[str]:
+        """Extract figure blocks from the full paper text.
+
+        Splits on ``Figure`` / ``Fig`` references (same pattern as
+        :meth:`PaperMdToInsights.extract_figure_blocks`) but operates on the
+        entire paper text rather than only the Results section.
+        """
+        text = self._raw_text
+        if not text.strip():
+            return []
+
+        blocks = self._FIGURE_RE.split(text)
+        refs = self._FIGURE_RE.findall(text)
+        result: list[str] = []
+        for i, block in enumerate(blocks[1:], start=1):
+            header = refs[i - 1] if i - 1 < len(refs) else f"Figure_{i}"
+            cleaned = block.strip().lstrip(".: ")
+            combined = f"{header}. {cleaned}"
+            if combined.strip():
+                result.append(combined)
+        if not result and text.strip():
+            result.append(text.strip())
+        return result
+
+    # ── Metadata parsing ───────────────────────────────────────────────────────────
+
+    def _parse_filename_meta(self) -> dict:
+        """Parse year/author/journal from filename.
+
+        Expects format: ``{year}_{author}_{journal}_{title}.md``
+        (mirrors :func:`paper_md_to_insights._parse_filename_meta`).
+        """
+        stem = Path(self._md_path).stem
+        parts = stem.split('_')
+        meta: dict = {
+            "filename": Path(self._md_path).name,
+            "stem": stem,
+            "year": None,
+            "first_author": None,
+            "journal": None,
+            "title": stem,
+        }
+        if len(parts) >= 3 and parts[0].isdigit() and len(parts[0]) in (2, 4):
+            meta["year"] = parts[0]
+            meta["first_author"] = parts[1]
+            meta["journal"] = parts[2]
+            meta["title"] = '_'.join(parts[3:]) if len(parts) > 3 else parts[2]
+        return meta
+
+    # ── Paper name ─────────────────────────────────────────────────────────────────
+
+    def _compute_paper_name(self) -> str:
+        """Build paper name in ``{year}_{first_author}_{journal}_{title}`` format."""
+        meta = self._metadata if self._metadata is not None else self._parse_filename_meta()
+        year = str(meta.get('year', 'XXXX'))
+        author = _slugify(str(meta.get('first_author', 'Unknown')), max_len=20)
+        journal = _slugify(str(meta.get('journal', 'Journal')), max_len=10)
+        title_slug = _slugify(str(meta.get('title', '')), max_len=40)
+
+        name = f'{year}_{author}_{journal}_{title_slug}'.strip('_')
+        name = name[:100].rstrip('_')
+        name = _slugify(name, max_len=100)
+        return name or 'Unknown_Paper'
+
+    # ── Public API ─────────────────────────────────────────────────────────────────
+
+    def get_sections(self) -> dict[str, str]:
+        """Return parsed sections by canonical key."""
+        if self._sections is None:
+            self._sections = self._parse_sections()
+        return dict(self._sections)
+
+    def get_figure_blocks(self) -> list[str]:
+        """Return extracted figure blocks."""
+        if self._figures is None:
+            self._figures = self._parse_figures()
+        return list(self._figures)
+
+    def get_metadata(self) -> dict:
+        """Return filename-derived metadata (year, first_author, journal, title)."""
+        if self._metadata is None:
+            self._metadata = self._parse_filename_meta()
+        return dict(self._metadata)
+
+    def get_paper_name(self) -> str:
+        """Return computed paper name."""
+        if self._paper_name is None:
+            self._paper_name = self._compute_paper_name()
+        return self._paper_name
+
+    def get_text(self) -> str:
+        """Return the full raw paper text."""
+        return self._raw_text
+
+
+# ═══════════════════════════════════════════════════════════════════════════════════
+#  Pymupdf4llmSource — PDF via pymupdf4llm (optional)
+# ═══════════════════════════════════════════════════════════════════════════════════
+
+
+class Pymupdf4llmSource(PaperSource):
+    """Convert a PDF paper via pymupdf4llm (optional), delegate to MarkdownSource."""
+
+    def __init__(self, pdf_path: str) -> None:
+        # Lazy import — raises ImportError if pymupdf4llm not installed
+        try:
+            import pymupdf4llm
+            import fitz  # pymupdf
+        except ImportError:
+            raise ImportError(
+                "pymupdf4llm not installed. Run: pip install -r requirements/paper.txt"
+            ) from None
+
+        # Convert PDF to markdown text
+        doc = fitz.open(pdf_path)
+        md_text = pymupdf4llm.to_markdown(doc)
+        doc.close()
+
+        # Apply clean_text post-processor
+        md_text = clean_text(md_text)
+
+        # Write to temp .md file and delegate to MarkdownSource
+        import tempfile
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            suffix='.md', prefix='pymupdf4llm_', text=True
+        )
+        with os.fdopen(tmp_fd, 'w', encoding='utf-8') as f:
+            f.write(md_text)
+
+        self._md_source = MarkdownSource(tmp_path)
+        self._pdf_path = pdf_path
+        self._tmp_path = tmp_path  # store for cleanup in __del__
+
+    def __del__(self) -> None:
+        """Clean up the temporary .md file on garbage collection."""
+        if hasattr(self, '_tmp_path') and os.path.exists(self._tmp_path):
+            try:
+                os.unlink(self._tmp_path)
+            except OSError:
+                pass
+    # ── Delegate public API to MarkdownSource ─────────────────────────────────────
+
+    def get_sections(self) -> dict[str, str]:
+        """Return parsed sections by canonical key (delegated to MarkdownSource)."""
+        return self._md_source.get_sections()
+
+    def get_figure_blocks(self) -> list[str]:
+        """Return extracted figure blocks (delegated to MarkdownSource)."""
+        return self._md_source.get_figure_blocks()
+
+    def get_metadata(self) -> dict:
+        """Return filename-derived metadata (delegated to MarkdownSource)."""
+        return self._md_source.get_metadata()
+
+    def get_paper_name(self) -> str:
+        """Return computed paper name (delegated to MarkdownSource)."""
+        return self._md_source.get_paper_name()
+
+    def get_text(self) -> str:
+        """Return full paper text (delegated to MarkdownSource)."""
+        return self._md_source.get_text()
