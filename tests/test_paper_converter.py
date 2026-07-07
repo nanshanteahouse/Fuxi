@@ -9,6 +9,7 @@ Covers:
 - CLI argument handling
 """
 import json
+import yaml
 import os
 import subprocess
 import sys
@@ -324,7 +325,7 @@ class TestPaperInsights:
         insights = PaperInsights.merge_to_insights(
             meta={"experimental_design": {"species": "human"}, "key_findings": ["test"]},
             figures=[{"id": "Fig1", "description": "test figure"}],
-            methods={"data_notes": ["note1"]},
+            methods_data={"data_notes": ["note1"]},
             paper_meta={"custom_key": "custom_value"},
         )
         assert insights["paper_meta"]["custom_key"] == "custom_value"
@@ -341,7 +342,7 @@ class TestPaperInsights:
                 {"id": "Fig1", "desc": "duplicate"},
                 {"id": "Fig2", "desc": "unique"},
             ],
-            methods={},
+            methods_data={},
             paper_meta={},
         )
         assert len(insights["figures"]) == 2
@@ -395,15 +396,146 @@ class TestPaperInsights:
         insights = PaperInsights.merge_to_insights(
             meta={},
             figures=[],
-            methods={},
+            methods_data={},
             paper_meta={"year": "2019", "first_author": "Menon"},
         )
         expected_keys = {
             "paper_meta", "experimental_design", "key_findings",
-            "data_notes", "figures", "reproduction_status",
+            "data_access", "methods", "data_notes", "figures", "reproduction_status",
         }
         assert set(insights.keys()) == expected_keys
 
+    def test_merge_to_insights_methods_propagation(self) -> None:
+        """Verify methods_data propagates key_methods, software_versions, etc."""
+        insights = PaperInsights.merge_to_insights(
+            meta={},
+            figures=[],
+            methods_data={
+                "key_methods": ["Seurat", "CellRanger"],
+                "software_versions": {"Seurat": "4.0"},
+                "reference_genome": "hg38",
+                "sequencing_platforms": ["NovaSeq 6000"],
+                "data_notes": ["some note"],
+            },
+            paper_meta={},
+        )
+        assert "methods" in insights
+        assert insights["methods"]["key_methods"] == ["Seurat", "CellRanger"]
+        assert insights["methods"]["software_versions"] == {"Seurat": "4.0"}
+        assert insights["methods"]["reference_genome"] == "hg38"
+        assert insights["methods"]["sequencing_platforms"] == ["NovaSeq 6000"]
+
+
+
+class TestReproductionStatus:
+    """Tests for reproduction_status computation in merge_to_insights."""
+
+    def test_reproduction_status_counts(self) -> None:
+        """3 figures (2 reproducible=true, 1 false) → total_figures=3, reproducible_count=2."""
+        figures = [
+            {"id": "Fig1", "reproducible": True},
+            {"id": "Fig2", "reproducible": True},
+            {"id": "Fig3", "reproducible": False},
+        ]
+        insights = PaperInsights.merge_to_insights(
+            meta={}, figures=figures, methods_data={}, paper_meta={}
+        )
+        rs = insights["reproduction_status"]
+        assert rs["total_figures"] == 3
+        assert rs["reproducible_count"] == 2
+
+    def test_reproduction_status_empty(self) -> None:
+        """Empty figures → total_figures=0, reproducible_count=0."""
+        insights = PaperInsights.merge_to_insights(
+            meta={}, figures=[], methods_data={}, paper_meta={}
+        )
+        rs = insights["reproduction_status"]
+        assert rs["total_figures"] == 0
+        assert rs["reproducible_count"] == 0
+
+    def test_reproduction_status_still_has_tracking(self) -> None:
+        """Tracking fields (pipeline_run, verified_figures) still present."""
+        insights = PaperInsights.merge_to_insights(
+            meta={}, figures=[], methods_data={}, paper_meta={}
+        )
+        rs = insights["reproduction_status"]
+        assert "pipeline_run" in rs
+        assert "verified_figures" in rs
+        assert "notes" in rs
+
+
+class TestEndToEnd:
+    """End-to-end integration test for PaperInsights pipeline with mocked LLM calls."""
+
+    def test_end_to_end_mock_merge(self, tmp_path: Path) -> None:
+        """Mock LLM extraction outputs, merge via merge_to_insights, verify YAML output."""
+        import yaml
+
+        paper_meta = {
+            "year": "2023",
+            "first_author": "Test",
+            "journal": "Test Journal",
+            "doi": "10.1234/test",
+        }
+
+        meta = {
+            "paper_type": "research",
+            "experimental_design": {
+                "species": "homo_sapiens", "tissue": "retina",
+                "tissue_info": "", "models": [], "conditions": [],
+                "modalities": ["snRNA-seq"],
+                "summary": "Test summary.",
+            },
+            "key_findings": ["58 cell types identified"],
+            "data_access": {"geo_ids": ["GSE137537"], "sra_ids": []},
+            "data_notes": [],
+        }
+
+        figures = [{
+            "id": "Fig_1", "caption": "UMAP embedding.",
+            "type": "umap", "panels": ["1a"],
+            "parameters": {"features": [], "resolution": None, "method": None,
+                          "conditions": [], "n_value": None, "error_bar_type": None},
+            "purpose": "UMAP overview.", "reproducible": True,
+            "reproducibility_reasoning": "Computational visualization.",
+        }]
+
+        methods_data = {
+            "key_methods": ["10x Genomics", "CellRanger"],
+            "software_versions": {"CellRanger": "7.0"},
+            "reference_genome": "hg38",
+            "sequencing_platforms": ["NovaSeq 6000"],
+            "data_notes": [],
+        }
+
+        insights = PaperInsights.merge_to_insights(
+            meta=meta,
+            figures=figures,
+            methods_data=methods_data,
+            paper_meta=paper_meta,
+        )
+
+        # Write YAML
+        yaml_path = tmp_path / "insights.yaml"
+        with open(yaml_path, "w") as f:
+            yaml.dump(insights, f, default_flow_style=False)
+
+        # Verify YAML output
+        assert yaml_path.exists(), f"YAML file not found at {yaml_path}"
+        with open(yaml_path) as f:
+            data = yaml.safe_load(f)
+
+        assert "paper_meta" in data
+        assert "experimental_design" in data
+        assert "key_findings" in data
+        assert "data_access" in data
+        assert "methods" in data
+        assert "figures" in data
+        assert "data_notes" in data
+        assert "reproduction_status" in data
+        assert data["methods"]["key_methods"] == ["10x Genomics", "CellRanger"]
+        assert data["reproduction_status"]["total_figures"] == 1
+        assert data["reproduction_status"]["reproducible_count"] == 1
 
 # ═════════════════════════════════════════════════════════════════════════════
 #  6.  CLI tests

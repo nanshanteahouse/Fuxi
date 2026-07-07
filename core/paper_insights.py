@@ -243,38 +243,86 @@ class PaperInsights:
         return _safe_json_parse(raw, "methods")
 
     @staticmethod
-    def merge_to_insights(meta: dict, figures: list[dict], methods: dict, paper_meta: dict) -> dict:
-        """Combine all extracted data into final insights dict.
-
-        Deduplicates figures by id, sorts them, merges data notes from meta and methods.
-        """
-        seen: set = set()
+    def merge_to_insights(meta: dict, figures: list[dict], methods_data: dict, paper_meta: dict) -> dict:
+        """Merge LLM-extracted metadata, figures, and methods into a single insights dict."""
+        # Deduplicate figures by id while preserving order
+        seen: set[str] = set()
         unique_figs: list[dict] = []
-        for f in figures:
-            fid = f.get("id", "")
-            if fid and fid not in seen:
+        for fig in figures:
+            fid = fig.get("id", "")
+            if fid not in seen:
                 seen.add(fid)
-                unique_figs.append(f)
-            elif not fid:
-                unique_figs.append(f)
-        unique_figs.sort(key=lambda f: f.get("id", ""))
+                unique_figs.append(fig)
+        unique_figs.sort(key=lambda x: x.get("id", ""))
 
         meta_notes = list(meta.get("data_notes", [])) if meta else []
-        methods_notes = list(methods.get("data_notes", [])) if methods else []
+        methods_notes = list(methods_data.get("data_notes", [])) if methods_data else []
+
+        # Build reproduction_status with tracking + computed fields
+        fig_count = len(unique_figs)
+        repro_count = sum(1 for f in unique_figs if f.get("reproducible"))
 
         return {
             "paper_meta": paper_meta,
             "experimental_design": meta.get("experimental_design", {}) if meta else {},
             "key_findings": list(meta.get("key_findings", [])) if meta else [],
-            "data_notes": meta_notes + [n for n in methods_notes if n not in meta_notes],
+            "data_access": _extract_data_access(meta, methods_data),
+            "methods": _extract_methods_summary(methods_data),
             "figures": unique_figs,
+            "data_notes": meta_notes + [n for n in methods_notes if n not in meta_notes],
             "reproduction_status": {
                 "pipeline_run": "not_started",
                 "overall_match": None,
+                "total_figures": fig_count,
+                "reproducible_count": repro_count,
                 "verified_figures": [],
                 "notes": "",
             },
         }
+
+def _extract_data_access(meta: dict | None, methods: dict | None) -> dict:
+    """Extract geo_ids/sra_ids from meta.data_access or regex-fallback from data_notes."""
+    result: dict[str, list] = {"geo_ids": [], "sra_ids": []}
+
+    # Primary path: meta has data_access sub-object
+    if meta:
+        da = meta.get("data_access", {})
+        if isinstance(da, dict):
+            result["geo_ids"] = list(da.get("geo_ids", []))
+            result["sra_ids"] = list(da.get("sra_ids", []))
+
+    # Fallback: scan meta and methods data_notes
+    if not result["geo_ids"] and not result["sra_ids"]:
+        notes = []
+        if meta:
+            notes.extend(meta.get("data_notes", []))
+        if methods:
+            notes.extend(methods.get("data_notes", []))
+        for note in notes:
+            if isinstance(note, str):
+                geo = re.findall(r'\bGSE\d{4,}\b', note)
+                sra = re.findall(r'\bSRP\d{4,}\b', note)
+                result["geo_ids"].extend(geo)
+                result["sra_ids"].extend(sra)
+
+    return result
+
+
+def _extract_methods_summary(methods_data: dict | None) -> dict:
+    """Extract methods summary from methods LLM extraction output."""
+    if not methods_data:
+        return {
+            "key_methods": [],
+            "software_versions": {},
+            "reference_genome": None,
+            "sequencing_platforms": [],
+        }
+    return {
+        "key_methods": list(methods_data.get("key_methods", [])),
+        "software_versions": dict(methods_data.get("software_versions", {})),
+        "reference_genome": methods_data.get("reference_genome"),
+        "sequencing_platforms": list(methods_data.get("sequencing_platforms", [])),
+    }
 
     def run(self, source: Union[PaperSource, str], cfg, output_path: str | None = None, force: bool = False) -> str:
         """Full pipeline: read, split, extract, merge, write.
@@ -318,7 +366,7 @@ class PaperInsights:
             logger.info("Extracting methods...")
             methods = self.extract_methods(sections["methods"], cfg)
 
-        insights = self.merge_to_insights(meta, figures, methods, source.get_metadata())
+        insights = self.merge_to_insights(meta, figures, methods_data=methods, paper_meta=source.get_metadata())
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text('\n'.join(_yaml_dump(insights)) + '\n', encoding="utf-8")
         logger.info("Wrote insights to %s", out_path)
