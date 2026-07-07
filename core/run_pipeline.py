@@ -343,6 +343,9 @@ def main():
     sys.modules["pipeline_config"] = cfg_module
     spec.loader.exec_module(cfg_module)
     CFG = cfg_module.CFG
+    # Auto-detect project_dir from config file location (mirrors resolve_config)
+    if not CFG.project_dir:
+        CFG.project_dir = os.path.dirname(config_path)
     CFG.resolve_paths()
 
     # ── Resolve n_jobs ───────────────────────────────────────────────
