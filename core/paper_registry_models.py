@@ -13,7 +13,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
+from typing import Any, Optional
 
 import yaml
 
@@ -50,6 +50,7 @@ class DatasetEntry:
     status: DatasetStatus = DatasetStatus.NOT_CONFIGURED
     modality: str = "rna"  # rna | atac | spatial | multiome
     notes: str = ""
+    experiments: Optional[list[ExperimentGroup]] = None
 
 
 @dataclass
@@ -65,6 +66,19 @@ class PaperEntry:
     doi: str = ""
     datasets: list[DatasetEntry] = field(default_factory=list)
     insights_status: str = "generated"  # generated | pending | failed | no_geo
+
+
+@dataclass
+class ExperimentGroup:
+    """An experimental sub-grouping within a dataset."""
+
+    group_name: str
+    sample_ids: list[str]
+    subset_suffix: str
+    modality: str
+    status: DatasetStatus
+    config_path: Optional[str] = None
+    figures: list[str] = field(default_factory=list)
 
 
 # ──────────────────────────────────────────────

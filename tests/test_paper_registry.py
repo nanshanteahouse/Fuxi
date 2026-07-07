@@ -22,6 +22,8 @@ from core.paper_registry import (
     _dict_to_paper,
 )
 
+from core.paper_registry_models import ExperimentGroup
+from dataclasses import asdict
 # ──────────────────────────────────────────────
 # DatasetStatus enum
 # ──────────────────────────────────────────────
@@ -118,6 +120,84 @@ class TestDataModel:
         assert paper2.pmid == "12345678"
         assert paper2.datasets == []
 
+
+
+class TestExperimentGroup:
+    """Verify ExperimentGroup dataclass construction and round-trip."""
+
+    def test_create_all_fields(self) -> None:
+        eg = ExperimentGroup(
+            group_name="Retina_Amacrine",
+            sample_ids=["GSM001", "GSM002"],
+            subset_suffix="_amacrine",
+            modality="rna",
+            status=DatasetStatus.CONFIG_EXISTS,
+            config_path="projects/rna/GSE123456/config_GSE123456.py",
+            figures=["fig1.png", "fig2.png"],
+        )
+        assert eg.group_name == "Retina_Amacrine"
+        assert eg.sample_ids == ["GSM001", "GSM002"]
+        assert eg.subset_suffix == "_amacrine"
+        assert eg.modality == "rna"
+        assert eg.status is DatasetStatus.CONFIG_EXISTS
+        assert eg.config_path == "projects/rna/GSE123456/config_GSE123456.py"
+        assert eg.figures == ["fig1.png", "fig2.png"]
+
+    def test_default_config_path(self) -> None:
+        eg = ExperimentGroup(
+            group_name="Test",
+            sample_ids=["GSM001"],
+            subset_suffix="_test",
+            modality="rna",
+            status=DatasetStatus.NOT_CONFIGURED,
+        )
+        assert eg.config_path is None
+
+    def test_default_figures(self) -> None:
+        eg = ExperimentGroup(
+            group_name="Test",
+            sample_ids=["GSM001"],
+            subset_suffix="_test",
+            modality="rna",
+            status=DatasetStatus.NOT_CONFIGURED,
+        )
+        assert eg.figures == []
+
+    def test_round_trip_dict(self) -> None:
+        eg = ExperimentGroup(
+            group_name="Retina_Amacrine",
+            sample_ids=["GSM001", "GSM002"],
+            subset_suffix="_amacrine",
+            modality="rna",
+            status=DatasetStatus.CONFIG_EXISTS,
+            config_path="projects/rna/GSE123456/config_GSE123456.py",
+            figures=["fig1.png", "fig2.png"],
+        )
+        d = asdict(eg)
+        eg2 = ExperimentGroup(**d)
+        assert eg2 == eg
+
+    def test_dataset_entry_with_experiments(self) -> None:
+        eg = ExperimentGroup(
+            group_name="Retina_Amacrine",
+            sample_ids=["GSM001"],
+            subset_suffix="_amacrine",
+            modality="rna",
+            status=DatasetStatus.CONFIG_EXISTS,
+        )
+        ds = DatasetEntry(
+            gse_id="GSE123456",
+            experiments=[eg],
+        )
+        assert ds.gse_id == "GSE123456"
+        assert ds.experiments is not None
+        assert len(ds.experiments) == 1
+        assert ds.experiments[0].group_name == "Retina_Amacrine"
+        assert ds.experiments[0].status is DatasetStatus.CONFIG_EXISTS
+
+    def test_dataset_entry_no_experiments(self) -> None:
+        ds = DatasetEntry(gse_id="GSE123456")
+        assert ds.experiments is None
 
 # ──────────────────────────────────────────────
 # detect_modality
