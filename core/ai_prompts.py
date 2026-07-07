@@ -220,7 +220,8 @@ PAPER_META_SYSTEM_PROMPT = """You are an expert biomedical research analyst who 
 
 Given the abstract of a single-cell genomics paper, extract the following structured information in JSON format:
 
-1. experimental_design — describes the biological and technical setup of the study:
+1. paper_type — the category of the paper: one of "research", "resource", "review", "method"
+2. experimental_design — describes the biological and technical setup of the study:
    - species: the model organism (use standard NCBI taxonomy names like homo_sapiens, mus_musculus, macaca_mulatta, danio_rerio, drosophila_melanogaster, etc.)
    - tissue: the tissue/organ studied (e.g. retina, brain, pancreas, liver)
    - tissue_info: a brief description of the tissue context/subregion
@@ -228,15 +229,41 @@ Given the abstract of a single-cell genomics paper, extract the following struct
    - conditions: a list of experimental conditions compared, each with name and description
    - modalities: sequencing modalities used (e.g. scRNA-seq, scATAC-seq, multiome, CITE-seq)
    - summary: a 2-3 sentence overview of the experimental design
-2. key_findings — an array of 1-6 key biological findings reported in the abstract
-3. data_notes — an array of important data characteristics (e.g. number of cells, sequencing depth, sample origin)
+3. key_findings — an array of 1-6 key biological findings reported in the abstract
+4. data_access — accession identifiers for public data repositories:
+   - geo_ids: an array of GEO accession IDs (e.g. ["GSE137537"])
+   - sra_ids: an array of SRA accession IDs (e.g. ["SRP123456"])
+5. data_notes — an array of important data characteristics (e.g. number of cells, sequencing depth, sample origin)
+
+EXAMPLE:
+
+Input: "We performed single-nucleus RNA-seq on postmortem human retinal samples from 6 donors using the 10x Genomics platform. Our analysis identified 58 transcriptionally distinct cell types, including novel subtypes of amacrine cells. The data are available through GEO accession GSE137537."
+
+Expected output:
+{
+  "paper_type": "research",
+  "experimental_design": {
+    "species": "homo_sapiens",
+    "tissue": "retina",
+    "tissue_info": "postmortem human retina from 6 donors",
+    "models": [{"name": "postmortem human retina", "description": "Six normal donors"}],
+    "conditions": [{"name": "Normal", "description": "Control retinas"}],
+    "modalities": ["snRNA-seq"],
+    "summary": "Single-nucleus RNA-seq on postmortem human retinal samples from 6 donors, identifying 58 cell types."
+  },
+  "key_findings": ["Identified 58 transcriptionally distinct cell types", "Novel subtypes of amacrine cells discovered"],
+  "data_access": {"geo_ids": ["GSE137537"], "sra_ids": []},
+  "data_notes": ["snRNA-seq — use is_nuclei=True", "6 postmortem donors"]
+}
+
+The input text may contain minor PDF-conversion artifacts such as word concatenation or watermark text — ignore these and extract only the structured data from the coherent portions.
 
 Return ONLY a valid JSON object. No explanation, no markdown formatting, no code fences.
 
 IMPORTANT: Species must use the homo_sapiens / mus_musculus naming convention.
 If the species is unclear, set it to "unknown" and note this in data_notes."""
 
-PAPER_META_USER_TEMPLATE = """Extract experimental design, key findings, and data notes from this paper abstract:
+PAPER_META_USER_TEMPLATE = """Extract experimental design, paper type, key findings, data access, and data notes from this paper abstract:
 
 Abstract:
 {abstract_text}
@@ -249,28 +276,50 @@ Analyze the given figure legend and extract structured information. Use the foll
 
   umap, tsne, pca, heatmap, dotplot, violin, barplot, feature_plot, trajectory,
   enrichment, volcano, scatter, lineplot, genome_browser, motif_analysis,
-  immunofluorescence, imaging_3d, schematic, electrophysiology, other
+  immunofluorescence, imaging_3d, schematic, electrophysiology, other,
+  stacked_violin, ridgeplot, correlation_heatmap, spatial_feature, pseudotime, cellchat
 
-REPRODUCIBILITY RULES (non-negotiable):
-  - reproducible = true ONLY for: umap, tsne, pca, heatmap, dotplot, violin,
-    barplot, feature_plot, trajectory, enrichment, volcano
-  - reproducible = false for: immunofluorescence, imaging_3d, schematic,
-    electrophysiology, genome_browser, motif_analysis
-  - For 'other' type, infer reproducibility from context; default to false.
+REPRODUCIBILITY: Based on the figure type and description, determine if this figure can be reproduced from raw single-cell data. Provide your reasoning in the reproducibility_reasoning field.
 
 Return a JSON object with the following fields:
   id: the figure identifier (e.g. 'Fig_2b')
+  caption: the raw figure legend text verbatim
   type: one of the controlled vocabulary above
   panels: array of panel labels (e.g. ['2B', '2C'])
   parameters.features: array of gene/feature names shown
   parameters.resolution: clustering resolution if mentioned, else null
   parameters.method: computational method if mentioned, else null
   parameters.conditions: array of experimental conditions compared
-  parameters.comparison: what is being compared, or null
-  parameters.gene_set: gene set name if relevant, else null
-  parameters.terms_expected: terms the reader should look for
+  parameters.n_value: sample size if mentioned (e.g. "n=6 donors"), else null
+  parameters.error_bar_type: type of error bars if mentioned (e.g. "SD", "SEM", "95% CI"), else null
   purpose: one-sentence summary of what this figure shows
-  reproducible: boolean based on reproducibility rules above
+  reproducible: boolean indicating whether the figure can be reproduced from raw data
+  reproducibility_reasoning: explanation of why the reproducibility decision was made
+
+EXAMPLE:
+
+Input: "Fig. 1: Single-cell transcriptomic analysis of human retina. a, UMAP embedding of 20,091 cells colored by cluster identity (n=6 donors). b, Dotplot showing expression of canonical retinal marker genes across clusters. c, Barplot of cell type proportions per donor."
+
+Expected output:
+{
+  "id": "Fig_1",
+  "caption": "Fig. 1: Single-cell transcriptomic analysis of human retina. a, UMAP embedding of 20,091 cells colored by cluster identity (n=6 donors). b, Dotplot showing expression of canonical retinal marker genes across clusters. c, Barplot of cell type proportions per donor.",
+  "type": "umap",
+  "panels": ["1a", "1b", "1c"],
+  "parameters": {
+    "features": null,
+    "resolution": null,
+    "method": null,
+    "conditions": [],
+    "n_value": "n=6 donors",
+    "error_bar_type": null
+  },
+  "purpose": "Overview of single-cell transcriptomic analysis of human retina showing clustering, marker gene expression, and cell type proportions.",
+  "reproducible": true,
+  "reproducibility_reasoning": "UMAP, dotplot, and barplot are computational visualizations generated from scRNA-seq data, reproducible with the same count matrix and parameters."
+}
+
+The input text may contain minor PDF-conversion artifacts such as word concatenation or watermark text — ignore these and extract only the structured data from the coherent portions.
 
 Return ONLY a valid JSON object. No explanation, no markdown formatting, no code fences."""
 
@@ -279,7 +328,7 @@ PAPER_FIGURE_USER_TEMPLATE = """Extract structured information from this figure 
 Figure text:
 {figure_text}
 
-Return ONLY the JSON object with figure type, parameters, purpose, and reproducibility status."""
+Return ONLY the JSON object with figure type, parameters, purpose, caption, and reproducibility status."""
 
 PAPER_METHODS_SYSTEM_PROMPT = """You are an expert in single-cell bioinformatics methods extraction.
 
@@ -288,18 +337,37 @@ Given a paper's Methods section (or relevant portions), extract structured detai
 Identify:
   1. key_methods — array of specific method/platform names (e.g. '10x Genomics Chromium Single Cell 3\' v3', 'Seurat v4.0', 'Cell Ranger 7.0')
   2. software_versions — object mapping software names to version strings
-  3. data_notes — array of important notes about data processing (e.g. 'snRNA-seq — use is_nuclei=True', 'data were filtered to remove doublets')
+  3. reference_genome — genome assembly name (e.g. hg38, GRCh38, mm10, GRCm39)
+  4. sequencing_platforms — array of sequencing instrument names (e.g. "Illumina NovaSeq 6000", "Illumina NextSeq 2000")
+  5. data_notes — array of important notes about data processing (e.g. 'snRNA-seq — use is_nuclei=True', 'data were filtered to remove doublets')
+
+EXAMPLE:
+
+Input: "Single-cell libraries were prepared using the 10x Genomics Chromium Single Cell 3' v3 reagent kit and sequenced on an Illumina NovaSeq 6000 platform. Reads were aligned to the hg38 reference genome using CellRanger v7.0. Downstream analysis was performed with Seurat v4.0."
+
+Expected output:
+{
+  "key_methods": ["10x Genomics Chromium Single Cell 3' v3", "CellRanger v7.0", "Seurat v4.0"],
+  "software_versions": {"CellRanger": "7.0", "Seurat": "4.0"},
+  "reference_genome": "hg38",
+  "sequencing_platforms": ["Illumina NovaSeq 6000"],
+  "data_notes": ["10x Genomics Chromium Single Cell 3' v3 used", "Sequenced on NovaSeq 6000"]
+}
+
+The input text may contain minor PDF-conversion artifacts such as word concatenation or watermark text — ignore these and extract only the structured data from the coherent portions.
 
 Return ONLY a valid JSON object with this structure:
 {
   "key_methods": ["method 1", "method 2"],
   "software_versions": {"SoftwareName": "version"},
+  "reference_genome": "assembly_name",
+  "sequencing_platforms": ["platform 1", "platform 2"],
   "data_notes": ["note 1", "note 2"]
 }
 
 No explanation, no markdown formatting, no code fences."""
 
-PAPER_METHODS_USER_TEMPLATE = """Extract bioinformatics methods, software versions, and data processing notes from this text:
+PAPER_METHODS_USER_TEMPLATE = """Extract bioinformatics methods, software versions, reference genome, sequencing platforms, and data processing notes from this text:
 
 Methods text:
 {methods_text}
