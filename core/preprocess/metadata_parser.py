@@ -72,7 +72,7 @@ def generate_dataset_yaml(gse_id: str,
     # Override with paper_context values where present
     if paper_context:
         if paper_context.get('species'):
-            species = paper_context['species']
+            species = fd._normalise_species(str(paper_context['species']))
     species_key = species  # already normalised by species functions or paper_context
     tissue = fd.guess_tissue(file_list)
     if paper_context and paper_context.get('tissue'):

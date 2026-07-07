@@ -24,13 +24,10 @@ import os
 import re
 import subprocess
 import sys
-import os
 import time
-import argparse
 from pathlib import Path
 from typing import Any, Optional
 
-import re
 
 # Ensure repo root is on sys.path for core package imports
 _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -222,7 +219,6 @@ def run_reproduce(
     if insights is None:
         raise ValueError(f"Empty or invalid insights.yaml in {paper_dir}")
 
-    _geo_ids = _extract_geo_ids(insights, raw_text)  # extracted for potential future cross-validation
     paper_meta = insights.get("paper_meta", {})
 
     if registry is None:
@@ -236,18 +232,6 @@ def run_reproduce(
             break
 
     datasets: list[dict[str, Any]] = paper_entry.get("datasets", []) if paper_entry else []
-
-    # Build paper context (species default + marker features from first figure)
-    paper_context: dict[str, Any] = {
-        "species": paper_meta.get("species", "human"),
-        "marker_dict": {},
-        "features": [],
-    }
-    for fig in insights.get("figures", []):
-        if fig.get("features"):
-            paper_context["marker_dict"] = {"extracted": fig["features"]}
-            paper_context["features"] = fig["features"]
-            break
 
     results: dict[str, dict[str, Any]] = {}
     for ds in datasets:

@@ -471,7 +471,7 @@ class TestGenerateConfigPaperContext:
         assert mtime2 >= mtime1, "File should have been re-written"
 
     def test_dry_run_with_paper_context(
-        self, tmp_path: Path, fake_classification: dict[str, Any], fake_file_list: list[str]
+        self, tmp_path: Path, fake_classification: dict[str, Any], fake_file_list: list[str], capsys
     ) -> None:
         """Dry-run with paper_context does not write files."""
         from core.preprocess.matrix_loader import generate_config
@@ -489,4 +489,6 @@ class TestGenerateConfigPaperContext:
             dry_run=True,
         )
         assert result is not None
-        assert "[DRY-RUN]" in result or not os.path.exists(result)
+        assert not os.path.exists(result)
+        captured = capsys.readouterr()
+        assert "[DRY-RUN]" in captured.out

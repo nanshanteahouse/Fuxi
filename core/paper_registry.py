@@ -16,10 +16,17 @@ Usage:
 """
 from __future__ import annotations
 
+import os
+import sys
 import logging
 import re
 from pathlib import Path
 from typing import Any
+
+# Ensure repo root is on sys.path for direct CLI invocation
+_repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _repo_root not in sys.path:
+    sys.path.insert(0, _repo_root)
 
 from core.paper_registry_models import (
     DatasetEntry,

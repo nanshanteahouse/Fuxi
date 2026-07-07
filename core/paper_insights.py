@@ -401,7 +401,11 @@ class PaperInsights:
             logger.info("Output exists at %s, skipping (use --force to overwrite)", out_path)
             return "SKIPPED"
 
-        md_text = source.get_text()
+        try:
+            md_text = source.get_text()
+        except (RuntimeError, HTTPError, URLError) as exc:
+            logger.error("Failed to read source: %s", exc)
+            return {}
         sections = self.split_sections(md_text)
         logger.info("Found sections: %s", [k for k, v in sections.items() if v])
 
