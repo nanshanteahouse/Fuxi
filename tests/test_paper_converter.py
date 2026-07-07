@@ -27,7 +27,11 @@ from core.paper_converter import (
     MarkdownSource,
     Pymupdf4llmSource,
 )
-from core.paper_insights import PaperInsights, _parse_filename_meta
+from core.paper_insights import (
+    PaperInsights, _parse_filename_meta,
+    _extract_geo_ids, _extract_data_access,
+    _extract_key_methods, _extract_methods_summary,
+)
 from core.ai_prompts import (
     PAPER_META_SYSTEM_PROMPT,
     PAPER_FIGURE_SYSTEM_PROMPT,
@@ -425,6 +429,183 @@ class TestPaperInsights:
         assert insights["methods"]["reference_genome"] == "hg38"
         assert insights["methods"]["sequencing_platforms"] == ["NovaSeq 6000"]
 
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  11.  New regex-fallback helpers (_extract_geo_ids, _extract_key_methods, etc.)
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class TestExtractGeoIds:
+    """Tests for _extract_geo_ids regex helper."""
+
+    def test_extracts_gse(self) -> None:
+        """Extracts GSE accession from text."""
+        assert _extract_geo_ids("GSE12345 is the accession") == ["GSE12345"]
+
+    def test_multiple_gse(self) -> None:
+        """Extracts multiple GSE accessions."""
+        result = _extract_geo_ids("GSE12345 and GSE67890 are both here")
+        assert result == ["GSE12345", "GSE67890"]
+
+    def test_variable_length(self) -> None:
+        """Supports 4-8 digit GSE IDs."""
+        assert _extract_geo_ids("GSE1234") == ["GSE1234"]
+        assert _extract_geo_ids("GSE12345678") == ["GSE12345678"]
+
+    def test_no_false_positive_partial(self) -> None:
+        """Does not match GSE without digits."""
+        assert _extract_geo_ids("not a GSE here") == []
+
+    def test_empty_text(self) -> None:
+        """Empty string returns empty list."""
+        assert _extract_geo_ids("") == []
+
+
+class TestExtractDataAccess:
+    """Tests for _extract_data_access with full_text fallback."""
+
+    def test_primary_path(self) -> None:
+        """meta.data_access is used as primary source."""
+        meta = {"data_access": {"geo_ids": ["GSE12345"], "sra_ids": []}}
+        result = _extract_data_access(meta, None)
+        assert result["geo_ids"] == ["GSE12345"]
+
+    def test_fallback_full_text_regex(self) -> None:
+        """When primary and data_notes empty, scans full_text for GEO IDs."""
+        result = _extract_data_access({}, {}, full_text="GSE99999 is the accession")
+        assert "GSE99999" in result["geo_ids"]
+
+    def test_no_fallback_when_geo_already_found(self) -> None:
+        """Does not scan full_text when geo_ids already populated by primary path."""
+        meta = {"data_access": {"geo_ids": ["GSE11111"]}}
+        result = _extract_data_access(meta, {}, full_text="GSE99999")
+        assert result["geo_ids"] == ["GSE11111"]  # should NOT add GSE99999
+
+    def test_empty_full_text_skips_fallback(self) -> None:
+        """Empty full_text means no regex scan occurs."""
+        result = _extract_data_access({}, {})
+        assert result["geo_ids"] == []
+
+    def test_sra_ids_extracted_from_data_notes(self) -> None:
+        """SRA IDs extracted from data_notes fallback path."""
+        meta = {"data_notes": ["SRP12345 is here"]}
+        result = _extract_data_access(meta, {})
+        assert "SRP12345" in result["sra_ids"]
+
+
+class TestExtractKeyMethods:
+    """Tests for _extract_key_methods regex helper."""
+
+    def test_known_method_detected(self) -> None:
+        """Detects UMAP in text via keyword matching."""
+        result = _extract_key_methods("We used UMAP for visualization")
+        assert "UMAP" in result
+
+    def test_multiple_methods(self) -> None:
+        """Detects multiple methods preserving order of appearance."""
+        result = _extract_key_methods("We used Seurat and Harmony for integration, then UMAP")
+        assert result == ["Seurat", "Harmony", "UMAP"]
+
+    def test_case_insensitive(self) -> None:
+        """Matches case-insensitively: 'seurat' matches 'Seurat'."""
+        result = _extract_key_methods("We used seurat for analysis")
+        assert "Seurat" in result
+
+    def test_word_boundary_prevents_substring(self) -> None:
+        """'SeuratDisk' does not match 'Seurat' keyword (word boundary)."""
+        result = _extract_key_methods("We used SeuratDisk for loading")
+        assert "Seurat" not in result
+
+    def test_no_methods_found(self) -> None:
+        """Text with no known methods returns empty list."""
+        result = _extract_key_methods("This paper does not mention any known method.")
+        assert result == []
+
+    def test_empty_text(self) -> None:
+        """Empty string returns empty list."""
+        assert _extract_key_methods("") == []
+
+
+class TestExtractMethodsSummary:
+    """Tests for _extract_methods_summary with full_text fallback."""
+
+    def test_methods_data_used_when_provided(self) -> None:
+        """When methods_data has key_methods, they are used directly."""
+        result = _extract_methods_summary({"key_methods": ["Seurat"]})
+        assert result["key_methods"] == ["Seurat"]
+
+    def test_empty_methods_data_returns_structured_empty(self) -> None:
+        """When methods_data is None/empty, returns structured empty result."""
+        result = _extract_methods_summary(None)
+        assert result["key_methods"] == []
+        assert result["software_versions"] == {}
+        assert result["reference_genome"] is None
+        assert result["sequencing_platforms"] == []
+
+    def test_fallback_full_text_when_key_methods_empty(self) -> None:
+        """When key_methods empty after LLM, falls back to regex on full_text."""
+        result = _extract_methods_summary({"key_methods": []}, full_text="We used UMAP for visualization")
+        assert "UMAP" in result["key_methods"]
+
+    def test_fallback_full_text_when_methods_none(self) -> None:
+        """When methods_data is None, falls back to regex on full_text."""
+        result = _extract_methods_summary(None, full_text="We used Seurat and Harmony")
+        assert result["key_methods"] == ["Seurat", "Harmony"]
+
+    def test_no_fallback_when_key_methods_already_populated(self) -> None:
+        """Does not fall back when key_methods already populated by LLM."""
+        result = _extract_methods_summary(
+            {"key_methods": ["CustomMethod"]}, full_text="We used UMAP"
+        )
+        assert result["key_methods"] == ["CustomMethod"]  # should NOT add UMAP
+
+    def test_software_versions_preserved(self) -> None:
+        """Non-key_methods fields from methods_data are preserved after fallback."""
+        result = _extract_methods_summary(
+            {"key_methods": [], "software_versions": {"Seurat": "4.0"},
+             "reference_genome": "hg38", "sequencing_platforms": ["NovaSeq"]},
+            full_text="We used UMAP"
+        )
+        assert "UMAP" in result["key_methods"]
+        assert result["software_versions"] == {"Seurat": "4.0"}
+        assert result["reference_genome"] == "hg38"
+        assert result["sequencing_platforms"] == ["NovaSeq"]
+
+
+class TestSplitSectionsMaterialsAndMethods:
+    """Tests for split_sections with Materials and Methods heading and pre-heading abstract."""
+
+    def test_materials_and_methods_mapped_to_methods(self) -> None:
+        """'Materials and Methods' heading maps to 'methods' key."""
+        text = "Abstract\nAbstract text.\nMaterials and Methods\nMethod details."
+        sections = PaperInsights.split_sections(text)
+        assert sections["methods"] == "Method details."
+
+    def test_materials_and_methods_with_ampersand(self) -> None:
+        """'Materials & Methods' heading also maps to 'methods' key."""
+        text = "Abstract\nAbstract text.\nMaterials & Methods\nMethod details."
+        sections = PaperInsights.split_sections(text)
+        assert sections["methods"] == "Method details."
+
+    def test_pre_heading_text_captured_as_abstract(self) -> None:
+        """Text before first heading is captured as abstract when no Abstract heading."""
+        text = "This is the introductory text that serves as abstract.\nIntroduction\nIntro text."
+        sections = PaperInsights.split_sections(text)
+        assert "This is the introductory text that serves as abstract." in sections["abstract"]
+
+    def test_abstract_heading_takes_precedence(self) -> None:
+        """Explicit Abstract heading takes precedence over pre-heading text."""
+        text = "Pre-header intro.\nAbstract\nReal abstract text.\nIntroduction\nIntro text."
+        sections = PaperInsights.split_sections(text)
+        assert "Real abstract text." in sections["abstract"]
+        assert "Pre-header intro." not in sections["abstract"]
+
+    def test_markdown_heading_syntax(self) -> None:
+        """Markdown ## heading syntax works for new headings."""
+        text = "## Materials and Methods\nMethod content here."
+        sections = PaperInsights.split_sections(text)
+        assert sections["methods"] == "Method content here."
 
 
 class TestReproductionStatus:

@@ -42,8 +42,20 @@ from core.paper_converter import PaperSource, PmcXmlSource, MarkdownSource, Pymu
 logger = logging.getLogger(__name__)
 
 # ── Section / figure regex patterns ────────────────────────────────────────────
-_SECTION_RE = re.compile(r'^(?:#+\s*)?(SUMMARY|Abstract|Introduction|Results|Discussion|Methods|Experimental\s*Procedures)\b', re.MULTILINE | re.IGNORECASE)
+_SECTION_RE = re.compile(r'^(?:#+\s*)?(SUMMARY|Abstract|Introduction|Results|Discussion|Methods|Materials\s*(?:and|&)\s*Methods|Experimental\s*Procedures)\b', re.MULTILINE | re.IGNORECASE)
 _FIGURE_RE = re.compile(r'(?:Figure|Fig\.?)\s+\d+[a-z]?', re.IGNORECASE)
+
+_METHOD_KEYWORDS = [
+    "Seurat", "Scanpy", "Harmony", "UMAP", "t-SNE", "tsne",
+    "Wilcoxon", "Mann-Whitney", "MAST", "DESeq2", "edgeR",
+    "Monocle", "Slingshot", "Velocity", "scVelo",
+    "CellChat", "NicheNet", "LIANA", "CellPhoneDB",
+    "SCENIC", "pySCENIC", "AUCell",
+    "ROGUE", "scran", "scran.js",
+    "SoupX", "DoubletFinder", "Scrublet",
+    "MAGIC", "SCTransform", "SCVI", "scGPT",
+    "BayesSpace", "SPOTlight", "CARD", "RCTD",
+]
 
 
 @dataclass
@@ -157,8 +169,16 @@ def _build_cfg_from_env() -> _LLMConfig:
 
 
 
-def _extract_data_access(meta: dict | None, methods: dict | None) -> dict:
-    """Extract geo_ids/sra_ids from meta.data_access or regex-fallback from data_notes."""
+
+def _extract_geo_ids(text: str) -> list[str]:
+    """Extract GEO accession IDs (GSE\\d{4,8}) from text via regex."""
+    return re.findall(r'GSE\d{4,8}', text)
+
+def _extract_data_access(meta: dict | None, methods: dict | None, full_text: str = "") -> dict:
+    """Extract geo_ids/sra_ids from meta.data_access or regex-fallback from data_notes.
+
+    Falls back to regex scan of full_text if both primary path and data_notes yield empty.
+    """
     result: dict[str, list] = {"geo_ids": [], "sra_ids": []}
 
     # Primary path: meta has data_access sub-object
@@ -182,24 +202,49 @@ def _extract_data_access(meta: dict | None, methods: dict | None) -> dict:
                 result["geo_ids"].extend(geo)
                 result["sra_ids"].extend(sra)
 
+    # Final fallback: regex scan of full text
+    if not result["geo_ids"] and full_text:
+        result["geo_ids"] = _extract_geo_ids(full_text)
+
     return result
 
 
-def _extract_methods_summary(methods_data: dict | None) -> dict:
-    """Extract methods summary from methods LLM extraction output."""
-    if not methods_data:
-        return {
-            "key_methods": [],
-            "software_versions": {},
-            "reference_genome": None,
-            "sequencing_platforms": [],
-        }
-    return {
-        "key_methods": list(methods_data.get("key_methods", [])),
-        "software_versions": dict(methods_data.get("software_versions", {})),
-        "reference_genome": methods_data.get("reference_genome"),
-        "sequencing_platforms": list(methods_data.get("sequencing_platforms", [])),
+def _extract_key_methods(text: str) -> list[str]:
+    """Extract known method keywords from text via case-insensitive word-boundary matching.
+
+    Uses _METHOD_KEYWORDS list. Returns deduplicated list preserving order of appearance.
+    """
+    found: list[str] = []
+    seen: set[str] = set()
+    for kw in _METHOD_KEYWORDS:
+        if re.search(r'\b' + re.escape(kw) + r'\b', text, re.IGNORECASE):
+            if kw not in seen:
+                seen.add(kw)
+                found.append(kw)
+    return found
+
+def _extract_methods_summary(methods_data: dict | None, full_text: str = "") -> dict:
+    """Extract methods summary from methods LLM extraction output.
+
+    Falls back to regex keyword scan of full_text when LLM yields empty key_methods.
+    """
+    result = {
+        "key_methods": [],
+        "software_versions": {},
+        "reference_genome": None,
+        "sequencing_platforms": [],
     }
+    if methods_data:
+        result["key_methods"] = list(methods_data.get("key_methods", []))
+        result["software_versions"] = dict(methods_data.get("software_versions", {}))
+        result["reference_genome"] = methods_data.get("reference_genome")
+        result["sequencing_platforms"] = list(methods_data.get("sequencing_platforms", []))
+
+    # Fallback: regex keyword scan when LLM yielded empty key_methods
+    if not result["key_methods"] and full_text:
+        result["key_methods"] = _extract_key_methods(full_text)
+
+    return result
 class PaperInsights:
     """Extract structured insights from paper markdown using AI prompts."""
 
@@ -224,6 +269,8 @@ class PaperInsights:
             "methods": "methods",
             "experimental procedures": "methods",
             "experimentalprocedures": "methods",
+            "materials and methods": "methods",
+            "materials & methods": "methods",
         }
         for i, m in enumerate(matches):
             raw_key = m.group(1).lower().strip()
@@ -231,6 +278,11 @@ class PaperInsights:
             start = m.end()
             end = matches[i + 1].start() if i + 1 < len(matches) else len(md_text)
             sections[key] = md_text[start:end].strip()
+        # Capture pre-heading text as abstract if no Abstract heading was matched
+        if not sections["abstract"] and matches and matches[0].start() > 0:
+            pre_text = md_text[:matches[0].start()].strip()
+            if pre_text:
+                sections["abstract"] = pre_text
         return sections
 
     @staticmethod
@@ -287,8 +339,14 @@ class PaperInsights:
         return _safe_json_parse(raw, "methods")
 
     @staticmethod
-    def merge_to_insights(meta: dict, figures: list[dict], methods_data: dict, paper_meta: dict) -> dict:
-        """Merge LLM-extracted metadata, figures, and methods into a single insights dict."""
+    def merge_to_insights(meta: dict, figures: list[dict], methods_data: dict, paper_meta: dict,
+                          full_text: str = "", methods_text: str = "") -> dict:
+        """Merge LLM-extracted metadata, figures, and methods into a single insights dict.
+
+        Args:
+            full_text: Full markdown text for regex fallback in data_access extraction.
+            methods_text: Methods section text for regex fallback in methods extraction.
+        """
         # Deduplicate figures by id while preserving order
         seen: set[str] = set()
         unique_figs: list[dict] = []
@@ -310,8 +368,8 @@ class PaperInsights:
             "paper_meta": paper_meta,
             "experimental_design": meta.get("experimental_design", {}) if meta else {},
             "key_findings": list(meta.get("key_findings", [])) if meta else [],
-            "data_access": _extract_data_access(meta, methods_data),
-            "methods": _extract_methods_summary(methods_data),
+            "data_access": _extract_data_access(meta, methods_data, full_text=full_text),
+            "methods": _extract_methods_summary(methods_data, full_text=methods_text),
             "figures": unique_figs,
             "data_notes": meta_notes + [n for n in methods_notes if n not in meta_notes],
             "reproduction_status": {
@@ -367,7 +425,8 @@ class PaperInsights:
             logger.info("Extracting methods...")
             methods = self.extract_methods(sections["methods"], cfg)
 
-        insights = self.merge_to_insights(meta, figures, methods_data=methods, paper_meta=source.get_metadata())
+        insights = self.merge_to_insights(meta, figures, methods_data=methods, paper_meta=source.get_metadata(),
+                                        full_text=md_text, methods_text=sections.get("methods", ""))
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text('\n'.join(_yaml_dump(insights)) + '\n', encoding="utf-8")
         logger.info("Wrote insights to %s", out_path)
