@@ -924,3 +924,114 @@ class TestRunReproduceWithExperimentGroups:
 
         # Subprocess should NOT have been called
         mock_subproc.assert_not_called()
+
+
+class TestGSE310245ExperimentGroups:
+    """GSE310245 capstone validation: 2 experiment groups, 3 pipeline calls, 6 verification points.
+
+    Verifies the complete experiment-groups flow end-to-end:
+    - 1 multiome group triggers 2 pipeline calls (rna + atac),
+    - 1 rna group triggers 1 pipeline call (rna),
+    - Config paths follow subset_suffix naming,
+    - No sample overlap between groups.
+    """
+
+    def test_full_gse310245_experiment_groups(self, tmp_path: Path) -> None:
+        """1 multiome group (2 calls) + 1 rna group (1 call) = 3 subprocess calls."""
+        # VP1: Mock registry with GSE310245 having 2 experiment groups
+        paper_dir = _make_paper_dir(
+            tmp_path, name="GSE310245Paper", geo_ids=["GSE310245"]
+        )
+
+        base_cfg = str(tmp_path / "config_GSE310245.py")
+        pcw8_cfg = str(tmp_path / "config_GSE310245_pcw8_multiome.py")
+        d140_cfg = str(tmp_path / "config_GSE310245_d140_rs.py")
+
+        Path(base_cfg).write_text('CFG.modality = "rna"\n')
+        Path(pcw8_cfg).write_text('CFG.modality = "multiome"\n')
+        Path(d140_cfg).write_text('CFG.modality = "rna"\n')
+
+        pcw8_samples = ["GSM9292434", "GSM9292436"]
+        d140_samples = ["GSM9567287", "GSM9567288"]
+
+        registry = _make_registry(
+            [
+                {
+                    "gse_id": "GSE310245",
+                    "config_path": base_cfg,
+                    "status": "config_exists",
+                    "modality": "rna",
+                    "experiments": [
+                        {
+                            "group_name": "pcw8_multiome",
+                            "sample_ids": pcw8_samples,
+                            "subset_suffix": "_pcw8_multiome",
+                            "modality": "multiome",
+                            "status": "config_exists",
+                            "config_path": pcw8_cfg,
+                            "figures": ["Fig1B", "Fig1C"],
+                        },
+                        {
+                            "group_name": "d140_rs",
+                            "sample_ids": d140_samples,
+                            "subset_suffix": "_d140_rs",
+                            "modality": "rna",
+                            "status": "config_exists",
+                            "config_path": d140_cfg,
+                            "figures": ["Fig4E", "Fig4F"],
+                        },
+                    ],
+                }
+            ],
+            paper_dir="GSE310245Paper",
+        )
+
+        # VP3: Call run_reproduce(paper_dir, dry_run=False) with mocked subprocess
+        with patch("core.run_reproduce.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="ok", stderr=""
+            )
+            results = run_reproduce(paper_dir, registry=registry)
+
+        # VP4: 3 subprocess calls total with correct --modality flags
+        assert mock_run.call_count == 3, f"Expected 3 calls, got {mock_run.call_count}"
+        assert "GSE310245_pcw8_multiome_rna" in results
+        assert "GSE310245_pcw8_multiome_atac" in results
+        assert "GSE310245_d140_rs_rna" in results
+
+        calls = mock_run.call_args_list
+        rna_count = 0
+        atac_count = 0
+        for c in calls:
+            cmd = c[0][0]
+            mod_idx = cmd.index("--modality") + 1
+            mod = cmd[mod_idx]
+            if mod == "rna":
+                rna_count += 1
+            elif mod == "atac":
+                atac_count += 1
+        assert rna_count == 2, f"Expected 2 rna calls, got {rna_count}"
+        assert atac_count == 1, f"Expected 1 atac call, got {atac_count}"
+
+        # VP5: Config paths use subset_suffix naming - 2 configs, correct sample_keep per group
+        assert results["GSE310245_pcw8_multiome_rna"]["status"] == "success"
+        assert results["GSE310245_pcw8_multiome_atac"]["status"] == "success"
+        assert results["GSE310245_d140_rs_rna"]["status"] == "success"
+
+        cfg_count_pcw8 = 0
+        cfg_count_d140 = 0
+        for c in calls:
+            cmd = c[0][0]
+            cfg_idx = cmd.index("--config") + 1
+            cfg_path = cmd[cfg_idx]
+            if cfg_path == pcw8_cfg:
+                cfg_count_pcw8 += 1
+            elif cfg_path == d140_cfg:
+                cfg_count_d140 += 1
+        # pcw8_multiome (multiome) -> 2 calls (rna + atac) sharing same config
+        assert cfg_count_pcw8 == 2, f"Expected 2 pcw8_multiome calls, got {cfg_count_pcw8}"
+        # d140_rs (rna) -> 1 call (rna only)
+        assert cfg_count_d140 == 1, f"Expected 1 d140_rs call, got {cfg_count_d140}"
+
+        # VP6: No sample overlap between the two groups
+        assert set(pcw8_samples).isdisjoint(set(d140_samples))

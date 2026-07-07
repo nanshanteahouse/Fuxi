@@ -36,7 +36,10 @@ if _repo_root not in sys.path:
 
 import yaml
 
+import shutil
 from core.paper_registry import load_registry, detect_modality
+
+from core.paper_registry_models import ExperimentGroup, _dict_to_exp_group
 
 REPRODUCE_TIMEOUT = 1800  # 30 minutes per GSE pipeline run
 
@@ -45,6 +48,16 @@ GSE_PATTERN = re.compile(r"GSE\d+")
 # ──────────────────────────────────────────────
 # Helpers
 # ──────────────────────────────────────────────
+
+def _build_experiment_config_path(base_config_path: str, subset_suffix: str) -> str:
+    """Build a config path for an experiment group by inserting *subset_suffix*.
+
+    E.g. ``/path/config_GSE123.py`` + ``_T_cell`` -> ``/path/config_GSE123_T_cell.py``
+    """
+    if base_config_path.endswith(".py"):
+        return base_config_path[:-3] + subset_suffix + ".py"
+    return base_config_path + subset_suffix
+
 
 
 def _detect_modality(config_path: str) -> str:
@@ -85,12 +98,19 @@ def _extract_geo_ids(insights: dict, raw_text: str = "") -> list[str]:
 
 def _run_pipeline_for_gse(
     _gse_id: str, config_path: str,
+    modality: str | None = None,
+    experiment_group: ExperimentGroup | None = None,
 ) -> dict[str, Any]:
     """Run the full pipeline for one GSE dataset as a subprocess.
 
     Args:
-        gse_id:       GEO accession ID (e.g. ``GSE107618``).
-        config_path:  Absolute path to the pipeline config file.
+        gse_id:           GEO accession ID (e.g. ``GSE107618``).
+        config_path:      Absolute path to the pipeline config file.
+        modality:         Explicit modality override. When ``None`` (default),
+                          auto-detect from the config file for backward compat.
+        experiment_group: Optional experiment group (used by W2.4 config
+                          generation path). Stored but does not affect the
+                          subprocess call in the basic path.
 
     Returns:
         A dict with keys:
@@ -102,7 +122,9 @@ def _run_pipeline_for_gse(
         * ``error`` — captured stderr or error message.
         * ``duration_s`` — wall-clock seconds.
     """
-    modality = _detect_modality(config_path)
+    # Determine modality: explicit param overrides config-file detection
+    if modality is None:
+        modality = _detect_modality(config_path)
     if modality == "unknown":
         return {
             "status": "failed",
@@ -243,31 +265,136 @@ def run_reproduce(
         config_path = ds.get("config_path", "")
         modality = ds.get("modality", "rna")
 
+        # -- 3-layer experiment group dispatch --
+        experiments_data = ds.get("experiments")
+
         if dry_run:
-            results[gse_id] = {
-                "status": "dry_run",
-                "config_path": config_path,
-                "modality": modality,
-            }
+            if experiments_data:
+                for exp_dict in experiments_data:
+                    group = _dict_to_exp_group(exp_dict)
+                    eg_modalities = (
+                        ["rna", "atac"]
+                        if group.modality == "multiome"
+                        else [group.modality]
+                    )
+                    for eg_mod in eg_modalities:
+                        exp_config_path = (
+                            group.config_path
+                            if group.config_path
+                            else _build_experiment_config_path(config_path, group.subset_suffix)
+                        )
+                        results[f"{gse_id}_{group.group_name}_{eg_mod}"] = {
+                            "status": "dry_run",
+                            "config_path": exp_config_path,
+                            "modality": eg_mod,
+                        }
+            else:
+                results[gse_id] = {
+                    "status": "dry_run",
+                    "config_path": config_path,
+                    "modality": modality,
+                }
             continue
 
         if status_enum == "config_exists" and config_path:
-            result = _run_pipeline_for_gse(gse_id, config_path)
-            # Ensure documented fields are always present
-            result.setdefault("config_path", config_path)
-            result.setdefault("modality", modality)
-            results[gse_id] = result
+            if experiments_data:
+                for exp_dict in experiments_data:
+                    group = _dict_to_exp_group(exp_dict)
+                    eg_modalities = (
+                        ["rna", "atac"]
+                        if group.modality == "multiome"
+                        else [group.modality]
+                    )
+                    for eg_mod in eg_modalities:
+                        exp_config_path = (
+                            group.config_path
+                            if group.config_path
+                            else _build_experiment_config_path(config_path, group.subset_suffix)
+                        )
+                        result = _run_pipeline_for_gse(
+                            gse_id, exp_config_path,
+                            modality=eg_mod, experiment_group=group,
+                        )
+                        result.setdefault("config_path", exp_config_path)
+                        result.setdefault("modality", eg_mod)
+                        results[f"{gse_id}_{group.group_name}_{eg_mod}"] = result
+            else:
+                # Original single-config path (backward compatible)
+                result = _run_pipeline_for_gse(gse_id, config_path, modality=modality)
+                result.setdefault("config_path", config_path)
+                result.setdefault("modality", modality)
+                results[gse_id] = result
 
         elif (
             status_enum == "not_configured"
             or (status_enum == "config_exists" and not config_path)
         ):
-            results[gse_id] = {
-                "status": "not_configured",
-                "config_path": config_path,
-                "modality": modality,
-                "reason": "GSE needs config generation (use P2 first)",
-            }
+            if experiments_data:
+                # Config generation for experiment groups
+                from core.preprocess.preprocessor import run_preprocess
+                from core.preprocess.matrix_loader import (_post_process_config, _resolve_project_dir)
+
+                try:
+                    retcode = run_preprocess(
+                        gse_id=gse_id,
+                        paper_context=insights,
+                        force=False,
+                        quiet=True,
+                    )
+                except Exception:
+                    retcode = 1
+
+                if retcode == 0:
+                    # Base config was generated
+                    proj_dir = _resolve_project_dir(modality, gse_id)
+                    base_config_path = os.path.join(proj_dir, f'config_{gse_id}.py')
+
+                    for exp_dict in experiments_data:
+                        group = _dict_to_exp_group(exp_dict)
+                        if group.config_path is None:
+                            # Build suffixed config path and generate
+                            copied_path = _build_experiment_config_path(
+                                base_config_path, group.subset_suffix,
+                            )
+                            if os.path.exists(base_config_path):
+                                shutil.copy2(base_config_path, copied_path)
+                                _post_process_config(
+                                    copied_path,
+                                    paper_context={},
+                                    inject={
+                                        "sample_keep": group.sample_ids,
+                                        "subset_suffix": group.subset_suffix,
+                                    }
+                                )
+                            group.config_path = copied_path
+
+                        eg_modalities = (
+                            ["rna", "atac"]
+                            if group.modality == "multiome"
+                            else [group.modality]
+                        )
+                        for eg_mod in eg_modalities:
+                            results[f"{gse_id}_{group.group_name}_{eg_mod}"] = {
+                                "status": "configured",
+                                "config_path": group.config_path,
+                                "modality": eg_mod,
+                                "reason": "Config generated for experiment group",
+                            }
+                else:
+                    # run_preprocess failed — fall through to original behaviour
+                    results[gse_id] = {
+                        "status": "not_configured",
+                        "config_path": config_path,
+                        "modality": modality,
+                        "reason": "GSE needs config generation (use P2 first)",
+                    }
+            else:
+                results[gse_id] = {
+                    "status": "not_configured",
+                    "config_path": config_path,
+                    "modality": modality,
+                    "reason": "GSE needs config generation (use P2 first)",
+                }
 
         elif status_enum == "data_not_downloaded":
             results[gse_id] = {

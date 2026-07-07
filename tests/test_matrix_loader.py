@@ -492,3 +492,88 @@ class TestGenerateConfigPaperContext:
         assert not os.path.exists(result)
         captured = capsys.readouterr()
         assert "[DRY-RUN]" in captured.out
+
+# ═══════════════════════════════════════════════════════════════════════
+#  _post_process_config — inject parameter tests
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestPostProcessConfigInject:
+    """inject parameter for arbitrary CFG.* value injection."""
+
+    def test_inject_sample_keep(self, tmp_path: Path, sample_config_source: str) -> None:
+        """Inject sample_keep list via inject parameter."""
+        from core.preprocess.matrix_loader import _post_process_config
+
+        config_path = tmp_path / "config_test.py"
+        config_path.write_text(sample_config_source)
+
+        _post_process_config(
+            str(config_path),
+            paper_context={},
+            inject={"sample_keep": ["GSM1"]},
+        )
+
+        source = config_path.read_text()
+        assert "CFG.sample_keep = [" in source
+        assert "'GSM1'" in source
+
+    def test_inject_subset_suffix(self, tmp_path: Path, sample_config_source: str) -> None:
+        """Inject subset_suffix string via inject parameter."""
+        from core.preprocess.matrix_loader import _post_process_config
+
+        config_path = tmp_path / "config_test.py"
+        config_path.write_text(sample_config_source)
+
+        _post_process_config(
+            str(config_path),
+            paper_context={},
+            inject={"subset_suffix": "_test"},
+        )
+
+        source = config_path.read_text()
+        assert "CFG.subset_suffix = '_test'" in source
+
+    def test_inject_mixed_types(self, tmp_path: Path, sample_config_source: str) -> None:
+        """Inject mixed types (string, list, bool) — all correctly repr'd."""
+        from core.preprocess.matrix_loader import _post_process_config
+
+        config_path = tmp_path / "config_test.py"
+        config_path.write_text(sample_config_source)
+
+        _post_process_config(
+            str(config_path),
+            paper_context={},
+            inject={
+                "subset_suffix": "_test",
+                "sample_keep": ["GSM1", "GSM2"],
+                "skip_qc": True,
+            },
+        )
+
+        source = config_path.read_text()
+        assert "CFG.subset_suffix = '_test'" in source
+        assert "CFG.sample_keep = ['GSM1', 'GSM2']" in source
+        assert "CFG.skip_qc = True" in source
+
+    def test_inject_none(self, tmp_path: Path, sample_config_source: str) -> None:
+        """inject=None → unchanged (backward compat)."""
+        from core.preprocess.matrix_loader import _post_process_config
+
+        config_path = tmp_path / "config_test.py"
+        config_path.write_text(sample_config_source)
+        original = config_path.read_text()
+
+        _post_process_config(str(config_path), paper_context={}, inject=None)
+        assert config_path.read_text() == original
+
+    def test_inject_empty(self, tmp_path: Path, sample_config_source: str) -> None:
+        """inject={} → no changes."""
+        from core.preprocess.matrix_loader import _post_process_config
+
+        config_path = tmp_path / "config_test.py"
+        config_path.write_text(sample_config_source)
+        original = config_path.read_text()
+
+        _post_process_config(str(config_path), paper_context={}, inject={})
+        assert config_path.read_text() == original

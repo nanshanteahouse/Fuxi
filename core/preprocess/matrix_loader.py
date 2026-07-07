@@ -112,12 +112,14 @@ def _fill_template(template_text: str, replacements: dict) -> str:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def _post_process_config(config_path: str, paper_context: dict) -> None:
+def _post_process_config(config_path: str, paper_context: dict,
+                      inject: Optional[dict] = None) -> None:
     """Inject paper-derived CFG fields using ast manipulation.
 
     Uses Python's ``ast`` module to parse the generated config, find
     existing ``CFG.*`` assignments, and inject or replace fields
-    (``marker_dict``, ``is_nuclei``, ``tissue_kb``, ``tissue_ontology``).
+    (``marker_dict``, ``is_nuclei``, ``tissue_kb``, ``tissue_ontology``),
+    plus additional arbitrary ``CFG.*`` values from the *inject* dict.
 
     **Idempotent**: if a field already exists, its value is replaced
     in-place rather than duplicate lines being appended.
@@ -126,8 +128,11 @@ def _post_process_config(config_path: str, paper_context: dict) -> None:
         config_path:   Path to the generated ``config_GSE_ID.py`` file.
         paper_context: Dict with optional keys ``features``, ``is_nuclei``,
                        ``tissue_kb``, ``tissue_ontology``.
+        inject:        Optional dict of arbitrary ``CFG.*`` key/value pairs
+                       to inject (e.g. ``{'sample_keep': ['GSM1'], 'subset_suffix': '_test'}``).
+                       Uses ``repr(val)`` to preserve Python literals.
     """
-    if not paper_context:
+    if not paper_context and not inject:
         return
 
     with open(config_path, 'r', encoding='utf-8') as f:
@@ -142,18 +147,25 @@ def _post_process_config(config_path: str, paper_context: dict) -> None:
     # Determine which fields to inject
     injections: dict[str, str] = {}
 
-    features = paper_context.get('features')
-    if features is not None:
-        marker_dict_repr = repr({'extracted': list(features)})
-        injections['marker_dict'] = f"CFG.marker_dict = {marker_dict_repr}"
+    # -- paper_context (existing behaviour) --
+    if paper_context:
+        features = paper_context.get('features')
+        if features is not None:
+            marker_dict_repr = repr({'extracted': list(features)})
+            injections['marker_dict'] = f"CFG.marker_dict = {marker_dict_repr}"
 
-    if paper_context.get('is_nuclei'):
-        injections['is_nuclei'] = 'CFG.is_nuclei = True'
+        if paper_context.get('is_nuclei'):
+            injections['is_nuclei'] = 'CFG.is_nuclei = True'
 
-    for key in ('tissue_kb', 'tissue_ontology'):
-        val = paper_context.get(key)
-        if val is not None:
-            injections[key] = f"CFG.{key} = {repr(str(val))}"
+        for key in ('tissue_kb', 'tissue_ontology'):
+            val = paper_context.get(key)
+            if val is not None:
+                injections[key] = f"CFG.{key} = {repr(str(val))}"
+
+    # -- inject dict (arbitrary CFG.* value injection) --
+    if inject:
+        for key, val in inject.items():
+            injections[key] = f"CFG.{key} = {repr(val)}"
 
     if not injections:
         return

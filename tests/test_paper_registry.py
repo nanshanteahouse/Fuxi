@@ -20,6 +20,8 @@ from core.paper_registry import (
     _find_data_only_entries,
     _paper_to_dict,
     _dict_to_paper,
+    _dataset_to_dict,
+    _dict_to_dataset,
 )
 
 from core.paper_registry_models import ExperimentGroup
@@ -198,6 +200,78 @@ class TestExperimentGroup:
     def test_dataset_entry_no_experiments(self) -> None:
         ds = DatasetEntry(gse_id="GSE123456")
         assert ds.experiments is None
+
+    def test_dataset_entry_empty_experiments(self) -> None:
+        ds = DatasetEntry(gse_id='GSE123456', experiments=[])
+        assert ds.experiments == []
+
+    def test_yaml_round_trip_with_experiments(self) -> None:
+        """DatasetEntry with experiments survives _dataset_to_dict -> _dict_to_dataset."""
+        eg1 = ExperimentGroup(
+            group_name='Retina_Amacrine',
+            sample_ids=['GSM001', 'GSM002'],
+            subset_suffix='_amacrine',
+            modality='rna',
+            status=DatasetStatus.CONFIG_EXISTS,
+            config_path='projects/rna/GSE123456/config_GSE123456.py',
+            figures=['fig1.png', 'fig2.png'],
+        )
+        eg2 = ExperimentGroup(
+            group_name='Retina_RGC',
+            sample_ids=['GSM003'],
+            subset_suffix='_rgc',
+            modality='rna',
+            status=DatasetStatus.NOT_CONFIGURED,
+        )
+        ds = DatasetEntry(
+            gse_id='GSE123456',
+            experiments=[eg1, eg2],
+        )
+        d = _dataset_to_dict(ds)
+        assert 'experiments' in d
+        assert len(d['experiments']) == 2
+        assert d['experiments'][0]['group_name'] == 'Retina_Amacrine'
+        assert d['experiments'][0]['status'] == 'config_exists'
+        assert d['experiments'][0]['config_path'] == 'projects/rna/GSE123456/config_GSE123456.py'
+        assert d['experiments'][0]['figures'] == ['fig1.png', 'fig2.png']
+        assert 'config_path' not in d['experiments'][1]  # skipped because None
+        assert 'figures' not in d['experiments'][1]       # skipped because empty
+        assert d['experiments'][1]['status'] == 'not_configured'
+        ds2 = _dict_to_dataset(d)
+        assert ds2.experiments is not None
+        assert len(ds2.experiments) == 2
+        assert ds2.experiments[0].group_name == 'Retina_Amacrine'
+        assert ds2.experiments[0].status is DatasetStatus.CONFIG_EXISTS
+        assert ds2.experiments[0].config_path == 'projects/rna/GSE123456/config_GSE123456.py'
+        assert ds2.experiments[0].figures == ['fig1.png', 'fig2.png']
+        assert ds2.experiments[1].config_path is None
+        assert ds2.experiments[1].figures == []
+        assert ds2.experiments[1].status is DatasetStatus.NOT_CONFIGURED
+
+    def test_yaml_round_trip_no_experiments(self) -> None:
+        """Dict without experiments key produces experiments is None on load."""
+        d = {
+            'gse_id': 'GSE123456',
+            'config_path': '',
+            'status': 'not_configured',
+            'modality': 'rna',
+            'notes': '',
+        }
+        ds = _dict_to_dataset(d)
+        assert ds.experiments is None
+
+    def test_yaml_round_trip_empty_experiments(self) -> None:
+        """Dict with empty experiments list produces [] on load."""
+        d = {
+            'gse_id': 'GSE123456',
+            'config_path': '',
+            'status': 'not_configured',
+            'modality': 'rna',
+            'notes': '',
+            'experiments': [],
+        }
+        ds = _dict_to_dataset(d)
+        assert ds.experiments == []
 
 # ──────────────────────────────────────────────
 # detect_modality
@@ -672,3 +746,136 @@ class TestFileIO:
         content = reg_path.read_text()
         assert "pmid:" in content  # block-style keys
         assert "paper_dir:" in content
+
+# ──────────────────────────────────────────────
+# build_registry — preserve experiment groups
+# ──────────────────────────────────────────────
+
+
+class TestBuildRegistryPreservesExperiments:
+    """Verify that hand-declared experiment groups survive --build."""
+
+    def test_experiments_preserved_when_old_entry_matches(self, tmp_path: Path) -> None:
+        """Old registry experiments are copied to matching new entries."""
+        projects_dir = tmp_path / "projects"
+        papers_dir = tmp_path / "papers"
+        registry_path = tmp_path / "registry.yaml"
+
+        # Old registry with a dataset that has experiments
+        save_registry({
+            "papers": [{
+                "pmid": "12345678",
+                "paper_dir": "2024_Test_Paper",
+                "title": "Test",
+                "journal": "J",
+                "year": "2024",
+                "first_author": "A",
+                "doi": "10.1234/test",
+                "insights_status": "generated",
+                "datasets": [{
+                    "gse_id": "GSE999999",
+                    "config_path": "",
+                    "status": "config_exists",
+                    "modality": "rna",
+                    "notes": "",
+                    "experiments": [{
+                        "group_name": "Test_Group",
+                        "sample_ids": ["GSM001"],
+                        "subset_suffix": "_test",
+                        "modality": "rna",
+                        "status": "config_exists",
+                    }],
+                }],
+            }],
+        }, str(registry_path))
+
+        # Matching paper dir + project dir
+        paper_dir = papers_dir / "2024_Test_Paper"
+        paper_dir.mkdir(parents=True)
+        (paper_dir / "insights.yaml").write_text(yaml.dump({
+            "paper_meta": {"pmid": "12345678", "title": "Test", "first_author": "A"},
+            "data_access": {"geo_ids": ["GSE999999"]},
+        }))
+        gse_dir = projects_dir / "rna" / "GSE999999"
+        gse_dir.mkdir(parents=True)
+        (gse_dir / "config_GSE999999.py").write_text('CFG.modality = "rna"\n')
+
+        registry = build_registry(
+            papers_dir=str(papers_dir),
+            projects_dir=str(projects_dir),
+            registry_path=str(registry_path),
+        )
+
+        assert len(registry["papers"]) == 1
+        ds = registry["papers"][0]["datasets"][0]
+        assert "experiments" in ds
+        assert len(ds["experiments"]) == 1
+        assert ds["experiments"][0]["group_name"] == "Test_Group"
+        assert ds["experiments"][0]["status"] == "config_exists"
+
+    def test_new_datasets_without_old_entry_get_no_experiments(self, tmp_path: Path) -> None:
+        """Datasets not present in old registry get no experiments field."""
+        projects_dir = tmp_path / "projects"
+        papers_dir = tmp_path / "papers"
+        registry_path = tmp_path / "registry.yaml"
+
+        # Old registry — empty datasets for the paper
+        save_registry({
+            "papers": [{
+                "pmid": "12345678",
+                "paper_dir": "2024_Test_Paper",
+                "title": "Test",
+                "journal": "J",
+                "year": "2024",
+                "first_author": "A",
+                "doi": "10.1234/test",
+                "insights_status": "generated",
+                "datasets": [],
+            }],
+        }, str(registry_path))
+
+        # Paper referencing a dataset that WASN'T in old registry
+        paper_dir = papers_dir / "2024_Test_Paper"
+        paper_dir.mkdir(parents=True)
+        (paper_dir / "insights.yaml").write_text(yaml.dump({
+            "paper_meta": {"pmid": "12345678"},
+            "data_access": {"geo_ids": ["GSE999999"]},
+        }))
+        gse_dir = projects_dir / "rna" / "GSE999999"
+        gse_dir.mkdir(parents=True)
+        (gse_dir / "config_GSE999999.py").write_text('CFG.modality = "rna"\n')
+
+        registry = build_registry(
+            papers_dir=str(papers_dir),
+            projects_dir=str(projects_dir),
+            registry_path=str(registry_path),
+        )
+
+        assert len(registry["papers"]) == 1
+        ds = registry["papers"][0]["datasets"][0]
+        assert "experiments" not in ds
+
+    def test_no_registry_yaml_does_not_crash(self, tmp_path: Path) -> None:
+        """First build without an existing registry.yaml runs cleanly."""
+        projects_dir = tmp_path / "projects"
+        papers_dir = tmp_path / "papers"
+        registry_path = tmp_path / "nonexistent.yaml"
+
+        paper_dir = papers_dir / "Test"
+        paper_dir.mkdir(parents=True)
+        (paper_dir / "insights.yaml").write_text(yaml.dump({
+            "paper_meta": {"pmid": "12345678"},
+            "data_access": {"geo_ids": ["GSE999999"]},
+        }))
+        gse_dir = projects_dir / "rna" / "GSE999999"
+        gse_dir.mkdir(parents=True)
+        (gse_dir / "config_GSE999999.py").write_text('CFG.modality = "rna"\n')
+
+        registry = build_registry(
+            papers_dir=str(papers_dir),
+            projects_dir=str(projects_dir),
+            registry_path=str(registry_path),
+        )
+
+        assert len(registry["papers"]) == 1
+        assert "experiments" not in registry["papers"][0]["datasets"][0]

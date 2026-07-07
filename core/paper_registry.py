@@ -235,16 +235,26 @@ def _dedup_list(items: list[str]) -> list[str]:
 def build_registry(
     papers_dir: str = "projects/papers",
     projects_dir: str = "projects",
+    registry_path: str = "projects/papers/registry.yaml",
 ) -> dict[str, Any]:
     """Build the full registry by cross-referencing papers and GSE datasets.
 
     Steps:
+      0. Load existing ``registry.yaml`` (if any) to preserve hand-declared experiment
+         groups.  Matches on ``(pmid, gse_id)`` pairs.
       1. Scan ``papers_dir/*/insights.yaml`` for paper metadata & geo_ids.
       2. Scan ``projects_dir/{rna,atac,spatial}/`` for GSE directories & configs.
       3. Cross-reference: for each paper's geo_ids, look up matching GSE dirs.
       4. Determine per-dataset status (``config_exists`` / ``not_configured`` /
          ``data_not_downloaded``).
       5. Detect GSE configs not linked to any paper (``data_only``).
+      6. Merge experiments from old registry into new entries for matching
+         ``(pmid, gse_id)`` pairs.
+
+    Args:
+        registry_path: Path to existing registry.yaml to preserve experiments from.
+        papers_dir: Directory containing paper subdirectories with insights.yaml.
+        projects_dir: Root directory of project configs (``projects/`` by default).
 
     Returns a dict ready for ``save_registry()``:
 
@@ -261,6 +271,16 @@ def build_registry(
           - gse_id: "GSE999999"
             ...
     """
+    # Phase 0 — load old registry to preserve hand-declared experiment groups
+    old_registry = load_registry(registry_path)
+    old_exp_lookup: dict[tuple[str, str], Any] = {}
+    for op in old_registry.get("papers", []):
+        pmid = op.get("pmid", "")
+        for od in op.get("datasets", []):
+            key = (pmid, od.get("gse_id", ""))
+            if key not in old_exp_lookup:
+                old_exp_lookup[key] = od.get("experiments")
+
     # Phase 1 — scan papers
     paper_infos = _scan_insights_yamls(papers_dir)
 
@@ -326,6 +346,14 @@ def build_registry(
     }
     if data_only:
         registry["data_only_datasets"] = [_dataset_to_dict(ds) for ds in data_only]
+    # Phase 6 — merge experiments from old registry into new entries
+    if old_exp_lookup:
+        for paper in registry.get("papers", []):
+            pmid = paper.get("pmid", "")
+            for ds in paper.get("datasets", []):
+                key = (pmid, ds.get("gse_id", ""))
+                if key in old_exp_lookup:
+                    ds["experiments"] = old_exp_lookup[key]
 
     return registry
 
@@ -339,7 +367,7 @@ def main() -> None:
     """CLI entry point for building/verifying PaperRegistry."""
     import argparse
     parser = argparse.ArgumentParser(description="PaperRegistry — paper ↔ GSE ↔ config linkage")
-    parser.add_argument("--build", action="store_true", help="Build registry.yaml from projects/")
+    parser.add_argument("--build", action="store_true", help="Build registry.yaml from projects/; preserves hand-declared experiment groups in existing registry.yaml")
     parser.add_argument("--verify", action="store_true", help="Verify registry.yaml consistency")
     parser.add_argument("--dry-run", action="store_true", help="Preview without writing")
     parser.add_argument("--papers-dir", default="projects/papers", help="Papers directory")

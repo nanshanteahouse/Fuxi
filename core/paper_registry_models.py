@@ -87,13 +87,16 @@ class ExperimentGroup:
 
 
 def _dataset_to_dict(ds: DatasetEntry) -> dict[str, Any]:
-    return {
+    data: dict[str, Any] = {
         "gse_id": ds.gse_id,
         "config_path": ds.config_path,
         "status": ds.status.value,
         "modality": ds.modality,
         "notes": ds.notes,
     }
+    if ds.experiments:
+        data["experiments"] = [_exp_group_to_dict(g) for g in ds.experiments]
+    return data
 
 
 def _dict_to_dataset(data: dict[str, Any]) -> DatasetEntry:
@@ -103,6 +106,36 @@ def _dict_to_dataset(data: dict[str, Any]) -> DatasetEntry:
         status=DatasetStatus(data.get("status", "not_configured")),
         modality=data.get("modality", "rna"),
         notes=data.get("notes", ""),
+        experiments=[_dict_to_exp_group(e) for e in data.get("experiments", [])]
+        if "experiments" in data
+        else None,
+    )
+
+
+def _exp_group_to_dict(group: ExperimentGroup) -> dict[str, Any]:
+    data: dict[str, Any] = {
+        "group_name": group.group_name,
+        "sample_ids": group.sample_ids,
+        "subset_suffix": group.subset_suffix,
+        "modality": group.modality,
+        "status": group.status.value,
+    }
+    if group.config_path is not None:
+        data["config_path"] = group.config_path
+    if group.figures:
+        data["figures"] = group.figures
+    return data
+
+
+def _dict_to_exp_group(data: dict[str, Any]) -> ExperimentGroup:
+    return ExperimentGroup(
+        group_name=data["group_name"],
+        sample_ids=data["sample_ids"],
+        subset_suffix=data["subset_suffix"],
+        modality=data["modality"],
+        status=DatasetStatus(data["status"]),
+        config_path=data.get("config_path"),
+        figures=data.get("figures", []),
     )
 
 
