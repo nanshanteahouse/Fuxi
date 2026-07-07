@@ -1219,3 +1219,15 @@ python core/run_pipeline.py --modality spatial --step 5 --config ...
 python core/run_pipeline.py --modality spatial --config projects/spatial/{dataset_id}/config_{dataset_id}.py
 # Config must set: CFG.rna_ref = "{rna_dataset_id}"
 ```
+
+### Paper reproduction
+
+Automatically generate pipeline configs from paper insights and run the pipeline (see [paper insights guide](paper_insights_en-US.md#6-pipeline-integration) for details):
+
+```bash
+# Preview reproducibility for all papers
+python core/run_reproduce.py --all --dry-run
+
+# Reproduce a single paper
+python core/run_reproduce.py projects/papers/<paper_dir>/
+```

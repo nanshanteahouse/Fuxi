@@ -238,26 +238,50 @@ Each figure entry contains a boolean `reproducible` field and a `reproducibility
 
 ## 6. Pipeline Integration
 
-### 6.1 Paper Genes → Pipeline Annotation
+### 6.1 PaperRegistry — Build the paper index
 
-Marker genes identified from papers can automatically guide cell type annotation in single-cell data:
+`paper_registry.py` scans all paper insights and existing project configs to automatically build a paper→GSE→config mapping:
 
+```bash
+python core/paper_registry.py --build   # generates projects/papers/registry.yaml
+python core/paper_registry.py --verify  # check consistency
+python core/paper_registry.py --build --dry-run  # preview without writing
 ```
---pmid → insights.yaml → KB-aware annotation (pipeline step 05/06)
+
+The generated `registry.yaml` labels each GSE with a status: `config_exists` (already configured), `not_configured` (needs preprocessing), `data_not_downloaded` (needs GEO download), etc.
+
+### 6.2 run_reproduce — Reproduce papers through the pipeline
+
+`run_reproduce.py` is the automated bridge from paper to pipeline: it detects which GSEs belong to a paper, runs preprocessing for unconfigured datasets, then launches the pipeline for all:
+
+```bash
+# Preview reproducibility for all papers
+python core/run_reproduce.py --all --dry-run
+
+# Reproduce a single paper
+python core/run_reproduce.py projects/papers/2019_Menon_Nature_Com_.../
+
+# Target a specific GSE only
+python core/run_reproduce.py projects/papers/.../ --gse GSE107618
 ```
 
-### 6.2 Complete Workflow Example
+### 6.3 Complete workflow: PMID → Reproduction
 
 ```bash
 # Step 1: Interpret paper
 python core/paper_insights.py --pmid 31269016
 
-# Step 2: Download matching GEO data and run pipeline
-python core/run_pipeline.py --modality rna --config projects/rna/GSE137537/config_GSE137537.py
+# Step 2: Build registry
+python core/paper_registry.py --build
 
-# Step 3: Compare paper findings to data results
-# insights.yaml genes/cell types → pipeline output marker_genes.csv / cell_types.json
+# Step 3: Preview reproducibility
+python core/run_reproduce.py --all --dry-run
+
+# Step 4: Reproduce (requires GEO data downloaded to projects/{modality}/{GSE_ID}/)
+python core/run_reproduce.py projects/papers/<paper_dir>/
 ```
+
+Existing manually-configured datasets are never overwritten (`force=False` by default).
 
 ---
 
