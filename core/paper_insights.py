@@ -156,6 +156,50 @@ def _build_cfg_from_env() -> _LLMConfig:
     )
 
 
+
+def _extract_data_access(meta: dict | None, methods: dict | None) -> dict:
+    """Extract geo_ids/sra_ids from meta.data_access or regex-fallback from data_notes."""
+    result: dict[str, list] = {"geo_ids": [], "sra_ids": []}
+
+    # Primary path: meta has data_access sub-object
+    if meta:
+        da = meta.get("data_access", {})
+        if isinstance(da, dict):
+            result["geo_ids"] = list(da.get("geo_ids", []))
+            result["sra_ids"] = list(da.get("sra_ids", []))
+
+    # Fallback: scan meta and methods data_notes
+    if not result["geo_ids"] and not result["sra_ids"]:
+        notes = []
+        if meta:
+            notes.extend(meta.get("data_notes", []))
+        if methods:
+            notes.extend(methods.get("data_notes", []))
+        for note in notes:
+            if isinstance(note, str):
+                geo = re.findall(r'\bGSE\d{4,}\b', note)
+                sra = re.findall(r'\bSRP\d{4,}\b', note)
+                result["geo_ids"].extend(geo)
+                result["sra_ids"].extend(sra)
+
+    return result
+
+
+def _extract_methods_summary(methods_data: dict | None) -> dict:
+    """Extract methods summary from methods LLM extraction output."""
+    if not methods_data:
+        return {
+            "key_methods": [],
+            "software_versions": {},
+            "reference_genome": None,
+            "sequencing_platforms": [],
+        }
+    return {
+        "key_methods": list(methods_data.get("key_methods", [])),
+        "software_versions": dict(methods_data.get("software_versions", {})),
+        "reference_genome": methods_data.get("reference_genome"),
+        "sequencing_platforms": list(methods_data.get("sequencing_platforms", [])),
+    }
 class PaperInsights:
     """Extract structured insights from paper markdown using AI prompts."""
 
@@ -280,49 +324,6 @@ class PaperInsights:
             },
         }
 
-def _extract_data_access(meta: dict | None, methods: dict | None) -> dict:
-    """Extract geo_ids/sra_ids from meta.data_access or regex-fallback from data_notes."""
-    result: dict[str, list] = {"geo_ids": [], "sra_ids": []}
-
-    # Primary path: meta has data_access sub-object
-    if meta:
-        da = meta.get("data_access", {})
-        if isinstance(da, dict):
-            result["geo_ids"] = list(da.get("geo_ids", []))
-            result["sra_ids"] = list(da.get("sra_ids", []))
-
-    # Fallback: scan meta and methods data_notes
-    if not result["geo_ids"] and not result["sra_ids"]:
-        notes = []
-        if meta:
-            notes.extend(meta.get("data_notes", []))
-        if methods:
-            notes.extend(methods.get("data_notes", []))
-        for note in notes:
-            if isinstance(note, str):
-                geo = re.findall(r'\bGSE\d{4,}\b', note)
-                sra = re.findall(r'\bSRP\d{4,}\b', note)
-                result["geo_ids"].extend(geo)
-                result["sra_ids"].extend(sra)
-
-    return result
-
-
-def _extract_methods_summary(methods_data: dict | None) -> dict:
-    """Extract methods summary from methods LLM extraction output."""
-    if not methods_data:
-        return {
-            "key_methods": [],
-            "software_versions": {},
-            "reference_genome": None,
-            "sequencing_platforms": [],
-        }
-    return {
-        "key_methods": list(methods_data.get("key_methods", [])),
-        "software_versions": dict(methods_data.get("software_versions", {})),
-        "reference_genome": methods_data.get("reference_genome"),
-        "sequencing_platforms": list(methods_data.get("sequencing_platforms", [])),
-    }
 
     def run(self, source: Union[PaperSource, str], cfg, output_path: str | None = None, force: bool = False) -> str:
         """Full pipeline: read, split, extract, merge, write.
