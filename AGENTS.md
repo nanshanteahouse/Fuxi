@@ -8,7 +8,11 @@
 python core/run_pipeline.py --modality rna --list
 python core/run_pipeline.py --modality atac --list
 python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config_<GSE_ID>.py
+python core/paper_insights.py --pmid <PMID>       # AI paper interpretation
 ```
+
+> Paper interpretation guide: [docs/paper_insights_zh-CN.md](docs/paper_insights_zh-CN.md)
+
 
 ## Key paths
 
@@ -17,8 +21,9 @@ python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config
 | Shared core | `core/` (config, utils, ai_caller, ai_prompts, run_pipeline, preprocess) |
 | RNA steps | `rna/steps/` (12 scripts) |
 | ATAC steps | `atac/steps/` (10 scripts) |
+| Paper insights | `core/paper_insights.py`, `core/paper_converter.py` |
+| Paper insights docs | `docs/paper_insights_zh-CN.md` |
 | Project configs | `projects/{modality}/{GSE_ID}/config_*.py` |
-
 ## Critical conventions
 
 - Steps run as **subprocesses** via `run_pipeline.py` — never imported directly
