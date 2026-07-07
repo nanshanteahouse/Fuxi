@@ -9,6 +9,10 @@ python core/run_pipeline.py --modality rna --list
 python core/run_pipeline.py --modality atac --list
 python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config_<GSE_ID>.py
 python core/paper_insights.py --pmid <PMID>       # AI paper interpretation
+python core/paper_registry.py --build              # build paper→GSE→config index
+python core/paper_registry.py --verify             # check registry consistency
+python core/run_reproduce.py --all --dry-run       # preview reproducibility for all papers
+python core/run_reproduce.py <paper_dir>           # reproduce a single paper's pipeline
 ```
 
 > Paper interpretation guide: [docs/paper_insights_zh-CN.md](docs/paper_insights_zh-CN.md)
@@ -22,8 +26,11 @@ python core/paper_insights.py --pmid <PMID>       # AI paper interpretation
 | RNA steps | `rna/steps/` (12 scripts) |
 | ATAC steps | `atac/steps/` (10 scripts) |
 | Paper insights | `core/paper_insights.py`, `core/paper_converter.py` |
+| Paper registry | `core/paper_registry.py`, `core/paper_registry_models.py` |
+| Reproduce mode | `core/run_reproduce.py` |
 | Paper insights docs | `docs/paper_insights_zh-CN.md` |
 | Project configs | `projects/{modality}/{GSE_ID}/config_*.py` |
+| Paper index | `projects/papers/paper_index.html`, `projects/papers/registry.yaml` |
 ## Critical conventions
 
 - Steps run as **subprocesses** via `run_pipeline.py` — never imported directly
