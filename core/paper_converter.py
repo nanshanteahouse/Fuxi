@@ -34,6 +34,32 @@ def clean_text(text: str) -> str:
     str
         Cleaned text with whitespace normalised.
     """
+    # Step 1: Watermark/boilerplate line removal (line-context-aware)
+    # Remove standalone lines matching "Author Manuscript", "HHS Public Access",
+    # Only remove when they appear as standalone lines (^\s*pattern\s*$)
+    text = re.sub(r'^ *Author Manuscript *$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^ *HHS Public Access *$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^ *Author *$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^ *Manuscript *$', '', text, flags=re.MULTILINE)
+
+    # Step 2: Character-spaced text merge (line-context-aware)
+    # Lines consisting entirely of single-letter sequences separated by whitespace
+    # e.g. "A u t h o r   M a n u s c r i p t" → characters merged, spaces removed
+    text = re.sub(
+        r'^(?:[A-Za-z]\s+){2,}[A-Za-z]\s*$',
+        lambda m: m.group(0).replace(' ', ''),
+        text,
+        flags=re.MULTILINE,
+    )
+
+    # Step 3: Line-number stripping at line starts
+    # Strip leading 1-3 digit numbers followed by space
+    text = re.sub(r'^\d{1,3}\s+', '', text, flags=re.MULTILINE)
+
+    # Step 4: Garbage character sequence suppression
+    # Remove runs of 8+ identical repeated characters (bioRxiv header artifacts)
+    text = re.sub(r'(.)\1{8,}', '', text)
+
     # P0: Insert space between lowercase letter and following uppercase letter
     # (catches concatenated words like ``ofAMD`` → ``of AMD``)
     text = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", text)

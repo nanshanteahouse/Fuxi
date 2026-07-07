@@ -27,6 +27,11 @@ from core.paper_converter import (
     Pymupdf4llmSource,
 )
 from core.paper_insights import PaperInsights, _parse_filename_meta
+from core.ai_prompts import (
+    PAPER_META_SYSTEM_PROMPT,
+    PAPER_FIGURE_SYSTEM_PROMPT,
+    PAPER_METHODS_SYSTEM_PROMPT,
+)
 
 # ── Fixture paths ────────────────────────────────────────────────────────────
 
@@ -498,3 +503,94 @@ class TestPmcFixture:
         assert root.tag == "article"
         assert root.find("body") is not None
         assert root.find("./front/article-meta") is not None
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  9.  clean_text — new patterns (char-spacing, watermark, line-no, garbage)
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class TestCleanTextNewPatterns:
+    """New clean_text patterns: char-spacing, watermark, line-number, garbage-char suppression."""
+
+    def test_character_spacing_suppressed(self) -> None:
+        """Character-spaced text: ``A u t h o r   M a n u s c r i p t`` → single letters collapsed."""
+        result = clean_text("A u t h o r   M a n u s c r i p t")
+        assert "A u" not in result
+
+    def test_watermark_line_removed(self) -> None:
+        """Watermark: ``Author Manuscript\ncontent`` → watermark line removed."""
+        result = clean_text("Author Manuscript\nActual content")
+        assert "Actual content" in result
+        assert "Author Manuscript" not in result
+
+    def test_leading_number_stripped(self) -> None:
+        """Line number: ``42 Some text`` → ``Some text``."""
+        result = clean_text("42 Some text")
+        assert result == "Some text"
+
+    def test_garbage_char_runs_removed(self) -> None:
+        """Garbage runs: ``bbbbbbiiiiioooo text`` → `` text`` (garbage chars removed)."""
+        result = clean_text("bbbbbbiiiiioooo text")
+        assert "text" in result
+
+    def test_single_letter_term_preserved(self) -> None:
+        """Bioterm preserved: ``T cell receptor`` unchanged (not char-spacing)."""
+        result = clean_text("T cell receptor")
+        assert result == "T cell receptor"
+
+    def test_hyphenated_bioterm_preserved(self) -> None:
+        """Hyphenated bioterm: ``RNA-seq`` unchanged."""
+        result = clean_text("RNA-seq")
+        assert result == "RNA-seq"
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+#  10.  System prompt content assertions
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class TestPromptContent:
+    """Content assertions for redesigned system prompts."""
+
+    def test_figure_prompt_contains_caption(self) -> None:
+        """PAPER_FIGURE_SYSTEM_PROMPT should reference 'caption'."""
+        assert "caption" in PAPER_FIGURE_SYSTEM_PROMPT
+
+    def test_figure_prompt_has_stacked_violin(self) -> None:
+        """PAPER_FIGURE_SYSTEM_PROMPT includes 'stacked_violin' in controlled vocabulary."""
+        assert "stacked_violin" in PAPER_FIGURE_SYSTEM_PROMPT
+
+    def test_figure_prompt_has_reproducibility_reasoning(self) -> None:
+        """PAPER_FIGURE_SYSTEM_PROMPT includes 'reproducibility_reasoning'."""
+        assert "reproducibility_reasoning" in PAPER_FIGURE_SYSTEM_PROMPT
+
+    def test_meta_prompt_contains_paper_type(self) -> None:
+        """PAPER_META_SYSTEM_PROMPT includes 'paper_type'."""
+        assert "paper_type" in PAPER_META_SYSTEM_PROMPT
+
+    def test_methods_prompt_contains_reference_genome(self) -> None:
+        """PAPER_METHODS_SYSTEM_PROMPT includes 'reference_genome'."""
+        assert "reference_genome" in PAPER_METHODS_SYSTEM_PROMPT
+
+    def test_all_prompts_have_corrupted_input_instruction(self) -> None:
+        """All system prompts contain 'artifacts' or 'ignore' for corrupted-input handling."""
+        for name, prompt in [
+            ("meta", PAPER_META_SYSTEM_PROMPT),
+            ("figure", PAPER_FIGURE_SYSTEM_PROMPT),
+            ("methods", PAPER_METHODS_SYSTEM_PROMPT),
+        ]:
+            assert "artifacts" in prompt or "ignore" in prompt, (
+                f"{name} prompt missing 'artifacts' or 'ignore'"
+            )
+
+    def test_all_prompts_have_few_shot_example(self) -> None:
+        """All system prompts contain 'EXAMPLE' or equivalent few-shot marker."""
+        for name, prompt in [
+            ("meta", PAPER_META_SYSTEM_PROMPT),
+            ("figure", PAPER_FIGURE_SYSTEM_PROMPT),
+            ("methods", PAPER_METHODS_SYSTEM_PROMPT),
+        ]:
+            assert "EXAMPLE" in prompt or "Example" in prompt, (
+                f"{name} prompt missing few-shot example marker"
+            )
