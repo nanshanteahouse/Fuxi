@@ -153,58 +153,86 @@ projects/papers/{paper_name}/
 
 ```yaml
 paper_meta:
-  year: 2019
-  first_author: Menon
-  journal: Nature Communications
-  doi: 10.1038/s41467-019-12780-8
+  year: "2025"
+  first_author: "Zhang"
+  journal: "Nature Genetics"
 
 experimental_design:
-  species: Human
-  tissue: Retina
-  technologies:
-    - scRNA-seq
+  species: homo_sapiens
+  tissue: retina
+  tissue_info: "macular and peripheral retina from postmortem donors"
+  models:
+    - name: "postmortem human retina"
+      description: "Six normal donors"
   conditions:
-    - Normal
-    - AMD
+    - name: "Normal"
+      description: "Control retinas"
+  modalities:
+    - snRNA-seq
+  summary: "Single-nucleus RNA-seq on postmortem human retinal samples from 6 donors"
 
 key_findings:
-  - PDGFRA is expressed in retinal astrocytes
-  - 58 cell types identified
-  - ...
+  - "58 transcriptionally distinct cell types identified"
+  - "Novel subtypes of amacrine cells discovered"
 
-data_notes:
-  accessions:
+data_access:
+  geo_ids:
     - GSE137537
-  cell_count: 149045
-  quality: "high"
+  sra_ids: []
+
+methods:
+  key_methods:
+    - "10x Genomics Chromium Single Cell 3' v3"
+    - CellRanger
+  software_versions:
+    CellRanger: "7.0"
+  reference_genome: hg38
+  sequencing_platforms:
+    - "Illumina NovaSeq 6000"
 
 figures:
-  - figure_id: Fig_1
-    caption: "Study overview and cell atlas"
-    figure_type: overview
-    panel_count: 5
-    genes: []
-    reproduction_feasibility: feasible   # reproducible from GEO data
+  - id: Fig_1
+    caption: "Single-cell transcriptomic analysis of human retina."
+    type: umap
+    panels:
+      - 1a
+      - 1b
+    parameters:
+      features:
+        - PDE6A
+      resolution: 0.8
+      method: ACTIONet
+      conditions:
+        - Normal
+      n_value: "n=6 donors"
+      error_bar_type: SD
+    purpose: "Study overview showing all major retinal cell types."
+    reproducible: true
+    reproducibility_reasoning: "UMAP generated from scRNA-seq data -- reproducible with dataset access."
 
-  - figure_id: Fig_3
-    caption: "Subcluster analysis"
-    figure_type: umap
-    panel_count: 4
-    genes: [PDGFRA, GFAP]
-    reproduction_feasibility: feasible
+data_notes:
+  - "20,091 cells after QC"
+  - "snRNA-seq -- use is_nuclei=True"
 
 reproduction_status:
-  total_figures: 37
-  reproducible: 19
-  not_reproducible: 18
+  pipeline_run: "not_started"
+  overall_match: null
+  total_figures: 12
+  reproducible_count: 9
+  verified_figures: []
+  notes: ""
 ```
 
-### 5.3 reproduction_feasibility Meaning
+### reproduction_status
+The top-level `reproduction_status` field combines tracking and computed aggregate fields:
+- `pipeline_run`: tracks whether this paper has been run through the downstream QC pipeline.
+- `overall_match`: an optional field for recording whether the reproduction matches the paper (null by default).
+- `total_figures`: computed count of figure entries in the `figures` array.
+- `reproducible_count`: computed count of figures where `reproducible: true`.
+- `verified_figures`: list of figures that have been manually verified.
+- `notes`: free-text notes about reproduction.
 
-| Status | Condition |
-|--------|-----------|
-| `feasible` | Figure has identifiable gene names + scRNA-seq/scATAC-seq data + GEO accession |
-| `not_feasible` | No identifiable genes (pure statistics/schematics) or no public data dependency |
+Each figure entry contains a boolean `reproducible` field and a `reproducibility_reasoning` field explaining the decision. The per-figure `reproducible` value comes from LLM classification; only the aggregate counts are computed post-hoc.
 
 ---
 
@@ -264,7 +292,7 @@ python core/paper_insights.py --pmid 31269016 --force
 
 ### Q5: How trustworthy is AI interpretation?
 
-The LLM performs structured extraction (abstracts, gene names, figure types), not analytical judgment. Key findings are based on the original text; gene lists are extracted verbatim from paper text and figures. Check the `reproduction_feasibility` field in `insights.yaml` as a quality reference.
+The LLM performs structured extraction (abstracts, gene names, figure types), not analytical judgment. Key findings are based on the original text; gene lists are extracted verbatim from paper text and figures. Check the `reproducible` field in `insights.yaml` as a quality reference.
 
 ### Q6: First run times out?
 
