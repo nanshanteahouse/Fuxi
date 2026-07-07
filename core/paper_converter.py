@@ -120,10 +120,18 @@ _FALLBACK_SECTION_RE = re.compile(
 
 
 def _strip_xml_namespaces(raw: str) -> str:
-    """Remove xmlns declarations so elements can be accessed without prefixes."""
-    return re.sub(r'\s+xmlns(?:\:\w+)?="[^"]*"', '', raw)
-
-
+    """Remove xmlns declarations AND strip prefix from element/attribute names.
+    This avoids "unbound prefix" errors when DTD is stripped but namespace
+    declarations were the only source of prefix definitions."""
+    # 1. Remove xmlns declarations from attributes
+    raw = re.sub(r'\s+xmlns(?:\:\w+)?="[^"]*"', '', raw)
+    # 2. Strip namespace prefixes from element tag names (opening AND closing)
+    #    e.g. <ali:license_ref → <license_ref,  </ali:license_ref → </license_ref
+    raw = re.sub(r'(</?)[\w-]+:(?=[\w-])', r'\1', raw)
+    # 3. Strip namespace prefixes from attribute names
+    #    e.g. xlink:href="..." → href="..."
+    raw = re.sub(r'(?<=\s)[\w-]+:(?=[\w-])', '', raw)
+    return raw
 def _elem_text(el: Optional[ET.Element]) -> str:
     """Return all text within *el*, stripped, or '' if *el* is None."""
     if el is None:
@@ -265,7 +273,7 @@ class PmcXmlSource(PaperSource):
             self._cache_xml()
 
     def _cache_xml(self) -> None:
-        """Save fetched XML to ``papers/{paper_name}/{pmcid}.xml``.
+        """Save fetched XML to ``projects/papers/{paper_name}/{pmcid}.xml``.
 
         Non-fatal on failure (disk issues, missing metadata).
         """
@@ -274,7 +282,7 @@ class PmcXmlSource(PaperSource):
             return
         try:
             name = self.get_paper_name()
-            cache_dir = Path('papers') / name
+            cache_dir = Path('projects') / 'papers' / name
             cache_dir.mkdir(parents=True, exist_ok=True)
             cache_path = cache_dir / f'{pmcid}.xml'
             if not cache_path.exists():
@@ -377,14 +385,19 @@ class PmcXmlSource(PaperSource):
     # ── XML Parsing ────────────────────────────────────────────────────────────────
 
     def _parse_xml(self) -> None:
-        """Strip DOCTYPE and namespaces, parse into ElementTree."""
+        """Strip DOCTYPE and namespaces, parse into ElementTree.
+        Handles both bare <article> (fixture) and <pmc-articleset><article> (live NCBI)."""
         raw = self._raw_xml or ''
         # Prevent ElementTree from fetching external DTDs
         raw = re.sub(r'<!DOCTYPE[^>]+>', '', raw)
         # Strip namespace declarations for tag-name access
         raw = _strip_xml_namespaces(raw)
         self._root = ET.fromstring(raw)
-
+        # Unwrap pmc-articleset wrapper from live NCBI responses
+        if self._root.tag == 'pmc-articleset':
+            children = list(self._root)
+            if children:
+                self._root = children[0]
     # ── Section parsing ────────────────────────────────────────────────────────────
 
     def _parse_sections(self) -> dict[str, str]:
