@@ -1219,3 +1219,15 @@ python core/run_pipeline.py --modality spatial --step 5 --config ...
 python core/run_pipeline.py --modality spatial --config projects/spatial/{数据集ID}/config_{数据集ID}.py
 # 配置文件需设置: CFG.rna_ref = "{RNA数据集ID}"
 ```
+
+### 论文复现
+
+通过论文自动生成配置并运行管线（详见 [论文解读文档](paper_insights_zh-CN.md#6-与管线联动)）：
+
+```bash
+# 预览所有论文的复现状态
+python core/run_reproduce.py --all --dry-run
+
+# 复现单篇论文
+python core/run_reproduce.py projects/papers/<paper_dir>/
+```

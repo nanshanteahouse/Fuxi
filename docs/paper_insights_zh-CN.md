@@ -238,25 +238,51 @@ reproduction_status:
 
 ## 6. 与管线联动
 
-### 6.1 论文基因 → 管线注释
+### 6.1 PaperRegistry — 构建论文索引
 
-论文中识别的标记基因可自动指导单细胞数据中的细胞类型注释：
+`paper_registry.py` 扫描所有论文的 `insights.yaml` 和已有项目配置，自动构建论文→GEO→配置的映射关系：
 
+```bash
+python core/paper_registry.py --build   # 生成 projects/papers/registry.yaml
+python core/paper_registry.py --verify  # 检查一致性
+python core/paper_registry.py --build --dry-run  # 预览不写入
 ```
-─pmid ─→ insights.yaml ─→ KB-aware 注释（管线 step 05/06）
+
+生成的 `registry.yaml` 为每个 GSE 标记状态：`config_exists`（已有配置）、`not_configured`（待生成）、`data_not_downloaded`（需下载数据）等。
+
+### 6.2 run_reproduce — 论文复现
+
+`run_reproduce.py` 是论文到管线的自动化桥梁：检测每篇论文对应的 GSE，对有配置的直接跑管线，没配置的先预处理再跑：
+
+```bash
+# 预览预览全部论文
+python core/run_reproduce.py --all --dry-run
+
+# 复现单篇论文
+python core/run_reproduce.py projects/papers/2019_Menon_Nature_Com_.../
+
+# 只跑某个指定 GSE
+python core/run_reproduce.py projects/papers/.../ --gse GSE107618
 ```
 
-### 6.2 完整工作流示例
+### 6.3 完整工作流：PMID → 复现
 
 ```bash
 # Step 1: 解读论文
 python core/paper_insights.py --pmid 31269016
 
-# Step 2: 下载对应的 GEO 数据并运行管线
-python core/run_pipeline.py --modality rna --config projects/rna/GSE137537/config_GSE137537.py
+# Step 2: 构建注册表
+python core/paper_registry.py --build
 
-# Step 3: 对比论文发现与数据结果
-# insights.yaml 中的基因/细胞类型 → 管线输出中的 marker_genes.csv / cell_types.json
+# Step 3: 预览可复现性
+python core/run_reproduce.py --all --dry-run
+
+# Step 4: 实际复现（需先下载 GEO 数据到 projects/{modality}/{GSE_ID}/）
+python core/run_reproduce.py projects/papers/<paper_dir>/
+```
+
+已有手动配置的数据集不会被覆盖（`force=False` 默认行为）。
+
 ```
 
 ---
