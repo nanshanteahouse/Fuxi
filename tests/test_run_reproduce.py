@@ -186,6 +186,87 @@ class TestRunPipelineForGse:
         assert "--modality" in cmd
         assert "spatial" in cmd
 
+    # ── New params tests (modality override, experiment_group) ─────────
+
+    def test_modality_param_override(self, tmp_path: Path) -> None:
+        """Passing modality='atac' overrides config file detection."""
+        # Config says "rna", but we pass "atac" explicitly
+        config_path = self._make_config(tmp_path, "rna")
+
+        with patch("core.run_reproduce.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="", stderr=""
+            )
+            result = _run_pipeline_for_gse(
+                "GSE010", config_path, modality="atac"
+            )
+
+        assert result["modality"] == "atac"
+        assert result["status"] == "success"
+        # Verify the subprocess call used "atac" despite config saying "rna"
+        cmd = mock_run.call_args[0][0]
+        atac_idx = cmd.index("--modality") + 1
+        assert cmd[atac_idx] == "atac"
+
+    def test_modality_param_none(self, tmp_path: Path) -> None:
+        """Passing modality=None falls back to config detection."""
+        config_path = self._make_config(tmp_path, "atac")
+
+        with patch("core.run_reproduce.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="", stderr=""
+            )
+            result = _run_pipeline_for_gse(
+                "GSE011", config_path, modality=None
+            )
+
+        assert result["modality"] == "atac"
+        cmd = mock_run.call_args[0][0]
+        atac_idx = cmd.index("--modality") + 1
+        assert cmd[atac_idx] == "atac"
+
+    def test_experiment_group_param(self, tmp_path: Path) -> None:
+        """Passing ExperimentGroup should not error (stored for W2.4)."""
+        from core.paper_registry_models import ExperimentGroup, DatasetStatus
+
+        config_path = self._make_config(tmp_path, "rna")
+        eg = ExperimentGroup(
+            group_name="test_group",
+            sample_ids=["s1", "s2"],
+            subset_suffix="_subset",
+            modality="rna",
+            status=DatasetStatus.CONFIG_EXISTS,
+        )
+
+        with patch("core.run_reproduce.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="eg_ok", stderr=""
+            )
+            result = _run_pipeline_for_gse(
+                "GSE012", config_path, experiment_group=eg
+            )
+
+        assert result["status"] == "success"
+        assert result["output"] == "eg_ok"
+
+    def test_backward_compat(self, tmp_path: Path) -> None:
+        """Call with only _gse_id and config_path works identically to before."""
+        config_path = self._make_config(tmp_path, "spatial")
+
+        with patch("core.run_reproduce.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="spatial_ok", stderr=""
+            )
+            result = _run_pipeline_for_gse("GSE013", config_path)
+
+        assert result["status"] == "success"
+        assert result["modality"] == "spatial"
+        assert result["output"] == "spatial_ok"
+        cmd = mock_run.call_args[0][0]
+        assert "--modality" in cmd
+        spatial_idx = cmd.index("--modality") + 1
+        assert cmd[spatial_idx] == "spatial"
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # run_reproduce — integration with mocked subprocess
@@ -553,3 +634,293 @@ class TestCLI:
                 main()
 
         mock_load.assert_called_once()
+
+
+
+class TestRunReproduceWithExperimentGroups:
+    """3-layer nested dispatch for experiment groups (W2.4)."""
+
+    def _make_config(self, tmp_path: Path, name: str = "config_GSE001.py", modality: str = "rna") -> str:
+        p = tmp_path / name
+        p.write_text(f'CFG.modality = "{modality}"\n')
+        return str(p)
+
+    def test_single_experiment_group(self, tmp_path: Path) -> None:
+        """1 experiment group (not multiome) -> 1 pipeline call."""
+        paper_dir = _make_paper_dir(tmp_path, name="SingleExp", geo_ids=["GSE001"])
+        config_path = self._make_config(tmp_path)
+        exp_config_path = self._make_config(tmp_path, "config_GSE001_myeloid.py", "rna")
+
+        registry = _make_registry([
+            {
+                "gse_id": "GSE001",
+                "config_path": config_path,
+                "status": "config_exists",
+                "modality": "rna",
+                "experiments": [
+                    {
+                        "group_name": "Myeloid",
+                        "sample_ids": ["s1", "s2"],
+                        "subset_suffix": "_myeloid",
+                        "modality": "rna",
+                        "status": "config_exists",
+                        "config_path": exp_config_path,
+                    }
+                ],
+            }
+        ])
+
+        with patch("core.run_reproduce.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+            results = run_reproduce(paper_dir, registry=registry)
+
+        assert mock_run.call_count == 1
+        assert "GSE001_Myeloid_rna" in results
+        assert results["GSE001_Myeloid_rna"]["status"] == "success"
+        cmd = mock_run.call_args[0][0]
+        cfg_idx = cmd.index("--config") + 1
+        assert cmd[cfg_idx] == exp_config_path
+        mod_idx = cmd.index("--modality") + 1
+        assert cmd[mod_idx] == "rna"
+
+    def test_multiome_experiment_group(self, tmp_path: Path) -> None:
+        """1 multiome group -> 2 pipeline calls (rna + atac)."""
+        paper_dir = _make_paper_dir(tmp_path, name="MultiomeExp", geo_ids=["GSE002"])
+        config_path = self._make_config(tmp_path, "config_GSE002.py")
+
+        registry = _make_registry([
+            {
+                "gse_id": "GSE002",
+                "config_path": config_path,
+                "status": "config_exists",
+                "modality": "multiome",
+                "experiments": [
+                    {
+                        "group_name": "MultiomeGroup",
+                        "sample_ids": ["s1", "s2"],
+                        "subset_suffix": "_multiome",
+                        "modality": "multiome",
+                        "status": "config_exists",
+                    }
+                ],
+            }
+        ])
+
+        with patch("core.run_reproduce.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+            results = run_reproduce(paper_dir, registry=registry)
+
+        assert mock_run.call_count == 2
+        assert "GSE002_MultiomeGroup_rna" in results
+        assert "GSE002_MultiomeGroup_atac" in results
+
+        calls = mock_run.call_args_list
+        cmd0 = calls[0][0][0]
+        mod0_idx = cmd0.index("--modality") + 1
+        assert cmd0[mod0_idx] == "rna"
+        cmd1 = calls[1][0][0]
+        mod1_idx = cmd1.index("--modality") + 1
+        assert cmd1[mod1_idx] == "atac"
+        expected_config = config_path[:-3] + "_multiome.py"
+        cfg0_idx = cmd0.index("--config") + 1
+        cfg1_idx = cmd1.index("--config") + 1
+        assert cmd0[cfg0_idx] == expected_config
+        assert cmd1[cfg1_idx] == expected_config
+
+    def test_multiple_experiment_groups(self, tmp_path: Path) -> None:
+        """GSE310245 pattern: 2 groups (1 multiome, 1 rna) -> 3 pipeline calls."""
+        paper_dir = _make_paper_dir(tmp_path, name="MultiGroup", geo_ids=["GSE003"])
+        config_path = self._make_config(tmp_path, "config_GSE003.py")
+        exp_a_config = self._make_config(tmp_path, "config_GSE003_A_rna.py", "rna")
+        exp_b_config = self._make_config(tmp_path, "config_GSE003_B_rna.py", "rna")
+
+        registry = _make_registry([
+            {
+                "gse_id": "GSE003",
+                "config_path": config_path,
+                "status": "config_exists",
+                "modality": "rna",
+                "experiments": [
+                    {
+                        "group_name": "GroupA",
+                        "sample_ids": ["s1"],
+                        "subset_suffix": "_A",
+                        "modality": "multiome",
+                        "status": "config_exists",
+                        "config_path": exp_a_config,
+                    },
+                    {
+                        "group_name": "GroupB",
+                        "sample_ids": ["s2"],
+                        "subset_suffix": "_B",
+                        "modality": "rna",
+                        "status": "config_exists",
+                        "config_path": exp_b_config,
+                    }
+                ],
+            }
+        ])
+
+        with patch("core.run_reproduce.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+            results = run_reproduce(paper_dir, registry=registry)
+
+        # GroupA (multiome) -> 2 calls, GroupB (rna) -> 1 call = 3 total
+        assert mock_run.call_count == 3
+        assert "GSE003_GroupA_rna" in results
+        assert "GSE003_GroupA_atac" in results
+        assert "GSE003_GroupB_rna" in results
+
+        calls = mock_run.call_args_list
+        modalities_used = []
+        for c in calls:
+            cmd = c[0][0]
+            mod_idx = cmd.index("--modality") + 1
+            modalities_used.append(cmd[mod_idx])
+        assert modalities_used.count("rna") == 2
+        assert modalities_used.count("atac") == 1
+
+    def test_no_experiments_backward_compat(self, tmp_path: Path) -> None:
+        """Dataset without experiments -> 1 call, original flat key."""
+        paper_dir = _make_paper_dir(tmp_path, name="Compat", geo_ids=["GSE004"])
+        config_path = self._make_config(tmp_path, "config_GSE004.py", "rna")
+
+        registry = _make_registry([
+            {
+                "gse_id": "GSE004",
+                "config_path": config_path,
+                "status": "config_exists",
+                "modality": "rna",
+            }
+        ])
+
+        with patch("core.run_reproduce.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+            results = run_reproduce(paper_dir, registry=registry)
+
+        assert mock_run.call_count == 1
+        assert "GSE004" in results
+        assert "GSE004_GroupA_rna" not in results
+        assert results["GSE004"]["status"] == "success"
+        assert results["GSE004"]["modality"] == "rna"
+        # Result dict keys match pre-W2.2 format (flat, no experiment grouping)
+        assert set(results["GSE004"].keys()) == {
+            "status", "config_path", "modality", "output", "error", "duration_s",
+        }
+
+        # Subprocess call uses the base config and dataset-level modality
+        cmd = mock_run.call_args[0][0]
+        cfg_idx = cmd.index("--config") + 1
+        assert cmd[cfg_idx] == config_path
+        mod_idx = cmd.index("--modality") + 1
+        assert cmd[mod_idx] == "rna"
+
+        # Registry dataset entry has no experiments field (None → flat dispatch)
+        assert "experiments" not in registry["papers"][0]["datasets"][0]
+
+    def test_mixed_datasets(self, tmp_path: Path) -> None:
+        """Some datasets with experiments, some without."""
+        paper_dir = _make_paper_dir(tmp_path, name="Mixed", geo_ids=["GSE005", "GSE006"])
+        config_5 = self._make_config(tmp_path, "config_GSE005.py", "rna")
+        config_6 = self._make_config(tmp_path, "config_GSE006.py", "atac")
+        exp_config = self._make_config(tmp_path, "config_GSE005_exp.py", "rna")
+
+        registry = _make_registry([
+            {
+                "gse_id": "GSE005",
+                "config_path": config_5,
+                "status": "config_exists",
+                "modality": "rna",
+                "experiments": [
+                    {
+                        "group_name": "ExpGroup",
+                        "sample_ids": ["s1"],
+                        "subset_suffix": "_exp",
+                        "modality": "rna",
+                        "status": "config_exists",
+                        "config_path": exp_config,
+                    }
+                ],
+            },
+            {
+                "gse_id": "GSE006",
+                "config_path": config_6,
+                "status": "config_exists",
+                "modality": "atac",
+            }
+        ])
+
+        with patch("core.run_reproduce.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+            results = run_reproduce(paper_dir, registry=registry)
+
+        assert mock_run.call_count == 2
+        assert "GSE005_ExpGroup_rna" in results
+        assert results["GSE005_ExpGroup_rna"]["status"] == "success"
+        assert "GSE006" in results
+        assert results["GSE006"]["status"] == "success"
+        assert results["GSE006"]["modality"] == "atac"
+    def test_not_configured_with_config_generation(self, tmp_path: Path) -> None:
+        """Experiment group with status=not_configured -> config generated."""
+        paper_dir = _make_paper_dir(
+            tmp_path, name="ExpCfgGen", geo_ids=["GSE001"]
+        )
+
+        registry = _make_registry([
+            {
+                "gse_id": "GSE001",
+                "config_path": "",
+                "status": "not_configured",
+                "modality": "rna",
+                "experiments": [
+                    {
+                        "group_name": "Tcell",
+                        "sample_ids": ["GSM1", "GSM2"],
+                        "subset_suffix": "_Tcell",
+                        "modality": "rna",
+                        "status": "not_configured",
+                    },
+                    {
+                        "group_name": "Myeloid",
+                        "sample_ids": ["GSM3"],
+                        "subset_suffix": "_Myeloid",
+                        "modality": "rna",
+                        "status": "not_configured",
+                    },
+                ],
+            }
+        ])
+
+        with (
+            patch("core.run_reproduce.subprocess.run") as mock_subproc,
+            patch("core.preprocess.preprocessor.run_preprocess", return_value=0) as mock_preproc,
+            patch("core.run_reproduce.shutil.copy2") as mock_copy,
+            patch("core.preprocess.matrix_loader._post_process_config") as mock_post,
+            patch("core.run_reproduce.os.path.exists", return_value=True) as mock_exists,
+        ):
+            results = run_reproduce(paper_dir, registry=registry)
+
+        # run_preprocess was called with gse_id
+        mock_preproc.assert_called_once()
+        call_kwargs = mock_preproc.call_args[1]
+        assert call_kwargs["gse_id"] == "GSE001"
+
+        # Two experiment groups -> two copy + post-process calls
+        assert mock_copy.call_count == 2
+        assert mock_post.call_count == 2
+
+        # Verify _post_process_config was called with inject dict
+        for call_args in mock_post.call_args_list:
+            args, kwargs = call_args
+            assert "inject" in kwargs
+            assert "sample_keep" in kwargs["inject"]
+            assert "subset_suffix" in kwargs["inject"]
+
+        # Results use compound keys with "configured" status
+        assert "GSE001_Tcell_rna" in results
+        assert "GSE001_Myeloid_rna" in results
+        assert results["GSE001_Tcell_rna"]["status"] == "configured"
+        assert results["GSE001_Myeloid_rna"]["status"] == "configured"
+
+        # Subprocess should NOT have been called
+        mock_subproc.assert_not_called()
