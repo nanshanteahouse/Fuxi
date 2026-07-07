@@ -321,3 +321,56 @@ def build_registry(
         registry["data_only_datasets"] = [_dataset_to_dict(ds) for ds in data_only]
 
     return registry
+
+
+# ──────────────────────────────────────────────
+# CLI
+# ──────────────────────────────────────────────
+
+
+def main() -> None:
+    """CLI entry point for building/verifying PaperRegistry."""
+    import argparse
+    parser = argparse.ArgumentParser(description="PaperRegistry — paper ↔ GSE ↔ config linkage")
+    parser.add_argument("--build", action="store_true", help="Build registry.yaml from projects/")
+    parser.add_argument("--verify", action="store_true", help="Verify registry.yaml consistency")
+    parser.add_argument("--dry-run", action="store_true", help="Preview without writing")
+    parser.add_argument("--papers-dir", default="projects/papers", help="Papers directory")
+    parser.add_argument("--projects-dir", default="projects", help="Projects root directory")
+    parser.add_argument("--output", default="projects/papers/registry.yaml", help="Output registry path")
+    args = parser.parse_args()
+
+    if args.build:
+        registry = build_registry(papers_dir=args.papers_dir, projects_dir=args.projects_dir)
+        n_papers = len(registry.get("papers", []))
+        n_datasets = sum(len(p.get("datasets", [])) for p in registry.get("papers", []))
+        n_data_only = len(registry.get("data_only_datasets", []))
+        print(f"Registry built: {n_papers} papers, {n_datasets} dataset links, {n_data_only} data-only")
+        if not args.dry_run:
+            save_registry(registry, args.output)
+            print(f"Written: {args.output}")
+    elif args.verify:
+        try:
+            registry = load_registry(args.output)
+            n_papers = len(registry.get("papers", []))
+            issues = 0
+            for p in registry.get("papers", []):
+                datasets = p.get("datasets", [])
+                for d in datasets:
+                    if d["status"] == "config_exists" and d.get("config_path"):
+                        import os
+                        if not os.path.exists(d["config_path"]):
+                            print(f"  WARNING: {d['gse_id']} config not found: {d['config_path']}")
+                            issues += 1
+            if issues:
+                print(f"Verify: {n_papers} papers, {issues} issue(s) found")
+            else:
+                print(f"Verify: {n_papers} papers, all consistent")
+        except FileNotFoundError:
+            print(f"Registry not found: {args.output}")
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()
