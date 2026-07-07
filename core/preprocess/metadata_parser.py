@@ -56,6 +56,7 @@ def generate_dataset_yaml(gse_id: str,
                           output_dir: str,
                           data_root: Optional[str],
                           input_dir_override: Optional[str] = None,
+                          paper_context: Optional[dict] = None,
                           dry_run: bool = False,
                           force: bool = False,
                           ncbi_assay_type: Optional[str] = None) -> Optional[str]:
@@ -68,8 +69,14 @@ def generate_dataset_yaml(gse_id: str,
         ncbi_species = superseries_info.get('species', '')
         if ncbi_species:
             species = fd._normalise_species(ncbi_species)
-    species_key = species  # already normalised by guess_species()
+    # Override with paper_context values where present
+    if paper_context:
+        if paper_context.get('species'):
+            species = paper_context['species']
+    species_key = species  # already normalised by species functions or paper_context
     tissue = fd.guess_tissue(file_list)
+    if paper_context and paper_context.get('tissue'):
+        tissue = paper_context['tissue']
     data_format = _detect_primary_format(classification, modality)
 
     # Determine the base directory for relative-path computation

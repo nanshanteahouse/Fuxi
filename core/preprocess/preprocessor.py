@@ -191,6 +191,7 @@ def run_preprocess(gse_id: Optional[str] = None,
                    input_dir: Optional[str] = None,
                    dataset_name: Optional[str] = None,
                    data_root: Optional[str] = None,
+                   paper_context: Optional[dict] = None,
                    query_ncbi: bool = False,
                    dry_run: bool = False,
                    force: bool = False,
@@ -216,6 +217,9 @@ def run_preprocess(gse_id: Optional[str] = None,
         dataset_name:  Dataset identifier when *input_dir* is used
                        (defaults to basename of *input_dir*).
         data_root:     Root data directory (default: FUXI_DATA_ROOT env var).
+        paper_context: Optional dict with paper-derived metadata values
+                       (species, tissue, expression_type, genome, assay_type,
+                       features, is_nuclei, etc.).
         query_ncbi:    Query NCBI for metadata (GEO mode with internet).
         dry_run:       Report only, don't write files.
         force:         Overwrite existing files.
@@ -224,7 +228,6 @@ def run_preprocess(gse_id: Optional[str] = None,
         output_dir:    Base output directory override.
         verbose:       Print detailed per-file detection info.
         quiet:         Minimal output.
-
     Returns:
         Exit code (0 = success, 1 = error).
     """
@@ -463,6 +466,7 @@ def run_preprocess(gse_id: Optional[str] = None,
                     output_dir=child_data_dir,
                     data_root=data_root,
                     input_dir_override=child_data_dir,
+                    paper_context=paper_context,
                     dry_run=dry_run,
                     force=force,
                     ncbi_assay_type=ncbi_assay_type,
@@ -479,6 +483,7 @@ def run_preprocess(gse_id: Optional[str] = None,
                     data_root=data_root,
                     input_dir_override=child_data_dir,
                     superseries_info=superseries_info,
+                    paper_context=paper_context,
                     dry_run=dry_run,
                     force=force,
                 )
@@ -513,6 +518,7 @@ def run_preprocess(gse_id: Optional[str] = None,
                 output_dir=proj_dir,
                 data_root=data_root,
                 input_dir_override=input_dir,
+                paper_context=paper_context,
                 dry_run=dry_run,
                 force=force,
                 ncbi_assay_type=ncbi_assay_type,
@@ -531,6 +537,7 @@ def run_preprocess(gse_id: Optional[str] = None,
                 data_root=data_root,
                 input_dir_override=input_dir,
                 superseries_info=superseries_info,
+                paper_context=paper_context,
                 dry_run=dry_run,
                 force=force,
             )

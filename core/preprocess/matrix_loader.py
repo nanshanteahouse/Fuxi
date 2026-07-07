@@ -9,6 +9,7 @@ Extracted from :mod:`core.preprocess.preprocessor` (Phase 5) to
 keep the main preprocessor focused on orchestration.
 """
 
+import ast
 import os
 import sys
 from typing import Optional
@@ -107,6 +108,114 @@ def _fill_template(template_text: str, replacements: dict) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════
+#  Post-process: inject paper-derived CFG fields
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _post_process_config(config_path: str, paper_context: dict) -> None:
+    """Inject paper-derived CFG fields using ast manipulation.
+
+    Uses Python's ``ast`` module to parse the generated config, find
+    existing ``CFG.*`` assignments, and inject or replace fields
+    (``marker_dict``, ``is_nuclei``, ``tissue_kb``, ``tissue_ontology``).
+
+    **Idempotent**: if a field already exists, its value is replaced
+    in-place rather than duplicate lines being appended.
+
+    Args:
+        config_path:   Path to the generated ``config_GSE_ID.py`` file.
+        paper_context: Dict with optional keys ``features``, ``is_nuclei``,
+                       ``tissue_kb``, ``tissue_ontology``.
+    """
+    if not paper_context:
+        return
+
+    with open(config_path, 'r', encoding='utf-8') as f:
+        source = f.read()
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        # If ast parsing fails, skip gracefully
+        return
+
+    # Determine which fields to inject
+    injections: dict[str, str] = {}
+
+    features = paper_context.get('features')
+    if features is not None:
+        marker_dict_repr = repr({'extracted': list(features)})
+        injections['marker_dict'] = f"CFG.marker_dict = {marker_dict_repr}"
+
+    if paper_context.get('is_nuclei'):
+        injections['is_nuclei'] = 'CFG.is_nuclei = True'
+
+    for key in ('tissue_kb', 'tissue_ontology'):
+        val = paper_context.get(key)
+        if val is not None:
+            injections[key] = f"CFG.{key} = {repr(str(val))}"
+
+    if not injections:
+        return
+
+    # Find all CFG assignments and the last CFG assignment end line
+    existing_attrs: dict[str, tuple[int, int]] = {}
+    last_cfg_end: int = 0
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if (
+                    isinstance(target, ast.Attribute)
+                    and isinstance(target.value, ast.Name)
+                    and target.value.id == 'CFG'
+                ):
+                    attr = target.attr
+                    start_line = node.lineno
+                    end_line = getattr(node, 'end_lineno', start_line)
+                    existing_attrs[attr] = (start_line, end_line)
+                    if end_line > last_cfg_end:
+                        last_cfg_end = end_line
+
+    lines = source.splitlines()
+
+    # Phase 1: Replace existing fields (bottom-to-top to preserve indices)
+    replace_ops = [(s, e, injections[a]) for a, (s, e) in existing_attrs.items() if a in injections]
+    for start, end, new_line in sorted(replace_ops, key=lambda x: x[0], reverse=True):
+        lines[start - 1:end] = [new_line]
+
+    # Phase 2: Append new fields after the last CFG assignment
+    new_fields = {k: v for k, v in injections.items() if k not in existing_attrs}
+    if new_fields:
+        # Re-parse modified source to find the new last CFG end
+        modified_source = '\n'.join(lines)
+        try:
+            new_tree = ast.parse(modified_source)
+            new_last_end: int = 0
+            for node in ast.walk(new_tree):
+                if isinstance(node, ast.Assign):
+                    for target in node.targets:
+                        if (
+                            isinstance(target, ast.Attribute)
+                            and isinstance(target.value, ast.Name)
+                            and target.value.id == 'CFG'
+                        ):
+                            end = getattr(node, 'end_lineno', node.lineno)
+                            if end > new_last_end:
+                                new_last_end = end
+            insert_idx = new_last_end  # 1-indexed → line after last CFG assign
+        except SyntaxError:
+            insert_idx = len(lines)
+
+        for new_line in new_fields.values():
+            lines.insert(insert_idx, new_line)
+            insert_idx += 1
+
+    with open(config_path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines))
+
+
+# ═══════════════════════════════════════════════════════════════════════
 #  Phase 5: Config generation
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -119,9 +228,25 @@ def generate_config(gse_id: str,
                     data_root: Optional[str] = None,
                     input_dir_override: Optional[str] = None,
                     superseries_info: Optional[dict] = None,
+                    paper_context: Optional[dict] = None,
                     dry_run: bool = False,
                     force: bool = False) -> Optional[str]:
     """Generate a config_GSE_ID.py file.
+
+    Args:
+        gse_id:            GEO accession ID.
+        modality:          'rna', 'atac', 'spatial', or 'multiome'.
+        classification:    Format classification dict from format_detector.
+        file_list:         List of file paths in the dataset.
+        output_dir:        Output directory for the generated config.
+        data_root:         Root data directory (default: FUXI_DATA_ROOT env var).
+        input_dir_override: Override input directory path.
+        superseries_info:  SuperSeries metadata dict (optional).
+        paper_context:     Optional dict with paper-derived metadata values
+                           (species, tissue, expression_type, genome,
+                           assay_type, features, is_nuclei, etc.).
+        dry_run:           Report only, don't write files.
+        force:             Overwrite existing files.
 
     Returns the path to the generated config, or None.
     """
@@ -217,6 +342,12 @@ def generate_config(gse_id: str,
         'EXPRESSION_TYPE': expression_type,
     }
 
+    # Override heuristic values with paper_context where present
+    if paper_context:
+        for key in ('species', 'tissue', 'expression_type', 'genome', 'assay_type'):
+            if key in paper_context and paper_context[key] is not None:
+                replacements[key.upper()] = str(paper_context[key])
+
     filled = _fill_template(template_text, replacements)
 
     os.makedirs(output_dir, exist_ok=True)
@@ -233,6 +364,10 @@ def generate_config(gse_id: str,
 
     with open(config_path, 'w', encoding='utf-8') as f:
         f.write(filled)
+
+    # Post-process: inject paper-derived CFG fields (marker_dict, is_nuclei, etc.)
+    if paper_context:
+        _post_process_config(config_path, paper_context)
 
     print(f"  Written: {config_path}")
     return config_path
