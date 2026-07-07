@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-paper_md_to_insights.py — AI-assisted extraction of structured paper insights
+paper_insights.py — AI-assisted extraction of structured paper insights
 
 Reads a paper's PDF-to-text markdown file and uses LLM (via core.ai_caller)
 to generate a structured insights.yaml for reproduction tracking.
 
 Usage:
-    python core/paper_md_to_insights.py <paper.md> [--output OUTPUT] [--force]
+    python core/paper_insights.py <paper.md> [--output OUTPUT] [--force]
 """
 
 import re
@@ -49,7 +49,7 @@ _FIGURE_RE = re.compile(r'(?:Figure|Fig\.?)\s+\d+[a-z]?', re.IGNORECASE)
 @dataclass
 class _LLMConfig:
     """Minimal LLM config for standalone CLI use."""
-    model: str = "deepseek/deepseek-v4-flash"
+    model: str = "deepseek-v4-flash"
     api_base: str = "https://api.deepseek.com/v1"
     api_key: str = ""
     max_tokens: int = 16384
@@ -152,11 +152,11 @@ def _build_cfg_from_env() -> _LLMConfig:
     return _LLMConfig(
         api_key=os.environ.get("LLM_API_KEY", ""),
         api_base=os.environ.get("LLM_API_BASE", "https://api.deepseek.com/v1"),
-        model=os.environ.get("LLM_MODEL", "deepseek/deepseek-v4-flash"),
+        model=os.environ.get("LLM_MODEL", "deepseek-v4-flash"),
     )
 
 
-class PaperMdToInsights:
+class PaperInsights:
     """Extract structured insights from paper markdown using AI prompts."""
 
     @staticmethod
@@ -361,7 +361,7 @@ def _resolve_source(args) -> PaperSource:
 
 
 def main() -> None:
-    """CLI entry point for paper_md_to_insights."""
+    """CLI entry point for paper_insights."""
     parser = argparse.ArgumentParser(description="Extract structured paper insights using AI.")
     parser.add_argument("positional", nargs="?", type=str, help="Paper markdown file (optional if --pmid/--doi/--xml/--pdf given)")
     parser.add_argument("--pmid", type=str, default=None, help="PubMed ID")
@@ -383,7 +383,7 @@ def main() -> None:
     logger.info("Using env-based LLM config")
 
     source = _resolve_source(args)
-    result = PaperMdToInsights().run(source=source, cfg=cfg, output_path=args.output, force=args.force)
+    result = PaperInsights().run(source=source, cfg=cfg, output_path=args.output, force=args.force)
     print("SKIPPED" if result == "SKIPPED" else f"Done: {result}")
 
 if __name__ == "__main__":

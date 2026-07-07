@@ -5,7 +5,7 @@ Covers:
 - ``MarkdownSource`` from .md files
 - ``PmcXmlSource`` from JATS XML
 - ``Pymupdf4llmSource`` (import/instantiation only — integration requires optional dep)
-- ``PaperMdToInsights`` integration
+- ``PaperInsights`` integration
 - CLI argument handling
 """
 import json
@@ -26,7 +26,7 @@ from core.paper_converter import (
     MarkdownSource,
     Pymupdf4llmSource,
 )
-from core.paper_md_to_insights import PaperMdToInsights, _parse_filename_meta
+from core.paper_insights import PaperInsights, _parse_filename_meta
 
 # ── Fixture paths ────────────────────────────────────────────────────────────
 
@@ -292,12 +292,12 @@ class TestPymupdf4llmSource:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  5.  Integration tests (PaperMdToInsights + sources)
+#  5.  Integration tests (PaperInsights + sources)
 # ═════════════════════════════════════════════════════════════════════════════
 
 
 class _FakeLLMConfig:
-    """Minimal config stub to let PaperMdToInsights methods run without real LLM."""
+    """Minimal config stub to let PaperInsights methods run without real LLM."""
     model = "test-model"
     api_base = "http://test"
     api_key = "test-key"
@@ -307,8 +307,8 @@ class _FakeLLMConfig:
     thinking_enabled = False
 
 
-class TestPaperMdToInsights:
-    """Integration between PaperMdToInsights and PaperSource classes."""
+class TestPaperInsights:
+    """Integration between PaperInsights and PaperSource classes."""
 
     @pytest.fixture
     def cfg(self) -> _FakeLLMConfig:
@@ -316,7 +316,7 @@ class TestPaperMdToInsights:
 
     def test_merge_to_insights_custom_meta(self, cfg: _FakeLLMConfig) -> None:
         """Pass custom paper_meta dict → appears in output."""
-        insights = PaperMdToInsights.merge_to_insights(
+        insights = PaperInsights.merge_to_insights(
             meta={"experimental_design": {"species": "human"}, "key_findings": ["test"]},
             figures=[{"id": "Fig1", "description": "test figure"}],
             methods={"data_notes": ["note1"]},
@@ -329,7 +329,7 @@ class TestPaperMdToInsights:
 
     def test_merge_to_insights_deduplicates_figures(self, cfg: _FakeLLMConfig) -> None:
         """Duplicate figure IDs should be removed."""
-        insights = PaperMdToInsights.merge_to_insights(
+        insights = PaperInsights.merge_to_insights(
             meta={},
             figures=[
                 {"id": "Fig1", "desc": "first"},
@@ -358,7 +358,7 @@ class TestPaperMdToInsights:
             "Discussion\nDiscussion text.\n"
             "Methods\nMethod details."
         )
-        sections = PaperMdToInsights.split_sections(text)
+        sections = PaperInsights.split_sections(text)
         assert "abstract" in sections
         assert "introduction" in sections
         assert "results" in sections
@@ -367,7 +367,7 @@ class TestPaperMdToInsights:
 
     def test_split_sections_no_headers(self) -> None:
         """Text with no recognized headers → all content in results."""
-        sections = PaperMdToInsights.split_sections("Just some plain text with no headers.")
+        sections = PaperInsights.split_sections("Just some plain text with no headers.")
         assert sections["results"] == "Just some plain text with no headers."
 
     def test_extract_figure_blocks(self) -> None:
@@ -376,18 +376,18 @@ class TestPaperMdToInsights:
             "Some intro text. Figure 1. This is the first figure. "
             "Figure 2. This is the second figure."
         )
-        blocks = PaperMdToInsights.extract_figure_blocks(text)
+        blocks = PaperInsights.extract_figure_blocks(text)
         assert len(blocks) == 2
         assert "Figure 1" in blocks[0]
         assert "Figure 2" in blocks[1]
 
     def test_extract_figure_blocks_empty(self) -> None:
         """Empty text returns empty list."""
-        assert PaperMdToInsights.extract_figure_blocks("") == []
+        assert PaperInsights.extract_figure_blocks("") == []
 
     def test_output_yaml_structure(self) -> None:
         """The merge_to_insights output has the expected top-level keys."""
-        insights = PaperMdToInsights.merge_to_insights(
+        insights = PaperInsights.merge_to_insights(
             meta={},
             figures=[],
             methods={},
@@ -406,9 +406,9 @@ class TestPaperMdToInsights:
 
 
 class TestCli:
-    """CLI argument handling for paper_md_to_insights.py."""
+    """CLI argument handling for paper_insights.py."""
 
-    CLI_SCRIPT = "core/paper_md_to_insights.py"
+    CLI_SCRIPT = "core/paper_insights.py"
 
     def _run(self, *args: str) -> subprocess.CompletedProcess:
         return subprocess.run(

@@ -362,27 +362,37 @@ class PmcXmlSource(PaperSource):
     # ── Section parsing ────────────────────────────────────────────────────────────
 
     def _parse_sections(self) -> dict[str, str]:
-        """Extract sections from ``<body><sec>`` elements."""
+        """Extract sections from ``<body><sec>`` elements, plus abstract from ``<front>``."""
         root = self._root
         if root is None:
             return {}
 
+        sections: dict[str, str] = {}
+
+        # Extract abstract from <front><article-meta><abstract>
+        front_abstract = root.find('./front/article-meta/abstract')
+        if front_abstract is not None:
+            abs_text = ''.join(front_abstract.itertext()).strip()
+            if abs_text:
+                sections['abstract'] = abs_text
+
         body = root.find('body')
         if body is None:
-            return {}
+            return sections
 
         secs = body.findall('sec')
         if not secs:
-            return self._fallback_split(body)
+            body_text = ''.join(body.itertext()).strip()
+            if body_text:
+                sections = self._fallback_split(body)
+            return sections
 
-        sections: dict[str, str] = {}
         for sec in secs:
             title_el = sec.find('title')
             title = _elem_text(title_el) if title_el is not None else ''
             text = ''.join(sec.itertext()).strip()
 
             key = self._section_key(title)
-            # Append if key already exists (e.g., multiple methods sub-sections)
             if key in sections:
                 sections[key] += '\n\n' + text
             else:
@@ -515,7 +525,7 @@ class PmcXmlSource(PaperSource):
                 meta['first_author'] = surname_el.text.strip()
 
         # Journal title
-        journal_el = root.find('./front/journal-meta/journal-title')
+        journal_el = root.find('./front/journal-meta/journal-title-group/journal-title')
         if journal_el is not None and journal_el.text:
             meta['journal'] = journal_el.text.strip()
 
@@ -594,7 +604,7 @@ class MarkdownSource(PaperSource):
 
     Accepts a path to a ``.md`` file produced by PDF-to-markdown conversion
     (e.g. via ``markitdown``).  Splits sections by heading regex and extracts
-    figure references using the same patterns as :class:`PaperMdToInsights`.
+    figure references using the same patterns as :class:`PaperInsights`.
 
     Parameters
     ----------
@@ -602,13 +612,13 @@ class MarkdownSource(PaperSource):
         Path to the markdown file.
     """
 
-    # Section heading regex (identical to paper_md_to_insights._SECTION_RE)
+    # Section heading regex (identical to paper_insights._SECTION_RE)
     _SECTION_RE = re.compile(
         r'^(?:#+\s*)?(SUMMARY|Abstract|Introduction|Results|Discussion|Methods|'
         r'Experimental\s*Procedures)\b',
         re.MULTILINE | re.IGNORECASE,
     )
-    # Figure reference regex (identical to paper_md_to_insights._FIGURE_RE)
+    # Figure reference regex (identical to paper_insights._FIGURE_RE)
     _FIGURE_RE = re.compile(r'(?:Figure|Fig\.?)\s+\d+[a-z]?', re.IGNORECASE)
 
     def __init__(self, md_path: str) -> None:
@@ -643,7 +653,7 @@ class MarkdownSource(PaperSource):
             sections["results"] = text.strip()
             return sections
 
-        # Section key map (mirrors paper_md_to_insights.PaperMdToInsights.split_sections)
+        # Section key map (mirrors paper_insights.PaperInsights.split_sections)
         section_key_map: dict[str, str] = {
             "summary": "abstract",
             "abstract": "abstract",
@@ -670,7 +680,7 @@ class MarkdownSource(PaperSource):
         """Extract figure blocks from the full paper text.
 
         Splits on ``Figure`` / ``Fig`` references (same pattern as
-        :meth:`PaperMdToInsights.extract_figure_blocks`) but operates on the
+        :meth:`PaperInsights.extract_figure_blocks`) but operates on the
         entire paper text rather than only the Results section.
         """
         text = self._raw_text
@@ -696,7 +706,7 @@ class MarkdownSource(PaperSource):
         """Parse year/author/journal from filename.
 
         Expects format: ``{year}_{author}_{journal}_{title}.md``
-        (mirrors :func:`paper_md_to_insights._parse_filename_meta`).
+        (mirrors :func:`paper_insights._parse_filename_meta`).
         """
         stem = Path(self._md_path).stem
         parts = stem.split('_')
