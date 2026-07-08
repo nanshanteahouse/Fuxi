@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import logging
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -15,7 +16,15 @@ from core.run_reproduce import (
     _detect_modality,
     _extract_geo_ids,
     _run_pipeline_for_gse,
+    _write_pipeline_status,
     run_reproduce,
+)
+
+from core.dataset_schema import (
+    DatasetMeta,
+    load_dataset,
+    save_dataset,
+    update_pipeline_status,
 )
 
 
@@ -267,6 +276,68 @@ class TestRunPipelineForGse:
         spatial_idx = cmd.index("--modality") + 1
         assert cmd[spatial_idx] == "spatial"
 
+
+
+    # ── Pipeline status write tests ──────────────────────────────────
+
+    def test_success_writes_dataset_status(self, tmp_path: Path) -> None:
+        """Successful run writes completed status to dataset.yaml."""
+        config_path = self._make_config(tmp_path, "rna")
+        # Create dataset.yaml next to config
+        ds_yaml = tmp_path / "dataset.yaml"
+        ds_yaml.write_text(yaml.dump({
+            "id": "GSE001",
+            "type": "SingleAccession",
+            "title": "Test",
+            "meta": {"pipeline_status": {"scRNAseq": "pending"}},
+        }))
+
+        with patch("core.run_reproduce.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="ok", stderr=""
+            )
+            with patch("core.run_reproduce.update_pipeline_status") as mock_update:
+                result = _run_pipeline_for_gse("GSE001", config_path)
+
+        assert result["status"] == "success"
+        mock_update.assert_called_once()
+        args = mock_update.call_args[0]
+        assert args[0] == str(ds_yaml)  # yaml_path
+        assert args[1] == "rna"         # modality_key
+        assert args[2] == "completed"   # status
+
+    def test_success_missing_dataset_yaml_skipped(self, tmp_path: Path) -> None:
+        """No dataset.yaml → skip status write, result still success."""
+        config_path = self._make_config(tmp_path, "rna")
+        # No dataset.yaml created
+
+        with patch("core.run_reproduce.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="ok", stderr=""
+            )
+            with patch("core.run_reproduce.update_pipeline_status") as mock_update:
+                result = _run_pipeline_for_gse("GSE002", config_path)
+
+        assert result["status"] == "success"
+        mock_update.assert_not_called()
+
+    def test_success_corrupt_dataset_yaml_does_not_crash(self, tmp_path: Path, caplog) -> None:
+        """Corrupt dataset.yaml → warning logged, result still success."""
+        config_path = self._make_config(tmp_path, "rna")
+        # Create corrupt dataset.yaml
+        ds_yaml = tmp_path / "dataset.yaml"
+        ds_yaml.write_text("::: not valid yaml :::")
+
+        caplog.set_level(logging.WARNING)
+
+        with patch("core.run_reproduce.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(
+                returncode=0, stdout="ok", stderr=""
+            )
+            result = _run_pipeline_for_gse("GSE003", config_path)
+
+        assert result["status"] == "success"
+        assert "Failed to update pipeline status" in caplog.text
 
 # ═══════════════════════════════════════════════════════════════════════
 # run_reproduce — integration with mocked subprocess
@@ -587,6 +658,53 @@ class TestRunReproducePaperContext:
         # This test verifies the code path exists; the actual context
         # is used only during preprocess (not tested in dry-run mode).
 
+
+class TestUpdatePipelineStatus:
+    """update_pipeline_status: modality key mapping and edge cases."""
+
+    def test_rna_to_scrnaseq(self, tmp_path: Path) -> None:
+        """Happy path: rna maps to scRNAseq field."""
+        yaml_path = tmp_path / "dataset.yaml"
+        ds = DatasetMeta(id="test", type="SingleAccession", title="test")
+        save_dataset(ds, str(yaml_path))
+        update_pipeline_status(str(yaml_path), "rna", "completed")
+        loaded = load_dataset(str(yaml_path))
+        assert loaded.meta.pipeline_status.scRNAseq == "completed"
+
+    def test_atac_to_atacseq(self, tmp_path: Path) -> None:
+        """Modality mapping: atac maps to ATACseq field."""
+        yaml_path = tmp_path / "dataset.yaml"
+        ds = DatasetMeta(id="test", type="SingleAccession", title="test")
+        save_dataset(ds, str(yaml_path))
+        update_pipeline_status(str(yaml_path), "atac", "running")
+        loaded = load_dataset(str(yaml_path))
+        assert loaded.meta.pipeline_status.ATACseq == "running"
+        assert loaded.meta.pipeline_status.scRNAseq is None
+
+    def test_spatial_to_spatial(self, tmp_path: Path) -> None:
+        """Modality mapping: spatial maps to spatial field."""
+        yaml_path = tmp_path / "dataset.yaml"
+        ds = DatasetMeta(id="test", type="SingleAccession", title="test")
+        save_dataset(ds, str(yaml_path))
+        update_pipeline_status(str(yaml_path), "spatial", "failed")
+        loaded = load_dataset(str(yaml_path))
+        assert loaded.meta.pipeline_status.spatial == "failed"
+
+    def test_unknown_modality(self, tmp_path: Path) -> None:
+        """Unknown modality logs warning and returns without crash."""
+        yaml_path = tmp_path / "dataset.yaml"
+        ds = DatasetMeta(id="test", type="SingleAccession", title="test")
+        save_dataset(ds, str(yaml_path))
+        update_pipeline_status(str(yaml_path), "unknown", "completed")
+        loaded = load_dataset(str(yaml_path))
+        # Verify no fields were modified
+        assert loaded.meta.pipeline_status.scRNAseq is None
+        assert loaded.meta.pipeline_status.ATACseq is None
+        assert loaded.meta.pipeline_status.spatial is None
+
+    def test_none_yaml_path(self) -> None:
+        """None yaml_path logs warning and returns without crash."""
+        update_pipeline_status(None, "rna", "completed")
 
 class TestCLI:
     """CLI argument parsing via main()."""
@@ -1035,3 +1153,135 @@ class TestGSE310245ExperimentGroups:
 
         # VP6: No sample overlap between the two groups
         assert set(pcw8_samples).isdisjoint(set(d140_samples))
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# _write_pipeline_status
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestPipelineStatusWrite:
+    """Incremental registry status writes after successful pipeline runs."""
+
+    def test_write_sets_dataset_status(self, tmp_path: Path) -> None:
+        """Successful run updates dataset status to pipeline_complete."""
+        paper_dir = tmp_path / "papers" / "TestPaper"
+        paper_dir.mkdir(parents=True)
+        reg_path = tmp_path / "papers" / "registry.yaml"
+        registry_data: dict = {
+            "papers": [
+                {
+                    "pmid": "12345678",
+                    "paper_dir": "TestPaper",
+                    "datasets": [
+                        {
+                            "gse_id": "GSE001",
+                            "config_path": "/fake/config.py",
+                            "status": "config_exists",
+                            "modality": "rna",
+                        }
+                    ],
+                }
+            ]
+        }
+        reg_path.write_text(yaml.dump(registry_data))
+
+        result = {
+            "status": "success", "config_path": "/fake/config.py", "modality": "rna",
+        }
+        _write_pipeline_status(str(reg_path), "GSE001", result, str(paper_dir))
+
+        updated = yaml.safe_load(reg_path.read_text())
+        ds = updated["papers"][0]["datasets"][0]
+        assert ds["status"] == "pipeline_complete"
+        assert ds["gse_id"] == "GSE001"
+
+    def test_write_sets_experiment_group_status(self, tmp_path: Path) -> None:
+        """Successful experiment group run updates group status."""
+        paper_dir = tmp_path / "papers" / "ExpPaper"
+        paper_dir.mkdir(parents=True)
+        reg_path = tmp_path / "papers" / "registry.yaml"
+        registry_data: dict = {
+            "papers": [
+                {
+                    "pmid": "87654321",
+                    "paper_dir": "ExpPaper",
+                    "datasets": [
+                        {
+                            "gse_id": "GSE002",
+                            "config_path": "/fake/base.py",
+                            "status": "config_exists",
+                            "modality": "rna",
+                            "experiments": [
+                                {
+                                    "group_name": "Myeloid",
+                                    "sample_ids": ["s1"],
+                                    "subset_suffix": "_myeloid",
+                                    "modality": "rna",
+                                    "status": "config_exists",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+        reg_path.write_text(yaml.dump(registry_data))
+
+        result = {
+            "status": "success",
+            "config_path": "/fake/myeloid.py",
+            "modality": "rna",
+            "group_name": "Myeloid",
+        }
+        _write_pipeline_status(str(reg_path), "GSE002", result, str(paper_dir))
+
+        updated = yaml.safe_load(reg_path.read_text())
+        exp = updated["papers"][0]["datasets"][0]["experiments"][0]
+        assert exp["status"] == "pipeline_complete"
+        assert exp["group_name"] == "Myeloid"
+
+    def test_write_gse_not_found_logs_warning(self, tmp_path: Path, caplog) -> None:
+        """GSE not in registry logs warning without error."""
+        paper_dir = tmp_path / "papers" / "NoGSE"
+        paper_dir.mkdir(parents=True)
+        reg_path = tmp_path / "papers" / "registry.yaml"
+        reg_path.write_text(yaml.dump({"papers": []}))
+
+        caplog.set_level(logging.WARNING)
+        result: dict = {"status": "success", "config_path": "/fake.py"}
+        _write_pipeline_status(str(reg_path), "GSE999", result, str(paper_dir))
+
+        assert "GSE999" in caplog.text
+        assert "not found" in caplog.text
+
+    def test_write_atomic_write_pattern(self, tmp_path: Path) -> None:
+        """Verify atomic write uses temp file + rename."""
+        paper_dir = tmp_path / "papers" / "AtomicTest"
+        paper_dir.mkdir(parents=True)
+        reg_path = tmp_path / "papers" / "registry.yaml"
+        reg_path.write_text(yaml.dump({"papers": []}))
+
+        result: dict = {"status": "success"}
+
+        with (
+            patch("core.run_reproduce.load_registry") as mock_load,
+            patch("core.run_reproduce.tempfile.NamedTemporaryFile") as mock_tmp,
+            patch("core.run_reproduce.os.rename") as mock_rename,
+        ):
+            mock_load.return_value = {
+                "papers": [
+                    {
+                        "paper_dir": "AtomicTest",
+                        "datasets": [{"gse_id": "GSE001", "status": "config_exists", "config_path": ""}],
+                    }
+                ]
+            }
+            mock_tmp.return_value.__enter__.return_value.name = str(
+                tmp_path / "tmp_registry.yaml"
+            )
+
+            _write_pipeline_status(str(reg_path), "GSE001", result, str(paper_dir))
+
+        mock_tmp.assert_called_once()
+        mock_rename.assert_called_once()

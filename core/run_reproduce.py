@@ -36,8 +36,12 @@ if _repo_root not in sys.path:
 
 import yaml
 
+import logging
+import tempfile
+
 import shutil
-from core.paper_registry import load_registry, detect_modality
+from core.paper_registry import load_registry, detect_modality, save_registry, DatasetStatus
+from core.dataset_schema import update_pipeline_status
 
 from core.paper_registry_models import ExperimentGroup, _dict_to_exp_group
 
@@ -152,7 +156,7 @@ def _run_pipeline_for_gse(
             timeout=REPRODUCE_TIMEOUT,
         )
         elapsed = time.time() - t0
-        return {
+        _result = {
             "status": "success" if result.returncode == 0 else "failed",
             "config_path": config_path,
             "modality": modality,
@@ -162,7 +166,7 @@ def _run_pipeline_for_gse(
         }
     except subprocess.TimeoutExpired:
         elapsed = time.time() - t0
-        return {
+        _result = {
             "status": "timeout",
             "config_path": config_path,
             "modality": modality,
@@ -172,7 +176,7 @@ def _run_pipeline_for_gse(
         }
     except Exception as exc:
         elapsed = time.time() - t0
-        return {
+        _result = {
             "status": "failed",
             "config_path": config_path,
             "modality": modality,
@@ -180,6 +184,103 @@ def _run_pipeline_for_gse(
             "error": str(exc),
             "duration_s": round(elapsed, 1),
         }
+
+    # Write pipeline status to dataset.yaml on success
+    if _result["status"] == "success":
+        try:
+            config_dir = os.path.dirname(config_path)
+            dataset_yaml = os.path.join(config_dir, "dataset.yaml")
+            if not os.path.exists(dataset_yaml) and _gse_id:
+                data_root = os.environ.get("FUXI_DATA_ROOT", "")
+                if data_root:
+                    alt_path = os.path.join(data_root, _gse_id, "dataset.yaml")
+                    if os.path.exists(alt_path):
+                        dataset_yaml = alt_path
+            if os.path.exists(dataset_yaml):
+                update_pipeline_status(dataset_yaml, modality, "completed")
+        except Exception as e:
+            _log = logging.getLogger(__name__)
+            _log.warning(
+                "Failed to update pipeline status in dataset.yaml: %s", e,
+            )
+
+    return _result
+
+
+def _write_pipeline_status(
+    registry_path: str,
+    gse_id: str,
+    result: dict[str, Any],
+    paper_dir: str,
+) -> None:
+    """Incrementally write pipeline_complete status to registry.yaml.
+
+    Uses atomic write (temp file + rename) to prevent corruption from
+    partial writes.
+
+    Args:
+        registry_path: Path to the registry YAML file.
+        gse_id: GEO accession ID.
+        result: Result dict from ``_run_pipeline_for_gse()``; may contain
+            ``group_name`` for experiment group results.
+        paper_dir: Path to the paper directory (not used directly but
+            kept for future extensibility).
+    """
+    logger = logging.getLogger(__name__)
+
+    try:
+        registry = load_registry(registry_path)
+    except Exception:
+        logger.warning("Cannot load registry from %s", registry_path)
+        return
+
+    # Find the DatasetEntry matching this GSE ID
+    found = False
+    for paper in registry.get("papers", []):
+        for ds in paper.get("datasets", []):
+            if ds.get("gse_id") != gse_id:
+                continue
+            group_name = result.get("group_name")
+            if group_name and ds.get("experiments"):
+                for exp in ds["experiments"]:
+                    if exp.get("group_name") == group_name:
+                        exp["status"] = DatasetStatus.PIPELINE_COMPLETE.value
+                        found = True
+                        break
+            else:
+                ds["status"] = DatasetStatus.PIPELINE_COMPLETE.value
+                found = True
+            break
+        if found:
+            break
+
+    if not found:
+        logger.warning(
+            "GSE %s not found in registry at %s; "
+            "cannot write pipeline_complete status",
+            gse_id, registry_path,
+        )
+        return
+
+    # Atomic write: write to temp file, then rename
+    dir_path = os.path.dirname(registry_path) or "."
+    os.makedirs(dir_path, exist_ok=True)
+
+    tmp_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=dir_path, delete=False, mode="w", encoding="utf-8", suffix=".tmp",
+        ) as f:
+            tmp_path = f.name
+            yaml.dump(
+                registry, f,
+                default_flow_style=False, sort_keys=False, allow_unicode=True,
+            )
+        os.rename(tmp_path, registry_path)
+    except Exception:
+        if tmp_path is not None and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
 
 
 # ──────────────────────────────────────────────
@@ -245,6 +346,9 @@ def run_reproduce(
 
     if registry is None:
         registry = load_registry()
+
+    # Compute registry path for incremental status writes
+    registry_path = str(paper_path.parent / "registry.yaml")
 
     # Look up this paper in the registry by PMID
     paper_entry = None
@@ -317,12 +421,18 @@ def run_reproduce(
                         )
                         result.setdefault("config_path", exp_config_path)
                         result.setdefault("modality", eg_mod)
+                        result["group_name"] = group.group_name
                         results[f"{gse_id}_{group.group_name}_{eg_mod}"] = result
+                        if result["status"] == "success" and not dry_run:
+                            _write_pipeline_status(registry_path, gse_id, result, paper_dir)
             else:
                 # Original single-config path (backward compatible)
                 result = _run_pipeline_for_gse(gse_id, config_path, modality=modality)
                 result.setdefault("config_path", config_path)
                 result.setdefault("modality", modality)
+                results[gse_id] = result
+                if result["status"] == "success" and not dry_run:
+                    _write_pipeline_status(registry_path, gse_id, result, paper_dir)
                 results[gse_id] = result
 
         elif (
