@@ -20,7 +20,11 @@ dataset_schema.py — dataset.yaml Python 数据模型
 
 import os
 import yaml
+import logging
+import os
+import yaml
 from dataclasses import dataclass, field
+from typing import Optional
 from typing import Optional
 
 
@@ -298,3 +302,34 @@ def save_dataset(ds: DatasetMeta, yaml_path: str) -> None:
     os.makedirs(os.path.dirname(yaml_path) or ".", exist_ok=True)
     with open(yaml_path, 'w', encoding='utf-8') as f:
         yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+
+
+# Modality key mapping for pipeline status updates
+_MODALITY_TO_STATUS_KEY = {
+    "rna": "scRNAseq",
+    "atac": "ATACseq",
+    "spatial": "spatial",
+}
+
+
+def update_pipeline_status(yaml_path: Optional[str], modality_key: str, status: str) -> None:
+    """Update pipeline status for a given modality in a dataset.yaml file.
+
+    Handles unknown modality gracefully (log warning, return without crash).
+    Handles None yaml_path gracefully (log warning, return without crash).
+    """
+    if yaml_path is None:
+        logging.warning("yaml_path is None, skipping pipeline status update")
+        return
+
+    if modality_key not in _MODALITY_TO_STATUS_KEY:
+        logging.warning(
+            f"Unknown modality '{modality_key}'. "
+            f"Valid modalities: {list(_MODALITY_TO_STATUS_KEY.keys())}"
+        )
+        return
+
+    ds = load_dataset(yaml_path)
+    status_key = _MODALITY_TO_STATUS_KEY[modality_key]
+    setattr(ds.meta.pipeline_status, status_key, status)
+    save_dataset(ds, yaml_path)
