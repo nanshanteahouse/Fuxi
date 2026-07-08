@@ -20,6 +20,8 @@ import os
 import sys
 import logging
 import re
+import re
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +42,7 @@ from core.paper_registry_models import (
     save_registry,
 )
 
+
 __all__ = [
     "DatasetStatus",
     "DatasetEntry",
@@ -51,6 +54,7 @@ __all__ = [
     "_scan_insights_yamls",
     "_scan_project_dirs",
     "_find_data_only_entries",
+    "_reset_pipeline_status",
 ]
 
 logger = logging.getLogger(__name__)
@@ -359,6 +363,192 @@ def build_registry(
 
 
 # ──────────────────────────────────────────────
+# Pipeline status reset
+# ──────────────────────────────────────────────
+
+
+def _atomic_save_registry(registry: dict[str, Any], path: str) -> None:
+    """Save registry dict to YAML using atomic write (temp file + rename).
+
+    Prevents corruption from partial writes during pipeline status updates.
+    """
+    dir_path = os.path.dirname(path) or "."
+    os.makedirs(dir_path, exist_ok=True)
+    tmp_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=dir_path, delete=False, mode="w", encoding="utf-8", suffix=".tmp",
+        ) as f:
+            tmp_path = f.name
+            import yaml
+            yaml.dump(registry, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        os.rename(tmp_path, path)
+    except Exception:
+        if tmp_path is not None and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
+
+
+def _reset_single_dataset_yaml(
+    gse_id: str,
+    config_path: str,
+    modality: str,
+    dry_run: bool,
+    updated_set: set[str],
+) -> None:
+    """Find and reset pipeline status in the associated dataset.yaml to pending.
+
+    Searches in the config directory first, then falls back to FUXI_DATA_ROOT.
+    Uses atomic write for the dataset.yaml update.
+    """
+    from core.dataset_schema import load_dataset
+
+    dataset_yaml: str | None = None
+    if config_path:
+        candidate = os.path.join(os.path.dirname(config_path), "dataset.yaml")
+        if os.path.exists(candidate):
+            dataset_yaml = candidate
+
+    if dataset_yaml is None:
+        data_root = os.environ.get("FUXI_DATA_ROOT", "")
+        if data_root:
+            candidate = os.path.join(data_root, gse_id, "dataset.yaml")
+            if os.path.exists(candidate):
+                dataset_yaml = candidate
+
+    if dataset_yaml is not None:
+        if not dry_run:
+            ds = load_dataset(dataset_yaml)
+            _MODALITY_TO_STATUS_KEY = {
+                "rna": "scRNAseq",
+                "atac": "ATACseq",
+                "spatial": "spatial",
+            }
+            status_key = _MODALITY_TO_STATUS_KEY.get(modality)
+            if status_key:
+                setattr(ds.meta.pipeline_status, status_key, "pending")
+                _atomic_save_dataset(ds, dataset_yaml)
+            else:
+                logger.warning(
+                    "Unknown modality '%s' for GSE %s; skipping dataset.yaml reset",
+                    modality, gse_id,
+                )
+        updated_set.add(dataset_yaml)
+
+
+def _atomic_save_dataset(ds, yaml_path: str) -> None:
+    """Save a DatasetMeta object to YAML file using atomic write.
+
+    Writes to a temporary file in the same directory, then renames to
+    the target path to prevent partial write corruption.
+    """
+    from core.dataset_schema import save_dataset
+    dir_path = os.path.dirname(yaml_path) or "."
+    os.makedirs(dir_path, exist_ok=True)
+    tmp_path: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=dir_path, delete=False, mode="w", encoding="utf-8", suffix=".tmp",
+        ) as f:
+            tmp_path = f.name
+        save_dataset(ds, tmp_path)
+        os.rename(tmp_path, yaml_path)
+    except Exception:
+        if tmp_path is not None and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
+
+
+def _reset_pipeline_status(
+    registry_path: str,
+    filter_paper: str | None = None,
+    filter_gse: str | None = None,
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Restore pipeline_complete entries in registry.yaml to pre-pipeline state.
+
+    For each dataset entry with status ``pipeline_complete``:
+      - Changes the registry status to ``config_exists`` (if config_path is
+        set) or ``not_configured``.
+      - Resets experiment group statuses within that dataset entry.
+      - Sets the corresponding ``pipeline_status.{modality}`` field in the
+        associated dataset.yaml to ``"pending"``.
+
+    Args:
+        registry_path: Path to the registry YAML file.
+        filter_paper: If set, only reset entries for this ``paper_dir``.
+        filter_gse:   If set, only reset entries for this GSE ID.
+        dry_run:      If True, only print what would be changed without
+                      modifying any files.
+
+    Returns:
+        A dict with keys:
+          papers_affected  -- number of papers with at least one reset.
+          datasets_reset   -- number of dataset entries reset.
+          dataset_yamls_updated -- sorted list of dataset.yaml paths updated.
+    """
+    registry = load_registry(registry_path)
+
+    papers_affected = 0
+    datasets_reset = 0
+    dataset_yamls_updated: set[str] = set()
+
+    for paper in registry.get("papers", []):
+        paper_dir = paper.get("paper_dir", "")
+        if filter_paper and paper_dir != filter_paper:
+            continue
+
+        paper_affected = False
+        for ds in paper.get("datasets", []):
+            gse_id = ds.get("gse_id", "")
+            if filter_gse and gse_id != filter_gse:
+                continue
+
+            status = ds.get("status", "")
+            if status != DatasetStatus.PIPELINE_COMPLETE.value:
+                continue
+
+            # Reset dataset entry status
+            config_path = ds.get("config_path", "")
+            if config_path:
+                ds["status"] = DatasetStatus.CONFIG_EXISTS.value
+            else:
+                ds["status"] = DatasetStatus.NOT_CONFIGURED.value
+
+            paper_affected = True
+            datasets_reset += 1
+
+            # Reset experiment group statuses within this dataset
+            for exp in ds.get("experiments", []):
+                if exp.get("status") == DatasetStatus.PIPELINE_COMPLETE.value:
+                    exp_config = exp.get("config_path", "")
+                    if exp_config:
+                        exp["status"] = DatasetStatus.CONFIG_EXISTS.value
+                    else:
+                        exp["status"] = DatasetStatus.NOT_CONFIGURED.value
+
+            # Update associated dataset.yaml
+            _reset_single_dataset_yaml(
+                gse_id, config_path, ds.get("modality", "rna"),
+                dry_run, dataset_yamls_updated,
+            )
+
+        if paper_affected:
+            papers_affected += 1
+
+    if not dry_run and datasets_reset > 0:
+        _atomic_save_registry(registry, registry_path)
+
+    print(f"Reset {datasets_reset} dataset(s) across {papers_affected} paper(s)")
+    print(f"Updated {len(dataset_yamls_updated)} dataset.yaml file(s)")
+
+    return {
+        "papers_affected": papers_affected,
+        "datasets_reset": datasets_reset,
+        "dataset_yamls_updated": sorted(dataset_yamls_updated),
+    }
+
+# ──────────────────────────────────────────────
 # CLI
 # ──────────────────────────────────────────────
 
@@ -367,8 +557,14 @@ def main() -> None:
     """CLI entry point for building/verifying PaperRegistry."""
     import argparse
     parser = argparse.ArgumentParser(description="PaperRegistry — paper ↔ GSE ↔ config linkage")
+    # Action flags (mutually exclusive by logic)
     parser.add_argument("--build", action="store_true", help="Build registry.yaml from projects/; preserves hand-declared experiment groups in existing registry.yaml")
     parser.add_argument("--verify", action="store_true", help="Verify registry.yaml consistency")
+    parser.add_argument("--reset", action="store_true", help="Reset pipeline_complete status to pre-pipeline state")
+    # Reset filters
+    parser.add_argument("--paper", type=str, default=None, help="Reset only datasets for this paper directory (use with --reset)")
+    parser.add_argument("--gse", type=str, default=None, help="Reset only this GSE across all papers (use with --reset)")
+    # Common options
     parser.add_argument("--dry-run", action="store_true", help="Preview without writing")
     parser.add_argument("--papers-dir", default="projects/papers", help="Papers directory")
     parser.add_argument("--projects-dir", default="projects", help="Projects root directory")
@@ -403,6 +599,17 @@ def main() -> None:
                 print(f"Verify: {n_papers} papers, all consistent")
         except FileNotFoundError:
             print(f"Registry not found: {args.output}")
+    elif args.reset:
+        if args.paper and args.gse:
+            parser.error("--paper and --gse are mutually exclusive")
+        summary = _reset_pipeline_status(
+            registry_path=args.output,
+            filter_paper=args.paper,
+            filter_gse=args.gse,
+            dry_run=args.dry_run,
+        )
+        print(f"Reset complete: {summary['datasets_reset']} datasets, "
+              f"{len(summary['dataset_yamls_updated'])} dataset.yaml files updated")
     else:
         parser.print_help()
 

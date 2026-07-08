@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+import sys
+from unittest.mock import patch
 import yaml
 from pathlib import Path
 
@@ -22,6 +24,8 @@ from core.paper_registry import (
     _dict_to_paper,
     _dataset_to_dict,
     _dict_to_dataset,
+    _reset_pipeline_status,
+    main,
 )
 
 from core.paper_registry_models import ExperimentGroup
@@ -879,3 +883,385 @@ class TestBuildRegistryPreservesExperiments:
 
         assert len(registry["papers"]) == 1
         assert "experiments" not in registry["papers"][0]["datasets"][0]
+
+
+# ──────────────────────────────────────────────
+# _reset_pipeline_status
+# ──────────────────────────────────────────────
+
+
+class TestResetPipelineStatus:
+    """Verify _reset_pipeline_status reverts pipeline_complete entries.
+
+    Tests cover full reset, filtering by paper/GSE, dry-run mode, and
+    edge cases with no pipeline_complete entries.
+    """
+
+    @staticmethod
+    def _make_registry(tmp_path, papers_data=None):
+        """Create a temporary registry.yaml from paper data dicts."""
+        if papers_data is None:
+            papers_data = [
+                {
+                    "pmid": "11111111",
+                    "paper_dir": "Paper_A",
+                    "title": "Paper A",
+                    "journal": "J",
+                    "year": "2024",
+                    "first_author": "A",
+                    "doi": "10.1/test",
+                    "insights_status": "generated",
+                    "datasets": [
+                        {
+                            "gse_id": "GSE001",
+                            "config_path": "/cfg/GSE001.py",
+                            "status": "pipeline_complete",
+                            "modality": "rna",
+                            "notes": "",
+                        }
+                    ],
+                }
+            ]
+        registry = {"papers": papers_data}
+        reg_path = tmp_path / "registry.yaml"
+        save_registry(registry, str(reg_path))
+        return str(reg_path)
+
+    # ── tests ─────────────────────────────────
+
+    def test_full_reset(self, tmp_path):
+        """Multiple pipeline_complete entries are all reverted.
+
+        Two papers with three datasets total, one with config_path and one
+        without — verifies both CONFIG_EXISTS and NOT_CONFIGURED outcomes.
+        """
+        papers_data = [
+            {
+                "pmid": "11111111",
+                "paper_dir": "Paper_A",
+                "title": "A", "journal": "J", "year": "2024",
+                "first_author": "A", "doi": "10.1/test",
+                "insights_status": "generated",
+                "datasets": [
+                    {
+                        "gse_id": "GSE001",
+                        "config_path": "/cfg/GSE001.py",
+                        "status": "pipeline_complete",
+                        "modality": "rna",
+                        "notes": "",
+                    },
+                    {
+                        "gse_id": "GSE002",
+                        "config_path": "",
+                        "status": "pipeline_complete",
+                        "modality": "atac",
+                        "notes": "",
+                    },
+                ],
+            },
+            {
+                "pmid": "22222222",
+                "paper_dir": "Paper_B",
+                "title": "B", "journal": "J", "year": "2024",
+                "first_author": "B", "doi": "10.2/test",
+                "insights_status": "generated",
+                "datasets": [
+                    {
+                        "gse_id": "GSE003",
+                        "config_path": "/cfg/GSE003.py",
+                        "status": "pipeline_complete",
+                        "modality": "spatial",
+                        "notes": "",
+                    }
+                ],
+            },
+        ]
+        reg_path = self._make_registry(tmp_path, papers_data)
+
+        with patch("core.paper_registry._reset_single_dataset_yaml"):
+            result = _reset_pipeline_status(reg_path)
+
+        assert result["papers_affected"] == 2
+        assert result["datasets_reset"] == 3
+        assert result["dataset_yamls_updated"] == []
+
+        registry = load_registry(reg_path)
+        ds_a0 = registry["papers"][0]["datasets"][0]
+        ds_a1 = registry["papers"][0]["datasets"][1]
+        ds_b = registry["papers"][1]["datasets"][0]
+        assert ds_a0["status"] == "config_exists"   # has config_path
+        assert ds_a1["status"] == "not_configured"   # no config_path
+        assert ds_b["status"] == "config_exists"    # has config_path
+
+    def test_filter_paper(self, tmp_path):
+        """Only the paper matching filter_paper is affected."""
+        papers_data = [
+            {
+                "pmid": "11111111",
+                "paper_dir": "KeepPaper",
+                "title": "Keep", "journal": "J", "year": "2024",
+                "first_author": "K", "doi": "10.1/keep",
+                "insights_status": "generated",
+                "datasets": [
+                    {
+                        "gse_id": "GSE001",
+                        "config_path": "/cfg/GSE001.py",
+                        "status": "pipeline_complete",
+                        "modality": "rna",
+                        "notes": "",
+                    }
+                ],
+            },
+            {
+                "pmid": "22222222",
+                "paper_dir": "OtherPaper",
+                "title": "Other", "journal": "J", "year": "2024",
+                "first_author": "O", "doi": "10.2/other",
+                "insights_status": "generated",
+                "datasets": [
+                    {
+                        "gse_id": "GSE002",
+                        "config_path": "/cfg/GSE002.py",
+                        "status": "pipeline_complete",
+                        "modality": "rna",
+                        "notes": "",
+                    }
+                ],
+            },
+        ]
+        reg_path = self._make_registry(tmp_path, papers_data)
+
+        # Filter for a paper that does NOT exist
+        with patch("core.paper_registry._reset_single_dataset_yaml"):
+            result = _reset_pipeline_status(reg_path, filter_paper="NonExistent")
+        assert result["papers_affected"] == 0
+        assert result["datasets_reset"] == 0
+
+        # Filter for KeepPaper — should reset that entry
+        result = _reset_pipeline_status(reg_path, filter_paper="KeepPaper")
+        assert result["papers_affected"] == 1
+        assert result["datasets_reset"] == 1
+        registry = load_registry(reg_path)
+        assert registry["papers"][0]["datasets"][0]["status"] == "config_exists"
+        # OtherPaper unchanged
+        assert registry["papers"][1]["datasets"][0]["status"] == "pipeline_complete"
+
+    def test_filter_gse(self, tmp_path):
+        """Only the dataset matching filter_gse is reset within a paper."""
+        papers_data = [
+            {
+                "pmid": "11111111",
+                "paper_dir": "Paper_A",
+                "title": "A", "journal": "J", "year": "2024",
+                "first_author": "A", "doi": "10.1/test",
+                "insights_status": "generated",
+                "datasets": [
+                    {
+                        "gse_id": "GSE001",
+                        "config_path": "/cfg/GSE001.py",
+                        "status": "pipeline_complete",
+                        "modality": "rna",
+                        "notes": "",
+                    },
+                    {
+                        "gse_id": "GSE002",
+                        "config_path": "/cfg/GSE002.py",
+                        "status": "pipeline_complete",
+                        "modality": "atac",
+                        "notes": "",
+                    },
+                ],
+            },
+        ]
+        reg_path = self._make_registry(tmp_path, papers_data)
+
+        with patch("core.paper_registry._reset_single_dataset_yaml"):
+            result = _reset_pipeline_status(reg_path, filter_gse="GSE001")
+
+        assert result["papers_affected"] == 1
+        assert result["datasets_reset"] == 1
+
+        registry = load_registry(reg_path)
+        assert registry["papers"][0]["datasets"][0]["status"] == "config_exists"  # reset
+        assert registry["papers"][0]["datasets"][1]["status"] == "pipeline_complete"  # intact
+
+    def test_dry_run(self, tmp_path):
+        """Dry-run mode inspects without modifying any files."""
+        papers_data = [
+            {
+                "pmid": "11111111",
+                "paper_dir": "Paper_A",
+                "title": "A", "journal": "J", "year": "2024",
+                "first_author": "A", "doi": "10.1/test",
+                "insights_status": "generated",
+                "datasets": [
+                    {
+                        "gse_id": "GSE001",
+                        "config_path": "/cfg/GSE001.py",
+                        "status": "pipeline_complete",
+                        "modality": "rna",
+                        "notes": "",
+                    }
+                ],
+            },
+        ]
+        reg_path = self._make_registry(tmp_path, papers_data)
+        import pathlib
+        original = pathlib.Path(reg_path).read_text()
+
+        with patch("core.paper_registry._reset_single_dataset_yaml") as mock_reset:
+            result = _reset_pipeline_status(reg_path, dry_run=True)
+
+        assert result["papers_affected"] == 1
+        assert result["datasets_reset"] == 1
+        assert result["dataset_yamls_updated"] == []
+
+        # Registry file unchanged
+        assert pathlib.Path(reg_path).read_text() == original
+        # _reset_single_dataset_yaml still called (dry_run applies inside it)
+        mock_reset.assert_called_once()
+
+    def test_no_pipeline_complete(self, tmp_path):
+        """Registry with no pipeline_complete entries returns empty summary."""
+        papers_data = [
+            {
+                "pmid": "11111111",
+                "paper_dir": "Paper_A",
+                "title": "A", "journal": "J", "year": "2024",
+                "first_author": "A", "doi": "10.1/test",
+                "insights_status": "generated",
+                "datasets": [
+                    {
+                        "gse_id": "GSE001",
+                        "config_path": "/cfg/GSE001.py",
+                        "status": "config_exists",
+                        "modality": "rna",
+                        "notes": "",
+                    }
+                ],
+            },
+        ]
+        reg_path = self._make_registry(tmp_path, papers_data)
+
+        with patch("core.paper_registry._reset_single_dataset_yaml") as mock_reset:
+            result = _reset_pipeline_status(reg_path)
+
+        assert result["papers_affected"] == 0
+        assert result["datasets_reset"] == 0
+        assert result["dataset_yamls_updated"] == []
+        mock_reset.assert_not_called()
+
+
+# ──────────────────────────────────────────────
+# CLI — --reset flag
+# ──────────────────────────────────────────────
+
+
+class TestCLIReset:
+    """Verify --reset CLI flag routes correctly to _reset_pipeline_status."""
+
+    def test_reset_default(self, tmp_path):
+        """--reset calls _reset_pipeline_status with registry_path default."""
+        reg_path = tmp_path / "registry.yaml"
+        reg_path.write_text("papers: []\n")
+
+        test_argv = ["paper_registry.py", "--reset", "--output", str(reg_path)]
+        with patch.object(sys, "argv", test_argv):
+            with patch("core.paper_registry._reset_pipeline_status") as mock_fn:
+                mock_fn.return_value = {
+                    "papers_affected": 0, "datasets_reset": 0,
+                    "dataset_yamls_updated": [],
+                }
+                main()
+
+        mock_fn.assert_called_once_with(
+            registry_path=str(reg_path),
+            filter_paper=None,
+            filter_gse=None,
+            dry_run=False,
+        )
+
+    def test_reset_with_paper(self, tmp_path):
+        """--reset --paper <dir> passes filter_paper."""
+        reg_path = tmp_path / "registry.yaml"
+        reg_path.write_text("papers: []\n")
+
+        test_argv = [
+            "paper_registry.py", "--reset", "--paper", "2024_Test_Paper",
+            "--output", str(reg_path),
+        ]
+        with patch.object(sys, "argv", test_argv):
+            with patch("core.paper_registry._reset_pipeline_status") as mock_fn:
+                mock_fn.return_value = {
+                    "papers_affected": 1, "datasets_reset": 0,
+                    "dataset_yamls_updated": [],
+                }
+                main()
+
+        mock_fn.assert_called_once_with(
+            registry_path=str(reg_path),
+            filter_paper="2024_Test_Paper",
+            filter_gse=None,
+            dry_run=False,
+        )
+
+    def test_reset_with_gse(self, tmp_path):
+        """--reset --gse <GSE_ID> passes filter_gse."""
+        reg_path = tmp_path / "registry.yaml"
+        reg_path.write_text("papers: []\n")
+
+        test_argv = [
+            "paper_registry.py", "--reset", "--gse", "GSE107618",
+            "--output", str(reg_path),
+        ]
+        with patch.object(sys, "argv", test_argv):
+            with patch("core.paper_registry._reset_pipeline_status") as mock_fn:
+                mock_fn.return_value = {
+                    "papers_affected": 1, "datasets_reset": 1,
+                    "dataset_yamls_updated": [],
+                }
+                main()
+
+        mock_fn.assert_called_once_with(
+            registry_path=str(reg_path),
+            filter_paper=None,
+            filter_gse="GSE107618",
+            dry_run=False,
+        )
+
+    def test_reset_dry_run(self, tmp_path):
+        """--reset --dry-run passes dry_run=True."""
+        reg_path = tmp_path / "registry.yaml"
+        reg_path.write_text("papers: []\n")
+
+        test_argv = [
+            "paper_registry.py", "--reset", "--dry-run",
+            "--output", str(reg_path),
+        ]
+        with patch.object(sys, "argv", test_argv):
+            with patch("core.paper_registry._reset_pipeline_status") as mock_fn:
+                mock_fn.return_value = {
+                    "papers_affected": 0, "datasets_reset": 0,
+                    "dataset_yamls_updated": [],
+                }
+                main()
+
+        mock_fn.assert_called_once_with(
+            registry_path=str(reg_path),
+            filter_paper=None,
+            filter_gse=None,
+            dry_run=True,
+        )
+
+    def test_paper_and_gse_mutually_exclusive(self, tmp_path):
+        """--paper and --gse together raise SystemExit."""
+        import pytest
+        test_argv = [
+            "paper_registry.py", "--reset",
+            "--paper", "TestPaper",
+            "--gse", "GSE001",
+            "--output", str(tmp_path / "registry.yaml"),
+        ]
+        with patch.object(sys, "argv", test_argv):
+            with pytest.raises(SystemExit):
+                main()
