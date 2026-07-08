@@ -108,6 +108,10 @@ atac/               scATAC-seq module (Snapatac2 2.9+)
 spatial/            Spatial transcriptomics module (Squidpy)
   steps/             11 pipeline steps (00_load → 10_cell_interaction)
 
+cross_paper/        Cross-paper pathway comparison framework
+  analyzer.py         CrossPaperAnalyzer — pathway-agnostic, YAML-configured
+  __init__.py          YAML loader helpers + default config getters
+
 projects/           Dataset-specific configs, organized as projects/{modality}/{GSE_ID}/
 templates/          Config templates for different input formats
 tests/              Test directory (mostly empty)
