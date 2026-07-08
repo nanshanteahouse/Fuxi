@@ -86,3 +86,6 @@ docs/tutorial/B_Walkthrough.md
 
 # ── User workspace (project configs, batch scripts, reports) ──
 projects/
+
+# ── Cross-paper dataset registry & pathway config (contains real GSM/condition data) ──
+cross_paper/*.yaml
