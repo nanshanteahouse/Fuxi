@@ -114,7 +114,7 @@ def ensure_gene_symbols(adata, log: object = None, species: str = "human"):
 
     # Rebuild .raw layer with the same gene set
     if adata.raw is not None:
-        raw = adata.raw.to_adata()[:, :].copy()
+        raw = adata.raw.to_adata()[:, adata.var_names].copy()
         raw.var_names = new_names
         if not keep.all():
             raw = raw[:, keep].copy()
