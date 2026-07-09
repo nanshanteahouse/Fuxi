@@ -26,31 +26,24 @@ from scipy.cluster.hierarchy import linkage, dendrogram
 from rna.tissue_ontologies import load_all_kb_markers
 from core.grn_tissue import compute_tf_relevance
 
-def _as_dense(adata, use_raw: bool = False):
-    """Return a dense (obs x var) expression matrix."""
-    src = adata.raw if use_raw else adata
-    X = src.X
-    if hasattr(X, 'toarray'):
-        X = X.toarray()
-    elif hasattr(X, 'todense'):
-        X = np.asarray(X.todense())
-    return X
-
 
 def build_pseudobulk(adata, group_col: str, use_raw: bool = True, log: object = None) -> pd.DataFrame:
     """Per-group mean expression -> (n_groups x n_genes) DataFrame.
 
-    If data are stored as log1p-transformed counts in adata.X and raw counts
-    in adata.raw, we work on raw counts and then add a pseudocount + log1p
-    before returning.  Otherwise we use .X directly.
+    Uses sparse-safe row indexing instead of converting the full matrix to dense.
     """
+    import scipy.sparse as sp
+
     if group_col not in adata.obs:
         if log:
             log.warning("%s not in adata.obs - using 'leiden'", group_col)
         group_col = 'leiden'
 
     groups = adata.obs[group_col].values
-    var_names = adata.raw.var_names if use_raw and adata.raw else adata.var_names
+    src = adata.raw if use_raw and adata.raw else adata
+    X = src.X
+    var_names = src.var_names
+    is_sparse = sp.issparse(X)
 
     if log:
         log.info("Pseudobulk: %d cells -> %d groups", adata.n_obs, len(adata.obs[group_col].cat.categories))
@@ -59,8 +52,6 @@ def build_pseudobulk(adata, group_col: str, use_raw: bool = True, log: object = 
     n_groups = len(unique_groups)
     n_genes = len(var_names)
 
-    X = _as_dense(adata, use_raw=use_raw)
-
     group_to_idx = {g: i for i, g in enumerate(unique_groups)}
     group_indices = np.array([group_to_idx[g] for g in groups])
 
@@ -68,7 +59,11 @@ def build_pseudobulk(adata, group_col: str, use_raw: bool = True, log: object = 
     for g_idx in range(n_groups):
         mask = group_indices == g_idx
         if mask.any():
-            pseudo[g_idx] = X[mask].mean(axis=0)
+            subset = X[mask]
+            if is_sparse:
+                pseudo[g_idx] = subset.mean(axis=0).A1
+            else:
+                pseudo[g_idx] = subset.mean(axis=0)
 
     pseudo = np.log1p(pseudo)
 
