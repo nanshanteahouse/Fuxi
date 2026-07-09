@@ -185,7 +185,7 @@ CFG.run_cci = True
 CFG.n_jobs = 0   # auto-detect
 CFG.random_seed = 42
 # CFG.force_csr = True           # 强制 CSR 稀疏矩阵格式
-# CFG.use_float32 = False        # 使用 float32 减少内存
+# CFG.use_float32 = True   # default; set False for float64
 # CFG.limit_blas_threads = True  # 限制 BLAS 线程数
 # CFG.scanpy_verbosity = 2       # Scanpy 日志级别 (0=error, 1=warning, 2=info)
 # CFG.h5ad_compression = 'gzip'  # h5ad 写入压缩

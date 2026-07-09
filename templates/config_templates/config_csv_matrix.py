@@ -187,7 +187,7 @@ CFG.run_cci = True
 CFG.n_jobs = 0   # auto-detect
 CFG.random_seed = 42
 # CFG.force_csr = True           # force CSR sparse matrix format
-# CFG.use_float32 = False        # use float32 to reduce memory
+# CFG.use_float32 = True   # default; set False for float64
 # CFG.limit_blas_threads = True  # limit BLAS threads
 # CFG.scanpy_verbosity = 2       # Scanpy log level (0=error, 1=warning, 2=info)
 # CFG.h5ad_compression = 'gzip'  # h5ad write compression

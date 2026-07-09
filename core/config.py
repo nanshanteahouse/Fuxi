@@ -675,7 +675,7 @@ class Config:
     run_cci: bool = True
     cci_method: str = "liana"              # 'liana' (LIANA+ rank_aggregate)
     cci_lr_database: str = "consensus"     # 'consensus' | 'cellphonedb' | 'cellchat' | 'celltalkdb' | 'ramilowski' | 'talklr'
-    cci_permutations: int = 1000           # permutation test iterations
+    cci_permutations: int = 100            # permutation test iterations (default 100)
     cci_n_top_interactions: int = 50       # top N interactions for heatmap / dotplot
     cci_spatial_method: str = "liana_spatial"  # (spatial) 'liana_spatial' — reserves 'commot' for future
     cci_spatial_distance: float = 0.0      # (spatial) 0 = use existing spatial_connectivities
@@ -695,7 +695,7 @@ class Config:
     random_seed: int = 42
     scanpy_verbosity: int = 2
     force_csr: bool = True
-    use_float32: bool = False
+    use_float32: bool = True
     h5ad_compression: str = "gzip"       # 'gzip' | 'lzf' | 'zstd'
     h5ad_tempdir: str = "/tmp/Fuxi"      # safe_write 临时目录
     cleanup_intermediates: bool = False  # ATAC: 自动删除上游中间 checkpoint
