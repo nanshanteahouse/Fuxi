@@ -53,8 +53,8 @@ __all__ = [
     "detect_modality",
     "_scan_insights_yamls",
     "_scan_project_dirs",
+    "_scan_data_root",
     "_find_data_only_entries",
-    "_reset_pipeline_status",
 ]
 
 logger = logging.getLogger(__name__)
@@ -186,6 +186,25 @@ def _scan_project_dirs(projects_dir: str) -> list[dict[str, Any]]:
     return entries
 
 
+def _scan_data_root(data_root: str) -> set[str]:
+    """Scan ``FUXI_DATA_ROOT`` for downloaded GSE directories.
+
+    Returns a set of GSE IDs (e.g. ``{"GSEXXXXXX"}``) that
+    have data directories present on disk.
+
+    Safe to call with empty string — returns empty set.
+    """
+    if not data_root:
+        return set()
+    root = Path(data_root)
+    if not root.exists():
+        return set()
+    return {
+        child.name
+        for child in root.iterdir()
+        if child.is_dir() and child.name.startswith("GSE")
+    }
+
 def _find_data_only_entries(
     scanned_gses: list[dict[str, Any]],
     all_paper_gse_ids: set[str],
@@ -248,9 +267,13 @@ def build_registry(
          groups.  Matches on ``(pmid, gse_id)`` pairs.
       1. Scan ``papers_dir/*/insights.yaml`` for paper metadata & geo_ids.
       2. Scan ``projects_dir/{rna,atac,spatial}/`` for GSE directories & configs.
-      3. Cross-reference: for each paper's geo_ids, look up matching GSE dirs.
-      4. Determine per-dataset status (``config_exists`` / ``not_configured`` /
-         ``data_not_downloaded``).
+      2.5 Scan ``FUXI_DATA_ROOT`` for downloaded GSE directories.
+      3. Cross-reference: for each paper's geo_ids, look up matching GSE dirs in
+         both projects_dir and data root.
+      4. Determine per-dataset status:
+         - ``config_exists`` — config file found in projects/{modality}/GSE/
+         - ``not_configured`` — data downloaded (in FUXI_DATA_ROOT) but no config
+         - ``data_not_downloaded`` — GSE found in neither projects_dir nor data root
       5. Detect GSE configs not linked to any paper (``data_only``).
       6. Merge experiments from old registry into new entries for matching
          ``(pmid, gse_id)`` pairs.
@@ -269,10 +292,10 @@ def build_registry(
             paper_dir: "2019_Menon_Nature_Com_..."
             ...
             datasets:
-              - gse_id: "GSE107618"
+              - gse_id: "GSEXXXXXX"
                 ...
         data_only_datasets:
-          - gse_id: "GSE999999"
+          - gse_id: "GSEXXXXXX"
             ...
     """
     # Phase 0 — load old registry to preserve hand-declared experiment groups
@@ -291,11 +314,16 @@ def build_registry(
     # Phase 2 — scan project GSE directories
     gse_entries = _scan_project_dirs(projects_dir)
 
+    # Phase 2.5 — scan data root for downloaded GSE directories
+    data_root = os.environ.get("FUXI_DATA_ROOT", "")
+    downloaded_gses = _scan_data_root(data_root) if data_root else set()
+    if downloaded_gses:
+        logger.info("Found %d GSE dirs in FUXI_DATA_ROOT", len(downloaded_gses))
+
     # Index GSE entries by GSE ID (one ID may appear in multiple modalities)
     gse_by_id: dict[str, list[dict[str, Any]]] = {}
     for gse in gse_entries:
         gse_by_id.setdefault(gse["gse_id"], []).append(gse)
-
     # Collect all GSE IDs referenced by papers
     all_paper_gse_ids: set[str] = set()
 
@@ -320,12 +348,20 @@ def build_registry(
                         notes="",
                     ))
             else:
-                datasets.append(DatasetEntry(
-                    gse_id=geo_id,
-                    status=DatasetStatus.DATA_NOT_DOWNLOADED,
-                    modality="rna",
-                    notes="GSE dataset directory not found in projects/",
-                ))
+                if geo_id in downloaded_gses:
+                    datasets.append(DatasetEntry(
+                        gse_id=geo_id,
+                        status=DatasetStatus.NOT_CONFIGURED,
+                        modality="rna",
+                        notes="Data downloaded, no pipeline config",
+                    ))
+                else:
+                    datasets.append(DatasetEntry(
+                        gse_id=geo_id,
+                        status=DatasetStatus.DATA_NOT_DOWNLOADED,
+                        modality="rna",
+                        notes="GSE data not found in FUXI_DATA_ROOT",
+                    ))
 
         insights_status = "no_geo" if not pinfo["geo_ids"] else "generated"
 

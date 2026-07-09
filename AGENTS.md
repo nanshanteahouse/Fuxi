@@ -31,8 +31,31 @@ python core/run_reproduce.py <paper_dir>           # reproduce a single paper's 
 | Paper insights docs | `docs/paper_insights_zh-CN.md` |
 | Project configs | `projects/{modality}/{GSE_ID}/config_*.py` |
 | Paper index | `projects/papers/paper_index.html`, `projects/papers/registry.yaml` |
+## Paper research workflow
+
+When running a pipeline or investigating a GSE dataset, always consult
+local paper materials first:
+
+1. **Check registry** — find papers linked to a GSE:
+   `python core/paper_registry.py --verify` for overview, or grep
+   `projects/papers/registry.yaml` for `gse_id:. <GSE_ID>`.
+2. **Read local insights** — `projects/papers/<paper_dir>/insights.yaml`
+   contains AI-extracted metadata: species, tissue, modalities,
+   experimental design, data access, key findings.
+3. **Optional cross-validate with NCBI** — if local data seems incomplete,
+   `python core/paper_insights.py --pmid <PMID>` fetches PMC full-text
+   XML for fresh AI interpretation.
+
+   > Note: 41 retina papers are already indexed in the registry with
+   > verified geo_ids mapped to 60 GSE datasets (sourced from
+   > `FUXI_DATA_ROOT/dataset_audit.md`). Most papers have PMC XML cached
+   > in their directories; only 3 required PDF fallback.
+
+
 ## Critical conventions
 
+- Use `.venv/bin/python` for all Python commands unless explicitly told otherwise
+- Always source `.env` before running pipeline scripts: `set -a && source .env && set +a`
 - Steps run as **subprocesses** via `run_pipeline.py` — never imported directly
 - Every step script must add repo root to `sys.path`: `sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))`
 - Config loaded dynamically: `CFG = resolve_config(args.config)`
