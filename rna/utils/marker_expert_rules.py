@@ -145,12 +145,18 @@ def apply_expert_rules(
         rules, key=lambda r: r.get("priority", 0), reverse=True
     )
     # Build a fast lookup: gene_name -> logfoldchanges.
+    # Normalise gene names to strip Macaca _p/_n/.digit suffixes so KB
+    # rule conditions (which use canonical human symbols) match correctly.
+    from rna.utils.marker_scoring import _normalize_gene_name
     marker_map: Dict[str, float] = {}
     for _, row in de_subset.iterrows():
-        gene_name = str(row["names"])
-        marker_map[gene_name] = float(row["logfoldchanges"])
+        gene_name = _normalize_gene_name(str(row["names"]))
+        # Keep the highest logFC when suffix-stripping produces duplicates.
+        lfc = float(row["logfoldchanges"])
+        if gene_name not in marker_map or lfc > marker_map[gene_name]:
+            marker_map[gene_name] = lfc
 
-    cluster_genes = set(de_subset["names"].tolist())
+    cluster_genes = set(_normalize_gene_name(g) for g in de_subset["names"].tolist())
 
     all_matched: list[Dict[str, Any]] = []
 

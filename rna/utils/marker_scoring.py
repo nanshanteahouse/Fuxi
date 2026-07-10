@@ -68,6 +68,35 @@ import pandas as pd
 from scipy.stats import fisher_exact
 
 logger = logging.getLogger(__name__)
+# ── Gene name normalisation for cross-species KB matching ────────────
+# Macaca fascicularis gene symbols carry Ensembl annotation suffixes:
+#   _p = paralog, _n = novel gene (e.g. GAD1_p, GAD1_n2)
+# These prevent KB marker matching because KB entries use canonical
+# human gene symbols.  Normalise by stripping these suffixes before
+# comparison.
+# NOTE: .digit suffixes (e.g. RHO.1, RP11-34P13.7) are NOT stripped
+# here because they are also part of real human gene names and
+# cannot be disambiguated reliably.
+_RE_MACACA_SUFFIX = re.compile(r'_[pn]\d*$')
+
+
+def _normalize_gene_name(name: str) -> str:
+    """Strip Macaca-specific Ensembl suffixes (``_p``, ``_n``) from gene names.
+
+    Returns the base gene symbol for KB matching.  Only affects names
+    ending with known Ensembl Macaca annotation suffixes; clean human /
+    mouse symbols pass through unchanged.
+
+    Examples
+    --------
+    >>> _normalize_gene_name('GAD1_p')
+    'GAD1'
+    >>> _normalize_gene_name('GAD2_n')
+    'GAD2'
+    >>> _normalize_gene_name('POU4F2')
+    'POU4F2'
+    """
+    return _RE_MACACA_SUFFIX.sub('', str(name))
 
 # ── Consensus-weight map ──────────────────────────────────────────────
 # Mirrors merge.compute_consensus_level() — maps qualitative label to a
@@ -668,7 +697,7 @@ def score_cluster_against_kb(kb: Dict[str, Any],
     # developmental / organoid data (KB self-audit Tier 0 finding).
     top_n = 20
     top_markers = _filtered.head(top_n).copy()
-    top_gene_set = set(top_markers["names"].tolist())
+    top_gene_set = set(_normalize_gene_name(g) for g in top_markers["names"].tolist())
     top_in_bg = top_gene_set & all_type_markers
 
     if adaptive_top_n:
