@@ -103,7 +103,7 @@ def load_all_sources(sources_dir: Optional[str] = None) -> List[Dict[str, Any]]:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def compute_consensus_level(source_count: int, n_sources: int = 7) -> str:
+def compute_consensus_level(source_count: int) -> str:
     """Map a marker's source-support count to a qualitative label.
 
     Thresholds (absolute counts across all available sources):
@@ -117,7 +117,6 @@ def compute_consensus_level(source_count: int, n_sources: int = 7) -> str:
     ----------
     source_count : int
         Number of distinct sources that list this marker for the type.
-    n_sources : int
         Total number of source files available (informational, 7 by default).
 
     Returns
@@ -565,9 +564,7 @@ def build_final_kb(
         for gene, info in type_data.get("add", {}).items():
             gene_sources.setdefault(gene, set()).update(info["source_ids"])
         for gene, src_set in gene_sources.items():
-            consensus_levels[gene] = compute_consensus_level(
-                len(src_set), total_sources
-            )
+            consensus_levels[gene] = compute_consensus_level(len(src_set))
 
         # Resolve class/order — use most common; fall back to sorted list
         classes_list = sorted(type_data.get("classes", set()))
