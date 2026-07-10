@@ -1,0 +1,892 @@
+# NOTE: major cell type markers verified against mmc2.xlsx supplement (Liang 2023, Cell Genomics)
+
+source_meta:
+  id: 'chen2023'
+  short_name: "Liang 2023 Cell Genomics"
+  pmid: '37388908'
+  journal: 'bioRxiv / Nature Communications'
+  year: 2023
+  species:
+  - 'Homo sapiens'
+  tissue: 'retina'
+  regions:
+  - 'fovea'
+  - 'macula'
+  - 'periphery'
+  n_cells: 250000
+  n_subtypes: 60
+  n_groups: 6
+  class: 'Mammalia'
+  order: 'Primates'
+
+markers:
+  Rod_Photoreceptor:
+    confirm:
+      PDE6A:
+        - '37388908'
+      RP11-35J10.5:
+        - '37388908'
+      SAG:
+        - '37388908'
+      ANO2:
+        - '37388908'
+      PPEF2:
+        - '37388908'
+      CNGB1:
+        - '37388908'
+      EYS:
+        - '37388908'
+      ABCA4:
+        - '37388908'
+      RP11-171L9.1:
+        - '37388908'
+      PDE6G:
+        - '37388908'
+    add:
+      USH2A:
+        - '37388908'
+      SYNE2:
+        - '37388908'
+      MPP4:
+        - '37388908'
+      PRPH2:
+        - '37388908'
+      TTC39C:
+        - '37388908'
+      RHO:
+        - '37388908'
+      IMPG1:
+        - '37388908'
+      RP11-90C1.1:
+        - '37388908'
+      RP1:
+        - '37388908'
+      COL25A1:
+        - '37388908'
+      AIPL1:
+        - '37388908'
+      THSD7B:
+        - '37388908'
+      PCDH15:
+        - '37388908'
+      KIFC3:
+        - '37388908'
+      DDC:
+        - '37388908'
+      PTPN13:
+        - '37388908'
+      PROM1:
+        - '37388908'
+      CASZ1:
+        - '37388908'
+      ARHGAP10:
+        - '37388908'
+      ESRRB:
+        - '37388908'
+    refine:
+      CRX:
+        note: 'pan-photoreceptor; detected in both snRNA-seq and snATAC-seq'
+        threshold: 'log2FC > 1.0'
+        pmid: '37388908'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+        - mmc2_major_markers_RNA
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Cone_Photoreceptor:
+    confirm:
+      KCNB2:
+        - '37388908'
+      CTD-2050N2.1:
+        - '37388908'
+      CNGB3:
+        - '37388908'
+      ARR3:
+        - '37388908'
+      PEX5L:
+        - '37388908'
+      RP11-434D9.1:
+        - '37388908'
+      GRK7:
+        - '37388908'
+      SEMA6D:
+        - '37388908'
+      PDE6H:
+        - '37388908'
+      RP11-16D22.2:
+        - '37388908'
+    add:
+      GUCA1C:
+        - '37388908'
+      NEDD4L:
+        - '37388908'
+      CTD-2034I21.1:
+        - '37388908'
+      LINC00457:
+        - '37388908'
+      LRFN2:
+        - '37388908'
+      PPP4R4:
+        - '37388908'
+      SLC24A2:
+        - '37388908'
+      AC013463.2:
+        - '37388908'
+      RAB41:
+        - '37388908'
+      WWC1:
+        - '37388908'
+      FAM19A4:
+        - '37388908'
+      EMB:
+        - '37388908'
+      MSR1:
+        - '37388908'
+      GALNT13:
+        - '37388908'
+      PRELID2:
+        - '37388908'
+      GNAT2:
+        - '37388908'
+      EGFLAM:
+        - '37388908'
+      XYLT1:
+        - '37388908'
+      PDE6C:
+        - '37388908'
+      TDRG1:
+        - '37388908'
+    refine:
+      OPN1LW:
+        note: 'M/L cone opsin; chromatin accessibility confirmed at OPN1LW locus'
+        threshold: 'log2FC > 1.5'
+        pmid: '37388908'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+        - mmc2_major_markers_RNA
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  RGC:
+    confirm:
+      RBPMS:
+        - '37388908'
+      HS6ST3:
+        - '37388908'
+      EBF1:
+        - '37388908'
+      PRKG1:
+        - '37388908'
+      GALNTL6:
+        - '37388908'
+      SLC4A4:
+        - '37388908'
+      SGCZ:
+        - '37388908'
+      DSCAM:
+        - '37388908'
+      SYN3:
+        - '37388908'
+      PLCB1:
+        - '37388908'
+    add:
+      MIAT:
+        - '37388908'
+      RBFOX1:
+        - '37388908'
+      RP11-624C23.1:
+        - '37388908'
+      KCNC2:
+        - '37388908'
+      MEG3:
+        - '37388908'
+      TMEM163:
+        - '37388908'
+      CLSTN2:
+        - '37388908'
+      LRP1B:
+        - '37388908'
+      CNTNAP5:
+        - '37388908'
+      WBSCR17:
+        - '37388908'
+      SNRPN:
+        - '37388908'
+      CDH18:
+        - '37388908'
+      LRFN5:
+        - '37388908'
+      ROBO2:
+        - '37388908'
+      CACNA2D3:
+        - '37388908'
+      ANK1:
+        - '37388908'
+      NEAT1:
+        - '37388908'
+      IL1RAPL2:
+        - '37388908'
+      CACNA1B:
+        - '37388908'
+      AC010127.3:
+        - '37388908'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+        - GSE118614
+      supplement_verified:
+        - mmc2_major_markers_RNA
+      cross_species_validated:
+        NEFM: true
+        POU4F1: true
+        POU4F2: true
+        RBPMS: false
+        ELAVL4: true
+        NEFL: true
+        TUBB3: true
+        BNC2: false
+        EOMES: false
+        IRX3: false
+        ISL1: true
+        NEUROD2: false
+        OPN4: false
+        POU4F3: false
+        SLC17A6: false
+        SNCG: true
+        STMN1: false
+        TBR1: false
+        THY1: false
+        GAP43: true
+        DCX: true
+        AIPL1: false
+        LAPTM4B: false
+        PCP2: false
+        UNC119: false
+        ATOH7: false
+        EBF1: true
+        EBF3: true
+        ELAVL2: true
+        KLHL1: false
+        POU6F2: true
+        RBFOX3: false
+      last_audited: 2026-07-10
+      flagged: true
+      notes: ''
+      pct_expressed:
+        NEFM: 0.6758
+        POU4F1: 0.3358
+        POU4F2: 0.3148
+        ELAVL4: 0.7963
+        NEFL: 0.7107
+        TUBB3: 0.9719
+        ISL1: 0.8001
+        SNCG: 0.6934
+        GAP43: 0.8961
+        DCX: 0.4048
+        EBF1: 0.7137
+        EBF3: 0.3564
+        ELAVL2: 0.4402
+        POU6F2: 0.5229
+      flagged_reason: 'pct_expression_below_threshold'
+  Bipolar_Cell:
+    confirm:
+      CA10:
+        - '37388908'
+      NETO1:
+        - '37388908'
+      DOK6:
+        - '37388908'
+      GRIK1:
+        - '37388908'
+      IQCJ-SCHIP1:
+        - '37388908'
+      CDH20:
+        - '37388908'
+      TRPM1:
+        - '37388908'
+      ZNF804B:
+        - '37388908'
+      ST18:
+        - '37388908'
+      DGKB:
+        - '37388908'
+    add:
+      FAM135B:
+        - '37388908'
+      AF165138.7:
+        - '37388908'
+      LPHN2:
+        - '37388908'
+      LRRC7:
+        - '37388908'
+      KCNMA1:
+        - '37388908'
+      SAMSN1:
+        - '37388908'
+      CHN2:
+        - '37388908'
+      MCC:
+        - '37388908'
+      GRM5:
+        - '37388908'
+      KHDRBS3:
+        - '37388908'
+      EDIL3:
+        - '37388908'
+      KCNAB1:
+        - '37388908'
+      PLXDC1:
+        - '37388908'
+      BCAT1:
+        - '37388908'
+      VSX1:
+        - '37388908'
+      NYAP2:
+        - '37388908'
+      RYR2:
+        - '37388908'
+      PDE4B:
+        - '37388908'
+      GRM6:
+        - '37388908'
+      OPCML:
+        - '37388908'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+        - GSE118614
+      supplement_verified:
+        - mmc2_major_markers_RNA
+      cross_species_validated:
+        PRKCA: false
+        TRPM1: true
+        VSX1: false
+        GRM6: true
+        OTX2: true
+        VSX2: true
+        TMEM215: false
+        CABP5: false
+        GRIK1: false
+        GNAO1: true
+        GNG13: true
+        ISL1: true
+        LRIT3: false
+        NYX: false
+        PKC: false
+        SCGN: false
+        SLC4A5: false
+        CHN2: false
+        DOK6: false
+        EFR3A: false
+        LRTM1: false
+        PRDM8: false
+        RGS16: false
+        SLC38A1: false
+        CA10: false
+        FSTL5: false
+        GABRR3: false
+        IGSF21: false
+        PTPRR: false
+        SLC4A10: false
+      last_audited: 2026-07-10
+      flagged: true
+      notes: ''
+      pct_expressed:
+        TRPM1: 0.3104
+        GRM6: 0.4552
+        OTX2: 0.5834
+        VSX2: 0.3786
+        GNAO1: 0.3389
+        GNG13: 0.3579
+        ISL1: 0.5933
+      flagged_reason: 'pct_expression_below_threshold'
+  Amacrine_Cell:
+    confirm:
+      DLGAP1:
+        - '37388908'
+      GRIP1:
+        - '37388908'
+      IL1RAPL1:
+        - '37388908'
+      GRM8:
+        - '37388908'
+      RBFOX1:
+        - '37388908'
+      NRXN1:
+        - '37388908'
+      RP11-123O10.4:
+        - '37388908'
+      SYNPR:
+        - '37388908'
+      LPHN3:
+        - '37388908'
+      FAM155A:
+        - '37388908'
+    add:
+      GRIA4:
+        - '37388908'
+      CNTNAP2:
+        - '37388908'
+      PTPRK:
+        - '37388908'
+      PAM:
+        - '37388908'
+      ADCY8:
+        - '37388908'
+      ZFPM2:
+        - '37388908'
+      DPP6:
+        - '37388908'
+      CDH18:
+        - '37388908'
+      PHACTR1:
+        - '37388908'
+      ASIC2:
+        - '37388908'
+      RALYL:
+        - '37388908'
+      CACNB4:
+        - '37388908'
+      AFF3:
+        - '37388908'
+      ANKS1B:
+        - '37388908'
+      TENM4:
+        - '37388908'
+      CACNA1A:
+        - '37388908'
+      FAT3:
+        - '37388908'
+      LPPR1:
+        - '37388908'
+      MEG3:
+        - '37388908'
+      EFNA5:
+        - '37388908'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+        - GSE118614
+      supplement_verified:
+        - mmc2_major_markers_RNA
+      cross_species_validated:
+        GAD1: false
+        GAD2: true
+        SLC6A9: false
+        TFAP2A: true
+        ELAVL3: true
+        SLC6A1: true
+        TFAP2B: true
+        CALB2: false
+        GLRA1: false
+        GLRA2: false
+        MEIS2: true
+        NPY: false
+        PTH2: false
+        SLC32A1: false
+        TCF4: true
+        TFAP2C: false
+        VIP: false
+        C1QL2: false
+        CACNA2D2: false
+        CARTPT: false
+        GABRA2: false
+        MIAT: false
+        PAPPA: false
+        CALB1: false
+        ASIC2: false
+        CACNA1D: false
+        DPP6: false
+        MDGA2: false
+        MYT1L: false
+        NRP1: false
+        PDE4D: false
+        TENM2: false
+      last_audited: 2026-07-10
+      flagged: true
+      notes: ''
+      pct_expressed:
+        GAD2: 0.387
+        TFAP2A: 0.3528
+        ELAVL3: 0.7487
+        SLC6A1: 0.418
+        TFAP2B: 0.7359
+        MEIS2: 0.5156
+        TCF4: 0.3645
+      flagged_reason: 'pct_expression_below_threshold'
+  Horizontal_Cell:
+    confirm:
+      FRMPD4:
+        - '37388908'
+      PCSK6:
+        - '37388908'
+      TNR:
+        - '37388908'
+      SNTG2:
+        - '37388908'
+      ONECUT1:
+        - '37388908'
+      ADAMTS17:
+        - '37388908'
+      ONECUT2:
+        - '37388908'
+      VAT1L:
+        - '37388908'
+      DOCK10:
+        - '37388908'
+      RASSF8:
+        - '37388908'
+    add:
+      SEMA5A:
+        - '37388908'
+      CACNA1C:
+        - '37388908'
+      SGCD:
+        - '37388908'
+      CMYA5:
+        - '37388908'
+      GRIA3:
+        - '37388908'
+      RYR3:
+        - '37388908'
+      TPM3:
+        - '37388908'
+      ADCY2:
+        - '37388908'
+      RHOBTB1:
+        - '37388908'
+      HECW1:
+        - '37388908'
+      NRG1:
+        - '37388908'
+      AC026150.5:
+        - '37388908'
+      FBXL7:
+        - '37388908'
+      PCSK5:
+        - '37388908'
+      KCNH7:
+        - '37388908'
+      MEGF11:
+        - '37388908'
+      GALNT13:
+        - '37388908'
+      TENM2:
+        - '37388908'
+      CACNG3:
+        - '37388908'
+      PLXNA2:
+        - '37388908'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+        - GSE118614
+      supplement_verified:
+        - mmc2_major_markers_RNA
+      cross_species_validated:
+        ONECUT1: false
+        ONECUT2: true
+        PROX1: false
+        CALB1: false
+        LHX1: false
+        EBF1: false
+        ONECUT3: false
+        PRDM6: false
+        TSHZ2: false
+        FRMPD4: false
+        NDFIP1: false
+        CNTN4: false
+        MEGF10: false
+        NDST3: false
+        NTRK2: false
+        STMN2: true
+        SYN3: false
+        TFAP2B: true
+      last_audited: 2026-07-10
+      flagged: true
+      notes: ''
+      pct_expressed:
+        ONECUT2: 0.7118
+        STMN2: 0.8629
+        TFAP2B: 0.665
+      flagged_reason: 'pct_expression_below_threshold'
+  Muller_Glia:
+    confirm:
+      WIF1:
+        - '37388908'
+      HKDC1:
+        - '37388908'
+      TF:
+        - '37388908'
+      FOXP2:
+        - '37388908'
+      GABRG3:
+        - '37388908'
+      SLC1A3:
+        - '37388908'
+      TRDN:
+        - '37388908'
+      GLUL:
+        - '37388908'
+      SORCS1:
+        - '37388908'
+      CPA6:
+        - '37388908'
+    add:
+      RGR:
+        - '37388908'
+      RLBP1:
+        - '37388908'
+      FRZB:
+        - '37388908'
+      RP11-430C1.1:
+        - '37388908'
+      APOE:
+        - '37388908'
+      TRPM3:
+        - '37388908'
+      PRKG1:
+        - '37388908'
+      EGF:
+        - '37388908'
+      LINC00478:
+        - '37388908'
+      AC133680.1:
+        - '37388908'
+      RARB:
+        - '37388908'
+      CLU:
+        - '37388908'
+      DACH1:
+        - '37388908'
+      CTNNA2:
+        - '37388908'
+      KIAA1217:
+        - '37388908'
+      PLCE1:
+        - '37388908'
+      FLT1:
+        - '37388908'
+      SULF1:
+        - '37388908'
+      HES1:
+        - '37388908'
+      MYO3A:
+        - '37388908'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+        - GSE118614
+      supplement_verified:
+        - mmc2_major_markers_RNA
+      cross_species_validated:
+        GFAP: false
+        GLUL: false
+        RLBP1: true
+        SLC1A3: true
+        VIM: true
+        CLU: false
+        CRYAB: false
+        APOE: true
+        AQP4: false
+        CRYM: true
+        CST3: true
+        DKK3: true
+        NFIA: false
+        SOX2: false
+        CRABP1: false
+        FRZB: false
+        GPM6B: true
+        GPX3: false
+        PTGDS: false
+        RGR: false
+        TF: false
+        WIF1: false
+        ADAMTS6: false
+        GLI3: false
+        PARD3B: false
+        PCDH11X: false
+        RARB: false
+        SAT1: true
+        SORCS1: false
+        SPON1: false
+        ASCL1: false
+      last_audited: 2026-07-10
+      flagged: true
+      notes: ''
+      pct_expressed:
+        RLBP1: 0.6548
+        SLC1A3: 0.6454
+        VIM: 0.3219
+        APOE: 0.9049
+        CRYM: 0.6686
+        CST3: 0.4175
+        DKK3: 0.4334
+        GPM6B: 0.6152
+        SAT1: 0.6444
+      flagged_reason: 'pct_expression_below_threshold'
+  Astrocyte:
+    confirm:
+      WIF1:
+        - '37388908'
+      ERBB4:
+        - '37388908'
+      LINC00511:
+        - '37388908'
+      RP11-649A16.1:
+        - '37388908'
+      TNC:
+        - '37388908'
+      DGKG:
+        - '37388908'
+      SLC4A4:
+        - '37388908'
+      LAMA2:
+        - '37388908'
+      PAX8:
+        - '37388908'
+      NPAS3:
+        - '37388908'
+    add:
+      GFAP:
+        - '37388908'
+      SLC1A3:
+        - '37388908'
+      PAX5:
+        - '37388908'
+      GLUL:
+        - '37388908'
+      HES1:
+        - '37388908'
+      RP11-141M1.3:
+        - '37388908'
+      KAZN:
+        - '37388908'
+      CASC15:
+        - '37388908'
+      LINC00478:
+        - '37388908'
+      SORCS1:
+        - '37388908'
+      EBF1:
+        - '37388908'
+      PTPRJ:
+        - '37388908'
+      NCALD:
+        - '37388908'
+      PAX2:
+        - '37388908'
+      SLC35F1:
+        - '37388908'
+      CLDN11:
+        - '37388908'
+      STARD13:
+        - '37388908'
+      RBMS3:
+        - '37388908'
+      DCLK1:
+        - '37388908'
+      NAV2:
+        - '37388908'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+        - mmc2_major_markers_RNA
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+
+novel_types:
+  - name: Macula_Specific_Cone
+    parent: Cone_Photoreceptor
+    markers:
+      - OPN1LW
+      - ARR3
+      - GNAT2
+      - PDE6H
+    species:
+      - Homo sapiens
+    source: chen2023
+  - name: Peripheral_Amacrine
+    parent: Amacrine_Cell
+    markers:
+      - SLC6A1
+      - GAD1
+      - TFAP2A
+    species:
+      - Homo sapiens
+    source: chen2023
+
+expert_rules:
+  - priority: 1
+    condition:
+      markers_present:
+        RHO: 1.0
+        NRL: 1.0
+    action: Rod_Photoreceptor
+    source: chen2023
+    notes: 'RHO+NRL co-expression defines rod photoreceptors in multi-omics atlas'
+  - priority: 1
+    condition:
+      markers_present:
+        ARR3: 1.0
+        GNAT2: 1.0
+    action: Cone_Photoreceptor
+    source: chen2023
+    notes: 'ARR3+GNAT2 co-expression defines cone photoreceptors in multi-omics atlas'
+  - priority: 1
+    condition:
+      markers_present:
+        RLBP1: 1.0
+        GLUL: 1.0
+    action: Muller_Glia
+    source: chen2023
+    notes: 'RLBP1+GLUL co-expression defines Muller glia in multi-omics atlas'
+  - priority: 1
+    condition:
+      markers_present:
+        POU4F2: 1.0
+        NEFM: 1.0
+    action: RGC
+    source: chen2023
+    notes: 'POU4F2+NEFM co-expression defines RGCs in multi-omics atlas'
+  - priority: 1
+    condition:
+      markers_present:
+        ONECUT1: 1.0
+        PROX1: 1.0
+    action: Horizontal_Cell
+    source: chen2023
+    notes: 'ONECUT1+PROX1 co-expression defines horizontal cells'
+

@@ -1,0 +1,742 @@
+source_meta:
+  id: hoang2023
+  short_name: Hoang 2023 ASCL1
+  pmid: '00000000'
+  journal: preprint / HRCA
+  year: 2023
+  species:
+  - Homo sapiens
+  tissue: retina
+  regions:
+  - fetal retina
+  - MG culture
+  n_cells: 50000
+  n_subtypes: 18
+  n_groups: 9
+  class: Mammalia
+  order: Primates
+markers:
+  Muller_Glia:
+    confirm:
+      GLUL:
+      - GSE246169
+      RLBP1:
+      - GSE246169
+      VIM:
+      - GSE246169
+    add:
+      CLU:
+      - GSE246169
+      CRYAB:
+      - GSE246169
+      SLC1A3:
+      - GSE246169
+    refine:
+      ASCL1:
+        note: ectopic ASCL1 expression drives MG reprogramming toward neuronal fate
+        threshold: log2FC > 2.0 (overexpression)
+        pmid: GSE246169
+      RLBP1:
+        note: canonical MG marker; downregulated upon ASCL1-induced reprogramming
+        threshold: log2FC > 1.0
+        pmid: GSE246169
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified: []
+      cross_species_validated:
+        GFAP: false
+        GLUL: false
+        RLBP1: true
+        SLC1A3: true
+        VIM: true
+        CLU: false
+        CRYAB: false
+        APOE: true
+        AQP4: false
+        CRYM: true
+        CST3: true
+        DKK3: true
+        NFIA: false
+        SOX2: false
+        CRABP1: false
+        FRZB: false
+        GPM6B: true
+        GPX3: false
+        PTGDS: false
+        RGR: false
+        TF: false
+        WIF1: false
+        ADAMTS6: false
+        GLI3: false
+        PARD3B: false
+        PCDH11X: false
+        RARB: false
+        SAT1: true
+        SORCS1: false
+        SPON1: false
+        ASCL1: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        RLBP1: 0.6548
+        SLC1A3: 0.6454
+        VIM: 0.3219
+        APOE: 0.9049
+        CRYM: 0.6686
+        CST3: 0.4175
+        DKK3: 0.4334
+        GPM6B: 0.6152
+        SAT1: 0.6444
+      flagged_reason: pct_expression_below_threshold
+  RPC:
+    confirm:
+      PAX6:
+      - GSE246169
+      SOX2:
+      - GSE246169
+      VSX2:
+      - GSE246169
+    add:
+      HES1:
+      - GSE246169
+      MKI67:
+      - GSE246169
+      NOTCH1:
+      - GSE246169
+    refine:
+      MKI67:
+        note: proliferation marker; high in proliferating RPCs and ASCL1-reprogrammed
+          MG
+        threshold: log2FC > 1.5
+        pmid: GSE246169
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified: []
+      cross_species_validated:
+        PAX6: true
+        SOX2: true
+        VSX2: true
+        HES1: true
+        NOTCH1: false
+        MKI67: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        PAX6: 0.6856
+        SOX2: 0.4483
+        VSX2: 0.3751
+        HES1: 0.8082
+      flagged_reason: pct_expression_below_threshold
+  Proliferating_MG:
+    confirm:
+      MKI67:
+      - GSE246169
+      PCNA:
+      - GSE246169
+      TOP2A:
+      - GSE246169
+    add:
+      ASCL1:
+      - GSE246169
+      DLL1:
+      - GSE246169
+      HES6:
+      - GSE246169
+    refine:
+      ASCL1:
+        note: proneural factor; induces MG re-entry into cell cycle and neurogenesis
+        threshold: log2FC > 1.5
+        pmid: GSE246169
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Rod_Photoreceptor:
+    confirm:
+      GNAT1:
+      - GSE246169
+      NRL:
+      - GSE246169
+      RHO:
+      - GSE246169
+    add:
+      NR2E3:
+      - GSE246169
+      PDE6B:
+      - GSE246169
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Cone_Photoreceptor:
+    confirm:
+      ARR3:
+      - GSE246169
+      GNAT2:
+      - GSE246169
+      RCVRN:
+      - GSE246169
+    add:
+      PDE6C:
+      - GSE246169
+      THRB:
+      - GSE246169
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  RGC:
+    confirm:
+      ELAVL4:
+      - GSE246169
+      NEFM:
+      - GSE246169
+      POU4F2:
+      - GSE246169
+    add:
+      GAP43:
+      - GSE246169
+      TUBB3:
+      - GSE246169
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified: []
+      cross_species_validated:
+        NEFM: true
+        POU4F1: true
+        POU4F2: true
+        RBPMS: false
+        ELAVL4: true
+        NEFL: true
+        TUBB3: true
+        BNC2: false
+        EOMES: false
+        IRX3: false
+        ISL1: true
+        NEUROD2: false
+        OPN4: false
+        POU4F3: false
+        SLC17A6: false
+        SNCG: true
+        STMN1: false
+        TBR1: false
+        THY1: false
+        GAP43: true
+        DCX: true
+        AIPL1: false
+        LAPTM4B: false
+        PCP2: false
+        UNC119: false
+        ATOH7: false
+        EBF1: true
+        EBF3: true
+        ELAVL2: true
+        KLHL1: false
+        POU6F2: true
+        RBFOX3: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        NEFM: 0.6758
+        POU4F1: 0.3358
+        POU4F2: 0.3148
+        ELAVL4: 0.7963
+        NEFL: 0.7107
+        TUBB3: 0.9719
+        ISL1: 0.8001
+        SNCG: 0.6934
+        GAP43: 0.8961
+        DCX: 0.4048
+        EBF1: 0.7137
+        EBF3: 0.3564
+        ELAVL2: 0.4402
+        POU6F2: 0.5229
+      flagged_reason: pct_expression_below_threshold
+  Bipolar_Cell:
+    confirm:
+      PRKCA:
+      - GSE246169
+      TRPM1:
+      - GSE246169
+      VSX1:
+      - GSE246169
+    add:
+      GRM6:
+      - GSE246169
+      OTX2:
+      - GSE246169
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified: []
+      cross_species_validated:
+        PRKCA: false
+        TRPM1: true
+        VSX1: false
+        GRM6: true
+        OTX2: true
+        VSX2: true
+        TMEM215: false
+        CABP5: false
+        GRIK1: false
+        GNAO1: true
+        GNG13: true
+        ISL1: true
+        LRIT3: false
+        NYX: false
+        PKC: false
+        SCGN: false
+        SLC4A5: false
+        CHN2: false
+        DOK6: false
+        EFR3A: false
+        LRTM1: false
+        PRDM8: false
+        RGS16: false
+        SLC38A1: false
+        CA10: false
+        FSTL5: false
+        GABRR3: false
+        IGSF21: false
+        PTPRR: false
+        SLC4A10: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        TRPM1: 0.3104
+        GRM6: 0.4552
+        OTX2: 0.5834
+        VSX2: 0.3786
+        GNAO1: 0.3389
+        GNG13: 0.3579
+        ISL1: 0.5933
+      flagged_reason: pct_expression_below_threshold
+  Amacrine_Cell:
+    confirm:
+      GAD1:
+      - GSE246169
+      GAD2:
+      - GSE246169
+      TFAP2A:
+      - GSE246169
+    add:
+      CALB2:
+      - GSE246169
+      SLC6A9:
+      - GSE246169
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified: []
+      cross_species_validated:
+        GAD1: false
+        GAD2: true
+        SLC6A9: false
+        TFAP2A: true
+        ELAVL3: true
+        SLC6A1: true
+        TFAP2B: true
+        CALB2: false
+        GLRA1: false
+        GLRA2: false
+        MEIS2: true
+        NPY: false
+        PTH2: false
+        SLC32A1: false
+        TCF4: true
+        TFAP2C: false
+        VIP: false
+        C1QL2: false
+        CACNA2D2: false
+        CARTPT: false
+        GABRA2: false
+        MIAT: false
+        PAPPA: false
+        CALB1: false
+        ASIC2: false
+        CACNA1D: false
+        DPP6: false
+        MDGA2: false
+        MYT1L: false
+        NRP1: false
+        PDE4D: false
+        TENM2: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        GAD2: 0.387
+        TFAP2A: 0.3528
+        ELAVL3: 0.7487
+        SLC6A1: 0.418
+        TFAP2B: 0.7359
+        MEIS2: 0.5156
+        TCF4: 0.3645
+      flagged_reason: pct_expression_below_threshold
+  Horizontal_Cell:
+    confirm:
+      ONECUT1:
+      - GSE246169
+      ONECUT2:
+      - GSE246169
+      PROX1:
+      - GSE246169
+    add:
+      CALB1:
+      - GSE246169
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified: []
+      cross_species_validated:
+        ONECUT1: false
+        ONECUT2: true
+        PROX1: false
+        CALB1: false
+        LHX1: false
+        EBF1: false
+        ONECUT3: false
+        PRDM6: false
+        TSHZ2: false
+        FRMPD4: false
+        NDFIP1: false
+        CNTN4: false
+        MEGF10: false
+        NDST3: false
+        NTRK2: false
+        STMN2: true
+        SYN3: false
+        TFAP2B: true
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        ONECUT2: 0.7118
+        STMN2: 0.8629
+        TFAP2B: 0.665
+      flagged_reason: pct_expression_below_threshold
+  Microglia:
+    confirm:
+      AIF1:
+      - GSE246169
+      CSF1R:
+      - GSE246169
+      P2RY12:
+      - GSE246169
+    add:
+      CX3CR1:
+      - GSE246169
+      ITGAM:
+      - GSE246169
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  RPE:
+    confirm:
+      BEST1:
+      - GSE246169
+      LRAT:
+      - GSE246169
+      RPE65:
+      - GSE246169
+    add:
+      TIMP3:
+      - GSE246169
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified: []
+      cross_species_validated:
+        BEST1: false
+        LRAT: false
+        RPE65: false
+        CRALBP: false
+        RDH10: false
+        TIMP3: false
+        DCT: false
+        PMEL: false
+        TYRP1: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      flagged_reason: pct_expression_below_threshold
+  Vascular_Endothelial:
+    confirm:
+      CDH5:
+      - GSE246169
+      PECAM1:
+      - GSE246169
+      VWF:
+      - GSE246169
+    add:
+      CLDN5:
+      - GSE246169
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Pericyte:
+    confirm:
+      ACTA2:
+      - GSE246169
+      CSPG4:
+      - GSE246169
+      PDGFRB:
+      - GSE246169
+    add:
+      RGS5:
+      - GSE246169
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Astrocyte:
+    confirm:
+      ALDH1L1:
+      - GSE246169
+      AQP4:
+      - GSE246169
+      GFAP:
+      - GSE246169
+    add:
+      S100B:
+      - GSE246169
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Oligodendrocyte:
+    confirm:
+      MBP:
+      - GSE246169
+      MOG:
+      - GSE246169
+      PLP1:
+      - GSE246169
+    add:
+      OLIG2:
+      - GSE246169
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Fibroblast:
+    confirm:
+      COL1A1:
+      - GSE246169
+      DCN:
+      - GSE246169
+      LUM:
+      - GSE246169
+    add:
+      COL3A1:
+      - GSE246169
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+novel_types:
+- name: ASCL1_Reprogrammed_MG
+  parent: Muller_Glia
+  markers:
+  - ASCL1
+  - MKI67
+  - TOP2A
+  - DLL1
+  - HES6
+  species:
+  - Homo sapiens
+  source: hoang2023
+- name: Proliferating_RPC
+  parent: RPC
+  markers:
+  - MKI67
+  - TOP2A
+  - PCNA
+  - HES1
+  species:
+  - Homo sapiens
+  source: hoang2023
+expert_rules:
+- priority: 1
+  condition:
+    markers_present:
+      RLBP1: 1.0
+      GLUL: 1.0
+  action: Muller_Glia
+  source: hoang2023
+  notes: RLBP1+GLUL co-expression defines Muller glia in fetal retina and culture
+- priority: 1
+  condition:
+    markers_present:
+      VSX2: 1.0
+      SOX2: 1.0
+  action: RPC
+  source: hoang2023
+  notes: VSX2+SOX2 co-expression defines fetal retinal progenitor cells
+- priority: 1
+  condition:
+    markers_present:
+      RHO: 1.0
+      NRL: 1.0
+  action: Rod_Photoreceptor
+  source: hoang2023
+  notes: RHO+NRL co-expression specifies rod photoreceptors
+- priority: 1
+  condition:
+    markers_present:
+      ARR3: 1.0
+      GNAT2: 1.0
+  action: Cone_Photoreceptor
+  source: hoang2023
+  notes: ARR3+GNAT2 co-expression specifies cone photoreceptors
+- priority: 1
+  condition:
+    markers_present:
+      POU4F2: 1.0
+      NEFM: 1.0
+  action: RGC
+  source: hoang2023
+  notes: POU4F2+NEFM co-expression defines RGCs
+- priority: 1
+  condition:
+    markers_present:
+      RPE65: 1.0
+      BEST1: 1.0
+  action: RPE
+  source: hoang2023
+  notes: RPE65+BEST1 co-expression defines RPE
+- priority: 1
+  condition:
+    markers_present:
+      AIF1: 1.0
+      P2RY12: 1.0
+  action: Microglia
+  source: hoang2023
+  notes: AIF1+P2RY12 co-expression defines retinal microglia
+- priority: 1
+  condition:
+    markers_present:
+      MKI67: 1.0
+      TOP2A: 1.0
+      ASCL1: 1.0
+  action: Proliferating_MG
+  source: hoang2023
+  notes: MKI67+TOP2A+ASCL1 marks ASCL1-reprogrammed Muller glia re-entering cell cycle
+- priority: 1
+  condition:
+    markers_present:
+      ONECUT1: 1.0
+      PROX1: 1.0
+  action: Horizontal_Cell
+  source: hoang2023
+  notes: ONECUT1+PROX1 co-expression defines horizontal cells
+conflicts:
+- type_a:
+    cell_type: Proliferating_MG
+    marker: MKI67
+  type_b:
+    cell_type: Muller_Glia
+    marker: RLBP1
+  notes: ASCL1-reprogrammed MG co-express proliferation markers (MKI67) while retaining
+    some MG markers (RLBP1). This transitional state is uniquely identified in Hoang
+    2023
+  source:
+    a: hoang2023
+    b: peng2020

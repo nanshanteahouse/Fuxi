@@ -1,0 +1,395 @@
+# Hahn 2023 Nature — Rebuilt from supplement tables (2026-07-10)
+# Previous KB had ~121 markers vs 41 unique class marker genes in MOESM8 Fig2a
+# Source: MOESM8 (class markers) + MOESM10 (OT markers)
+
+source_meta:
+  id: hahn2023
+  short_name: Hahn 2023 Nature
+  pmid: '38092908'
+  journal: Nature
+  year: 2023
+  species:
+  - Homo sapiens
+  - Callithrix jacchus
+  - Bos taurus
+  - Ovis aries
+  - Sus scrofa
+  - Mustela putorius furo
+  - Didelphis marsupialis
+  - Tupaia belangeri
+  - Peromyscus maniculatus
+  - Rhabdomys pumilio
+  - Ictidomys tridecemlineatus
+  - Anolis sagrei
+  - Danio rerio
+  tissue: retina
+  regions:
+  - whole retina
+  n_cells: 1000000
+  n_subtypes: 60
+  n_groups: 6
+  class: multi
+  order: multi
+  notes: Rebuilt from supplement tables (2026-07-10). Previous KB had 121 markers vs 41 unique class marker genes in MOESM8 Fig2a.
+
+markers:
+  Rod_Photoreceptor:
+    confirm:
+      GNGT1:
+      - '38092908'
+      NRL:
+      - '38092908'
+      PDC:
+      - '38092908'
+      RCVRN:
+      - '38092908'
+      SAG:
+      - '38092908'
+    add:
+      {}
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - MOESM8_class_markers
+      - MOESM10_OT_markers
+      cross_species_validated:
+        GNGT1: 13
+        NRL: 14
+        PDC: 14
+        RCVRN: 14
+        SAG: 14
+      last_audited: '2026-07-10'
+      flagged: false
+      notes: ''
+  Cone_Photoreceptor:
+    confirm:
+      GNGT2:
+      - '38092908'
+      PDC:
+      - '38092908'
+      RCVRN:
+      - '38092908'
+      SAG:
+      - '38092908'
+    add:
+      {}
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - MOESM8_class_markers
+      - MOESM10_OT_markers
+      cross_species_validated:
+        GNGT2: 11
+        PDC: 14
+        RCVRN: 14
+        SAG: 14
+      last_audited: '2026-07-10'
+      flagged: false
+      notes: ''
+  Bipolar_Cell:
+    confirm:
+      CABP5:
+      - '38092908'
+      GRIK1:
+      - '38092908'
+      GRM6:
+      - '38092908'
+      OTX2:
+      - '38092908'
+      TRPM1:
+      - '38092908'
+      VSX1:
+      - '38092908'
+      VSX2:
+      - '38092908'
+    add:
+      {}
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - MOESM8_class_markers
+      - MOESM10_OT_markers
+      cross_species_validated:
+        CABP5: 11
+        GRIK1: 13
+        GRM6: 14
+        OTX2: 13
+        TRPM1: 13
+        VSX1: 16
+        VSX2: 15
+      last_audited: '2026-07-10'
+      flagged: false
+      notes: ''
+  Amacrine_Cell:
+    confirm:
+      GAD1:
+      - '38092908'
+      GAD2:
+      - '38092908'
+      PAX6:
+      - '38092908'
+      ROBO1:
+      - '38092908'
+      SLC6A9:
+      - '38092908'
+      TFAP2A:
+      - '38092908'
+      TFAP2C:
+      - '38092908'
+    add:
+      {}
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - MOESM8_class_markers
+      - MOESM10_OT_markers
+      cross_species_validated:
+        GAD1: 16
+        GAD2: 15
+        PAX6: 15
+        ROBO1: 10
+        SLC6A9: 16
+        TFAP2A: 16
+        TFAP2C: 16
+      last_audited: '2026-07-10'
+      flagged: false
+      notes: ''
+  Horizontal_Cell:
+    confirm:
+      CALB1:
+      - '38092908'
+      LHX1:
+      - '38092908'
+      ONECUT1:
+      - '38092908'
+      ONECUT2:
+      - '38092908'
+      SLC4A3:
+      - '38092908'
+      TFAP2B:
+      - '38092908'
+      WDR72:
+      - '38092908'
+    add:
+      PROX1:
+      - '38092908'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - MOESM8_class_markers
+      - MOESM10_OT_markers
+      cross_species_validated:
+        CALB1: 13
+        LHX1: 15
+        ONECUT1: 14
+        ONECUT2: 15
+        PROX1: 0
+        SLC4A3: 15
+        TFAP2B: 15
+        WDR72: 13
+      last_audited: '2026-07-10'
+      flagged: false
+      notes: ''
+  Retinal_Ganglion_Cell:
+    confirm:
+      NEFL:
+      - '38092908'
+      POU4F1:
+      - '38092908'
+      RBPMS:
+      - '38092908'
+      RBPMS2:
+      - '38092908'
+      SLC17A6:
+      - '38092908'
+      THY1:
+      - '38092908'
+    add:
+      NEFM:
+      - '38092908'
+      BNC2:
+      - '38092908'
+      CDH11:
+      - '38092908'
+      CDH6:
+      - '38092908'
+      CHST9:
+      - '38092908'
+      EOMES:
+      - '38092908'
+      FOXP2:
+      - '38092908'
+      GRIK3:
+      - '38092908'
+      GULP1:
+      - '38092908'
+      IL1RAPL2:
+      - '38092908'
+      IRX3:
+      - '38092908'
+      IRX6:
+      - '38092908'
+      MAFB:
+      - '38092908'
+      MDFIC:
+      - '38092908'
+      NDST4:
+      - '38092908'
+      NEUROD2:
+      - '38092908'
+      NFIB:
+      - '38092908'
+      PCDH17:
+      - '38092908'
+      PLXNA2:
+      - '38092908'
+      PROX1:
+      - '38092908'
+      RUNX1:
+      - '38092908'
+      RXRG:
+      - '38092908'
+      SATB2:
+      - '38092908'
+      SGCD:
+      - '38092908'
+      SORCS3:
+      - '38092908'
+      SYT6:
+      - '38092908'
+      TBR1:
+      - '38092908'
+      TBX20:
+      - '38092908'
+      TFAP2D:
+      - '38092908'
+      TMEM132C:
+      - '38092908'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - MOESM8_class_markers
+      - MOESM10_OT_markers
+      cross_species_validated:
+        BNC2: 0
+        CDH11: 0
+        CDH6: 0
+        CHST9: 0
+        EOMES: 0
+        FOXP2: 0
+        GRIK3: 0
+        GULP1: 0
+        IL1RAPL2: 0
+        IRX3: 0
+        IRX6: 0
+        MAFB: 0
+        MDFIC: 0
+        NDST4: 0
+        NEFL: 13
+        NEFM: 9
+        NEUROD2: 0
+        NFIB: 0
+        PCDH17: 0
+        PLXNA2: 0
+        POU4F1: 13
+        PROX1: 0
+        RBPMS: 14
+        RBPMS2: 14
+        RUNX1: 0
+        RXRG: 0
+        SATB2: 0
+        SGCD: 0
+        SLC17A6: 15
+        SORCS3: 0
+        SYT6: 0
+        TBR1: 0
+        TBX20: 0
+        TFAP2D: 0
+        THY1: 16
+        TMEM132C: 0
+      last_audited: '2026-07-10'
+      flagged: false
+      notes: ''
+  Muller_Glia:
+    confirm:
+      APOE:
+      - '38092908'
+      GLUL:
+      - '38092908'
+      RLBP1:
+      - '38092908'
+      SFRP2:
+      - '38092908'
+      SLC1A3:
+      - '38092908'
+      VIM:
+      - '38092908'
+    add:
+      {}
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - MOESM8_class_markers
+      - MOESM10_OT_markers
+      cross_species_validated:
+        APOE: 12
+        GLUL: 15
+        RLBP1: 15
+        SFRP2: 12
+        SLC1A3: 14
+        VIM: 12
+      last_audited: '2026-07-10'
+      flagged: false
+      notes: ''
+
+expert_rules:
+- priority: 10
+  condition:
+    markers_present:
+      RBPMS: 1.0
+      POU4F1: 1.0
+      SLC17A6: 1.0
+  action: Retinal_Ganglion_Cell
+  source: hahn2023
+  notes: RBPMS+POU4F1 co-expression universally specifies RGC identity in jawed vertebrates
+- priority: 9
+  condition:
+    markers_present:
+      VSX2: 1.0
+      GRM6: 0.5
+    markers_absent:
+    - RLBP1
+  action: Bipolar_Cell
+  source: hahn2023
+  notes: VSX2+GRM6 without RLBP1 distinguishes bipolar cells from Müller glia
+
+novel_types: []
+conflicts: []

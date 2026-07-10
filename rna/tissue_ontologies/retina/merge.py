@@ -10,10 +10,11 @@ Usage::
     from tissue_ontologies.retina.merge import retina_expert_kb
 """
 
-import importlib.util
 import logging
 import os
 from typing import Any, Dict, List, Optional, Set
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +32,9 @@ TYPE_ALIASES: Dict[str, str] = {
 
 
 def load_all_sources(sources_dir: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Auto-discover and import all ``.py`` source files from ``sources/``.
+    """Auto-discover and load all YAML source files from ``sources/``.
 
-    Excludes files whose name starts with ``_`` (notably ``_TEMPLATE.py``).
-    Also excludes files whose first 20 lines contain a ``DISABLED`` marker
-    (e.g. sources that have been commented out pending formal publication).
+    Excludes ``schema.yaml`` (documentation only) and files starting with ``_``.
 
     Parameters
     ----------
@@ -58,45 +57,39 @@ def load_all_sources(sources_dir: Optional[str] = None) -> List[Dict[str, Any]]:
     entries = sorted(os.listdir(sources_dir))
 
     for entry in entries:
-        if not entry.endswith(".py"):
+        if not entry.endswith(".yaml"):
             continue
         if entry.startswith("_"):
             continue  # skip _TEMPLATE.py etc.
+        if entry == "schema.yaml":
+            continue  # documentation only
 
         filepath = os.path.join(sources_dir, entry)
 
-        # Check for DISABLED marker before importing
         with open(filepath, "r", encoding="utf-8") as fh:
-            head = "".join(fh.readline() for _ in range(20))
-        if "# DISABLED" in head or "# NOTE" in head and "DISABLED" in head:
-            logger.info("Skipping disabled source: %s", entry)
+            try:
+                data = yaml.safe_load(fh)
+            except Exception:
+                logger.exception("Error parsing YAML source: %s", entry)
+                continue
+
+        if not isinstance(data, dict):
+            logger.warning("Skipping non-dict YAML source: %s", entry)
             continue
 
-        module_name = entry[:-3]
-
-        spec = importlib.util.spec_from_file_location(module_name, filepath)
-        if spec is None or spec.loader is None:
-            logger.warning("Cannot load source module: %s", entry)
-            continue
-
-        mod = importlib.util.module_from_spec(spec)
-        try:
-            spec.loader.exec_module(mod)
-        except Exception:
-            logger.exception("Error executing source module: %s", entry)
-            continue
-
-        meta = getattr(mod, "source_meta", {})
+        meta = data.get("source_meta", {})
         if not meta:
             logger.warning("Skipping source with empty source_meta: %s", entry)
             continue
+
+        module_name = entry[:-5]  # strip '.yaml'
         sources.append(
             {
                 "meta": meta,
-                "markers": getattr(mod, "markers", {}),
-                "novel_types": getattr(mod, "novel_types", []),
-                "expert_rules": getattr(mod, "expert_rules", []),
-                "conflicts": getattr(mod, "conflicts", []),
+                "markers": data.get("markers", {}),
+                "novel_types": data.get("novel_types", []),
+                "expert_rules": data.get("expert_rules", []),
+                "conflicts": data.get("conflicts", []),
                 "source_id": meta.get("id", module_name),
             }
         )

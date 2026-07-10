@@ -1,0 +1,582 @@
+source_meta:
+  id: hu2019
+  short_name: Hu 2019 PLoS Biol
+  pmid: '31269016'
+  journal: PLoS Biology
+  year: 2019
+  species:
+  - Homo sapiens
+  tissue: retina
+  regions:
+  - fetal retina
+  - fetal RPE
+  n_cells: 2421
+  n_subtypes: 9
+  n_groups: 9
+  class: Mammalia
+  order: Primates
+markers:
+  RPE:
+    confirm:
+      BEST1:
+      - '31269016'
+      LRAT:
+      - '31269016'
+      RPE65:
+      - '31269016'
+    add:
+      TIMP3:
+      - '31269016'
+    refine:
+      RPE65:
+        note: RPE-specific marker in fetal tissue; high expression by GW8
+        threshold: log2FC > 2.0
+        pmid: '31269016'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE107618
+      - GSE118614
+      supplement_verified: []
+      cross_species_validated:
+        BEST1: false
+        LRAT: false
+        RPE65: false
+        CRALBP: false
+        RDH10: false
+        TIMP3: false
+        DCT: false
+        PMEL: false
+        TYRP1: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        BEST1: 0.4393
+        LRAT: 0.5825
+        RPE65: 0.3981
+        TIMP3: 0.835
+        DCT: 0.8592
+        PMEL: 1.0
+        TYRP1: 0.983
+      flagged_reason: pct_expression_below_threshold
+  Fibroblast:
+    confirm:
+      COL1A1:
+      - '31269016'
+      DCN:
+      - '31269016'
+      LUM:
+      - '31269016'
+    add:
+      COL1A2:
+      - '31269016'
+      COL3A1:
+      - '31269016'
+      PDGFRA:
+      - '31269016'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE107618
+      supplement_verified: []
+      cross_species_validated:
+        COL1A1: true
+        DCN: true
+        LUM: true
+        COL1A2: true
+        COL3A1: true
+        PDGFRA: true
+      last_audited: '2026-07-10'
+      flagged: false
+      notes: ''
+      pct_expressed:
+        COL1A1: 0.932
+        DCN: 0.7961
+        LUM: 0.7767
+        COL1A2: 0.9709
+        COL3A1: 0.9806
+        PDGFRA: 0.7961
+  RPC:
+    confirm:
+      SOX2:
+      - '31269016'
+      VSX2:
+      - '31269016'
+    add:
+      # NOTE: likely filtered out by Hu's 5K HVG gene set — not in supplement cluster markers
+      HES1:
+      - '31269016'
+      # NOTE: likely filtered out by Hu's 5K HVG gene set — not in supplement cluster markers
+      MKI67:
+      - '31269016'
+      # NOTE: likely filtered out by Hu's 5K HVG gene set — not in supplement cluster markers
+      NOTCH1:
+      - '31269016'
+      PAX6:
+      - '31269016'
+    refine:
+      VSX2:
+        note: canonical RPC marker; expressed throughout fetal stages 5-24 GW
+        threshold: log2FC > 1.0
+        pmid: '31269016'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE107618
+      - GSE118614
+      supplement_verified: []
+      cross_species_validated:
+        PAX6: true
+        SOX2: true
+        VSX2: true
+        HES1: true
+        NOTCH1: false
+        MKI67: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        PAX6: 0.6856
+        SOX2: 0.4483
+        VSX2: 0.3751
+        HES1: 0.8082
+        NOTCH1: 0.4637
+        MKI67: 0.3975
+      flagged_reason: pct_expression_below_threshold
+  Muller_Glia:
+    confirm:
+      GLUL:
+      - '31269016'
+      RLBP1:
+      - '31269016'
+    add:
+      GFAP:
+      - '31269016'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified: []
+      cross_species_validated:
+        GFAP: false
+        GLUL: false
+        RLBP1: true
+        SLC1A3: true
+        VIM: true
+        CLU: false
+        CRYAB: false
+        APOE: true
+        AQP4: false
+        CRYM: true
+        CST3: true
+        DKK3: true
+        NFIA: false
+        SOX2: false
+        CRABP1: false
+        FRZB: false
+        GPM6B: true
+        GPX3: false
+        PTGDS: false
+        RGR: false
+        TF: false
+        WIF1: false
+        ADAMTS6: false
+        GLI3: false
+        PARD3B: false
+        PCDH11X: false
+        RARB: false
+        SAT1: true
+        SORCS1: false
+        SPON1: false
+        ASCL1: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        RLBP1: 0.6548
+        SLC1A3: 0.6454
+        VIM: 0.3219
+        APOE: 0.9049
+        CRYM: 0.6686
+        CST3: 0.4175
+        DKK3: 0.4334
+        GPM6B: 0.6152
+        SAT1: 0.6444
+      flagged_reason: pct_expression_below_threshold
+  Retinal_Ganglion_Cell:
+    confirm:
+      ELAVL4:
+      - '31269016'
+      NEFM:
+      - '31269016'
+      POU4F2:
+      - '31269016'
+    add:
+      # NOTE: likely filtered out by Hu's 5K HVG gene set — not in supplement cluster markers
+      DCX:
+      - '31269016'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE107618
+      - GSE118614
+      supplement_verified: []
+      cross_species_validated:
+        NEFM: true
+        POU4F1: true
+        POU4F2: true
+        RBPMS: false
+        ELAVL4: true
+        NEFL: true
+        TUBB3: true
+        BNC2: false
+        EOMES: false
+        IRX3: false
+        ISL1: true
+        NEUROD2: false
+        OPN4: false
+        POU4F3: false
+        SLC17A6: false
+        SNCG: true
+        STMN1: false
+        TBR1: false
+        THY1: false
+        GAP43: true
+        DCX: true
+        AIPL1: false
+        LAPTM4B: false
+        PCP2: false
+        UNC119: false
+        ATOH7: false
+        EBF1: true
+        EBF3: true
+        ELAVL2: true
+        KLHL1: false
+        POU6F2: true
+        RBFOX3: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        NEFM: 0.6758
+        POU4F2: 0.3148
+        ELAVL4: 0.7963
+        NEFL: 0.7107
+        ISL1: 0.8001
+        SNCG: 0.6934
+        GAP43: 0.8961
+        UNC119: 0.3185
+        ATOH7: 0.4637
+        POU4F1: 0.3358
+        TUBB3: 0.9719
+        DCX: 0.4048
+        EBF1: 0.7137
+        EBF3: 0.3564
+        ELAVL2: 0.4402
+        POU6F2: 0.5229
+      flagged_reason: pct_expression_below_threshold
+  Photoreceptor_Precursor:
+    confirm:
+      CRX:
+      - '31269016'
+      OTX2:
+      - '31269016'
+      RCVRN:
+      - '31269016'
+    add:
+      NRL:
+      - '31269016'
+    refine:
+      CRX:
+        note: early photoreceptor precursor marker; precedes opsin expression
+        threshold: log2FC > 1.0
+        pmid: '31269016'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified: []
+      cross_species_validated:
+        CRX: true
+        OTX2: true
+        RCVRN: false
+        NRL: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        CRX: 0.4317
+        OTX2: 0.9442
+      flagged_reason: pct_expression_below_threshold
+  Bipolar_Precursor:
+    confirm:
+      OTX2:
+      - '31269016'
+      VSX1:
+      - '31269016'
+      VSX2:
+      - '31269016'
+    add:
+      GRM6:
+      - '31269016'
+      PRKCA:
+      - '31269016'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Amacrine_Precursor:
+    confirm:
+      GAD1:
+      - '31269016'
+      TFAP2A:
+      - '31269016'
+      TFAP2B:
+      - '31269016'
+    add:
+      CALB2:
+      - '31269016'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Horizontal_Cell:
+    confirm:
+      ONECUT1:
+      - '31269016'
+      PROX1:
+      - '31269016'
+    add:
+      CALB1:
+      - '31269016'
+      ONECUT2:
+      - '31269016'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified: []
+      cross_species_validated:
+        ONECUT1: false
+        ONECUT2: true
+        PROX1: false
+        CALB1: false
+        LHX1: false
+        EBF1: false
+        ONECUT3: false
+        PRDM6: false
+        TSHZ2: false
+        FRMPD4: false
+        NDFIP1: false
+        CNTN4: false
+        MEGF10: false
+        NDST3: false
+        NTRK2: false
+        STMN2: true
+        SYN3: false
+        TFAP2B: true
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        ONECUT2: 0.7118
+        STMN2: 0.8629
+        TFAP2B: 0.665
+      flagged_reason: pct_expression_below_threshold
+  Vascular_Endothelial:
+    confirm:
+      CDH5:
+      - '31269016'
+      PECAM1:
+      - '31269016'
+      VWF:
+      - '31269016'
+    add:
+      CLDN5:
+      - '31269016'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Microglia:
+    confirm:
+      AIF1:
+      - '31269016'
+      CSF1R:
+      - '31269016'
+      CX3CR1:
+      - '31269016'
+    add:
+      # NOTE: likely filtered out by Hu's 5K HVG gene set — not in supplement cluster markers
+      ITGAM:
+      - '31269016'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE107618
+      supplement_verified: []
+      cross_species_validated:
+        AIF1: true
+        CSF1R: true
+        P2RY12: true
+        CX3CR1: true
+        C1QA: true
+        C1QB: true
+        C1QC: true
+        TYROBP: true
+        CD74: true
+        ITGAM: false
+        SALL1: false
+        TREM2: true
+        FCER1G: true
+        ITGB2: true
+        LAPTM5: true
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        AIF1: 1.0
+        CSF1R: 0.9672
+        P2RY12: 0.5902
+        CX3CR1: 0.8689
+        C1QA: 0.8852
+        C1QB: 0.8689
+        C1QC: 0.9344
+        TYROBP: 1.0
+        CD74: 0.9836
+        TREM2: 0.5738
+        FCER1G: 0.9344
+        ITGB2: 0.9344
+        LAPTM5: 0.9672
+      flagged_reason: pct_expression_below_threshold
+novel_types:
+- name: Fetal_RPE
+  parent: RPE
+  markers:
+  - RPE65
+  - BEST1
+  - LRAT
+  - TIMP3
+  species:
+  - Homo sapiens
+  source: hu2019
+expert_rules:
+- priority: 1
+  condition:
+    markers_present:
+      RPE65: 1.0
+      BEST1: 1.0
+  action: RPE
+  source: hu2019
+  notes: RPE65+BEST1 co-expression defines fetal RPE cells
+- priority: 1
+  condition:
+    markers_present:
+      VSX2: 1.0
+      SOX2: 1.0
+  action: RPC
+  source: hu2019
+  notes: VSX2+SOX2 co-expression defines fetal retinal progenitor cells
+- priority: 1
+  condition:
+    markers_present:
+      CRX: 1.0
+      RCVRN: 1.0
+  action: Photoreceptor_Precursor
+  source: hu2019
+  notes: CRX+RCVRN expression defines photoreceptor precursors in fetal retina
+- priority: 1
+  condition:
+    markers_present:
+      COL1A1: 1.0
+      DCN: 1.0
+  action: Fibroblast
+  source: hu2019
+  notes: COL1A1+DCN co-expression defines fetal fibroblasts
+- priority: 1
+  condition:
+    markers_present:
+      POU4F2: 1.0
+      NEFM: 1.0
+  action: Retinal_Ganglion_Cell
+  source: hu2019
+  notes: POU4F2+NEFM co-expression defines fetal RGCs
+- priority: 1
+  condition:
+    markers_present:
+      ONECUT1: 1.0
+      PROX1: 1.0
+  action: Horizontal_Cell
+  source: hu2019
+  notes: ONECUT1+PROX1 co-expression defines fetal horizontal cells
+- priority: 2
+  condition:
+    markers_present:
+      GAD1: 1.0
+      TFAP2A: 1.0
+  action: Amacrine_Precursor
+  source: hu2019
+  notes: GAD1+TFAP2A expression defines developing amacrine cells
+- priority: 2
+  condition:
+    markers_present:
+      VSX1: 1.0
+      OTX2: 1.0
+  action: Bipolar_Precursor
+  source: hu2019
+  notes: VSX1+OTX2 expression defines developing bipolar cells
+conflicts:
+- type_a:
+    cell_type: Muller_Glia
+    marker: GFAP
+  type_b:
+    cell_type: Glial_Cell_Oligodendrocyte
+    marker: GFAP
+  notes: GFAP is expressed by both Muller glia and astrocytes; this study labels all
+    GFAP+ neural retinal cells as Muller glia
+  source:
+    a: hu2019
+    b: yan2020

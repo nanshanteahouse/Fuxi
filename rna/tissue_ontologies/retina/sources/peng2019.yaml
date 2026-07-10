@@ -1,0 +1,820 @@
+source_meta:
+  id: peng2019
+  short_name: Peng 2019 Cell
+  pmid: '30712875'
+  journal: Cell
+  year: 2019
+  species:
+  - Macaca fascicularis
+  tissue: retina
+  regions:
+  - fovea
+  - periphery
+  n_cells: 165679
+  n_subtypes: 60
+  n_groups: 6
+  class: Mammalia
+  order: Primates
+markers:
+  Rod_Photoreceptor:
+    confirm:
+      GNAT1:
+      - '30712875'
+      NRL:
+      - '30712875'
+      RHO:
+      - '30712875'
+    add:
+      NR2E3:
+      - '30712875'
+      PDE6B:
+      - '30712875'
+      SAG:
+      - '30712875'
+      GNB1:
+      - '30712875'
+      GNGT1:
+      - '30712875'
+      PDC:
+      - '30712875'
+    refine:
+      CRX:
+        note: pan-photoreceptor; expressed in both rods and cones
+        threshold: log2FC > 1.5
+        pmid: '30712875'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - supp-9
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Cone_Photoreceptor:
+    confirm:
+      ARR3:
+      - '30712875'
+      GNAT2:
+      - '30712875'
+      OPN1SW:
+      - '30712875'
+    add:
+      OPN1LW:
+      - '30712875'
+      PDE6C:
+      - '30712875'
+      PDE6H:
+      - '30712875'
+      GNGT2:
+      - '30712875'
+      GUCA1A:
+      - '30712875'
+      OPN1MW:
+      - '30712875'
+      RCVRN:
+      - '30712875'
+    refine:
+      OPN1LW:
+        note: M/L cone opsin; fovea-enriched expression
+        threshold: log2FC > 2.0
+        pmid: '30712875'
+      OPN1SW:
+        note: S cone opsin; periphery-enriched relative to fovea
+        threshold: log2FC > 1.5
+        pmid: '30712875'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - supp-9
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  RGC:
+    confirm:
+      NEFM:
+      - '30712875'
+      POU4F1:
+      - '30712875'
+      POU4F2:
+      - '30712875'
+    add:
+      ELAVL4:
+      - '30712875'
+      NEFL:
+      - '30712875'
+      TUBB3:
+      - '30712875'
+      POU4F3:
+      - '30712875'
+      RBPMS:
+      - '30712875'
+      SLC17A6:
+      - '30712875'
+      SNCG:
+      - '30712875'
+      THY1:
+      - '30712875'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified:
+      - supp-9
+      cross_species_validated:
+        NEFM: true
+        POU4F1: true
+        POU4F2: true
+        RBPMS: false
+        ELAVL4: true
+        NEFL: true
+        TUBB3: true
+        BNC2: false
+        EOMES: false
+        IRX3: false
+        ISL1: true
+        NEUROD2: false
+        OPN4: false
+        POU4F3: false
+        SLC17A6: false
+        SNCG: true
+        STMN1: false
+        TBR1: false
+        THY1: false
+        GAP43: true
+        DCX: true
+        AIPL1: false
+        LAPTM4B: false
+        PCP2: false
+        UNC119: false
+        ATOH7: false
+        EBF1: true
+        EBF3: true
+        ELAVL2: true
+        KLHL1: false
+        POU6F2: true
+        RBFOX3: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        NEFM: 0.6758
+        POU4F1: 0.3358
+        POU4F2: 0.3148
+        ELAVL4: 0.7963
+        NEFL: 0.7107
+        TUBB3: 0.9719
+        ISL1: 0.8001
+        SNCG: 0.6934
+        GAP43: 0.8961
+        DCX: 0.4048
+        EBF1: 0.7137
+        EBF3: 0.3564
+        ELAVL2: 0.4402
+        POU6F2: 0.5229
+      flagged_reason: pct_expression_below_threshold
+  Bipolar_Cell:
+    confirm:
+      PRKCA:
+      - '30712875'
+      TRPM1:
+      - '30712875'
+      VSX1:
+      - '30712875'
+    add:
+      CABP5:
+      - '30712875'
+      GRM6:
+      - '30712875'
+      VSX2:
+      - '30712875'
+      GRIK1:
+      - '30712875'
+      OTX2:
+      - '30712875'
+    refine:
+      PRKCA:
+        note: ON bipolar cell marker; labels rod bipolar cells
+        threshold: log2FC > 1.0
+        pmid: '30712875'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified:
+      - supp-9
+      cross_species_validated:
+        PRKCA: false
+        TRPM1: true
+        VSX1: false
+        GRM6: true
+        OTX2: true
+        VSX2: true
+        TMEM215: false
+        CABP5: false
+        GRIK1: false
+        GNAO1: true
+        GNG13: true
+        ISL1: true
+        LRIT3: false
+        NYX: false
+        PKC: false
+        SCGN: false
+        SLC4A5: false
+        CHN2: false
+        DOK6: false
+        EFR3A: false
+        LRTM1: false
+        PRDM8: false
+        RGS16: false
+        SLC38A1: false
+        CA10: false
+        FSTL5: false
+        GABRR3: false
+        IGSF21: false
+        PTPRR: false
+        SLC4A10: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        TRPM1: 0.3104
+        GRM6: 0.4552
+        OTX2: 0.5834
+        VSX2: 0.3786
+        GNAO1: 0.3389
+        GNG13: 0.3579
+        ISL1: 0.5933
+      flagged_reason: pct_expression_below_threshold
+  Amacrine_Cell:
+    confirm:
+      GAD1:
+      - '30712875'
+      GAD2:
+      - '30712875'
+      SLC6A9:
+      - '30712875'
+    add:
+      CALB1:
+      - '30712875'
+      TFAP2A:
+      - '30712875'
+      TFAP2B:
+      - '30712875'
+      C1QL1:
+      - '30712875'
+      C1QL2:
+      - '30712875'
+      TFAP2C:
+      - '30712875'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified:
+      - supp-9
+      cross_species_validated:
+        GAD1: false
+        GAD2: true
+        SLC6A9: false
+        TFAP2A: true
+        ELAVL3: true
+        SLC6A1: true
+        TFAP2B: true
+        CALB2: false
+        GLRA1: false
+        GLRA2: false
+        MEIS2: true
+        NPY: false
+        PTH2: false
+        SLC32A1: false
+        TCF4: true
+        TFAP2C: false
+        VIP: false
+        C1QL2: false
+        CACNA2D2: false
+        CARTPT: false
+        GABRA2: false
+        MIAT: false
+        PAPPA: false
+        CALB1: false
+        ASIC2: false
+        CACNA1D: false
+        DPP6: false
+        MDGA2: false
+        MYT1L: false
+        NRP1: false
+        PDE4D: false
+        TENM2: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        GAD2: 0.387
+        TFAP2A: 0.3528
+        ELAVL3: 0.7487
+        SLC6A1: 0.418
+        TFAP2B: 0.7359
+        MEIS2: 0.5156
+        TCF4: 0.3645
+      flagged_reason: pct_expression_below_threshold
+  Horizontal_Cell:
+    confirm:
+      ONECUT1:
+      - '30712875'
+      ONECUT2:
+      - '30712875'
+      PROX1:
+      - '30712875'
+    add:
+      CALB1:
+      - '30712875'
+      LHX1:
+      - '30712875'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified:
+      - supp-9
+      cross_species_validated:
+        ONECUT1: false
+        ONECUT2: true
+        PROX1: false
+        CALB1: false
+        LHX1: false
+        EBF1: false
+        ONECUT3: false
+        PRDM6: false
+        TSHZ2: false
+        FRMPD4: false
+        NDFIP1: false
+        CNTN4: false
+        MEGF10: false
+        NDST3: false
+        NTRK2: false
+        STMN2: true
+        SYN3: false
+        TFAP2B: true
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        ONECUT2: 0.7118
+        STMN2: 0.8629
+        TFAP2B: 0.665
+      flagged_reason: pct_expression_below_threshold
+  Muller_Glia:
+    confirm:
+      GFAP:
+      - '30712875'
+      GLUL:
+      - '30712875'
+      RLBP1:
+      - '30712875'
+    add:
+      CRYAB:
+      - '30712875'
+      SLC1A3:
+      - '30712875'
+      VIM:
+      - '30712875'
+      APOE:
+      - '30712875'
+      CLU:
+      - '30712875'
+      CRABP1:
+      - '30712875'
+      CRYM:
+      - '30712875'
+      DKK3:
+      - '30712875'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified:
+      - supp-9
+      cross_species_validated:
+        GFAP: false
+        GLUL: false
+        RLBP1: true
+        SLC1A3: true
+        VIM: true
+        CLU: false
+        CRYAB: false
+        APOE: true
+        AQP4: false
+        CRYM: true
+        CST3: true
+        DKK3: true
+        NFIA: false
+        SOX2: false
+        CRABP1: false
+        FRZB: false
+        GPM6B: true
+        GPX3: false
+        PTGDS: false
+        RGR: false
+        TF: false
+        WIF1: false
+        ADAMTS6: false
+        GLI3: false
+        PARD3B: false
+        PCDH11X: false
+        RARB: false
+        SAT1: true
+        SORCS1: false
+        SPON1: false
+        ASCL1: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        RLBP1: 0.6548
+        SLC1A3: 0.6454
+        VIM: 0.3219
+        APOE: 0.9049
+        CRYM: 0.6686
+        CST3: 0.4175
+        DKK3: 0.4334
+        GPM6B: 0.6152
+        SAT1: 0.6444
+      flagged_reason: pct_expression_below_threshold
+  Microglia:
+    confirm:
+      AIF1:
+      - '30712875'
+      CSF1R:
+      - '30712875'
+      P2RY12:
+      - '30712875'
+    add:
+      CD74:
+      - '30712875'
+      CX3CR1:
+      - '30712875'
+      ITGAM:
+      - '30712875'
+      B2M:
+      - '30712875'
+      C1QA:
+      - '30712875'
+      C1QB:
+      - '30712875'
+      C1QC:
+      - '30712875'
+      CTSS:
+      - '30712875'
+      HEXB:
+      - '30712875'
+      TMEM119:
+      - '30712875'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - supp-9
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  RPE:
+    confirm:
+      BEST1:
+      - '30712875'
+      LRAT:
+      - '30712875'
+      RPE65:
+      - '30712875'
+    add:
+      RDH10:
+      - '30712875'
+      TIMP3:
+      - '30712875'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified: []
+      cross_species_validated:
+        BEST1: false
+        LRAT: false
+        RPE65: false
+        CRALBP: false
+        RDH10: false
+        TIMP3: false
+        DCT: false
+        PMEL: false
+        TYRP1: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      flagged_reason: pct_expression_below_threshold
+  Vascular_Endothelial:
+    confirm:
+      CDH5:
+      - '30712875'
+      PECAM1:
+      - '30712875'
+      VWF:
+      - '30712875'
+    add:
+      CLDN5:
+      - '30712875'
+      EGFL7:
+      - '30712875'
+      COL4A1:
+      - '30712875'
+      IGFBP7:
+      - '30712875'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - supp-9
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Pericyte:
+    confirm:
+      ACTA2:
+      - '30712875'
+      CSPG4:
+      - '30712875'
+      PDGFRB:
+      - '30712875'
+    add:
+      ANPEP:
+      - '30712875'
+      RGS5:
+      - '30712875'
+      COL4A1:
+      - '30712875'
+      KCNJ8:
+      - '30712875'
+      MGP:
+      - '30712875'
+      MYL9:
+      - '30712875'
+      RGC5:
+      - '30712875'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - supp-9
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  RPC:
+    confirm:
+      PAX6:
+      - '30712875'
+      SOX2:
+      - '30712875'
+      VSX2:
+      - '30712875'
+    add:
+      HES1:
+      - '30712875'
+      NOTCH1:
+      - '30712875'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified: []
+      cross_species_validated:
+        PAX6: true
+        SOX2: true
+        VSX2: true
+        HES1: true
+        NOTCH1: false
+        MKI67: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        PAX6: 0.6856
+        SOX2: 0.4483
+        VSX2: 0.3751
+        HES1: 0.8082
+      flagged_reason: pct_expression_below_threshold
+  Astrocyte:
+    confirm:
+      ALDH1L1:
+      - '30712875'
+      AQP4:
+      - '30712875'
+      GFAP:
+      - '30712875'
+    add:
+      S100B:
+      - '30712875'
+      SOX9:
+      - '30712875'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Oligodendrocyte:
+    confirm:
+      MBP:
+      - '30712875'
+      MOG:
+      - '30712875'
+      PLP1:
+      - '30712875'
+    add:
+      OLIG2:
+      - '30712875'
+      SOX10:
+      - '30712875'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Fibroblast:
+    confirm:
+      COL1A1:
+      - '30712875'
+      DCN:
+      - '30712875'
+      LUM:
+      - '30712875'
+    add:
+      COL1A2:
+      - '30712875'
+      COL3A1:
+      - '30712875'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+novel_types:
+- name: Foveal_Cones
+  parent: Cone_Photoreceptor
+  markers:
+  - OPN1LW
+  - OPN1SW
+  - ARR3
+  - GNAT2
+  species:
+  - Macaca fascicularis
+  source: peng2019
+- name: Peripheral_Rods
+  parent: Rod_Photoreceptor
+  markers:
+  - RHO
+  - NRL
+  - NR2E3
+  - GNAT1
+  species:
+  - Macaca fascicularis
+  source: peng2019
+expert_rules:
+- priority: 1
+  condition:
+    markers_present:
+      RHO: 1.0
+      NRL: 1.0
+  action: Rod_Photoreceptor
+  source: peng2019
+  notes: RHO+NRL co-expression specifies rod photoreceptor identity
+- priority: 1
+  condition:
+    markers_present:
+      ARR3: 1.0
+      GNAT2: 1.0
+  action: Cone_Photoreceptor
+  source: peng2019
+  notes: ARR3+GNAT2 co-expression specifies cone photoreceptor identity
+- priority: 1
+  condition:
+    markers_present:
+      RLBP1: 1.0
+      GLUL: 1.0
+  action: Muller_Glia
+  source: peng2019
+  notes: RLBP1+GLUL co-expression defines Muller glial cells
+- priority: 1
+  condition:
+    markers_present:
+      POU4F2: 1.0
+      NEFM: 1.0
+  action: RGC
+  source: peng2019
+  notes: POU4F2+NEFM co-expression defines retinal ganglion cells
+- priority: 1
+  condition:
+    markers_present:
+      AIF1: 1.0
+      P2RY12: 1.0
+  action: Microglia
+  source: peng2019
+  notes: AIF1+P2RY12 co-expression defines retinal microglia
+- priority: 1
+  condition:
+    markers_present:
+      ONECUT1: 1.0
+      PROX1: 1.0
+  action: Horizontal_Cell
+  source: peng2019
+  notes: ONECUT1+PROX1 co-expression defines horizontal cells
+- priority: 2
+  condition:
+    markers_present:
+      GAD1: 1.0
+      GAD2: 1.0
+  action: Amacrine_Cell
+  source: peng2019
+  notes: GAD1+GAD2 expression is characteristic of amacrine cells (GABAergic)
+- priority: 2
+  condition:
+    markers_present:
+      VSX1: 1.0
+      PRKCA: 1.0
+  action: Bipolar_Cell
+  source: peng2019
+  notes: VSX1+PRKCA co-expression defines bipolar cells
+conflicts:
+- type_a:
+    cell_type: Rod_Photoreceptor
+    marker: NR2E3
+  type_b:
+    cell_type: Cone_Photoreceptor
+    marker: NR2E3
+  notes: NR2E3 is rod-specific in this study but some sources report low expression
+    in developing cones
+  source:
+    a: peng2019
+    b: yan2020
+- type_a:
+    cell_type: Amacrine_Cell
+    marker: CALB1
+  type_b:
+    cell_type: Horizontal_Cell
+    marker: CALB1
+  notes: CALB1 expressed in both amacrine and horizontal cells; not specific alone
+  source:
+    a: peng2019
+    b: peng2020

@@ -1,0 +1,408 @@
+# =============================================================================
+# schema.yaml — KB Source File Schema for Retina Cell Type Ontology
+# =============================================================================
+#
+# This document defines the expected structure for each source file (*.py)
+# in this directory.  Every source file is a pure-Python module exporting
+# dict/list constants; this YAML schema mirrors those Python structures for
+# documentation and cross-reference purposes.
+#
+# There is NO YAML-based validation — the Python import mechanism loads the
+# `.py` files directly.  This schema is a reference for contributors and an
+# audit inventory.
+#
+# Sections:
+#   1. source_meta  — Publication-level metadata
+#   2. markers      — Cell-type-level marker gene annotations
+#   3. novel_types  — Cell types uniquely reported by this source
+#   4. expert_rules — Decision rules for cell type annotation
+#   5. conflicts    — Known cross-source annotation conflicts
+#
+# =============================================================================
+
+
+# ---------------------------------------------------------------------------
+# 1. source_meta — Publication-level metadata
+# ---------------------------------------------------------------------------
+# Every source file MUST define a top-level `source_meta` dict.
+#
+# Fields marked [REQUIRED] must be present.  Fields marked [OPTIONAL]
+# default to empty string / zero / empty list when absent.
+#
+# Fields marked [NEW*] are not yet present in the Python files but are
+# documented here for future adoption.
+
+source_meta:
+    id:                 # [REQUIRED] str — Unique lowercase identifier, e.g. "peng2019"
+                        #   Used as the primary key throughout the KB pipeline.
+                        #   Convention: {first_author_lowercase}{year}.
+
+    short_name:         # [REQUIRED] str — Human-readable label, e.g. "Peng 2019 Cell"
+                        #   Used in reports, tables, and UI summaries.
+
+    pmid:               # [REQUIRED] str — PubMed ID of the primary publication.
+                        #   Padded to 8 digits, e.g. "30712875".
+
+    journal:            # [REQUIRED] str — Journal abbreviation, e.g. "Cell",
+                        #   "PLoS Biology", "Nature Communications".
+
+    year:               # [REQUIRED] int — Publication year, e.g. 2019.
+
+    species:            # [REQUIRED] list[str] — Scientific names of all species
+                        #   covered, e.g. ["Homo sapiens"].
+                        #   Each entry uses the canonical Linnaean binomial.
+
+    tissue:             # [REQUIRED] str — Tissue name, always "retina" for this
+                        #   ontology.  May include qualifiers such as "fetal retina"
+                        #   (see `regions` for anatomical sub-divisions).
+
+    regions:            # [OPTIONAL] list[str] — Anatomical sub-regions profiled,
+                        #   e.g. ["fovea", "periphery"], ["whole retina"].
+                        #   Empty list means no regional specificity.
+
+    n_cells:            # [OPTIONAL] int — Approximate number of cells profiled
+                        #   in the study.  0 means not reported.
+
+    n_subtypes:         # [OPTIONAL] int — Number of reported cell subtypes.
+                        #   0 means not reported.
+
+    n_groups:           # [OPTIONAL] int — Number of major cell groups.
+                        #   0 means not reported.
+
+    class:              # [REQUIRED] str — Taxonomic class (纲), one of:
+                        #   "Mammalia", "Aves", "Reptilia", "Teleostei",
+                        #   "Cyclostomata", "multi".
+                        #   Use "multi" for sources spanning multiple classes
+                        #   (e.g. Hahn 2023 — 17 species across 5 classes).
+
+    order:              # [REQUIRED] str — Taxonomic order (目), e.g. "Primates",
+                        #   "Rodentia", "Carnivora", "multi".
+                        #   Use "multi" for multi-order sources.
+
+    first_author:       # [OPTIONAL] [NEW*] str — First author surname only,
+                        #   e.g. "Hu", "Peng", "Hahn".
+                        #   Useful for quick citation in tables.
+
+    title:              # [OPTIONAL] [NEW*] str — Full publication title.
+                        #   Useful for reports and paper lookups without
+                        #   fetching from PubMed.
+
+    peer_reviewed:      # [OPTIONAL] [NEW*] bool — Whether the source has
+                        #   undergone peer review.  Preprint-only sources
+                        #   that lack formal peer review should set this to
+                        #   false (default: true).
+
+
+# ---------------------------------------------------------------------------
+# 2. markers — Cell-type-level marker gene annotations
+# ---------------------------------------------------------------------------
+# Top-level `markers` dict.
+#   Key:   Canonical cell type name, e.g. "Rod_Photoreceptor", "RPE", "RGC".
+#   Value: CellTypeEntry dict (see below).
+
+markers:
+    # ── Example cell type entry ──────────────────────────────────────────
+    # This entry documents EVERY sub-field.  A real source file MAY omit
+    # empty sub-dicts (e.g. `refine: {}` can be left out).
+    Rod_Photoreceptor:
+
+        # -- confirm --
+        # Markers this paper explicitly confirms from other sources.
+        #   Key:   Gene symbol (str, uppercase HGNC/MGI).
+        #   Value: list[str] — PMIDs supporting this marker assignment.
+        #          The source's own PMID MUST be included.
+        confirm:
+            RHO:     ["30712875", "38092908"]  # PMIDs where this is reported
+            NRL:     ["30712875"]
+            GNAT1:   ["30712875"]
+
+        # -- add --
+        # Markers this paper adds / newly reports that other papers may not.
+        # Same structure as `confirm`.
+        add:
+            PDE6B:   ["30712875"]
+            SAG:     ["30712875"]
+            NR2E3:   ["30712875"]
+
+        # -- refine --
+        # Specialized annotations for individual markers.
+        #   Key:   Gene symbol (str, uppercase).
+        #   Value: One of two forms:
+        #
+        #   A) Dict form (full annotation):
+        #       note:      str — Free-text annotation about this marker's
+        #                  specificity, expression pattern, or caveats.
+        #       threshold: str — Expression threshold string, e.g.
+        #                  "log2FC > 1.5", "avg_log2FC >= 0.585".
+        #       pmid:      str — PMID for this refinement record.
+        #
+        #   B) List-of-strings form (simple gene list):
+        #       ["RPE65"] — A list of gene symbols to be refined.
+        #       This shorter form is used when the source only wishes
+        #       to flag a marker for refinement without detailed metadata.
+        refine:
+            CRX:
+                note:      "Pan-photoreceptor marker; expressed in rods and cones"
+                threshold: "log2FC > 1.5"
+                pmid:      "30712875"
+            RPE65:
+                note:      "RPE-specific; also lowly expressed in fetal retina"
+                threshold: "log2FC > 2.0"
+                pmid:      "31269016"
+
+        # -- negative_markers --
+        # [OPTIONAL] list[str] — Genes that are NOT expressed by this cell type
+        # in this source.  Used for disambiguation (e.g. RGCs are NEGATIVE for
+        # RLBP1, ruling out Muller glia identity).
+        # NOTE: The Python source data uses sets; YAML lists are converted via
+        #       set() at import time.
+        negative_markers:
+            - RLBP1
+            - GLUL
+
+        # -- species --
+        # [OPTIONAL] list[str] — Per-type species annotation, overriding or
+        # supplementing the top-level source_meta.species list.  Useful for
+        # multi-species studies where different types come from different
+        # species.
+        species:
+            - "Homo sapiens"
+            - "Macaca fascicularis"
+
+        # -- synonyms --
+        # [OPTIONAL] list[str] — Alternative names for this cell type used
+        # across different sources.  Populated automatically during merging.
+        # Examples: "Retinal_Ganglion_Cell" ↔ "RGC".
+        synonyms:
+            - "Rod"
+
+        # -- parent --
+        # [OPTIONAL] str — Parent ontology type name.  Used for hierarchical
+        # grouping (e.g. "Photoreceptor_Precursor" parent="Photoreceptor").
+        # Populated from novel_types entries.
+        parent: "Photoreceptor"
+
+        # -- classes --
+        # [OPTIONAL] [COMPUTED] list[str] — Taxonomic classes contributing
+        # to this type.  Populated during merging from contributing source_meta.
+        # Documented here for merged-KB traceability.
+        classes:
+            - "Mammalia"
+
+        # -- orders --
+        # [OPTIONAL] [COMPUTED] list[str] — Taxonomic orders contributing
+        # to this type.  Populated during merging.
+        orders:
+            - "Primates"
+
+        # -- consensus_levels --
+        # [OPTIONAL] [COMPUTED] dict — Per-gene consensus quality levels.
+        #   Key:   Gene symbol (str).
+        #   Value: str, one of "gold", "high", "medium", "low".
+        # Computed during KB merge by merge.py compute_consensus_level().
+        # Thresholds (over 7 sources):
+        #   gold:   5+ sources
+        #   high:   3-4 sources
+        #   medium: 2 sources
+        #   low:    1 source
+        consensus_levels:
+            RHO:   "gold"
+            NRL:   "high"
+            SAG:   "medium"
+            NR2E3: "medium"
+
+        # -- audit --
+        # [OPTIONAL] [NEW*] dict — Audit trail for this cell type's marker
+        # annotations.  Tracks empirical validation status, supplement
+        # verification, cross-species validation, and any flagged issues.
+        audit:
+            # expression_validated: list[str] — Marker genes that have been
+            #   empirically validated against real scRNA-seq data (e.g. via
+            #   the cross-validation pipeline in notes/temp/_cross_validation/).
+            #   Each entry is a gene symbol.  Validation criteria:
+            #   ≥30% cells in the matched cluster express the gene.
+            expression_validated:
+                - RHO
+                - NRL
+                - GNAT1
+
+            # supplement_verified: list[str] — Marker genes whose source-paper
+            #   supplement table / gene-score matrix explicitly lists them for
+            #   this cell type.  Different from expression_validated — checks
+            #   the supplementary materials rather than re-analysis.
+            #   Entries follow format "GENE:status" where status is one of:
+            #     CONFIRMED  — found in supplement with expected ranking
+            #     WARN       — found in supplement but with low score/rank
+            #     NOT_FOUND  — absent from supplement entirely (flagged)
+            supplement_verified:
+                - "RHO:CONFIRMED"
+                - "CRX:WARN"    # found but low relative score
+                - "SAG:NOT_FOUND"
+
+            # cross_species_validated: bool — Whether at least one marker for
+            #   this type has been validated across multiple species (e.g. both
+            #   human and mouse datasets).  Sets to true after the cross-
+            #   species validation pipeline confirms cross-species consistency.
+            cross_species_validated: false
+
+            # last_audited: str — Date of the most recent audit/review in
+            #   ISO-8601 format (YYYY-MM-DD).  Allows tracking of freshness.
+            last_audited: "2025-07-10"
+
+            # flagged: bool — Whether any serious issue was found during
+            #   the most recent audit.  Set to true when markers fail
+            #   validation, supplements mismatch, or expert review identifies
+            #   a problem.  Use `notes` to record the details.
+            flagged: false
+
+            # notes: str — Free-text audit notes.  Documents any anomalies,
+            #   decisions, or context from the audit process.  Parsed from
+            #   reports such as notes/temp/_cross_validation/REPORT.md.
+            notes: ""
+
+
+# ---------------------------------------------------------------------------
+# 3. novel_types — Cell types uniquely reported by this source
+# ---------------------------------------------------------------------------
+# Top-level `novel_types` list.
+#   Each element: NovelTypeEntry dict.
+#
+# These are cell types that the source paper reports but that are NOT found
+# in other source files.  They are added to the merged KB as new entries.
+
+novel_types:
+    -   # Example entry:
+        name:     "Fetal_RPE"             # [REQUIRED] str — Cell type name
+        parent:   "RPE"                   # [REQUIRED] str — Parent ontology type
+        markers:                          # [REQUIRED] list[str] — Marker genes
+            - "RPE65"
+            - "BEST1"
+            - "LRAT"
+        species:                          # [REQUIRED] list[str] — Species
+            - "Homo sapiens"
+        source:   "hu2019"               # [REQUIRED] str — Source identifier
+                                          #   (same as source_meta.id)
+
+
+# ---------------------------------------------------------------------------
+# 4. expert_rules — Decision rules for cell type annotation
+# ---------------------------------------------------------------------------
+# Top-level `expert_rules` list.
+#   Each element: ExpertRuleEntry dict.
+#
+# Each rule describes a logical condition (co-expression of a set of markers)
+# that triggers a cell-type annotation.  These rules are merged across all
+# sources and deduplicated by condition+action in merge.py.
+
+expert_rules:
+    -   # Example entry:
+        priority: 1                       # [REQUIRED] int — Rule priority.
+                                          #   Lower number = higher priority.
+                                          #   Used for conflict resolution
+                                          #   when multiple rules match.
+
+        condition:                        # [REQUIRED] dict — Trigger condition
+            markers_present:              #   [REQUIRED] dict — Genes that must
+                                          #   be expressed for this rule to fire.
+                RHO:  1.0                 #     Key:   Gene symbol (str)
+                NRL:  1.0                 #     Value: float — expression
+                                          #            threshold (arbitrary units,
+                                          #            typically 1.0 for binary
+                                          #            presence/absence).
+
+        action:   "Rod_Photoreceptor"     # [REQUIRED] str — Cell type name to
+                                          #   assign when all conditions are met.
+
+        source:   "peng2019"              # [REQUIRED] str — Source identifier.
+
+        notes:    "RHO+NRL co-expression  # [OPTIONAL] str — Free-text
+                  specifies rod            explanation of the rule.
+                  photoreceptor fate"      #   Documents biological rationale.
+
+
+# ---------------------------------------------------------------------------
+# 5. conflicts — Known cross-source annotation conflicts
+# ---------------------------------------------------------------------------
+# Top-level `conflicts` list.
+#   Each element: ConflictEntry dict.
+#
+# Documents situations where two sources assign the same marker gene to
+# different cell types, or where there is a substantive annotation
+# disagreement.  Used by merge.py's conflict detection and resolution logic.
+
+conflicts:
+    -   # Example entry:
+        type_a:                           # [REQUIRED] dict — First type
+            cell_type: "Muller_Glia"      #   Cell type name
+            marker:   "GFAP"              #   Conflicting marker gene
+
+        type_b:                           # [REQUIRED] dict — Second type
+            cell_type: "Astrocyte"        #   Cell type name
+            marker:   "GFAP"              #   Same marker, different type
+
+        notes:    "GFAP is expressed by   # [REQUIRED] str — Explanation of
+                  both Muller glia and     the nature of the conflict, why
+                  astrocytes; this study   it exists, and whether it is a
+                  labels all GFAP+ neural  genuine biological ambiguity or an
+                  retinal cells as         annotation error.
+                  Muller glia"
+
+        source:                           # [REQUIRED] dict — Source IDs
+            a: "hu2019"                   #   Source for type_a
+            b: "yan2020"                  #   Source for type_b
+
+
+# =============================================================================
+# REFERENCE: Core cell types (each source should cover ≥3 markers per type)
+# =============================================================================
+#
+#   Rod_Photoreceptor, Cone_Photoreceptor, RGC, Bipolar_Cell,
+#   Amacrine_Cell, Horizontal_Cell, Muller_Glia, RPC, RPE, Microglia,
+#   Vascular_Endothelial, Pericyte, Astrocyte, Oligodendrocyte, Fibroblast
+#
+# =============================================================================
+# REFERENCE: Minimum expert rules (8 canonical rules expected across all sources)
+# =============================================================================
+#
+#   Rod:         RHO + NRL
+#   Cone:        ARR3 + GNAT2
+#   Muller_Glia: RLBP1 + GLUL
+#   RGC:         POU4F2 + NEFM
+#   RPC:         VSX2 + SOX2
+#   RPE:         RPE65 + BEST1
+#   Microglia:   AIF1 + P2RY12
+#   Horizontal_Cell: ONECUT1 + PROX1
+#
+# =============================================================================
+# REFERENCE: Merged KB output structure (build_final_kb in merge.py)
+# =============================================================================
+#
+# The merged KB (`retina_expert_kb`) reorganises source data into:
+#
+#   {
+#       "CellTypeName": {
+#           "markers": {
+#               "confirm": {"GENE": ["src1_id", "src2_id", ...], ...},
+#               "add":    {"GENE": ["srcN_id", ...], ...},
+#               "refine": {"GENE": {"note": "...", "threshold": "...",
+#                                   "pmid": "..."}, ...},
+#           },
+#           "negative_markers": [...],    # list[str]  sorted
+#           "species": [...],             # list[str]  sorted, deduplicated
+#           "synonyms": [...],            # list[str]  sorted, deduplicated
+#           "parent": "...",              # str        from novel_types
+#           "consensus_levels": {...},    # dict[str]  per-gene gold/high/medium/low
+#           "class": "...",               # str        most common class
+#           "order": "...",               # str        most common order
+#           "classes": [...],             # list[str]  all contributing classes
+#           "orders": [...],              # list[str]  all contributing orders
+#       },
+#       "expert_rules": [...],            # deduplicated, sorted by priority
+#       "_meta": {
+#           "total_sources": 7,
+#           "classes": ["Mammalia", ...],
+#           "orders": ["Primates", "Rodentia", ...],
+#       },
+#   }
+#
+# =============================================================================

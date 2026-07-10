@@ -1,0 +1,1662 @@
+source_meta:
+  id: zuo2024
+  short_name: Zuo 2024 Nat Commun
+  pmid: '39117640'
+  journal: Nature Communications
+  year: 2024
+  species:
+  - Homo sapiens
+  tissue: retina
+  regions:
+  - fovea
+  - periphery
+  - developing
+  n_cells: 220000
+  n_subtypes: 22
+  n_groups: 9
+  class: Mammalia
+  order: Primates
+markers:
+  Proliferating_RPC:
+    confirm:
+      PAX6:
+      - '39117640'
+      SOX2:
+      - '39117640'
+      VSX2:
+      - '39117640'
+      PDE3A:
+      - '39117640'
+      ONECUT1:
+      - '39117640'
+      MDFIC:
+      - '39117640'
+      SLC1A3:
+      - '39117640'
+      COL25A1:
+      - '39117640'
+      TANC1:
+      - '39117640'
+      ONECUT2:
+      - '39117640'
+      GAS2L3:
+      - '39117640'
+      HES5:
+      - '39117640'
+      SIPA1L1:
+      - '39117640'
+      TGFB2:
+      - '39117640'
+      AC092422.1:
+      - '39117640'
+      HES6:
+      - '39117640'
+      HMGB2:
+      - '39117640'
+      NALCN-AS1:
+      - '39117640'
+      SFRP2:
+      - '39117640'
+      SEMA5A:
+      - '39117640'
+      MIS18BP1:
+      - '39117640'
+      LINC01748:
+      - '39117640'
+      AC099792.1:
+      - '39117640'
+      ATOH7:
+      - '39117640'
+      PDE1C:
+      - '39117640'
+      DLL3:
+      - '39117640'
+      MDGA1:
+      - '39117640'
+      MYBL1:
+      - '39117640'
+      MDK:
+      - '39117640'
+      SPON1:
+      - '39117640'
+      WNT5B:
+      - '39117640'
+      ROBO1:
+      - '39117640'
+      PRKD1:
+      - '39117640'
+      WDR72:
+      - '39117640'
+      RARB:
+      - '39117640'
+      GULP1:
+      - '39117640'
+      ST18:
+      - '39117640'
+      ROR1:
+      - '39117640'
+      CADPS2:
+      - '39117640'
+      SASH1:
+      - '39117640'
+      SMC4:
+      - '39117640'
+      LINC00511:
+      - '39117640'
+      HES1:
+      - '39117640'
+      LINC01515:
+      - '39117640'
+      PCDH7:
+      - '39117640'
+      GFRA1:
+      - '39117640'
+      KDR:
+      - '39117640'
+      LINC01508:
+      - '39117640'
+      FAM160A1:
+      - '39117640'
+      DNAH11:
+      - '39117640'
+      BRIP1:
+      - '39117640'
+      ADAMTS6:
+      - '39117640'
+      PRKG1:
+      - '39117640'
+      COL23A1:
+      - '39117640'
+      MED12L:
+      - '39117640'
+      MIR924HG:
+      - '39117640'
+      EGFR:
+      - '39117640'
+      CCND1:
+      - '39117640'
+      PTPRQ:
+      - '39117640'
+      PDZRN3:
+      - '39117640'
+      AC021055.1:
+      - '39117640'
+      HHIP:
+      - '39117640'
+      TMTC1:
+      - '39117640'
+      AC079298.3:
+      - '39117640'
+    add:
+      ADAMTS18:
+      - '39117640'
+      ASPM:
+      - '39117640'
+      CDK6:
+      - '39117640'
+      ECT2:
+      - '39117640'
+      ELL2:
+      - '39117640'
+      FOXN4:
+      - '39117640'
+      GLI3:
+      - '39117640'
+      MECOM:
+      - '39117640'
+      MKI67:
+      - '39117640'
+      MOB3B:
+      - '39117640'
+      MXD3:
+      - '39117640'
+      NFIA:
+      - '39117640'
+      NPAS3:
+      - '39117640'
+      PARD3B:
+      - '39117640'
+      PCDH11X:
+      - '39117640'
+      PIP5K1B:
+      - '39117640'
+      PROX1:
+      - '39117640'
+      PTPRK:
+      - '39117640'
+      SHROOM3:
+      - '39117640'
+      SORCS1:
+      - '39117640'
+      ZHX2:
+      - '39117640'
+      ZNF367:
+      - '39117640'
+    refine:
+      ARHGAP11B:
+        note: Human-specific gene expressed in transitioning PRPCs; no mouse homolog.
+          Identified in zuo2024 NRPC GRN.
+        threshold: log2FC > 0.5
+        pmid: '39117640'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified:
+      - MOESM6
+      cross_species_validated:
+        PAX6: true
+        SOX2: true
+        VSX2: false
+        MKI67: false
+        TOP2A: true
+        PCNA: false
+        HES1: true
+        ADAMTS18: false
+        ASPM: false
+        CDK6: false
+        ECT2: false
+        ELL2: false
+        FOXN4: false
+        GLI3: false
+        MECOM: false
+        MOB3B: false
+        MXD3: false
+        NFIA: false
+        NPAS3: false
+        PARD3B: false
+        PCDH11X: false
+        PIP5K1B: false
+        PROX1: false
+        PTPRK: false
+        SHROOM3: false
+        SORCS1: false
+        ZHX2: false
+        ZNF367: false
+        ARHGAP11B: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        PAX6: 0.6036
+        SOX2: 0.4235
+        TOP2A: 0.4305
+        HES1: 0.5288
+      flagged_reason: pct_expression_below_threshold
+  NRPC:
+    confirm:
+      ATOH7:
+      - '39117640'
+      OTX2:
+      - '39117640'
+      PRDM13:
+      - '39117640'
+      MDK:
+      - '39117640'
+      MDFIC:
+      - '39117640'
+      PRKD1:
+      - '39117640'
+      SLC1A3:
+      - '39117640'
+      LINC01748:
+      - '39117640'
+      ROBO1:
+      - '39117640'
+      CDK6:
+      - '39117640'
+      HMGB2:
+      - '39117640'
+      ST18:
+      - '39117640'
+      FOXN4:
+      - '39117640'
+      ZHX2:
+      - '39117640'
+      AC099792.1:
+      - '39117640'
+      MYBL1:
+      - '39117640'
+      MOB3B:
+      - '39117640'
+      NFIA:
+      - '39117640'
+      SORCS1:
+      - '39117640'
+      SMC4:
+      - '39117640'
+      WNT5B:
+      - '39117640'
+      NALCN-AS1:
+      - '39117640'
+      PIP5K1B:
+      - '39117640'
+      GLI3:
+      - '39117640'
+      COL25A1:
+      - '39117640'
+      SASH1:
+      - '39117640'
+      TGFB2:
+      - '39117640'
+      RARB:
+      - '39117640'
+      HES5:
+      - '39117640'
+      PDE3A:
+      - '39117640'
+      WDR72:
+      - '39117640'
+      MIS18BP1:
+      - '39117640'
+      PTPRK:
+      - '39117640'
+      SFRP2:
+      - '39117640'
+      DLL3:
+      - '39117640'
+      ROR1:
+      - '39117640'
+      GAS2L3:
+      - '39117640'
+      PARD3B:
+      - '39117640'
+      ELL2:
+      - '39117640'
+      SPON1:
+      - '39117640'
+      TANC1:
+      - '39117640'
+      MDGA1:
+      - '39117640'
+      GULP1:
+      - '39117640'
+      PDE1C:
+      - '39117640'
+      CADPS2:
+      - '39117640'
+      SIPA1L1:
+      - '39117640'
+      AC092422.1:
+      - '39117640'
+      ADAMTS18:
+      - '39117640'
+      SEMA5A:
+      - '39117640'
+    add:
+      CRX:
+      - '39117640'
+      HES6:
+      - '39117640'
+      ISL1:
+      - '39117640'
+      NEUROD1:
+      - '39117640'
+      NRL:
+      - '39117640'
+      ONECUT1:
+      - '39117640'
+      ONECUT2:
+      - '39117640'
+      POU4F2:
+      - '39117640'
+      PRDM1:
+      - '39117640'
+      TFAP2A:
+      - '39117640'
+      TFAP2B:
+      - '39117640'
+      THRB:
+      - '39117640'
+      VSX1:
+      - '39117640'
+    refine:
+      ATOH7:
+        note: 'Master regulator of RGC fate. Ground Truth validated (mouse Atoh7 KO
+          → complete loss of RGCs). PMID: 11723443'
+        threshold: log2FC > 1.0
+        pmid: '39117640'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - MOESM6
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Rod_Photoreceptor:
+    confirm:
+      NR2E3:
+      - '39117640'
+      NRL:
+      - '39117640'
+      RHO:
+      - '39117640'
+      OTX2-AS1:
+      - '39117640'
+      SLC35F3:
+      - '39117640'
+      CARMIL1:
+      - '39117640'
+      GPR160:
+      - '39117640'
+      MPP4:
+      - '39117640'
+      SYNDIG1:
+      - '39117640'
+      RASGRF2:
+      - '39117640'
+      PROM1:
+      - '39117640'
+      PTPN13:
+      - '39117640'
+      PRICKLE2:
+      - '39117640'
+      CNGB1:
+      - '39117640'
+      ABCA4:
+      - '39117640'
+      AIPL1:
+      - '39117640'
+      CABP5:
+      - '39117640'
+      ALK:
+      - '39117640'
+      ANKRD33B:
+      - '39117640'
+      CCDC60:
+      - '39117640'
+      MYO5B:
+      - '39117640'
+      FSTL5:
+      - '39117640'
+      TAFA4:
+      - '39117640'
+      GNB3:
+      - '39117640'
+      PRDM1:
+      - '39117640'
+      ROM1:
+      - '39117640'
+      DSCAML1:
+      - '39117640'
+      ABCA1:
+      - '39117640'
+      FRMPD1:
+      - '39117640'
+      PRPH2:
+      - '39117640'
+      DMD:
+      - '39117640'
+      ZNF385B:
+      - '39117640'
+      SMIM36:
+      - '39117640'
+      AC002070.1:
+      - '39117640'
+      DOCK8:
+      - '39117640'
+      TMEM108:
+      - '39117640'
+      AC093898.1:
+      - '39117640'
+      IMPG2:
+      - '39117640'
+      AL161757.4:
+      - '39117640'
+      KIFC3:
+      - '39117640'
+      NIPAL1:
+      - '39117640'
+      EGFLAM:
+      - '39117640'
+    add:
+      ANO2:
+      - '39117640'
+      CRX:
+      - '39117640'
+      EPS8:
+      - '39117640'
+      EYS:
+      - '39117640'
+      GNAT1:
+      - '39117640'
+      PDC:
+      - '39117640'
+      PDE6A:
+      - '39117640'
+      PDE6B:
+      - '39117640'
+      RCVRN:
+      - '39117640'
+      RP1:
+      - '39117640'
+      SAG:
+      - '39117640'
+      TMEM244:
+      - '39117640'
+      USH2A:
+      - '39117640'
+    refine:
+      NR2E3:
+        note: 'Rod fate TF; validated in Ground Truth (ESCS patients with NR2E3 mutations,
+          PMID: 18547563)'
+        threshold: log2FC > 1.0
+        pmid: '39117640'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - MOESM6
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Cone_Photoreceptor:
+    confirm:
+      ARR3:
+      - '39117640'
+      GNAT2:
+      - '39117640'
+      THRB:
+      - '39117640'
+      OTX2-AS1:
+      - '39117640'
+      NEGR1:
+      - '39117640'
+      ATP8A2:
+      - '39117640'
+      GPC5:
+      - '39117640'
+      RP1:
+      - '39117640'
+      SAMD12:
+      - '39117640'
+      ANO2:
+      - '39117640'
+      PEX5L:
+      - '39117640'
+      PCAT4:
+      - '39117640'
+      TTN:
+      - '39117640'
+      SH3GL2:
+      - '39117640'
+      PRKN:
+      - '39117640'
+      TMEM244:
+      - '39117640'
+      EYA2:
+      - '39117640'
+      SEMA6D:
+      - '39117640'
+      RASGRF2:
+      - '39117640'
+      RXRG:
+      - '39117640'
+      PRICKLE2:
+      - '39117640'
+      AIPL1:
+      - '39117640'
+      MEIS2:
+      - '39117640'
+      CHRNB4:
+      - '39117640'
+      ABTB2:
+      - '39117640'
+      CCDC60:
+      - '39117640'
+      IQCJ-SCHIP1:
+      - '39117640'
+      GRIP1:
+      - '39117640'
+      FSTL5:
+      - '39117640'
+      ADCY2:
+      - '39117640'
+      AGBL4:
+      - '39117640'
+      AC116903.2:
+      - '39117640'
+      RD3:
+      - '39117640'
+      ARMC9:
+      - '39117640'
+      SGCD:
+      - '39117640'
+      SLC40A1:
+      - '39117640'
+      DPP10:
+      - '39117640'
+      ZNF385B:
+      - '39117640'
+      CERKL:
+      - '39117640'
+      AC002070.1:
+      - '39117640'
+      IMPG2:
+      - '39117640'
+      FMN1:
+      - '39117640'
+      GRM6:
+      - '39117640'
+    add:
+      ANKRD33B:
+      - '39117640'
+      CNGB3:
+      - '39117640'
+      DCT:
+      - '39117640'
+      EGFLAM:
+      - '39117640'
+      EYS:
+      - '39117640'
+      GUCY2E:
+      - '39117640'
+      MCC:
+      - '39117640'
+      OPN1SW:
+      - '39117640'
+      PDE1C:
+      - '39117640'
+      PDE6H:
+      - '39117640'
+      PRDM1:
+      - '39117640'
+      TMEM108:
+      - '39117640'
+      WWC1:
+      - '39117640'
+    refine:
+      THRB:
+        note: 'Cone fate TF; validated in Ground Truth (mouse TrB2 KO → complete loss
+          of cones, PMID: 11138006)'
+        threshold: log2FC > 1.0
+        pmid: '39117640'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - MOESM6
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Bipolar_Cell:
+    confirm:
+      GRM6:
+      - '39117640'
+      TRPM1:
+      - '39117640'
+      VSX2:
+      - '39117640'
+      OTX2-AS1:
+      - '39117640'
+      PLXNA4:
+      - '39117640'
+      DOK6:
+      - '39117640'
+      CARMIL1:
+      - '39117640'
+      GRID1:
+      - '39117640'
+      RAPGEF5:
+      - '39117640'
+      DAB1:
+      - '39117640'
+      CNTNAP5:
+      - '39117640'
+      KCNMA1:
+      - '39117640'
+      PRICKLE2:
+      - '39117640'
+      WFDC1:
+      - '39117640'
+      CRYBG3:
+      - '39117640'
+      LDB2:
+      - '39117640'
+      FRMD3:
+      - '39117640'
+      MTUS2:
+      - '39117640'
+      UNC13C:
+      - '39117640'
+      ZFHX3:
+      - '39117640'
+      SAMSN1:
+      - '39117640'
+      IQCJ-SCHIP1:
+      - '39117640'
+      SMOC1:
+      - '39117640'
+      NETO1:
+      - '39117640'
+      ZNF804B:
+      - '39117640'
+      PLXDC2:
+      - '39117640'
+      DSCAML1:
+      - '39117640'
+      FMN2:
+      - '39117640'
+      TMEM132D:
+      - '39117640'
+      IGF1:
+      - '39117640'
+      LRRC7:
+      - '39117640'
+      RD3:
+      - '39117640'
+      ZNF385B:
+      - '39117640'
+      GABRA1:
+      - '39117640'
+      GRM7:
+      - '39117640'
+      PDE1A:
+      - '39117640'
+      AL161757.4:
+      - '39117640'
+      NEBL:
+      - '39117640'
+      FMN1:
+      - '39117640'
+      DGKB:
+      - '39117640'
+      CACNA2D4:
+      - '39117640'
+      LRRC1:
+      - '39117640'
+      PDE4B:
+      - '39117640'
+    add:
+      CA10:
+      - '39117640'
+      CABP5:
+      - '39117640'
+      FSTL5:
+      - '39117640'
+      GABRR3:
+      - '39117640'
+      GRIK1:
+      - '39117640'
+      IGSF21:
+      - '39117640'
+      ISL1:
+      - '39117640'
+      OTX2:
+      - '39117640'
+      PKC:
+      - '39117640'
+      PRDM8:
+      - '39117640'
+      PRKCA:
+      - '39117640'
+      PTPRR:
+      - '39117640'
+      SLC4A10:
+      - '39117640'
+      TMEM215:
+      - '39117640'
+      VSX1:
+      - '39117640'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified:
+      - MOESM6
+      cross_species_validated:
+        PRKCA: false
+        TRPM1: true
+        VSX1: false
+        GRM6: true
+        OTX2: true
+        VSX2: true
+        TMEM215: false
+        CABP5: false
+        GRIK1: false
+        GNAO1: true
+        GNG13: true
+        ISL1: true
+        LRIT3: false
+        NYX: false
+        PKC: false
+        SCGN: false
+        SLC4A5: false
+        CHN2: false
+        DOK6: false
+        EFR3A: false
+        LRTM1: false
+        PRDM8: false
+        RGS16: false
+        SLC38A1: false
+        CA10: false
+        FSTL5: false
+        GABRR3: false
+        IGSF21: false
+        PTPRR: false
+        SLC4A10: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        TRPM1: 0.3104
+        GRM6: 0.4552
+        OTX2: 0.5834
+        VSX2: 0.3786
+        GNAO1: 0.3389
+        GNG13: 0.3579
+        ISL1: 0.5933
+      flagged_reason: pct_expression_below_threshold
+  Amacrine_Cell:
+    confirm:
+      GAD1:
+      - '39117640'
+      GAD2:
+      - '39117640'
+      TFAP2A:
+      - '39117640'
+      PDE3A:
+      - '39117640'
+      NMNAT2:
+      - '39117640'
+      ADCY8:
+      - '39117640'
+      KIRREL3:
+      - '39117640'
+      DAB1:
+      - '39117640'
+      KLHL5:
+      - '39117640'
+      ZNF804A:
+      - '39117640'
+      SOX5:
+      - '39117640'
+      ZFPM2:
+      - '39117640'
+      ENOX1:
+      - '39117640'
+      PAUPAR:
+      - '39117640'
+      OPCML:
+      - '39117640'
+      DLG2:
+      - '39117640'
+      RBFOX1:
+      - '39117640'
+      IL1RAPL1:
+      - '39117640'
+      SPOCK3:
+      - '39117640'
+      LINC00535:
+      - '39117640'
+      PTPRT:
+      - '39117640'
+      PLXNA2:
+      - '39117640'
+      EDIL3:
+      - '39117640'
+      FRMD5:
+      - '39117640'
+      CACNB4:
+      - '39117640'
+      GRIP1:
+      - '39117640'
+      KCNH5:
+      - '39117640'
+      CALN1:
+      - '39117640'
+      FMN2:
+      - '39117640'
+      PLCL1:
+      - '39117640'
+      KCNH7:
+      - '39117640'
+      LUZP2:
+      - '39117640'
+      AKAP6:
+      - '39117640'
+      LHFPL6:
+      - '39117640'
+      LRFN5:
+      - '39117640'
+      CNTNAP2:
+      - '39117640'
+      SCN2A:
+      - '39117640'
+      GRIA3:
+      - '39117640'
+      GRM8:
+      - '39117640'
+      GLRA2:
+      - '39117640'
+      STMN2:
+      - '39117640'
+    add:
+      ASIC2:
+      - '39117640'
+      CACNA1D:
+      - '39117640'
+      CALB2:
+      - '39117640'
+      DPP6:
+      - '39117640'
+      GLRA1:
+      - '39117640'
+      MDGA2:
+      - '39117640'
+      MYT1L:
+      - '39117640'
+      NRP1:
+      - '39117640'
+      PDE4D:
+      - '39117640'
+      SLC32A1:
+      - '39117640'
+      SLC6A9:
+      - '39117640'
+      TENM2:
+      - '39117640'
+      TFAP2B:
+      - '39117640'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified:
+      - MOESM6
+      cross_species_validated:
+        GAD1: false
+        GAD2: true
+        SLC6A9: false
+        TFAP2A: true
+        ELAVL3: true
+        SLC6A1: true
+        TFAP2B: true
+        CALB2: false
+        GLRA1: false
+        GLRA2: false
+        MEIS2: true
+        NPY: false
+        PTH2: false
+        SLC32A1: false
+        TCF4: true
+        TFAP2C: false
+        VIP: false
+        C1QL2: false
+        CACNA2D2: false
+        CARTPT: false
+        GABRA2: false
+        MIAT: false
+        PAPPA: false
+        CALB1: false
+        ASIC2: false
+        CACNA1D: false
+        DPP6: false
+        MDGA2: false
+        MYT1L: false
+        NRP1: false
+        PDE4D: false
+        TENM2: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        GAD2: 0.387
+        TFAP2A: 0.3528
+        ELAVL3: 0.7487
+        SLC6A1: 0.418
+        TFAP2B: 0.7359
+        MEIS2: 0.5156
+        TCF4: 0.3645
+      flagged_reason: pct_expression_below_threshold
+  Horizontal_Cell:
+    confirm:
+      CALB1:
+      - '39117640'
+      ONECUT1:
+      - '39117640'
+      PROX1:
+      - '39117640'
+      LINC02775:
+      - '39117640'
+      ESRRG:
+      - '39117640'
+      AC016044.1:
+      - '39117640'
+      TANC1:
+      - '39117640'
+      AL139815.1:
+      - '39117640'
+      MYT1L:
+      - '39117640'
+      ZNF804A:
+      - '39117640'
+      KCNJ3:
+      - '39117640'
+      TNR:
+      - '39117640'
+      ZFPM2:
+      - '39117640'
+      PCDH9:
+      - '39117640'
+      MEGF11:
+      - '39117640'
+      NKAIN2:
+      - '39117640'
+      TFAP2A:
+      - '39117640'
+      GRIN3A:
+      - '39117640'
+      PLXNA2:
+      - '39117640'
+      EFNA5:
+      - '39117640'
+      CACNG3:
+      - '39117640'
+      GRIP1:
+      - '39117640'
+      TENM2:
+      - '39117640'
+      PLCL1:
+      - '39117640'
+      SNTG2:
+      - '39117640'
+      PCSK6:
+      - '39117640'
+      KCNIP1:
+      - '39117640'
+      PMFBP1:
+      - '39117640'
+      AKAP6:
+      - '39117640'
+      CSMD1:
+      - '39117640'
+      RYR3:
+      - '39117640'
+      ADARB2:
+      - '39117640'
+      UTRN:
+      - '39117640'
+      ROBO1:
+      - '39117640'
+      DOCK10:
+      - '39117640'
+      NEBL:
+      - '39117640'
+      CNTNAP2:
+      - '39117640'
+      DPP6:
+      - '39117640'
+      ESRRB:
+      - '39117640'
+      GRIA3:
+      - '39117640'
+      CPNE4:
+      - '39117640'
+    add:
+      CNTN4:
+      - '39117640'
+      EBF1:
+      - '39117640'
+      LHX1:
+      - '39117640'
+      MEGF10:
+      - '39117640'
+      NDST3:
+      - '39117640'
+      NTRK2:
+      - '39117640'
+      ONECUT2:
+      - '39117640'
+      ONECUT3:
+      - '39117640'
+      STMN2:
+      - '39117640'
+      SYN3:
+      - '39117640'
+      TFAP2B:
+      - '39117640'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified:
+      - MOESM6
+      cross_species_validated:
+        ONECUT1: false
+        ONECUT2: true
+        PROX1: false
+        CALB1: false
+        LHX1: false
+        EBF1: false
+        ONECUT3: false
+        PRDM6: false
+        TSHZ2: false
+        FRMPD4: false
+        NDFIP1: false
+        CNTN4: false
+        MEGF10: false
+        NDST3: false
+        NTRK2: false
+        STMN2: true
+        SYN3: false
+        TFAP2B: true
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        ONECUT2: 0.7118
+        STMN2: 0.8629
+        TFAP2B: 0.665
+      flagged_reason: pct_expression_below_threshold
+  RGC:
+    confirm:
+      NEFM:
+      - '39117640'
+      POU4F2:
+      - '39117640'
+      RBPMS:
+      - '39117640'
+      NMNAT2:
+      - '39117640'
+      SCN9A:
+      - '39117640'
+      NTNG1:
+      - '39117640'
+      KLF7:
+      - '39117640'
+      NAV2:
+      - '39117640'
+      RELN:
+      - '39117640'
+      PAM:
+      - '39117640'
+      MYT1L:
+      - '39117640'
+      SEMA6D:
+      - '39117640'
+      RUNDC3B:
+      - '39117640'
+      AL445623.2:
+      - '39117640'
+      RBFOX1:
+      - '39117640'
+      SLIT1:
+      - '39117640'
+      CACNA1B:
+      - '39117640'
+      EPHA6:
+      - '39117640'
+      ASTN2:
+      - '39117640'
+      EDIL3:
+      - '39117640'
+      EPHB1:
+      - '39117640'
+      STMN2:
+      - '39117640'
+      KCTD16:
+      - '39117640'
+      SYT4:
+      - '39117640'
+      RBMS1:
+      - '39117640'
+      KCNH7:
+      - '39117640'
+      SNCA:
+      - '39117640'
+      HS3ST5:
+      - '39117640'
+      TUBB3:
+      - '39117640'
+      UCHL1:
+      - '39117640'
+      RALYL:
+      - '39117640'
+      DCC:
+      - '39117640'
+      AKAP6:
+      - '39117640'
+      LRFN5:
+      - '39117640'
+      PTPRN2:
+      - '39117640'
+      CNTNAP2:
+      - '39117640'
+      NKAIN3:
+      - '39117640'
+      CACNA1A:
+      - '39117640'
+      ANK2:
+      - '39117640'
+      ZNF804A:
+      - '39117640'
+      GALNTL6:
+      - '39117640'
+    add:
+      ATOH7:
+      - '39117640'
+      EBF1:
+      - '39117640'
+      EBF3:
+      - '39117640'
+      ELAVL2:
+      - '39117640'
+      ELAVL4:
+      - '39117640'
+      GAP43:
+      - '39117640'
+      ISL1:
+      - '39117640'
+      KLHL1:
+      - '39117640'
+      NEFL:
+      - '39117640'
+      POU4F1:
+      - '39117640'
+      POU6F2:
+      - '39117640'
+      RBFOX3:
+      - '39117640'
+      SLC17A6:
+      - '39117640'
+      SNCG:
+      - '39117640'
+      THY1:
+      - '39117640'
+    refine:
+      POU4F2:
+        note: 'RGC master TF; Ground Truth validated (mouse Pou4f2 KO → loss of most
+          RGCs, PMID: 25775587)'
+        threshold: log2FC > 1.0
+        pmid: '39117640'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified:
+      - MOESM6
+      cross_species_validated:
+        NEFM: true
+        POU4F1: true
+        POU4F2: true
+        RBPMS: false
+        ELAVL4: true
+        NEFL: true
+        TUBB3: true
+        BNC2: false
+        EOMES: false
+        IRX3: false
+        ISL1: true
+        NEUROD2: false
+        OPN4: false
+        POU4F3: false
+        SLC17A6: false
+        SNCG: true
+        STMN1: false
+        TBR1: false
+        THY1: false
+        GAP43: true
+        DCX: true
+        AIPL1: false
+        LAPTM4B: false
+        PCP2: false
+        UNC119: false
+        ATOH7: false
+        EBF1: true
+        EBF3: true
+        ELAVL2: true
+        KLHL1: false
+        POU6F2: true
+        RBFOX3: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        NEFM: 0.6758
+        POU4F1: 0.3358
+        POU4F2: 0.3148
+        ELAVL4: 0.7963
+        NEFL: 0.7107
+        TUBB3: 0.9719
+        ISL1: 0.8001
+        SNCG: 0.6934
+        GAP43: 0.8961
+        DCX: 0.4048
+        EBF1: 0.7137
+        EBF3: 0.3564
+        ELAVL2: 0.4402
+        POU6F2: 0.5229
+      flagged_reason: pct_expression_below_threshold
+  Muller_Glia:
+    confirm:
+      GLUL:
+      - '39117640'
+      RLBP1:
+      - '39117640'
+      SLC1A3:
+      - '39117640'
+      HKDC1:
+      - '39117640'
+      NAV2:
+      - '39117640'
+      CREB5:
+      - '39117640'
+      TANC1:
+      - '39117640'
+      CGNL1:
+      - '39117640'
+      CHL1:
+      - '39117640'
+      LINC00511:
+      - '39117640'
+      GABRG3-AS1:
+      - '39117640'
+      MIR99AHG:
+      - '39117640'
+      NCALD:
+      - '39117640'
+      SOX5:
+      - '39117640'
+      KDR:
+      - '39117640'
+      FAP:
+      - '39117640'
+      HMGA2:
+      - '39117640'
+      AC092422.1:
+      - '39117640'
+      SIPA1L1:
+      - '39117640'
+      FAM160A1:
+      - '39117640'
+      SFRP2:
+      - '39117640'
+      SEMA5A:
+      - '39117640'
+      PTPRK:
+      - '39117640'
+      SEL1L3:
+      - '39117640'
+      LINC01748:
+      - '39117640'
+      AC099792.1:
+      - '39117640'
+      C1ORF61:
+      - '39117640'
+      SHROOM3:
+      - '39117640'
+      PIP5K1B:
+      - '39117640'
+      EPHA3:
+      - '39117640'
+      WNT5B:
+      - '39117640'
+      ADAMTS18:
+      - '39117640'
+      MOB3B:
+      - '39117640'
+      NFIB:
+      - '39117640'
+      P3H2:
+      - '39117640'
+      FLT1:
+      - '39117640'
+      TF:
+      - '39117640'
+      GABRG3:
+      - '39117640'
+      WIF1:
+      - '39117640'
+      DGKB:
+      - '39117640'
+      ZHX2:
+      - '39117640'
+      SASH1:
+      - '39117640'
+    add:
+      ADAMTS6:
+      - '39117640'
+      AQP4:
+      - '39117640'
+      CLU:
+      - '39117640'
+      CRYM:
+      - '39117640'
+      DKK3:
+      - '39117640'
+      GLI3:
+      - '39117640'
+      NFIA:
+      - '39117640'
+      PARD3B:
+      - '39117640'
+      PCDH11X:
+      - '39117640'
+      RARB:
+      - '39117640'
+      SAT1:
+      - '39117640'
+      SORCS1:
+      - '39117640'
+      SOX2:
+      - '39117640'
+      SPON1:
+      - '39117640'
+      VIM:
+      - '39117640'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified:
+      - MOESM6
+      cross_species_validated:
+        GFAP: false
+        GLUL: false
+        RLBP1: true
+        SLC1A3: true
+        VIM: true
+        CLU: false
+        CRYAB: false
+        APOE: true
+        AQP4: false
+        CRYM: true
+        CST3: true
+        DKK3: true
+        NFIA: false
+        SOX2: false
+        CRABP1: false
+        FRZB: false
+        GPM6B: true
+        GPX3: false
+        PTGDS: false
+        RGR: false
+        TF: false
+        WIF1: false
+        ADAMTS6: false
+        GLI3: false
+        PARD3B: false
+        PCDH11X: false
+        RARB: false
+        SAT1: true
+        SORCS1: false
+        SPON1: false
+        ASCL1: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      pct_expressed:
+        RLBP1: 0.6548
+        SLC1A3: 0.6454
+        VIM: 0.3219
+        APOE: 0.9049
+        CRYM: 0.6686
+        CST3: 0.4175
+        DKK3: 0.4334
+        GPM6B: 0.6152
+        SAT1: 0.6444
+      flagged_reason: pct_expression_below_threshold
+  Microglia:
+    confirm:
+      AIF1:
+      - '39117640'
+      CSF1R:
+      - '39117640'
+      P2RY12:
+      - '39117640'
+    add:
+      C1QA:
+      - '39117640'
+      C1QB:
+      - '39117640'
+      CX3CR1:
+      - '39117640'
+      ITGAM:
+      - '39117640'
+      TREM2:
+      - '39117640'
+      TYROBP:
+      - '39117640'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Astrocyte:
+    confirm:
+      ALDH1L1:
+      - '39117640'
+      GFAP:
+      - '39117640'
+      S100B:
+      - '39117640'
+    add:
+      AQP4:
+      - '39117640'
+      GJA1:
+      - '39117640'
+      SLC1A2:
+      - '39117640'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  RPE:
+    confirm:
+      BEST1:
+      - '39117640'
+      LRAT:
+      - '39117640'
+      RPE65:
+      - '39117640'
+    add:
+      DCT:
+      - '39117640'
+      PMEL:
+      - '39117640'
+      RDH10:
+      - '39117640'
+      TIMP3:
+      - '39117640'
+      TYRP1:
+      - '39117640'
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated:
+      - GSE118614
+      supplement_verified: []
+      cross_species_validated:
+        BEST1: false
+        LRAT: false
+        RPE65: false
+        CRALBP: false
+        RDH10: false
+        TIMP3: false
+        DCT: false
+        PMEL: false
+        TYRP1: false
+      last_audited: '2026-07-10'
+      flagged: true
+      notes: ''
+      flagged_reason: pct_expression_below_threshold
+novel_types:
+- name: Proliferating_RPC
+  parent: RPC
+  markers:
+  - VSX2
+  - SOX2
+  - PAX6
+  - MKI67
+  - ASPM
+  - MXD3
+  - NPAS3
+  - ZNF367
+  - PROX1
+  - CDK6
+  - GLI3
+  - SORCS1
+  species:
+  - Homo sapiens
+  source: zuo2024
+- name: NRPC
+  parent: RPC
+  markers:
+  - ATOH7
+  - PRDM13
+  - OTX2
+  - NEUROD1
+  - HES6
+  - TFAP2A
+  - CRX
+  - NRL
+  - POU4F2
+  - ISL1
+  species:
+  - Homo sapiens
+  source: zuo2024
+expert_rules:
+- priority: 10
+  condition:
+    markers_present:
+      VSX2: 1.0
+      SOX2: 1.0
+      MKI67: 0.5
+    markers_absent:
+    - ATOH7
+    - OTX2
+  action: Proliferating_RPC
+  source: zuo2024
+  notes: VSX2+SOX2+MKI67 without neurogenic TFs specifies proliferating RPCs
+- priority: 9
+  condition:
+    markers_present:
+      ATOH7: 0.5
+      POU4F2: 1.0
+      ISL1: 0.5
+  action: RGC
+  source: zuo2024
+  notes: 'ATOH7+POU4F2+ISL1: core RGC identity GRN from developing retina'
+- priority: 8
+  condition:
+    markers_present:
+      ONECUT1: 1.0
+      PROX1: 0.5
+      CALB1: 0.5
+  action: Horizontal_Cell
+  source: zuo2024
+  notes: 'ONECUT1+PROX1: experimentally validated HC specification (PMID: 25228773)'
+- priority: 7
+  condition:
+    markers_present:
+      RLBP1: 1.0
+      GLUL: 1.0
+    markers_absent:
+    - MKI67
+    - ATOH7
+  action: Muller_Glia
+  source: zuo2024
+  notes: RLBP1+GLUL without progenitor markers distinguishes mature MG from PRPCs
+conflicts: []
