@@ -147,6 +147,14 @@ def main():
             # Load metadata if barcodes/features files provided
             if CFG.barcodes_file and os.path.exists(CFG.barcodes_file):
                 metadata = pd.read_csv(CFG.barcodes_file, index_col=0, sep=sep)
+                # Apply meta_columns renaming (same as MTX branch below)
+                if CFG.meta_columns:
+                    rename_map = {}
+                    for target_col, source_col in CFG.meta_columns.items():
+                        if source_col in metadata.columns:
+                            rename_map[source_col] = target_col
+                    if rename_map:
+                        metadata.rename(columns=rename_map, inplace=True)
                 adata.obs = adata.obs.join(metadata, how='left')
             if CFG.features_file and os.path.exists(CFG.features_file):
                 genes = _read_features_with_header_detection(CFG.features_file, sep=sep)
