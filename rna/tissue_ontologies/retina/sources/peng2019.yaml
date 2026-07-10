@@ -18,25 +18,16 @@ source_meta:
 markers:
   Rod_Photoreceptor:
     confirm:
-      GNAT1:
-      - '30712875'
-      NRL:
-      - '30712875'
-      RHO:
-      - '30712875'
+    - GNAT1
+    - NRL
+    - RHO
     add:
-      NR2E3:
-      - '30712875'
-      PDE6B:
-      - '30712875'
-      SAG:
-      - '30712875'
-      GNB1:
-      - '30712875'
-      GNGT1:
-      - '30712875'
-      PDC:
-      - '30712875'
+    - GNB1
+    - GNGT1
+    - NR2E3
+    - PDC
+    - PDE6B
+    - SAG
     refine:
       CRX:
         note: pan-photoreceptor; expressed in both rods and cones
@@ -55,27 +46,17 @@ markers:
       notes: ''
   Cone_Photoreceptor:
     confirm:
-      ARR3:
-      - '30712875'
-      GNAT2:
-      - '30712875'
-      OPN1SW:
-      - '30712875'
+    - ARR3
+    - GNAT2
+    - OPN1SW
     add:
-      OPN1LW:
-      - '30712875'
-      PDE6C:
-      - '30712875'
-      PDE6H:
-      - '30712875'
-      GNGT2:
-      - '30712875'
-      GUCA1A:
-      - '30712875'
-      OPN1MW:
-      - '30712875'
-      RCVRN:
-      - '30712875'
+    - GNGT2
+    - GUCA1A
+    - OPN1LW
+    - OPN1MW
+    - PDE6C
+    - PDE6H
+    - RCVRN
     refine:
       OPN1LW:
         note: M/L cone opsin; fovea-enriched expression
@@ -98,29 +79,18 @@ markers:
       notes: ''
   RGC:
     confirm:
-      NEFM:
-      - '30712875'
-      POU4F1:
-      - '30712875'
-      POU4F2:
-      - '30712875'
+    - NEFM
+    - POU4F1
+    - POU4F2
     add:
-      ELAVL4:
-      - '30712875'
-      NEFL:
-      - '30712875'
-      TUBB3:
-      - '30712875'
-      POU4F3:
-      - '30712875'
-      RBPMS:
-      - '30712875'
-      SLC17A6:
-      - '30712875'
-      SNCG:
-      - '30712875'
-      THY1:
-      - '30712875'
+    - ELAVL4
+    - NEFL
+    - POU4F3
+    - RBPMS
+    - SLC17A6
+    - SNCG
+    - THY1
+    - TUBB3
     refine: {}
     negative_markers: []
     species: []
@@ -184,23 +154,15 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Bipolar_Cell:
     confirm:
-      PRKCA:
-      - '30712875'
-      TRPM1:
-      - '30712875'
-      VSX1:
-      - '30712875'
+    - PRKCA
+    - TRPM1
+    - VSX1
     add:
-      CABP5:
-      - '30712875'
-      GRM6:
-      - '30712875'
-      VSX2:
-      - '30712875'
-      GRIK1:
-      - '30712875'
-      OTX2:
-      - '30712875'
+    - CABP5
+    - GRIK1
+    - GRM6
+    - OTX2
+    - VSX2
     refine:
       PRKCA:
         note: ON bipolar cell marker; labels rod bipolar cells
@@ -259,25 +221,16 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Amacrine_Cell:
     confirm:
-      GAD1:
-      - '30712875'
-      GAD2:
-      - '30712875'
-      SLC6A9:
-      - '30712875'
+    - GAD1
+    - GAD2
+    - SLC6A9
     add:
-      CALB1:
-      - '30712875'
-      TFAP2A:
-      - '30712875'
-      TFAP2B:
-      - '30712875'
-      C1QL1:
-      - '30712875'
-      C1QL2:
-      - '30712875'
-      TFAP2C:
-      - '30712875'
+    - C1QL1
+    - C1QL2
+    - CALB1
+    - TFAP2A
+    - TFAP2B
+    - TFAP2C
     refine: {}
     negative_markers: []
     species: []
@@ -334,17 +287,12 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Horizontal_Cell:
     confirm:
-      ONECUT1:
-      - '30712875'
-      ONECUT2:
-      - '30712875'
-      PROX1:
-      - '30712875'
+    - ONECUT1
+    - ONECUT2
+    - PROX1
     add:
-      CALB1:
-      - '30712875'
-      LHX1:
-      - '30712875'
+    - CALB1
+    - LHX1
     refine: {}
     negative_markers: []
     species: []
@@ -383,29 +331,18 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Muller_Glia:
     confirm:
-      GFAP:
-      - '30712875'
-      GLUL:
-      - '30712875'
-      RLBP1:
-      - '30712875'
+    - GFAP
+    - GLUL
+    - RLBP1
     add:
-      CRYAB:
-      - '30712875'
-      SLC1A3:
-      - '30712875'
-      VIM:
-      - '30712875'
-      APOE:
-      - '30712875'
-      CLU:
-      - '30712875'
-      CRABP1:
-      - '30712875'
-      CRYM:
-      - '30712875'
-      DKK3:
-      - '30712875'
+    - APOE
+    - CLU
+    - CRABP1
+    - CRYAB
+    - CRYM
+    - DKK3
+    - SLC1A3
+    - VIM
     refine: {}
     negative_markers: []
     species: []
@@ -463,33 +400,20 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Microglia:
     confirm:
-      AIF1:
-      - '30712875'
-      CSF1R:
-      - '30712875'
-      P2RY12:
-      - '30712875'
+    - AIF1
+    - CSF1R
+    - P2RY12
     add:
-      CD74:
-      - '30712875'
-      CX3CR1:
-      - '30712875'
-      ITGAM:
-      - '30712875'
-      B2M:
-      - '30712875'
-      C1QA:
-      - '30712875'
-      C1QB:
-      - '30712875'
-      C1QC:
-      - '30712875'
-      CTSS:
-      - '30712875'
-      HEXB:
-      - '30712875'
-      TMEM119:
-      - '30712875'
+    - B2M
+    - C1QA
+    - C1QB
+    - C1QC
+    - CD74
+    - CTSS
+    - CX3CR1
+    - HEXB
+    - ITGAM
+    - TMEM119
     refine: {}
     negative_markers: []
     species: []
@@ -504,17 +428,12 @@ markers:
       notes: ''
   RPE:
     confirm:
-      BEST1:
-      - '30712875'
-      LRAT:
-      - '30712875'
-      RPE65:
-      - '30712875'
+    - BEST1
+    - LRAT
+    - RPE65
     add:
-      RDH10:
-      - '30712875'
-      TIMP3:
-      - '30712875'
+    - RDH10
+    - TIMP3
     refine: {}
     negative_markers: []
     species: []
@@ -539,21 +458,14 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Vascular_Endothelial:
     confirm:
-      CDH5:
-      - '30712875'
-      PECAM1:
-      - '30712875'
-      VWF:
-      - '30712875'
+    - CDH5
+    - PECAM1
+    - VWF
     add:
-      CLDN5:
-      - '30712875'
-      EGFL7:
-      - '30712875'
-      COL4A1:
-      - '30712875'
-      IGFBP7:
-      - '30712875'
+    - CLDN5
+    - COL4A1
+    - EGFL7
+    - IGFBP7
     refine: {}
     negative_markers: []
     species: []
@@ -568,27 +480,17 @@ markers:
       notes: ''
   Pericyte:
     confirm:
-      ACTA2:
-      - '30712875'
-      CSPG4:
-      - '30712875'
-      PDGFRB:
-      - '30712875'
+    - ACTA2
+    - CSPG4
+    - PDGFRB
     add:
-      ANPEP:
-      - '30712875'
-      RGS5:
-      - '30712875'
-      COL4A1:
-      - '30712875'
-      KCNJ8:
-      - '30712875'
-      MGP:
-      - '30712875'
-      MYL9:
-      - '30712875'
-      RGC5:
-      - '30712875'
+    - ANPEP
+    - COL4A1
+    - KCNJ8
+    - MGP
+    - MYL9
+    - RGC5
+    - RGS5
     refine: {}
     negative_markers: []
     species: []
@@ -603,17 +505,12 @@ markers:
       notes: ''
   RPC:
     confirm:
-      PAX6:
-      - '30712875'
-      SOX2:
-      - '30712875'
-      VSX2:
-      - '30712875'
+    - PAX6
+    - SOX2
+    - VSX2
     add:
-      HES1:
-      - '30712875'
-      NOTCH1:
-      - '30712875'
+    - HES1
+    - NOTCH1
     refine: {}
     negative_markers: []
     species: []
@@ -640,17 +537,12 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Astrocyte:
     confirm:
-      ALDH1L1:
-      - '30712875'
-      AQP4:
-      - '30712875'
-      GFAP:
-      - '30712875'
+    - ALDH1L1
+    - AQP4
+    - GFAP
     add:
-      S100B:
-      - '30712875'
-      SOX9:
-      - '30712875'
+    - S100B
+    - SOX9
     refine: {}
     negative_markers: []
     species: []
@@ -664,17 +556,12 @@ markers:
       notes: ''
   Oligodendrocyte:
     confirm:
-      MBP:
-      - '30712875'
-      MOG:
-      - '30712875'
-      PLP1:
-      - '30712875'
+    - MBP
+    - MOG
+    - PLP1
     add:
-      OLIG2:
-      - '30712875'
-      SOX10:
-      - '30712875'
+    - OLIG2
+    - SOX10
     refine: {}
     negative_markers: []
     species: []
@@ -688,17 +575,12 @@ markers:
       notes: ''
   Fibroblast:
     confirm:
-      COL1A1:
-      - '30712875'
-      DCN:
-      - '30712875'
-      LUM:
-      - '30712875'
+    - COL1A1
+    - DCN
+    - LUM
     add:
-      COL1A2:
-      - '30712875'
-      COL3A1:
-      - '30712875'
+    - COL1A2
+    - COL3A1
     refine: {}
     negative_markers: []
     species: []

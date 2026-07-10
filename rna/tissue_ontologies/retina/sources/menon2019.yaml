@@ -18,43 +18,25 @@ source_meta:
 markers:
   Rod_Photoreceptor:
     confirm:
-      CNGA1:
-      - '31653841'
-      NR2E3:
-      - '31653841'
-      PDE6A:
-      - '31653841'
-      PDE6B:
-      - '31653841'
+    - CNGA1
+    - NR2E3
+    - PDE6A
+    - PDE6B
     add:
-      AIPL1:
-      - '31653841'
-      CNGB1:
-      - '31653841'
-      EPB41L2:
-      - '31653841'
-      GNAT1:
-      - '31653841'
-      MFGE8:
-      - '31653841'
-      MOK:
-      - '31653841'
-      OSBP2:
-      - '31653841'
-      PDC:
-      - '31653841'
-      PPEF2:
-      - '31653841'
-      RCVRN:
-      - '31653841'
-      SAG:
-      - '31653841'
-      SCAPER:
-      - '31653841'
-      SYNE2:
-      - '31653841'
-      UNC119:
-      - '31653841'
+    - AIPL1
+    - CNGB1
+    - EPB41L2
+    - GNAT1
+    - MFGE8
+    - MOK
+    - OSBP2
+    - PDC
+    - PPEF2
+    - RCVRN
+    - SAG
+    - SCAPER
+    - SYNE2
+    - UNC119
     refine:
       NR2E3:
         note: Rod-fate specification TF; mutation causes Enhanced S-Cone Syndrome
@@ -73,31 +55,19 @@ markers:
       notes: ''
   Cone_Photoreceptor:
     confirm:
-      CNGB3:
-      - '31653841'
-      GRK7:
-      - '31653841'
-      OPN1LW:
-      - '31653841'
-      RAB41:
-      - '31653841'
+    - CNGB3
+    - GRK7
+    - OPN1LW
+    - RAB41
     add:
-      ARR3:
-      - '31653841'
-      CRX:
-      - '31653841'
-      GNAT2:
-      - '31653841'
-      GNGT2:
-      - '31653841'
-      MEGF9:
-      - '31653841'
-      OPN1SW:
-      - '31653841'
-      PDE6H:
-      - '31653841'
-      THRB:
-      - '31653841'
+    - ARR3
+    - CRX
+    - GNAT2
+    - GNGT2
+    - MEGF9
+    - OPN1SW
+    - PDE6H
+    - THRB
     refine:
       OPN1LW:
         note: L-opsin; strongest cone-specific signal in adult human retina. L/M cone
@@ -116,33 +86,20 @@ markers:
       notes: ''
   RGC:
     confirm:
-      NEFM:
-      - '31653841'
+    - NEFM
     add:
-      AIPL1:
-      - '31653841'
-      ISL1:
-      - '31653841'
-      LAPTM4B:
-      - '31653841'
-      NEFL:
-      - '31653841'
-      PCP2:
-      - '31653841'
-      POU4F1:
-      - '31653841'
-      POU4F2:
-      - '31653841'
-      RBPMS:
-        - '31653841'
-      SLC17A6:
-      - '31653841'
-      STMN1:
-      - '31653841'
-      THY1:
-      - '31653841'
-      UNC119:
-      - '31653841'
+    - AIPL1
+    - ISL1
+    - LAPTM4B
+    - NEFL
+    - PCP2
+    - POU4F1
+    - POU4F2
+    - RBPMS
+    - SLC17A6
+    - STMN1
+    - THY1
+    - UNC119
     refine: {}
     negative_markers: []
     species: []
@@ -186,7 +143,9 @@ markers:
         RBFOX3: false
       last_audited: '2026-07-10'
       flagged: true
-      notes: "AUDIT: RBPMS not found in Menon MOESM5 gene_scores matrix (0 grep hits); robust RGC marker validated externally, but kept as add in this source pending direct DE verification"
+      notes: 'AUDIT: RBPMS not found in Menon MOESM5 gene_scores matrix (0 grep hits);
+        robust RGC marker validated externally, but kept as add in this source pending
+        direct DE verification'
       pct_expressed:
         NEFM: 0.6758
         POU4F1: 0.3358
@@ -205,39 +164,23 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Bipolar_Cell:
     confirm:
-      GRM6:
-      - '31653841'
-      TMEM215:
-      - '31653841'
-      TRPM1:
-      - '31653841'
-      VSX1:
-      - '31653841'
+    - GRM6
+    - TMEM215
+    - TRPM1
+    - VSX1
     add:
-      CABP5:
-      - '31653841'
-      CHN2:
-      - '31653841'
-      DOK6:
-      - '31653841'
-      EFR3A:
-      - '31653841'
-      ISL1:
-      - '31653841'
-      LRTM1:
-      - '31653841'
-      OTX2:
-      - '31653841'
-      PRDM8:
-      - '31653841'
-      PRKCA:
-      - '31653841'
-      RGS16:
-      - '31653841'
-      SLC38A1:
-      - '31653841'
-      VSX2:
-      - '31653841'
+    - CABP5
+    - CHN2
+    - DOK6
+    - EFR3A
+    - ISL1
+    - LRTM1
+    - OTX2
+    - PRDM8
+    - PRKCA
+    - RGS16
+    - SLC38A1
+    - VSX2
     refine:
       TRPM1:
         note: ON-bipolar cell marker; signal transduction channel. Highest bipolar-specific
@@ -301,31 +244,19 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Amacrine_Cell:
     confirm:
-      ELAVL3:
-      - '31653841'
-      GAD1:
-      - '31653841'
+    - ELAVL3
+    - GAD1
     add:
-      C1QL2:
-      - '31653841'
-      CACNA2D2:
-      - '31653841'
-      CALB2:
-      - '31653841'
-      CARTPT:
-      - '31653841'
-      GABRA2:
-      - '31653841'
-      GAD2:
-      - '31653841'
-      MIAT:
-      - '31653841'
-      PAPPA:
-      - '31653841'
-      SLC32A1:
-      - '31653841'
-      TFAP2A:
-      - '31653841'
+    - C1QL2
+    - CACNA2D2
+    - CALB2
+    - CARTPT
+    - GABRA2
+    - GAD2
+    - MIAT
+    - PAPPA
+    - SLC32A1
+    - TFAP2A
     refine: {}
     negative_markers: []
     species: []
@@ -381,23 +312,15 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Horizontal_Cell:
     confirm:
-      LHX1:
-      - '31653841'
-      ONECUT1:
-      - '31653841'
+    - LHX1
+    - ONECUT1
     add:
-      CALB1:
-      - '31653841'
-      FRMPD4:
-      - '31653841'
-      NDFIP1:
-      - '31653841'
-      ONECUT2:
-      - '31653841'
-      ONECUT3:
-      - '31653841'
-      PROX1:
-      - '31653841'
+    - CALB1
+    - FRMPD4
+    - NDFIP1
+    - ONECUT2
+    - ONECUT3
+    - PROX1
     refine:
       ONECUT1:
         note: Master TF for horizontal cell specification. Strongest HC-specific signal
@@ -440,39 +363,23 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Muller_Glia:
     confirm:
-      CLU:
-      - '31653841'
-      GLUL:
-      - '31653841'
-      RLBP1:
-      - '31653841'
+    - CLU
+    - GLUL
+    - RLBP1
     add:
-      APOE:
-      - '31653841'
-      AQP4:
-      - '31653841'
-      CRABP1:
-      - '31653841'
-      DKK3:
-      - '31653841'
-      FRZB:
-      - '31653841'
-      GPM6B:
-      - '31653841'
-      GPX3:
-      - '31653841'
-      PTGDS:
-      - '31653841'
-      RGR:
-      - '31653841'
-      SLC1A3:
-      - '31653841'
-      TF:
-      - '31653841'
-      VIM:
-      - '31653841'
-      WIF1:
-      - '31653841'
+    - APOE
+    - AQP4
+    - CRABP1
+    - DKK3
+    - FRZB
+    - GPM6B
+    - GPX3
+    - PTGDS
+    - RGR
+    - SLC1A3
+    - TF
+    - VIM
+    - WIF1
     refine:
       CLU:
         note: Clusterin; highest MG-specific signal (score > 25). Complement regulator;
@@ -534,31 +441,19 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Microglia:
     confirm:
-      C1QA:
-      - '31653841'
-      C1QB:
-      - '31653841'
-      C1QC:
-      - '31653841'
-      TYROBP:
-      - '31653841'
+    - C1QA
+    - C1QB
+    - C1QC
+    - TYROBP
     add:
-      AIF1:
-      - '31653841'
-      CSF1R:
-      - '31653841'
-      CX3CR1:
-      - '31653841'
-      FCER1G:
-      - '31653841'
-      ITGB2:
-      - '31653841'
-      LAPTM5:
-      - '31653841'
-      P2RY12:
-      - '31653841'
-      TREM2:
-      - '31653841'
+    - AIF1
+    - CSF1R
+    - CX3CR1
+    - FCER1G
+    - ITGB2
+    - LAPTM5
+    - P2RY12
+    - TREM2
     refine:
       C1QB:
         note: Complement C1q B chain; highest microglia signal (score > 5.7). Complement
@@ -577,19 +472,13 @@ markers:
       notes: ''
   Astrocyte:
     confirm:
-      GFAP:
-      - '31653841'
-      S100B:
-      - '31653841'
+    - GFAP
+    - S100B
     add:
-      ALDH1L1:
-      - '31653841'
-      AQP4:
-      - '31653841'
-      GJA1:
-      - '31653841'
-      SLC1A2:
-      - '31653841'
+    - ALDH1L1
+    - AQP4
+    - GJA1
+    - SLC1A2
     refine: {}
     negative_markers: []
     species: []
@@ -603,23 +492,15 @@ markers:
       notes: ''
   Vascular_Endothelial:
     confirm:
-      CLDN5:
-      - '31653841'
-      VWF:
-      - '31653841'
+    - CLDN5
+    - VWF
     add:
-      CDH5:
-      - '31653841'
-      ENG:
-      - '31653841'
-      FLT1:
-      - '31653841'
-      GNG11:
-      - '31653841'
-      HIGD1B:
-      - '31653841'
-      PECAM1:
-      - '31653841'
+    - CDH5
+    - ENG
+    - FLT1
+    - GNG11
+    - HIGD1B
+    - PECAM1
     refine:
       CLDN5:
         note: Claudin-5; tight junction protein. Highest vascular endothelial score

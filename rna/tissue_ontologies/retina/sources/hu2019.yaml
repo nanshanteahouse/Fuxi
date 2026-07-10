@@ -18,15 +18,11 @@ source_meta:
 markers:
   RPE:
     confirm:
-      BEST1:
-      - '31269016'
-      LRAT:
-      - '31269016'
-      RPE65:
-      - '31269016'
+    - BEST1
+    - LRAT
+    - RPE65
     add:
-      TIMP3:
-      - '31269016'
+    - TIMP3
     refine:
       RPE65:
         note: RPE-specific marker in fetal tissue; high expression by GW8
@@ -64,19 +60,13 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Fibroblast:
     confirm:
-      COL1A1:
-      - '31269016'
-      DCN:
-      - '31269016'
-      LUM:
-      - '31269016'
+    - COL1A1
+    - DCN
+    - LUM
     add:
-      COL1A2:
-      - '31269016'
-      COL3A1:
-      - '31269016'
-      PDGFRA:
-      - '31269016'
+    - COL1A2
+    - COL3A1
+    - PDGFRA
     refine: {}
     negative_markers: []
     species: []
@@ -104,22 +94,13 @@ markers:
         PDGFRA: 0.7961
   RPC:
     confirm:
-      SOX2:
-      - '31269016'
-      VSX2:
-      - '31269016'
+    - SOX2
+    - VSX2
     add:
-      # NOTE: likely filtered out by Hu's 5K HVG gene set — not in supplement cluster markers
-      HES1:
-      - '31269016'
-      # NOTE: likely filtered out by Hu's 5K HVG gene set — not in supplement cluster markers
-      MKI67:
-      - '31269016'
-      # NOTE: likely filtered out by Hu's 5K HVG gene set — not in supplement cluster markers
-      NOTCH1:
-      - '31269016'
-      PAX6:
-      - '31269016'
+    - HES1
+    - MKI67
+    - NOTCH1
+    - PAX6
     refine:
       VSX2:
         note: canonical RPC marker; expressed throughout fetal stages 5-24 GW
@@ -153,13 +134,10 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Muller_Glia:
     confirm:
-      GLUL:
-      - '31269016'
-      RLBP1:
-      - '31269016'
+    - GLUL
+    - RLBP1
     add:
-      GFAP:
-      - '31269016'
+    - GFAP
     refine: {}
     negative_markers: []
     species: []
@@ -216,16 +194,11 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Retinal_Ganglion_Cell:
     confirm:
-      ELAVL4:
-      - '31269016'
-      NEFM:
-      - '31269016'
-      POU4F2:
-      - '31269016'
+    - ELAVL4
+    - NEFM
+    - POU4F2
     add:
-      # NOTE: likely filtered out by Hu's 5K HVG gene set — not in supplement cluster markers
-      DCX:
-      - '31269016'
+    - DCX
     refine: {}
     negative_markers: []
     species: []
@@ -291,15 +264,11 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Photoreceptor_Precursor:
     confirm:
-      CRX:
-      - '31269016'
-      OTX2:
-      - '31269016'
-      RCVRN:
-      - '31269016'
+    - CRX
+    - OTX2
+    - RCVRN
     add:
-      NRL:
-      - '31269016'
+    - NRL
     refine:
       CRX:
         note: early photoreceptor precursor marker; precedes opsin expression
@@ -326,17 +295,12 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Bipolar_Precursor:
     confirm:
-      OTX2:
-      - '31269016'
-      VSX1:
-      - '31269016'
-      VSX2:
-      - '31269016'
+    - OTX2
+    - VSX1
+    - VSX2
     add:
-      GRM6:
-      - '31269016'
-      PRKCA:
-      - '31269016'
+    - GRM6
+    - PRKCA
     refine: {}
     negative_markers: []
     species: []
@@ -350,15 +314,11 @@ markers:
       notes: ''
   Amacrine_Precursor:
     confirm:
-      GAD1:
-      - '31269016'
-      TFAP2A:
-      - '31269016'
-      TFAP2B:
-      - '31269016'
+    - GAD1
+    - TFAP2A
+    - TFAP2B
     add:
-      CALB2:
-      - '31269016'
+    - CALB2
     refine: {}
     negative_markers: []
     species: []
@@ -372,15 +332,11 @@ markers:
       notes: ''
   Horizontal_Cell:
     confirm:
-      ONECUT1:
-      - '31269016'
-      PROX1:
-      - '31269016'
+    - ONECUT1
+    - PROX1
     add:
-      CALB1:
-      - '31269016'
-      ONECUT2:
-      - '31269016'
+    - CALB1
+    - ONECUT2
     refine: {}
     negative_markers: []
     species: []
@@ -418,15 +374,11 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Vascular_Endothelial:
     confirm:
-      CDH5:
-      - '31269016'
-      PECAM1:
-      - '31269016'
-      VWF:
-      - '31269016'
+    - CDH5
+    - PECAM1
+    - VWF
     add:
-      CLDN5:
-      - '31269016'
+    - CLDN5
     refine: {}
     negative_markers: []
     species: []
@@ -440,16 +392,11 @@ markers:
       notes: ''
   Microglia:
     confirm:
-      AIF1:
-      - '31269016'
-      CSF1R:
-      - '31269016'
-      CX3CR1:
-      - '31269016'
+    - AIF1
+    - CSF1R
+    - CX3CR1
     add:
-      # NOTE: likely filtered out by Hu's 5K HVG gene set — not in supplement cluster markers
-      ITGAM:
-      - '31269016'
+    - ITGAM
     refine: {}
     negative_markers: []
     species: []

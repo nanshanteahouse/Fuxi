@@ -17,171 +17,91 @@ source_meta:
 markers:
   Proliferating_RPC:
     add:
-      FGF19:
-      - '38670973'
-      SFRP2:
-      - '38670973'
-      DAPL1:
-      - '38670973'
-      ZIC1:
-      - '38670973'
-      ID3:
-      - '38670973'
-      HMGA1:
-      - '38670973'
-      EEF1A1:
-      - '38670973'
-      TPT1:
-      - '38670973'
-      TMSB4X:
-      - '38670973'
-      MDK:
-      - '38670973'
-      FOXP1:
-      - '38670973'
-      GN2BL1:
-      - '38670973'
-      HNRNPA1:
-      - '38670973'
+    - DAPL1
+    - EEF1A1
+    - FGF19
+    - FOXP1
+    - GN2BL1
+    - HMGA1
+    - HNRNPA1
+    - ID3
+    - MDK
+    - SFRP2
+    - TMSB4X
+    - TPT1
+    - ZIC1
   RPC:
     add:
-      HES5:
-      - '38670973'
-      HES4:
-      - '38670973'
-      SIX3:
-      - '38670973'
-      FRZB:
-      - '38670973'
-      FOS:
-      - '38670973'
-      JUN:
-      - '38670973'
-      VIM:
-      - '38670973'
-      SOX2:
-      - '38670973'
-      HES1:
-      - '38670973'
-      CKB:
-      - '38670973'
-      HES6:
-      - '38670973'
-      SOX9:
-      - '38670973'
-      SPP1:
-      - '38670973'
-      CCND1:
-      - '38670973'
-      ZFP36L2:
-      - '38670973'
-      SOX4:
-      - '38670973'
-      RORB:
-      - '38670973'
-      MALAT1:
-      - '38670973'
-      MYB:
-      - '38670973'
-      ASCL1:
-      - '38670973'
-      BTG1:
-      - '38670973'
-      HMGB2:
-      - '38670973'
-      SFRP1:
-      - '38670973'
+    - ASCL1
+    - BTG1
+    - CCND1
+    - CKB
+    - FOS
+    - FRZB
+    - HES1
+    - HES4
+    - HES5
+    - HES6
+    - HMGB2
+    - JUN
+    - MALAT1
+    - MYB
+    - RORB
+    - SFRP1
+    - SIX3
+    - SOX2
+    - SOX4
+    - SOX9
+    - SPP1
+    - VIM
+    - ZFP36L2
   T1:
     add:
-      ATOH7:
-      - '38670973'
-      DLL3:
-      - '38670973'
-      NEUROD1:
-      - '38670973'
-      VXN:
-      - '38670973'
-      HES6:
-      - '38670973'
-      GADD45G:
-      - '38670973'
-      FAM131C:
-      - '38670973'
-      MYBL1:
-      - '38670973'
-      GADD45A:
-      - '38670973'
-      NEUROD4:
-      - '38670973'
-      PCPB4:
-      - '38670973'
-      INSM1:
-      - '38670973'
-      OLIG2:
-      - '38670973'
-      NEUROG2:
-      - '38670973'
-      DLL4:
-      - '38670973'
-      MFNG:
-      - '38670973'
+    - ATOH7
+    - DLL3
+    - DLL4
+    - FAM131C
+    - GADD45A
+    - GADD45G
+    - HES6
+    - INSM1
+    - MFNG
+    - MYBL1
+    - NEUROD1
+    - NEUROD4
+    - NEUROG2
+    - OLIG2
+    - PCPB4
+    - VXN
   T2:
     add:
-      PTF1A:
-      - '38670973'
-      NEUROD4:
-      - '38670973'
-      PRDM13:
-      - '38670973'
-      SOX11:
-      - '38670973'
-      HIF1A:
-      - '38670973'
-      SPATS2L:
-      - '38670973'
-      ACKR3:
-      - '38670973'
-      BNIP3:
-      - '38670973'
-      CCK:
-      - '38670973'
-      HSPB1:
-      - '38670973'
-      PGK1:
-      - '38670973'
-      CD9:
-      - '38670973'
+    - ACKR3
+    - BNIP3
+    - CCK
+    - CD9
+    - HIF1A
+    - HSPB1
+    - NEUROD4
+    - PGK1
+    - PRDM13
+    - PTF1A
+    - SOX11
+    - SPATS2L
   T3:
     add:
-      FABP7:
-      - '38670973'
-      OTX2:
-      - '38670973'
-      NEUROD4:
-      - '38670973'
-      TFF1:
-      - '38670973'
-      NEUROD1:
-      - '38670973'
-      PCPB4:
-      - '38670973'
-      DCT:
-      - '38670973'
-      NRL:
-      - '38670973'
-      PI3KR1:
-      - '38670973'
-      RCVRN:
-      - '38670973'
-      GADD45G:
-      - '38670973'
-      CADPS:
-      - '38670973'
-      CD24:
-      - '38670973'
-      AIPL1:
-      - '38670973'
-      RXRG:
-      - '38670973'
-      VXN:
-      - '38670973'
+    - AIPL1
+    - CADPS
+    - CD24
+    - DCT
+    - FABP7
+    - GADD45G
+    - NEUROD1
+    - NEUROD4
+    - NRL
+    - OTX2
+    - PCPB4
+    - PI3KR1
+    - RCVRN
+    - RXRG
+    - TFF1
+    - VXN

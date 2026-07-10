@@ -18,19 +18,13 @@ source_meta:
 markers:
   Muller_Glia:
     confirm:
-      GLUL:
-      - GSE246169
-      RLBP1:
-      - GSE246169
-      VIM:
-      - GSE246169
+    - GLUL
+    - RLBP1
+    - VIM
     add:
-      CLU:
-      - GSE246169
-      CRYAB:
-      - GSE246169
-      SLC1A3:
-      - GSE246169
+    - CLU
+    - CRYAB
+    - SLC1A3
     refine:
       ASCL1:
         note: ectopic ASCL1 expression drives MG reprogramming toward neuronal fate
@@ -95,19 +89,13 @@ markers:
       flagged_reason: pct_expression_below_threshold
   RPC:
     confirm:
-      PAX6:
-      - GSE246169
-      SOX2:
-      - GSE246169
-      VSX2:
-      - GSE246169
+    - PAX6
+    - SOX2
+    - VSX2
     add:
-      HES1:
-      - GSE246169
-      MKI67:
-      - GSE246169
-      NOTCH1:
-      - GSE246169
+    - HES1
+    - MKI67
+    - NOTCH1
     refine:
       MKI67:
         note: proliferation marker; high in proliferating RPCs and ASCL1-reprogrammed
@@ -139,19 +127,13 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Proliferating_MG:
     confirm:
-      MKI67:
-      - GSE246169
-      PCNA:
-      - GSE246169
-      TOP2A:
-      - GSE246169
+    - MKI67
+    - PCNA
+    - TOP2A
     add:
-      ASCL1:
-      - GSE246169
-      DLL1:
-      - GSE246169
-      HES6:
-      - GSE246169
+    - ASCL1
+    - DLL1
+    - HES6
     refine:
       ASCL1:
         note: proneural factor; induces MG re-entry into cell cycle and neurogenesis
@@ -169,17 +151,12 @@ markers:
       notes: ''
   Rod_Photoreceptor:
     confirm:
-      GNAT1:
-      - GSE246169
-      NRL:
-      - GSE246169
-      RHO:
-      - GSE246169
+    - GNAT1
+    - NRL
+    - RHO
     add:
-      NR2E3:
-      - GSE246169
-      PDE6B:
-      - GSE246169
+    - NR2E3
+    - PDE6B
     refine: {}
     negative_markers: []
     species: []
@@ -193,17 +170,12 @@ markers:
       notes: ''
   Cone_Photoreceptor:
     confirm:
-      ARR3:
-      - GSE246169
-      GNAT2:
-      - GSE246169
-      RCVRN:
-      - GSE246169
+    - ARR3
+    - GNAT2
+    - RCVRN
     add:
-      PDE6C:
-      - GSE246169
-      THRB:
-      - GSE246169
+    - PDE6C
+    - THRB
     refine: {}
     negative_markers: []
     species: []
@@ -217,17 +189,12 @@ markers:
       notes: ''
   RGC:
     confirm:
-      ELAVL4:
-      - GSE246169
-      NEFM:
-      - GSE246169
-      POU4F2:
-      - GSE246169
+    - ELAVL4
+    - NEFM
+    - POU4F2
     add:
-      GAP43:
-      - GSE246169
-      TUBB3:
-      - GSE246169
+    - GAP43
+    - TUBB3
     refine: {}
     negative_markers: []
     species: []
@@ -290,17 +257,12 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Bipolar_Cell:
     confirm:
-      PRKCA:
-      - GSE246169
-      TRPM1:
-      - GSE246169
-      VSX1:
-      - GSE246169
+    - PRKCA
+    - TRPM1
+    - VSX1
     add:
-      GRM6:
-      - GSE246169
-      OTX2:
-      - GSE246169
+    - GRM6
+    - OTX2
     refine: {}
     negative_markers: []
     species: []
@@ -354,17 +316,12 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Amacrine_Cell:
     confirm:
-      GAD1:
-      - GSE246169
-      GAD2:
-      - GSE246169
-      TFAP2A:
-      - GSE246169
+    - GAD1
+    - GAD2
+    - TFAP2A
     add:
-      CALB2:
-      - GSE246169
-      SLC6A9:
-      - GSE246169
+    - CALB2
+    - SLC6A9
     refine: {}
     negative_markers: []
     species: []
@@ -420,15 +377,11 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Horizontal_Cell:
     confirm:
-      ONECUT1:
-      - GSE246169
-      ONECUT2:
-      - GSE246169
-      PROX1:
-      - GSE246169
+    - ONECUT1
+    - ONECUT2
+    - PROX1
     add:
-      CALB1:
-      - GSE246169
+    - CALB1
     refine: {}
     negative_markers: []
     species: []
@@ -466,17 +419,12 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Microglia:
     confirm:
-      AIF1:
-      - GSE246169
-      CSF1R:
-      - GSE246169
-      P2RY12:
-      - GSE246169
+    - AIF1
+    - CSF1R
+    - P2RY12
     add:
-      CX3CR1:
-      - GSE246169
-      ITGAM:
-      - GSE246169
+    - CX3CR1
+    - ITGAM
     refine: {}
     negative_markers: []
     species: []
@@ -490,15 +438,11 @@ markers:
       notes: ''
   RPE:
     confirm:
-      BEST1:
-      - GSE246169
-      LRAT:
-      - GSE246169
-      RPE65:
-      - GSE246169
+    - BEST1
+    - LRAT
+    - RPE65
     add:
-      TIMP3:
-      - GSE246169
+    - TIMP3
     refine: {}
     negative_markers: []
     species: []
@@ -523,15 +467,11 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Vascular_Endothelial:
     confirm:
-      CDH5:
-      - GSE246169
-      PECAM1:
-      - GSE246169
-      VWF:
-      - GSE246169
+    - CDH5
+    - PECAM1
+    - VWF
     add:
-      CLDN5:
-      - GSE246169
+    - CLDN5
     refine: {}
     negative_markers: []
     species: []
@@ -545,15 +485,11 @@ markers:
       notes: ''
   Pericyte:
     confirm:
-      ACTA2:
-      - GSE246169
-      CSPG4:
-      - GSE246169
-      PDGFRB:
-      - GSE246169
+    - ACTA2
+    - CSPG4
+    - PDGFRB
     add:
-      RGS5:
-      - GSE246169
+    - RGS5
     refine: {}
     negative_markers: []
     species: []
@@ -567,15 +503,11 @@ markers:
       notes: ''
   Astrocyte:
     confirm:
-      ALDH1L1:
-      - GSE246169
-      AQP4:
-      - GSE246169
-      GFAP:
-      - GSE246169
+    - ALDH1L1
+    - AQP4
+    - GFAP
     add:
-      S100B:
-      - GSE246169
+    - S100B
     refine: {}
     negative_markers: []
     species: []
@@ -589,15 +521,11 @@ markers:
       notes: ''
   Oligodendrocyte:
     confirm:
-      MBP:
-      - GSE246169
-      MOG:
-      - GSE246169
-      PLP1:
-      - GSE246169
+    - MBP
+    - MOG
+    - PLP1
     add:
-      OLIG2:
-      - GSE246169
+    - OLIG2
     refine: {}
     negative_markers: []
     species: []
@@ -611,15 +539,11 @@ markers:
       notes: ''
   Fibroblast:
     confirm:
-      COL1A1:
-      - GSE246169
-      DCN:
-      - GSE246169
-      LUM:
-      - GSE246169
+    - COL1A1
+    - DCN
+    - LUM
     add:
-      COL3A1:
-      - GSE246169
+    - COL3A1
     refine: {}
     negative_markers: []
     species: []

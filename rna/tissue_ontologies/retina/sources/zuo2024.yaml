@@ -19,179 +19,93 @@ source_meta:
 markers:
   Proliferating_RPC:
     confirm:
-      PAX6:
-      - '39117640'
-      SOX2:
-      - '39117640'
-      VSX2:
-      - '39117640'
-      PDE3A:
-      - '39117640'
-      ONECUT1:
-      - '39117640'
-      MDFIC:
-      - '39117640'
-      SLC1A3:
-      - '39117640'
-      COL25A1:
-      - '39117640'
-      TANC1:
-      - '39117640'
-      ONECUT2:
-      - '39117640'
-      GAS2L3:
-      - '39117640'
-      HES5:
-      - '39117640'
-      SIPA1L1:
-      - '39117640'
-      TGFB2:
-      - '39117640'
-      AC092422.1:
-      - '39117640'
-      HES6:
-      - '39117640'
-      HMGB2:
-      - '39117640'
-      NALCN-AS1:
-      - '39117640'
-      SFRP2:
-      - '39117640'
-      SEMA5A:
-      - '39117640'
-      MIS18BP1:
-      - '39117640'
-      LINC01748:
-      - '39117640'
-      AC099792.1:
-      - '39117640'
-      ATOH7:
-      - '39117640'
-      PDE1C:
-      - '39117640'
-      DLL3:
-      - '39117640'
-      MDGA1:
-      - '39117640'
-      MYBL1:
-      - '39117640'
-      MDK:
-      - '39117640'
-      SPON1:
-      - '39117640'
-      WNT5B:
-      - '39117640'
-      ROBO1:
-      - '39117640'
-      PRKD1:
-      - '39117640'
-      WDR72:
-      - '39117640'
-      RARB:
-      - '39117640'
-      GULP1:
-      - '39117640'
-      ST18:
-      - '39117640'
-      ROR1:
-      - '39117640'
-      CADPS2:
-      - '39117640'
-      SASH1:
-      - '39117640'
-      SMC4:
-      - '39117640'
-      LINC00511:
-      - '39117640'
-      HES1:
-      - '39117640'
-      LINC01515:
-      - '39117640'
-      PCDH7:
-      - '39117640'
-      GFRA1:
-      - '39117640'
-      KDR:
-      - '39117640'
-      LINC01508:
-      - '39117640'
-      FAM160A1:
-      - '39117640'
-      DNAH11:
-      - '39117640'
-      BRIP1:
-      - '39117640'
-      ADAMTS6:
-      - '39117640'
-      PRKG1:
-      - '39117640'
-      COL23A1:
-      - '39117640'
-      MED12L:
-      - '39117640'
-      MIR924HG:
-      - '39117640'
-      EGFR:
-      - '39117640'
-      CCND1:
-      - '39117640'
-      PTPRQ:
-      - '39117640'
-      PDZRN3:
-      - '39117640'
-      AC021055.1:
-      - '39117640'
-      HHIP:
-      - '39117640'
-      TMTC1:
-      - '39117640'
-      AC079298.3:
-      - '39117640'
+    - AC021055.1
+    - AC079298.3
+    - AC092422.1
+    - AC099792.1
+    - ADAMTS6
+    - ATOH7
+    - BRIP1
+    - CADPS2
+    - CCND1
+    - COL23A1
+    - COL25A1
+    - DLL3
+    - DNAH11
+    - EGFR
+    - FAM160A1
+    - GAS2L3
+    - GFRA1
+    - GULP1
+    - HES1
+    - HES5
+    - HES6
+    - HHIP
+    - HMGB2
+    - KDR
+    - LINC00511
+    - LINC01508
+    - LINC01515
+    - LINC01748
+    - MDFIC
+    - MDGA1
+    - MDK
+    - MED12L
+    - MIR924HG
+    - MIS18BP1
+    - MYBL1
+    - NALCN-AS1
+    - ONECUT1
+    - ONECUT2
+    - PAX6
+    - PCDH7
+    - PDE1C
+    - PDE3A
+    - PDZRN3
+    - PRKD1
+    - PRKG1
+    - PTPRQ
+    - RARB
+    - ROBO1
+    - ROR1
+    - SASH1
+    - SEMA5A
+    - SFRP2
+    - SIPA1L1
+    - SLC1A3
+    - SMC4
+    - SOX2
+    - SPON1
+    - ST18
+    - TANC1
+    - TGFB2
+    - TMTC1
+    - VSX2
+    - WDR72
+    - WNT5B
     add:
-      ADAMTS18:
-      - '39117640'
-      ASPM:
-      - '39117640'
-      CDK6:
-      - '39117640'
-      ECT2:
-      - '39117640'
-      ELL2:
-      - '39117640'
-      FOXN4:
-      - '39117640'
-      GLI3:
-      - '39117640'
-      MECOM:
-      - '39117640'
-      MKI67:
-      - '39117640'
-      MOB3B:
-      - '39117640'
-      MXD3:
-      - '39117640'
-      NFIA:
-      - '39117640'
-      NPAS3:
-      - '39117640'
-      PARD3B:
-      - '39117640'
-      PCDH11X:
-      - '39117640'
-      PIP5K1B:
-      - '39117640'
-      PROX1:
-      - '39117640'
-      PTPRK:
-      - '39117640'
-      SHROOM3:
-      - '39117640'
-      SORCS1:
-      - '39117640'
-      ZHX2:
-      - '39117640'
-      ZNF367:
-      - '39117640'
+    - ADAMTS18
+    - ASPM
+    - CDK6
+    - ECT2
+    - ELL2
+    - FOXN4
+    - GLI3
+    - MECOM
+    - MKI67
+    - MOB3B
+    - MXD3
+    - NFIA
+    - NPAS3
+    - PARD3B
+    - PCDH11X
+    - PIP5K1B
+    - PROX1
+    - PTPRK
+    - SHROOM3
+    - SORCS1
+    - ZHX2
+    - ZNF367
     refine:
       ARHGAP11B:
         note: Human-specific gene expressed in transitioning PRPCs; no mouse homolog.
@@ -247,131 +161,69 @@ markers:
       flagged_reason: pct_expression_below_threshold
   NRPC:
     confirm:
-      ATOH7:
-      - '39117640'
-      OTX2:
-      - '39117640'
-      PRDM13:
-      - '39117640'
-      MDK:
-      - '39117640'
-      MDFIC:
-      - '39117640'
-      PRKD1:
-      - '39117640'
-      SLC1A3:
-      - '39117640'
-      LINC01748:
-      - '39117640'
-      ROBO1:
-      - '39117640'
-      CDK6:
-      - '39117640'
-      HMGB2:
-      - '39117640'
-      ST18:
-      - '39117640'
-      FOXN4:
-      - '39117640'
-      ZHX2:
-      - '39117640'
-      AC099792.1:
-      - '39117640'
-      MYBL1:
-      - '39117640'
-      MOB3B:
-      - '39117640'
-      NFIA:
-      - '39117640'
-      SORCS1:
-      - '39117640'
-      SMC4:
-      - '39117640'
-      WNT5B:
-      - '39117640'
-      NALCN-AS1:
-      - '39117640'
-      PIP5K1B:
-      - '39117640'
-      GLI3:
-      - '39117640'
-      COL25A1:
-      - '39117640'
-      SASH1:
-      - '39117640'
-      TGFB2:
-      - '39117640'
-      RARB:
-      - '39117640'
-      HES5:
-      - '39117640'
-      PDE3A:
-      - '39117640'
-      WDR72:
-      - '39117640'
-      MIS18BP1:
-      - '39117640'
-      PTPRK:
-      - '39117640'
-      SFRP2:
-      - '39117640'
-      DLL3:
-      - '39117640'
-      ROR1:
-      - '39117640'
-      GAS2L3:
-      - '39117640'
-      PARD3B:
-      - '39117640'
-      ELL2:
-      - '39117640'
-      SPON1:
-      - '39117640'
-      TANC1:
-      - '39117640'
-      MDGA1:
-      - '39117640'
-      GULP1:
-      - '39117640'
-      PDE1C:
-      - '39117640'
-      CADPS2:
-      - '39117640'
-      SIPA1L1:
-      - '39117640'
-      AC092422.1:
-      - '39117640'
-      ADAMTS18:
-      - '39117640'
-      SEMA5A:
-      - '39117640'
+    - AC092422.1
+    - AC099792.1
+    - ADAMTS18
+    - ATOH7
+    - CADPS2
+    - CDK6
+    - COL25A1
+    - DLL3
+    - ELL2
+    - FOXN4
+    - GAS2L3
+    - GLI3
+    - GULP1
+    - HES5
+    - HMGB2
+    - LINC01748
+    - MDFIC
+    - MDGA1
+    - MDK
+    - MIS18BP1
+    - MOB3B
+    - MYBL1
+    - NALCN-AS1
+    - NFIA
+    - OTX2
+    - PARD3B
+    - PDE1C
+    - PDE3A
+    - PIP5K1B
+    - PRDM13
+    - PRKD1
+    - PTPRK
+    - RARB
+    - ROBO1
+    - ROR1
+    - SASH1
+    - SEMA5A
+    - SFRP2
+    - SIPA1L1
+    - SLC1A3
+    - SMC4
+    - SORCS1
+    - SPON1
+    - ST18
+    - TANC1
+    - TGFB2
+    - WDR72
+    - WNT5B
+    - ZHX2
     add:
-      CRX:
-      - '39117640'
-      HES6:
-      - '39117640'
-      ISL1:
-      - '39117640'
-      NEUROD1:
-      - '39117640'
-      NRL:
-      - '39117640'
-      ONECUT1:
-      - '39117640'
-      ONECUT2:
-      - '39117640'
-      POU4F2:
-      - '39117640'
-      PRDM1:
-      - '39117640'
-      TFAP2A:
-      - '39117640'
-      TFAP2B:
-      - '39117640'
-      THRB:
-      - '39117640'
-      VSX1:
-      - '39117640'
+    - CRX
+    - HES6
+    - ISL1
+    - NEUROD1
+    - NRL
+    - ONECUT1
+    - ONECUT2
+    - POU4F2
+    - PRDM1
+    - TFAP2A
+    - TFAP2B
+    - THRB
+    - VSX1
     refine:
       ATOH7:
         note: 'Master regulator of RGC fate. Ground Truth validated (mouse Atoh7 KO
@@ -391,117 +243,62 @@ markers:
       notes: ''
   Rod_Photoreceptor:
     confirm:
-      NR2E3:
-      - '39117640'
-      NRL:
-      - '39117640'
-      RHO:
-      - '39117640'
-      OTX2-AS1:
-      - '39117640'
-      SLC35F3:
-      - '39117640'
-      CARMIL1:
-      - '39117640'
-      GPR160:
-      - '39117640'
-      MPP4:
-      - '39117640'
-      SYNDIG1:
-      - '39117640'
-      RASGRF2:
-      - '39117640'
-      PROM1:
-      - '39117640'
-      PTPN13:
-      - '39117640'
-      PRICKLE2:
-      - '39117640'
-      CNGB1:
-      - '39117640'
-      ABCA4:
-      - '39117640'
-      AIPL1:
-      - '39117640'
-      CABP5:
-      - '39117640'
-      ALK:
-      - '39117640'
-      ANKRD33B:
-      - '39117640'
-      CCDC60:
-      - '39117640'
-      MYO5B:
-      - '39117640'
-      FSTL5:
-      - '39117640'
-      TAFA4:
-      - '39117640'
-      GNB3:
-      - '39117640'
-      PRDM1:
-      - '39117640'
-      ROM1:
-      - '39117640'
-      DSCAML1:
-      - '39117640'
-      ABCA1:
-      - '39117640'
-      FRMPD1:
-      - '39117640'
-      PRPH2:
-      - '39117640'
-      DMD:
-      - '39117640'
-      ZNF385B:
-      - '39117640'
-      SMIM36:
-      - '39117640'
-      AC002070.1:
-      - '39117640'
-      DOCK8:
-      - '39117640'
-      TMEM108:
-      - '39117640'
-      AC093898.1:
-      - '39117640'
-      IMPG2:
-      - '39117640'
-      AL161757.4:
-      - '39117640'
-      KIFC3:
-      - '39117640'
-      NIPAL1:
-      - '39117640'
-      EGFLAM:
-      - '39117640'
+    - ABCA1
+    - ABCA4
+    - AC002070.1
+    - AC093898.1
+    - AIPL1
+    - AL161757.4
+    - ALK
+    - ANKRD33B
+    - CABP5
+    - CARMIL1
+    - CCDC60
+    - CNGB1
+    - DMD
+    - DOCK8
+    - DSCAML1
+    - EGFLAM
+    - FRMPD1
+    - FSTL5
+    - GNB3
+    - GPR160
+    - IMPG2
+    - KIFC3
+    - MPP4
+    - MYO5B
+    - NIPAL1
+    - NR2E3
+    - NRL
+    - OTX2-AS1
+    - PRDM1
+    - PRICKLE2
+    - PROM1
+    - PRPH2
+    - PTPN13
+    - RASGRF2
+    - RHO
+    - ROM1
+    - SLC35F3
+    - SMIM36
+    - SYNDIG1
+    - TAFA4
+    - TMEM108
+    - ZNF385B
     add:
-      ANO2:
-      - '39117640'
-      CRX:
-      - '39117640'
-      EPS8:
-      - '39117640'
-      EYS:
-      - '39117640'
-      GNAT1:
-      - '39117640'
-      PDC:
-      - '39117640'
-      PDE6A:
-      - '39117640'
-      PDE6B:
-      - '39117640'
-      RCVRN:
-      - '39117640'
-      RP1:
-      - '39117640'
-      SAG:
-      - '39117640'
-      TMEM244:
-      - '39117640'
-      USH2A:
-      - '39117640'
+    - ANO2
+    - CRX
+    - EPS8
+    - EYS
+    - GNAT1
+    - PDC
+    - PDE6A
+    - PDE6B
+    - RCVRN
+    - RP1
+    - SAG
+    - TMEM244
+    - USH2A
     refine:
       NR2E3:
         note: 'Rod fate TF; validated in Ground Truth (ESCS patients with NR2E3 mutations,
@@ -521,119 +318,63 @@ markers:
       notes: ''
   Cone_Photoreceptor:
     confirm:
-      ARR3:
-      - '39117640'
-      GNAT2:
-      - '39117640'
-      THRB:
-      - '39117640'
-      OTX2-AS1:
-      - '39117640'
-      NEGR1:
-      - '39117640'
-      ATP8A2:
-      - '39117640'
-      GPC5:
-      - '39117640'
-      RP1:
-      - '39117640'
-      SAMD12:
-      - '39117640'
-      ANO2:
-      - '39117640'
-      PEX5L:
-      - '39117640'
-      PCAT4:
-      - '39117640'
-      TTN:
-      - '39117640'
-      SH3GL2:
-      - '39117640'
-      PRKN:
-      - '39117640'
-      TMEM244:
-      - '39117640'
-      EYA2:
-      - '39117640'
-      SEMA6D:
-      - '39117640'
-      RASGRF2:
-      - '39117640'
-      RXRG:
-      - '39117640'
-      PRICKLE2:
-      - '39117640'
-      AIPL1:
-      - '39117640'
-      MEIS2:
-      - '39117640'
-      CHRNB4:
-      - '39117640'
-      ABTB2:
-      - '39117640'
-      CCDC60:
-      - '39117640'
-      IQCJ-SCHIP1:
-      - '39117640'
-      GRIP1:
-      - '39117640'
-      FSTL5:
-      - '39117640'
-      ADCY2:
-      - '39117640'
-      AGBL4:
-      - '39117640'
-      AC116903.2:
-      - '39117640'
-      RD3:
-      - '39117640'
-      ARMC9:
-      - '39117640'
-      SGCD:
-      - '39117640'
-      SLC40A1:
-      - '39117640'
-      DPP10:
-      - '39117640'
-      ZNF385B:
-      - '39117640'
-      CERKL:
-      - '39117640'
-      AC002070.1:
-      - '39117640'
-      IMPG2:
-      - '39117640'
-      FMN1:
-      - '39117640'
-      GRM6:
-      - '39117640'
+    - ABTB2
+    - AC002070.1
+    - AC116903.2
+    - ADCY2
+    - AGBL4
+    - AIPL1
+    - ANO2
+    - ARMC9
+    - ARR3
+    - ATP8A2
+    - CCDC60
+    - CERKL
+    - CHRNB4
+    - DPP10
+    - EYA2
+    - FMN1
+    - FSTL5
+    - GNAT2
+    - GPC5
+    - GRIP1
+    - GRM6
+    - IMPG2
+    - IQCJ-SCHIP1
+    - MEIS2
+    - NEGR1
+    - OTX2-AS1
+    - PCAT4
+    - PEX5L
+    - PRICKLE2
+    - PRKN
+    - RASGRF2
+    - RD3
+    - RP1
+    - RXRG
+    - SAMD12
+    - SEMA6D
+    - SGCD
+    - SH3GL2
+    - SLC40A1
+    - THRB
+    - TMEM244
+    - TTN
+    - ZNF385B
     add:
-      ANKRD33B:
-      - '39117640'
-      CNGB3:
-      - '39117640'
-      DCT:
-      - '39117640'
-      EGFLAM:
-      - '39117640'
-      EYS:
-      - '39117640'
-      GUCY2E:
-      - '39117640'
-      MCC:
-      - '39117640'
-      OPN1SW:
-      - '39117640'
-      PDE1C:
-      - '39117640'
-      PDE6H:
-      - '39117640'
-      PRDM1:
-      - '39117640'
-      TMEM108:
-      - '39117640'
-      WWC1:
-      - '39117640'
+    - ANKRD33B
+    - CNGB3
+    - DCT
+    - EGFLAM
+    - EYS
+    - GUCY2E
+    - MCC
+    - OPN1SW
+    - PDE1C
+    - PDE6H
+    - PRDM1
+    - TMEM108
+    - WWC1
     refine:
       THRB:
         note: 'Cone fate TF; validated in Ground Truth (mouse TrB2 KO → complete loss
@@ -653,123 +394,65 @@ markers:
       notes: ''
   Bipolar_Cell:
     confirm:
-      GRM6:
-      - '39117640'
-      TRPM1:
-      - '39117640'
-      VSX2:
-      - '39117640'
-      OTX2-AS1:
-      - '39117640'
-      PLXNA4:
-      - '39117640'
-      DOK6:
-      - '39117640'
-      CARMIL1:
-      - '39117640'
-      GRID1:
-      - '39117640'
-      RAPGEF5:
-      - '39117640'
-      DAB1:
-      - '39117640'
-      CNTNAP5:
-      - '39117640'
-      KCNMA1:
-      - '39117640'
-      PRICKLE2:
-      - '39117640'
-      WFDC1:
-      - '39117640'
-      CRYBG3:
-      - '39117640'
-      LDB2:
-      - '39117640'
-      FRMD3:
-      - '39117640'
-      MTUS2:
-      - '39117640'
-      UNC13C:
-      - '39117640'
-      ZFHX3:
-      - '39117640'
-      SAMSN1:
-      - '39117640'
-      IQCJ-SCHIP1:
-      - '39117640'
-      SMOC1:
-      - '39117640'
-      NETO1:
-      - '39117640'
-      ZNF804B:
-      - '39117640'
-      PLXDC2:
-      - '39117640'
-      DSCAML1:
-      - '39117640'
-      FMN2:
-      - '39117640'
-      TMEM132D:
-      - '39117640'
-      IGF1:
-      - '39117640'
-      LRRC7:
-      - '39117640'
-      RD3:
-      - '39117640'
-      ZNF385B:
-      - '39117640'
-      GABRA1:
-      - '39117640'
-      GRM7:
-      - '39117640'
-      PDE1A:
-      - '39117640'
-      AL161757.4:
-      - '39117640'
-      NEBL:
-      - '39117640'
-      FMN1:
-      - '39117640'
-      DGKB:
-      - '39117640'
-      CACNA2D4:
-      - '39117640'
-      LRRC1:
-      - '39117640'
-      PDE4B:
-      - '39117640'
+    - AL161757.4
+    - CACNA2D4
+    - CARMIL1
+    - CNTNAP5
+    - CRYBG3
+    - DAB1
+    - DGKB
+    - DOK6
+    - DSCAML1
+    - FMN1
+    - FMN2
+    - FRMD3
+    - GABRA1
+    - GRID1
+    - GRM6
+    - GRM7
+    - IGF1
+    - IQCJ-SCHIP1
+    - KCNMA1
+    - LDB2
+    - LRRC1
+    - LRRC7
+    - MTUS2
+    - NEBL
+    - NETO1
+    - OTX2-AS1
+    - PDE1A
+    - PDE4B
+    - PLXDC2
+    - PLXNA4
+    - PRICKLE2
+    - RAPGEF5
+    - RD3
+    - SAMSN1
+    - SMOC1
+    - TMEM132D
+    - TRPM1
+    - UNC13C
+    - VSX2
+    - WFDC1
+    - ZFHX3
+    - ZNF385B
+    - ZNF804B
     add:
-      CA10:
-      - '39117640'
-      CABP5:
-      - '39117640'
-      FSTL5:
-      - '39117640'
-      GABRR3:
-      - '39117640'
-      GRIK1:
-      - '39117640'
-      IGSF21:
-      - '39117640'
-      ISL1:
-      - '39117640'
-      OTX2:
-      - '39117640'
-      PKC:
-      - '39117640'
-      PRDM8:
-      - '39117640'
-      PRKCA:
-      - '39117640'
-      PTPRR:
-      - '39117640'
-      SLC4A10:
-      - '39117640'
-      TMEM215:
-      - '39117640'
-      VSX1:
-      - '39117640'
+    - CA10
+    - CABP5
+    - FSTL5
+    - GABRR3
+    - GRIK1
+    - IGSF21
+    - ISL1
+    - OTX2
+    - PKC
+    - PRDM8
+    - PRKCA
+    - PTPRR
+    - SLC4A10
+    - TMEM215
+    - VSX1
     refine: {}
     negative_markers: []
     species: []
@@ -824,115 +507,61 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Amacrine_Cell:
     confirm:
-      GAD1:
-      - '39117640'
-      GAD2:
-      - '39117640'
-      TFAP2A:
-      - '39117640'
-      PDE3A:
-      - '39117640'
-      NMNAT2:
-      - '39117640'
-      ADCY8:
-      - '39117640'
-      KIRREL3:
-      - '39117640'
-      DAB1:
-      - '39117640'
-      KLHL5:
-      - '39117640'
-      ZNF804A:
-      - '39117640'
-      SOX5:
-      - '39117640'
-      ZFPM2:
-      - '39117640'
-      ENOX1:
-      - '39117640'
-      PAUPAR:
-      - '39117640'
-      OPCML:
-      - '39117640'
-      DLG2:
-      - '39117640'
-      RBFOX1:
-      - '39117640'
-      IL1RAPL1:
-      - '39117640'
-      SPOCK3:
-      - '39117640'
-      LINC00535:
-      - '39117640'
-      PTPRT:
-      - '39117640'
-      PLXNA2:
-      - '39117640'
-      EDIL3:
-      - '39117640'
-      FRMD5:
-      - '39117640'
-      CACNB4:
-      - '39117640'
-      GRIP1:
-      - '39117640'
-      KCNH5:
-      - '39117640'
-      CALN1:
-      - '39117640'
-      FMN2:
-      - '39117640'
-      PLCL1:
-      - '39117640'
-      KCNH7:
-      - '39117640'
-      LUZP2:
-      - '39117640'
-      AKAP6:
-      - '39117640'
-      LHFPL6:
-      - '39117640'
-      LRFN5:
-      - '39117640'
-      CNTNAP2:
-      - '39117640'
-      SCN2A:
-      - '39117640'
-      GRIA3:
-      - '39117640'
-      GRM8:
-      - '39117640'
-      GLRA2:
-      - '39117640'
-      STMN2:
-      - '39117640'
+    - ADCY8
+    - AKAP6
+    - CACNB4
+    - CALN1
+    - CNTNAP2
+    - DAB1
+    - DLG2
+    - EDIL3
+    - ENOX1
+    - FMN2
+    - FRMD5
+    - GAD1
+    - GAD2
+    - GLRA2
+    - GRIA3
+    - GRIP1
+    - GRM8
+    - IL1RAPL1
+    - KCNH5
+    - KCNH7
+    - KIRREL3
+    - KLHL5
+    - LHFPL6
+    - LINC00535
+    - LRFN5
+    - LUZP2
+    - NMNAT2
+    - OPCML
+    - PAUPAR
+    - PDE3A
+    - PLCL1
+    - PLXNA2
+    - PTPRT
+    - RBFOX1
+    - SCN2A
+    - SOX5
+    - SPOCK3
+    - STMN2
+    - TFAP2A
+    - ZFPM2
+    - ZNF804A
     add:
-      ASIC2:
-      - '39117640'
-      CACNA1D:
-      - '39117640'
-      CALB2:
-      - '39117640'
-      DPP6:
-      - '39117640'
-      GLRA1:
-      - '39117640'
-      MDGA2:
-      - '39117640'
-      MYT1L:
-      - '39117640'
-      NRP1:
-      - '39117640'
-      PDE4D:
-      - '39117640'
-      SLC32A1:
-      - '39117640'
-      SLC6A9:
-      - '39117640'
-      TENM2:
-      - '39117640'
-      TFAP2B:
-      - '39117640'
+    - ASIC2
+    - CACNA1D
+    - CALB2
+    - DPP6
+    - GLRA1
+    - MDGA2
+    - MYT1L
+    - NRP1
+    - PDE4D
+    - SLC32A1
+    - SLC6A9
+    - TENM2
+    - TFAP2B
     refine: {}
     negative_markers: []
     species: []
@@ -989,111 +618,59 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Horizontal_Cell:
     confirm:
-      CALB1:
-      - '39117640'
-      ONECUT1:
-      - '39117640'
-      PROX1:
-      - '39117640'
-      LINC02775:
-      - '39117640'
-      ESRRG:
-      - '39117640'
-      AC016044.1:
-      - '39117640'
-      TANC1:
-      - '39117640'
-      AL139815.1:
-      - '39117640'
-      MYT1L:
-      - '39117640'
-      ZNF804A:
-      - '39117640'
-      KCNJ3:
-      - '39117640'
-      TNR:
-      - '39117640'
-      ZFPM2:
-      - '39117640'
-      PCDH9:
-      - '39117640'
-      MEGF11:
-      - '39117640'
-      NKAIN2:
-      - '39117640'
-      TFAP2A:
-      - '39117640'
-      GRIN3A:
-      - '39117640'
-      PLXNA2:
-      - '39117640'
-      EFNA5:
-      - '39117640'
-      CACNG3:
-      - '39117640'
-      GRIP1:
-      - '39117640'
-      TENM2:
-      - '39117640'
-      PLCL1:
-      - '39117640'
-      SNTG2:
-      - '39117640'
-      PCSK6:
-      - '39117640'
-      KCNIP1:
-      - '39117640'
-      PMFBP1:
-      - '39117640'
-      AKAP6:
-      - '39117640'
-      CSMD1:
-      - '39117640'
-      RYR3:
-      - '39117640'
-      ADARB2:
-      - '39117640'
-      UTRN:
-      - '39117640'
-      ROBO1:
-      - '39117640'
-      DOCK10:
-      - '39117640'
-      NEBL:
-      - '39117640'
-      CNTNAP2:
-      - '39117640'
-      DPP6:
-      - '39117640'
-      ESRRB:
-      - '39117640'
-      GRIA3:
-      - '39117640'
-      CPNE4:
-      - '39117640'
+    - AC016044.1
+    - ADARB2
+    - AKAP6
+    - AL139815.1
+    - CACNG3
+    - CALB1
+    - CNTNAP2
+    - CPNE4
+    - CSMD1
+    - DOCK10
+    - DPP6
+    - EFNA5
+    - ESRRB
+    - ESRRG
+    - GRIA3
+    - GRIN3A
+    - GRIP1
+    - KCNIP1
+    - KCNJ3
+    - LINC02775
+    - MEGF11
+    - MYT1L
+    - NEBL
+    - NKAIN2
+    - ONECUT1
+    - PCDH9
+    - PCSK6
+    - PLCL1
+    - PLXNA2
+    - PMFBP1
+    - PROX1
+    - ROBO1
+    - RYR3
+    - SNTG2
+    - TANC1
+    - TENM2
+    - TFAP2A
+    - TNR
+    - UTRN
+    - ZFPM2
+    - ZNF804A
     add:
-      CNTN4:
-      - '39117640'
-      EBF1:
-      - '39117640'
-      LHX1:
-      - '39117640'
-      MEGF10:
-      - '39117640'
-      NDST3:
-      - '39117640'
-      NTRK2:
-      - '39117640'
-      ONECUT2:
-      - '39117640'
-      ONECUT3:
-      - '39117640'
-      STMN2:
-      - '39117640'
-      SYN3:
-      - '39117640'
-      TFAP2B:
-      - '39117640'
+    - CNTN4
+    - EBF1
+    - LHX1
+    - MEGF10
+    - NDST3
+    - NTRK2
+    - ONECUT2
+    - ONECUT3
+    - STMN2
+    - SYN3
+    - TFAP2B
     refine: {}
     negative_markers: []
     species: []
@@ -1132,119 +709,63 @@ markers:
       flagged_reason: pct_expression_below_threshold
   RGC:
     confirm:
-      NEFM:
-      - '39117640'
-      POU4F2:
-      - '39117640'
-      RBPMS:
-      - '39117640'
-      NMNAT2:
-      - '39117640'
-      SCN9A:
-      - '39117640'
-      NTNG1:
-      - '39117640'
-      KLF7:
-      - '39117640'
-      NAV2:
-      - '39117640'
-      RELN:
-      - '39117640'
-      PAM:
-      - '39117640'
-      MYT1L:
-      - '39117640'
-      SEMA6D:
-      - '39117640'
-      RUNDC3B:
-      - '39117640'
-      AL445623.2:
-      - '39117640'
-      RBFOX1:
-      - '39117640'
-      SLIT1:
-      - '39117640'
-      CACNA1B:
-      - '39117640'
-      EPHA6:
-      - '39117640'
-      ASTN2:
-      - '39117640'
-      EDIL3:
-      - '39117640'
-      EPHB1:
-      - '39117640'
-      STMN2:
-      - '39117640'
-      KCTD16:
-      - '39117640'
-      SYT4:
-      - '39117640'
-      RBMS1:
-      - '39117640'
-      KCNH7:
-      - '39117640'
-      SNCA:
-      - '39117640'
-      HS3ST5:
-      - '39117640'
-      TUBB3:
-      - '39117640'
-      UCHL1:
-      - '39117640'
-      RALYL:
-      - '39117640'
-      DCC:
-      - '39117640'
-      AKAP6:
-      - '39117640'
-      LRFN5:
-      - '39117640'
-      PTPRN2:
-      - '39117640'
-      CNTNAP2:
-      - '39117640'
-      NKAIN3:
-      - '39117640'
-      CACNA1A:
-      - '39117640'
-      ANK2:
-      - '39117640'
-      ZNF804A:
-      - '39117640'
-      GALNTL6:
-      - '39117640'
+    - AKAP6
+    - AL445623.2
+    - ANK2
+    - ASTN2
+    - CACNA1A
+    - CACNA1B
+    - CNTNAP2
+    - DCC
+    - EDIL3
+    - EPHA6
+    - EPHB1
+    - GALNTL6
+    - HS3ST5
+    - KCNH7
+    - KCTD16
+    - KLF7
+    - LRFN5
+    - MYT1L
+    - NAV2
+    - NEFM
+    - NKAIN3
+    - NMNAT2
+    - NTNG1
+    - PAM
+    - POU4F2
+    - PTPRN2
+    - RALYL
+    - RBFOX1
+    - RBMS1
+    - RBPMS
+    - RELN
+    - RUNDC3B
+    - SCN9A
+    - SEMA6D
+    - SLIT1
+    - SNCA
+    - STMN2
+    - SYT4
+    - TUBB3
+    - UCHL1
+    - ZNF804A
     add:
-      ATOH7:
-      - '39117640'
-      EBF1:
-      - '39117640'
-      EBF3:
-      - '39117640'
-      ELAVL2:
-      - '39117640'
-      ELAVL4:
-      - '39117640'
-      GAP43:
-      - '39117640'
-      ISL1:
-      - '39117640'
-      KLHL1:
-      - '39117640'
-      NEFL:
-      - '39117640'
-      POU4F1:
-      - '39117640'
-      POU6F2:
-      - '39117640'
-      RBFOX3:
-      - '39117640'
-      SLC17A6:
-      - '39117640'
-      SNCG:
-      - '39117640'
-      THY1:
-      - '39117640'
+    - ATOH7
+    - EBF1
+    - EBF3
+    - ELAVL2
+    - ELAVL4
+    - GAP43
+    - ISL1
+    - KLHL1
+    - NEFL
+    - POU4F1
+    - POU6F2
+    - RBFOX3
+    - SLC17A6
+    - SNCG
+    - THY1
     refine:
       POU4F2:
         note: 'RGC master TF; Ground Truth validated (mouse Pou4f2 KO → loss of most
@@ -1313,121 +834,64 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Muller_Glia:
     confirm:
-      GLUL:
-      - '39117640'
-      RLBP1:
-      - '39117640'
-      SLC1A3:
-      - '39117640'
-      HKDC1:
-      - '39117640'
-      NAV2:
-      - '39117640'
-      CREB5:
-      - '39117640'
-      TANC1:
-      - '39117640'
-      CGNL1:
-      - '39117640'
-      CHL1:
-      - '39117640'
-      LINC00511:
-      - '39117640'
-      GABRG3-AS1:
-      - '39117640'
-      MIR99AHG:
-      - '39117640'
-      NCALD:
-      - '39117640'
-      SOX5:
-      - '39117640'
-      KDR:
-      - '39117640'
-      FAP:
-      - '39117640'
-      HMGA2:
-      - '39117640'
-      AC092422.1:
-      - '39117640'
-      SIPA1L1:
-      - '39117640'
-      FAM160A1:
-      - '39117640'
-      SFRP2:
-      - '39117640'
-      SEMA5A:
-      - '39117640'
-      PTPRK:
-      - '39117640'
-      SEL1L3:
-      - '39117640'
-      LINC01748:
-      - '39117640'
-      AC099792.1:
-      - '39117640'
-      C1ORF61:
-      - '39117640'
-      SHROOM3:
-      - '39117640'
-      PIP5K1B:
-      - '39117640'
-      EPHA3:
-      - '39117640'
-      WNT5B:
-      - '39117640'
-      ADAMTS18:
-      - '39117640'
-      MOB3B:
-      - '39117640'
-      NFIB:
-      - '39117640'
-      P3H2:
-      - '39117640'
-      FLT1:
-      - '39117640'
-      TF:
-      - '39117640'
-      GABRG3:
-      - '39117640'
-      WIF1:
-      - '39117640'
-      DGKB:
-      - '39117640'
-      ZHX2:
-      - '39117640'
-      SASH1:
-      - '39117640'
+    - AC092422.1
+    - AC099792.1
+    - ADAMTS18
+    - C1ORF61
+    - CGNL1
+    - CHL1
+    - CREB5
+    - DGKB
+    - EPHA3
+    - FAM160A1
+    - FAP
+    - FLT1
+    - GABRG3
+    - GABRG3-AS1
+    - GLUL
+    - HKDC1
+    - HMGA2
+    - KDR
+    - LINC00511
+    - LINC01748
+    - MIR99AHG
+    - MOB3B
+    - NAV2
+    - NCALD
+    - NFIB
+    - P3H2
+    - PIP5K1B
+    - PTPRK
+    - RLBP1
+    - SASH1
+    - SEL1L3
+    - SEMA5A
+    - SFRP2
+    - SHROOM3
+    - SIPA1L1
+    - SLC1A3
+    - SOX5
+    - TANC1
+    - TF
+    - WIF1
+    - WNT5B
+    - ZHX2
     add:
-      ADAMTS6:
-      - '39117640'
-      AQP4:
-      - '39117640'
-      CLU:
-      - '39117640'
-      CRYM:
-      - '39117640'
-      DKK3:
-      - '39117640'
-      GLI3:
-      - '39117640'
-      NFIA:
-      - '39117640'
-      PARD3B:
-      - '39117640'
-      PCDH11X:
-      - '39117640'
-      RARB:
-      - '39117640'
-      SAT1:
-      - '39117640'
-      SORCS1:
-      - '39117640'
-      SOX2:
-      - '39117640'
-      SPON1:
-      - '39117640'
-      VIM:
-      - '39117640'
+    - ADAMTS6
+    - AQP4
+    - CLU
+    - CRYM
+    - DKK3
+    - GLI3
+    - NFIA
+    - PARD3B
+    - PCDH11X
+    - RARB
+    - SAT1
+    - SORCS1
+    - SOX2
+    - SPON1
+    - VIM
     refine: {}
     negative_markers: []
     species: []
@@ -1485,25 +949,16 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Microglia:
     confirm:
-      AIF1:
-      - '39117640'
-      CSF1R:
-      - '39117640'
-      P2RY12:
-      - '39117640'
+    - AIF1
+    - CSF1R
+    - P2RY12
     add:
-      C1QA:
-      - '39117640'
-      C1QB:
-      - '39117640'
-      CX3CR1:
-      - '39117640'
-      ITGAM:
-      - '39117640'
-      TREM2:
-      - '39117640'
-      TYROBP:
-      - '39117640'
+    - C1QA
+    - C1QB
+    - CX3CR1
+    - ITGAM
+    - TREM2
+    - TYROBP
     refine: {}
     negative_markers: []
     species: []
@@ -1517,19 +972,13 @@ markers:
       notes: ''
   Astrocyte:
     confirm:
-      ALDH1L1:
-      - '39117640'
-      GFAP:
-      - '39117640'
-      S100B:
-      - '39117640'
+    - ALDH1L1
+    - GFAP
+    - S100B
     add:
-      AQP4:
-      - '39117640'
-      GJA1:
-      - '39117640'
-      SLC1A2:
-      - '39117640'
+    - AQP4
+    - GJA1
+    - SLC1A2
     refine: {}
     negative_markers: []
     species: []
@@ -1543,23 +992,15 @@ markers:
       notes: ''
   RPE:
     confirm:
-      BEST1:
-      - '39117640'
-      LRAT:
-      - '39117640'
-      RPE65:
-      - '39117640'
+    - BEST1
+    - LRAT
+    - RPE65
     add:
-      DCT:
-      - '39117640'
-      PMEL:
-      - '39117640'
-      RDH10:
-      - '39117640'
-      TIMP3:
-      - '39117640'
-      TYRP1:
-      - '39117640'
+    - DCT
+    - PMEL
+    - RDH10
+    - TIMP3
+    - TYRP1
     refine: {}
     negative_markers: []
     species: []
