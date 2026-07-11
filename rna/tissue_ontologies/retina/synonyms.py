@@ -703,4 +703,48 @@ RETINA_SYNONYMS: dict[str, dict[str, str | list[str]]] = {
             "agnathan RGC",
         ],
     },
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # Macaca fascicularis (cynomolgus macaque) naming variants (peng2019)
+    # ═══════════════════════════════════════════════════════════════════════
+
+    "Macaca_RGC": {
+        "display_name": "Macaque Retinal Ganglion Cell",
+        "synonyms": [
+            "Macaque Retinal Ganglion Cell",
+            "Macaque RGC",
+            "macaque RGC",
+            "Cynomolgus RGC",
+            "cynomolgus RGC",
+            "Macaca RGC",
+            "macaque retinal ganglion",
+            "macaque ganglion cell",
+            "Cynomolgus retinal ganglion",
+            "Macaca_fascicularis_RGC",
+        ],
+    },
+
+    "Macaca_Cone": {
+        "display_name": "Macaque Cone Photoreceptor",
+        "synonyms": [
+            "Macaque Cone Photoreceptor",
+            "Macaca Cone",
+            "macaque cone",
+            "Cynomolgus cone",
+            "macaque cone photoreceptor",
+            "Macaca cone cell",
+        ],
+    },
+
+    "Macaca_Rod": {
+        "display_name": "Macaque Rod Photoreceptor",
+        "synonyms": [
+            "Macaque Rod Photoreceptor",
+            "Macaca Rod",
+            "macaque rod",
+            "Cynomolgus rod",
+            "macaque rod photoreceptor",
+            "Macaca rod cell",
+        ],
+    },
 }

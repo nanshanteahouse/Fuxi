@@ -216,6 +216,10 @@ def merge_markers(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
             # Refine
             for gene, refine_data in marker_data.get("refine", {}).items():
                 entry["refine"].setdefault(gene, []).append(refine_data)
+            # Negative markers (union across sources)
+            neg = marker_data.get("negative_markers", [])
+            if isinstance(neg, list):
+                entry["negative_markers"].update(neg)
 
             # Species from source meta
             entry["species"].update(src["meta"].get("species", []))

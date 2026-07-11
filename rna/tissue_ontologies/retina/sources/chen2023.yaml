@@ -572,7 +572,10 @@ markers:
     - SORCS1
     - STARD13
     refine: {}
-    negative_markers: []
+    negative_markers:
+    - RLBP1   # MG exclusive marker; expression excludes Astrocyte identity
+    - CLU     # MG-associated gene; absent in true retinal astrocytes
+    - CRYAB   # MG/lens crystallin; not expressed by astrocytes
     species: []
     synonyms: []
     audit:
@@ -583,6 +586,68 @@ markers:
       last_audited: null
       flagged: false
       notes: ''
+  Microglia:
+    confirm:
+    - AIF1    # canonical microglia/myeloid marker (IBA1)
+    - C1QA    # complement pathway; Menon2019 score 4.73
+    - C1QB    # complement pathway; Menon2019 score 5.80 — strongest MG hit
+    - C3      # complement; Hu2019 score 2.68 — most MG-specific in fetal retina
+    - CX3CR1  # fractalkine receptor; CNS microglia-specific
+    - CSF1R   # M-CSF receptor; required for microglia survival
+    add:
+    - CD68    # lysosomal macrophage marker
+    - FCER1G  # Fc receptor gamma chain; Menon2019 score 3.85
+    - PTPRC   # CD45 pan-immune marker
+    - TLR4    # innate immune; Hu2019 score 0.69
+    - TREM2   # disease-associated microglia (DAM)
+    - CD163   # scavenger receptor; perivascular macrophage
+    - LAPTM5  # lysosomal immune cell marker
+    - HTRA1   # AMD risk gene; MG-enriched in retina
+    - P2RY12  # homeostatic microglia marker
+    - TMEM119 # homeostatic microglia marker
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - menon2019_gene_scores
+      - hu2019_gene_score_by_celltype
+      cross_species_validated: false
+      last_audited: '2026-07-11'
+      flagged: false
+      notes: 'Supplement-verified markers from Menon2019 (Nat Commun) and Hu2019 (PLoS Biol) microglia gene specificity scores.'
+  Blood_Erythrocyte:
+    confirm:
+    - HBA1    # hemoglobin alpha 1
+    - HBA2    # hemoglobin alpha 2
+    - HBB     # hemoglobin beta
+    add:
+    - HBG2    # fetal hemoglobin gamma
+    - HBZ     # hemoglobin zeta (embryonic)
+    - ALAS2   # erythroid-specific heme biosynthesis
+    - GYPA    # glycophorin A (erythrocyte membrane)
+    - AHSP    # alpha-hemoglobin stabilizing protein
+    - HBE1    # hemoglobin epsilon (embryonic)
+    - HBM     # hemoglobin mu
+    negative_markers: []
+    species: []
+    synonyms:
+    - RBC
+    - Red blood cell
+    - Erythrocyte
+    - erythrocyte
+    - red blood cell
+    - Blood
+    - blood
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: '2026-07-11'
+      flagged: false
+      notes: 'Known erythroid lineage markers from general biology. Added for annotation completeness — Blood cells frequently appear as contaminants in retinal dissections (e.g., GSE107618 had 36 RBCs labeled Unknown due to missing PECAM1 after HVG filtering).'
+
 novel_types:
 - name: Macula_Specific_Cone
   parent: Cone_Photoreceptor
@@ -644,3 +709,11 @@ expert_rules:
   action: Horizontal_Cell
   source: chen2023
   notes: ONECUT1+PROX1 co-expression defines horizontal cells
+- priority: 2
+  condition:
+    markers_present:
+      RLBP1: 1.0
+      GFAP: 1.0
+  action: Muller_Glia
+  source: chen2023
+  notes: 'RLBP1 is retina MG-specific. GFAP alone drives Astrocyte scoring, but RLBP1+GFAP co-expression in retina indicates reactive Muller glia, not astrocyte. This rule ensures MG wins when both markers are present.'
