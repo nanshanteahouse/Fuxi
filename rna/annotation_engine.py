@@ -69,6 +69,11 @@ def run_unified_annotation(adata, CFG, logger):
     from rna.utils.evidence_fusion import fuse_all_clusters
 
     species = CFG.species
+    # ── Normalise species key (e.g. "danio_rerio" → "zebrafish") ────
+    # _SPECIES_NORMALISE maps NCBI-style names to pipeline keys; this
+    # ensures consistency with _SPECIES_SYNONYMS and SPECIES_TO_CLASS.
+    from core.preprocess.format_detector import _SPECIES_NORMALISE
+    species = _SPECIES_NORMALISE.get(species, species)
 
     # ── Resolve taxonomic class/order for phylogenetic weighting ──────
     # CFG.target_class/order take precedence; fall back to species lookup.
