@@ -10,7 +10,7 @@ Squidpy).  The shared layer handles:
   * Cartesian-product grid expansion
   * Optional grouping so expensive steps (neighbors, UMAP) run once per group
   * Parallel evaluation across combinations
-  * Pareto-elbow best-parameter selection (re-export from
+  * Pareto-elbow / multi-metric best-parameter selection (re-export from
     ``rna.utils.cluster_evaluation``)
 
 Exports
@@ -20,6 +20,12 @@ grid_search_clustering(adata, param_grid, clusterer, ...) -> list[dict]
 
 select_best_params(results, method='pareto_elbow')
     Re-export from ``rna.utils.cluster_evaluation.select_best_params``.
+_compute_stability(adata, resolution, ...) -> float
+    Re-export from ``rna.utils.cluster_evaluation``.
+
+_compute_marker_coverage(adata, cluster_key, per_cell_scores, ...) -> float
+    Re-export from ``rna.utils.cluster_evaluation``.
+
 
 umap_sweep(adata, param_sweep, umap_fn, ...) -> list[dict]
     Run a UMAP parameter sweep and return per-combination results.
@@ -35,7 +41,7 @@ from typing import Any
 import numpy as np
 
 # Re-export the existing Pareto selection logic — no duplication.
-from rna.utils.cluster_evaluation import select_best_params  # noqa: F401
+from rna.utils.cluster_evaluation import select_best_params, _compute_stability, _compute_marker_coverage  # noqa: F401
 
 # ---------------------------------------------------------------------------
 #  Public API

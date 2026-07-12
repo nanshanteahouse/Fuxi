@@ -3,18 +3,33 @@
 Cluster parameter selection methods for the Fuxi pipeline.
 
 Provides objective, quantitative selection of the best (n_neighbors, resolution)
+from a grid search summary, supporting four methods: 'pareto_elbow',
+'silhouette', 'multi_metric' (default), and None (manual).
 from a grid search summary, replacing naive silhouette-score-max selection.
 
 Exports:
-    select_best_params(results_summary, method, best_resolution=None)
+    select_best_params(results_summary, method, best_resolution=None, best_n_neighbors=0, multi_metric_weights=None)
         -> (best_n, best_r, method_label, reason_str)
+    _compute_stability(adata, resolution, ...) -> float
+    _compute_marker_coverage(adata, cluster_key, per_cell_scores, ...) -> float
 """
 
 import numpy as np
 from scipy.spatial import ConvexHull
+from typing import Literal
+
+import logging
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_MULTI_METRIC_WEIGHTS = {
+    'silhouette': 0.3,
+    'stability': 0.3,
+    'marker_coverage': 0.4,
+}
 
 
-def select_best_params(results_summary, method="pareto_elbow", best_resolution=None, best_n_neighbors=0):
+def select_best_params(results_summary, method="pareto_elbow", best_resolution=None, best_n_neighbors=0, multi_metric_weights=None):
     """Select the best (n_neighbors, resolution) from a grid search summary.
 
     Parameters
@@ -25,6 +40,7 @@ def select_best_params(results_summary, method="pareto_elbow", best_resolution=N
     method : str or None
         "pareto_elbow"  — Pareto frontier + normalized elbow detection
         "silhouette"    — Pick max silhouette score
+        "multi_metric"  — Composite scoring: silhouette + stability + marker coverage
         None            — Manual via best_resolution + best_n_neighbors
                            (falls back to max silhouette within matching
                            resolution if n_neighbors=0, then globally if
@@ -36,6 +52,10 @@ def select_best_params(results_summary, method="pareto_elbow", best_resolution=N
         Only used when method is None.  If > 0, requires an exact match
         on both resolution and n_neighbors.  Default 0 = auto-pick best
         silhouette at the given resolution.
+    multi_metric_weights : dict[str, float] | None
+        Only used when method is "multi_metric".  Custom metric weights.
+        Defaults to :data:`DEFAULT_MULTI_METRIC_WEIGHTS` (silhouette=0.3,
+        stability=0.3, marker_coverage=0.4) when None.
 
     Returns
     -------
@@ -64,10 +84,12 @@ def select_best_params(results_summary, method="pareto_elbow", best_resolution=N
         return _select_pareto_elbow(valid)
     elif method == "silhouette":
         return _select_max_silhouette(valid)
+    elif method == "multi_metric":
+        return _select_multi_metric(valid, weights=multi_metric_weights)
     else:
         raise ValueError(
             f"Unknown cluster_selection_method: {method!r}. "
-            f"Valid options: 'pareto_elbow', 'silhouette', None"
+            f"Valid options: 'pareto_elbow', 'silhouette', 'multi_metric', None"
         )
 
 
@@ -218,6 +240,277 @@ def _select_pareto_elbow(valid):
         f"dist_to_ideal={dist[elbow_idx]:.4f} "
         f"silhouette={best['silhouette_score']:.4f} k={best['n_clusters']}"
         f"{delta_note}",
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Multi-metric scoring helpers
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _compute_stability(adata, resolution, leiden_flavor: Literal['leidenalg', 'igraph'] = 'igraph', n_seeds=5, base_seed=42):
+    """Compute cross-seed clustering stability via pairwise ARI.
+
+    Re-runs Leiden clustering with *n_seeds* different random seeds at the
+    given *resolution*, then computes pairwise adjusted Rand index between
+    all label sets.  Returns mean ARI as a stability score.
+
+    Parameters
+    ----------
+    adata : AnnData
+    resolution : float
+        Resolution parameter for Leiden clustering.
+    leiden_flavor : str
+        Flavour of leiden algorithm (default 'igraph').
+    n_seeds : int
+        Number of different seeds to run.
+    base_seed : int
+        Starting seed value.
+
+    Returns
+    -------
+    float
+        Mean pairwise ARI.  1.0 when *n_seeds* <= 1 or all clusterings
+        are identical.
+    """
+    if n_seeds <= 1:
+        return 1.0
+
+    from sklearn.metrics import adjusted_rand_score
+    import scanpy as sc
+
+    seeds = range(base_seed, base_seed + n_seeds)
+    temp_keys = [f'_temp_stab_{i}' for i in range(n_seeds)]
+
+    label_sets = []
+    for i, seed in enumerate(seeds):
+        key = temp_keys[i]
+        try:
+            sc.tl.leiden(
+                adata,
+                resolution=resolution,
+                key_added=key,
+                random_state=seed,
+                flavor=leiden_flavor,
+                n_iterations=2,
+            )
+            label_sets.append(adata.obs[key].values)
+        except Exception:
+            pass
+        finally:
+            if key in adata.obs.columns:
+                del adata.obs[key]
+
+    # Final cleanup: remove any remaining temp columns
+    for col in list(adata.obs.columns):
+        if col.startswith('_temp_stab_'):
+            del adata.obs[col]
+
+    n_runs = len(label_sets)
+    if n_runs <= 1:
+        return 1.0
+
+    # Compute pairwise ARI
+    aris = []
+    for i in range(n_runs):
+        for j in range(i + 1, n_runs):
+            ari = adjusted_rand_score(label_sets[i], label_sets[j])
+            aris.append(ari)
+
+    return float(np.mean(aris))
+
+
+def _compute_marker_coverage(adata, cluster_key, per_cell_scores, ratio_threshold=1.5):
+    """Compute fraction of clusters with a clear marker-gene match.
+
+    For each cluster, computes the mean per-cell score for each cell type.
+    A cluster is "matched" if the top cell type's mean score is at least
+    *ratio_threshold* × the second-best score.
+
+    Parameters
+    ----------
+    adata : AnnData
+    cluster_key : str
+        Key in ``adata.obs`` for cluster labels.
+    per_cell_scores : dict[str, np.ndarray]
+        Cell-type → per-cell score array (shape: n_cells,).  Pre-computed
+        by the caller (e.g. via ``sc.tl.score_genes()``).
+    ratio_threshold : float
+        Minimum ratio of top score to second-best for a match.
+
+    Returns
+    -------
+    float
+        Fraction of clusters with a clear marker match (0.0–1.0).
+        1.0 if *per_cell_scores* is empty or has no valid entries.
+    """
+    if not per_cell_scores:
+        return 1.0
+
+    # Check for any valid (non-None) entries
+    has_valid = any(v is not None for v in per_cell_scores.values())
+    if not has_valid:
+        return 1.0
+
+    cluster_labels = adata.obs[cluster_key].values
+    unique_clusters = np.unique(cluster_labels)
+    n_clusters = len(unique_clusters)
+
+    if n_clusters <= 1:
+        return 1.0
+
+    cell_types = list(per_cell_scores.keys())
+    n_cells = len(cluster_labels)
+    n_matched = 0
+
+    for cluster in unique_clusters:
+        mask = cluster_labels == cluster
+        mean_scores = []
+        for ct in cell_types:
+            scores = per_cell_scores[ct]
+            if scores is not None and len(scores) == n_cells:
+                mean_scores.append((ct, float(np.mean(scores[mask]))))
+
+        if not mean_scores:
+            continue
+
+        # Sort by mean score descending
+        mean_scores.sort(key=lambda x: x[1], reverse=True)
+        top_score = mean_scores[0][1]
+
+        if top_score <= 0.0:
+            continue
+
+        if len(mean_scores) == 1:
+            n_matched += 1
+        else:
+            second_score = mean_scores[1][1]
+            if top_score >= ratio_threshold * second_score:
+                n_matched += 1
+
+    return n_matched / n_clusters
+
+
+def _select_multi_metric(valid, weights=None):
+    """Select best clustering via composite multi-metric scoring.
+
+    Reads precomputed ``silhouette_score``, ``stability_score``, and
+    ``marker_coverage`` from each entry dict, normalises each metric to
+    [0, 1] across all entries, then computes a weighted composite.
+    Returns argmax.
+
+    Parameters
+    ----------
+    valid : list[dict]
+        Pre-filtered entries (must have valid ``silhouette_score``).
+    weights : dict[str, float] | None
+        Metric weights.  Defaults to :data:`DEFAULT_MULTI_METRIC_WEIGHTS`.
+        Degrades to silhouette+stability (0.5/0.5) when no entry has
+        ``marker_coverage``.
+
+    Returns
+    -------
+    tuple[int, float, str, str]
+        (n_neighbors, resolution, 'multi_metric', reason_str)
+    """
+    n = len(valid)
+
+    # ── Gather raw scores ──
+    sil_scores = np.array([r['silhouette_score'] for r in valid])
+    stab_scores = np.array([r.get('stability_score', 0.0) for r in valid])
+
+    has_marker_coverage = any('marker_coverage' in r for r in valid)
+    mc_scores: np.ndarray = np.zeros(n)
+    if has_marker_coverage:
+        mc_scores = np.array([r.get('marker_coverage', 0.0) for r in valid])
+
+    # ── Determine initial weights ──
+    if weights is None:
+        if has_marker_coverage:
+            active_weights = dict(DEFAULT_MULTI_METRIC_WEIGHTS)
+        else:
+            active_weights = {'silhouette': 0.5, 'stability': 0.5}
+    else:
+        active_weights = dict(weights)
+
+    # Remove marker_coverage from weights if entries lack it
+    if not has_marker_coverage:
+        active_weights.pop('marker_coverage', None)
+
+    # ── Low-variance guard (on raw scores) ──
+    metrics_raw = {
+        'silhouette': sil_scores,
+        'stability': stab_scores,
+    }
+    if has_marker_coverage:
+        metrics_raw['marker_coverage'] = mc_scores
+
+    for metric_name in list(active_weights.keys()):
+        scores = metrics_raw.get(metric_name)
+        if scores is None:
+            continue
+        score_range = float(np.max(scores) - np.min(scores))
+        if score_range < 0.01:
+            logger.warning(
+                "%s variance < 0.01 (range=%.4f) — disabling metric",
+                metric_name, score_range,
+            )
+            del active_weights[metric_name]
+
+    if not active_weights:
+        logger.warning("All metrics dropped — falling back to silhouette only")
+        active_weights = {'silhouette': 1.0}
+
+    # ── Renormalise weights to sum=1.0 ──
+    total_w = sum(active_weights.values())
+    if total_w > 0:
+        for k in active_weights:
+            active_weights[k] /= total_w
+
+    # ── Normalise each metric to [0, 1] ──
+    def _normalize(values):
+        vmin, vmax = float(np.min(values)), float(np.max(values))
+        if vmax - vmin < 1e-10:
+            return np.ones_like(values)
+        return (values - vmin) / (vmax - vmin + 1e-10)
+
+    norm = {}
+    if 'silhouette' in active_weights:
+        norm['silhouette'] = _normalize(sil_scores)
+    if 'stability' in active_weights:
+        norm['stability'] = _normalize(stab_scores)
+    if 'marker_coverage' in active_weights and has_marker_coverage:
+        norm['marker_coverage'] = _normalize(mc_scores)
+
+    # ── Composite score ──
+    composite = np.zeros(n)
+    for metric_name, w in active_weights.items():
+        composite += w * norm[metric_name]
+
+    best_idx = int(np.argmax(composite))
+    best = valid[best_idx]
+
+    # ── Build reason string ──
+    sil_val = best['silhouette_score']
+    stab_val = best.get('stability_score', 0.0)
+    mc_val = best.get('marker_coverage', 0.0) if has_marker_coverage else 0.0
+    k = best['n_clusters']
+
+    sil_norm_val = norm.get('silhouette', np.zeros(n))[best_idx]
+    stab_norm_val = norm.get('stability', np.zeros(n))[best_idx]
+
+    reason = (
+        f"composite={composite[best_idx]:.4f} "
+        f"sil={sil_val:.4f}(n={sil_norm_val:.2f}) "
+        f"stab={stab_val:.3f}(n={stab_norm_val:.2f}) "
+        f"marker_cov={mc_val:.3f} k={k}"
+    )
+
+    return (
+        best['n_neighbors'],
+        best['resolution'],
+        'multi_metric',
+        reason,
     )
 
 
