@@ -411,3 +411,101 @@ class TestSelectMultiMetric:
         assert best_n3 == 15
         assert best_r3 == pytest.approx(0.6)
         assert method3 == "multi_metric"
+
+
+
+class TestSelectMultiMetricIntegration:
+    """Integration tests for _select_multi_metric with realistic grid data.
+
+    Uses 6-entry grids (3 n_neighbors × 2 resolutions) to verify
+    composite multi-metric scoring end-to-end.
+    """
+
+    def test_select_multi_metric_with_markers(self) -> None:
+        """6 entries with marker_coverage -> returns valid 4-tuple; mc influences winner."""
+        valid = [
+            {"n_neighbors": 10, "resolution": 0.5, "n_clusters": 3,
+             "silhouette_score": 0.4, "stability_score": 0.7,
+             "marker_coverage": 0.3, "cluster_key": "leiden_10_0.5"},
+            {"n_neighbors": 10, "resolution": 1.0, "n_clusters": 5,
+             "silhouette_score": 0.4, "stability_score": 0.7,
+             "marker_coverage": 0.6, "cluster_key": "leiden_10_1.0"},
+            {"n_neighbors": 20, "resolution": 0.5, "n_clusters": 6,
+             "silhouette_score": 0.6, "stability_score": 0.85,
+             "marker_coverage": 0.5, "cluster_key": "leiden_20_0.5"},
+            {"n_neighbors": 20, "resolution": 1.0, "n_clusters": 8,
+             "silhouette_score": 0.6, "stability_score": 0.85,
+             "marker_coverage": 0.8, "cluster_key": "leiden_20_1.0"},
+            {"n_neighbors": 30, "resolution": 0.5, "n_clusters": 9,
+             "silhouette_score": 0.5, "stability_score": 0.75,
+             "marker_coverage": 0.7, "cluster_key": "leiden_30_0.5"},
+            {"n_neighbors": 30, "resolution": 1.0, "n_clusters": 12,
+             "silhouette_score": 0.5, "stability_score": 0.75,
+             "marker_coverage": 0.9, "cluster_key": "leiden_30_1.0"},
+        ]
+        best_n, best_r, method, reason = _select_multi_metric(valid)
+        assert method == "multi_metric"
+        assert isinstance(best_n, int)
+        assert isinstance(best_r, float)
+        assert "marker_cov=" in reason
+        assert "composite=" in reason
+        assert best_n == 20
+        assert best_r == pytest.approx(1.0)
+
+    def test_select_multi_metric_without_markers(self) -> None:
+        """6 entries without marker_coverage -> degrades to sil+stab (0.5/0.5)."""
+        valid = [
+            {"n_neighbors": 10, "resolution": 0.5, "n_clusters": 3,
+             "silhouette_score": 0.3, "stability_score": 0.6,
+             "cluster_key": "leiden_10_0.5"},
+            {"n_neighbors": 10, "resolution": 1.0, "n_clusters": 5,
+             "silhouette_score": 0.4, "stability_score": 0.7,
+             "cluster_key": "leiden_10_1.0"},
+            {"n_neighbors": 20, "resolution": 0.5, "n_clusters": 6,
+             "silhouette_score": 0.8, "stability_score": 0.95,
+             "cluster_key": "leiden_20_0.5"},
+            {"n_neighbors": 20, "resolution": 1.0, "n_clusters": 8,
+             "silhouette_score": 0.6, "stability_score": 0.8,
+             "cluster_key": "leiden_20_1.0"},
+            {"n_neighbors": 30, "resolution": 0.5, "n_clusters": 9,
+             "silhouette_score": 0.5, "stability_score": 0.75,
+             "cluster_key": "leiden_30_0.5"},
+            {"n_neighbors": 30, "resolution": 1.0, "n_clusters": 12,
+             "silhouette_score": 0.55, "stability_score": 0.7,
+             "cluster_key": "leiden_30_1.0"},
+        ]
+        best_n, best_r, method, reason = _select_multi_metric(valid)
+        assert method == "multi_metric"
+        assert "marker_cov=0.000" in reason
+        assert "sil=" in reason and "stab=" in reason
+        assert best_n == 20
+        assert best_r == pytest.approx(0.5)
+
+    def test_select_multi_metric_no_marker_degrade(self) -> None:
+        """All entries lack marker_coverage -> weights degrade to {sil:0.5, stab:0.5}."""
+        valid = [
+            {"n_neighbors": 15, "resolution": 0.6, "n_clusters": 4,
+             "silhouette_score": 0.5, "stability_score": 0.8,
+             "cluster_key": "leiden_15_0.6"},
+            {"n_neighbors": 25, "resolution": 1.2, "n_clusters": 7,
+             "silhouette_score": 0.7, "stability_score": 0.9,
+             "cluster_key": "leiden_25_1.2"},
+        ]
+        best_n, best_r, method, reason = _select_multi_metric(valid)
+        assert method == "multi_metric"
+        assert "marker_cov=0.000" in reason
+        assert "sil=" in reason and "stab=" in reason
+        assert best_n == 25
+        assert best_r == pytest.approx(1.2)
+
+    def test_select_multi_metric_single_entry(self) -> None:
+        """Single valid entry -> returns that entry unchanged."""
+        valid = [
+            {"n_neighbors": 15, "resolution": 0.6, "n_clusters": 4,
+             "silhouette_score": 0.5, "stability_score": 0.85,
+             "marker_coverage": 0.4, "cluster_key": "leiden_15_0.6"},
+        ]
+        best_n, best_r, method, _reason = _select_multi_metric(valid)
+        assert best_n == 15
+        assert best_r == pytest.approx(0.6)
+        assert method == "multi_metric"
