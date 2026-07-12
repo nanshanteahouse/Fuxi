@@ -109,6 +109,75 @@ def main():
     for r in results_summary:
         if 'score' in r:
             r['silhouette_score'] = r.pop('score')
+    # ── Multi-metric enrichment (for multi_metric selection method) ──
+    from rna.utils.cluster_evaluation import _compute_stability, _compute_marker_coverage
+    import logging as _logging
+    _log_enrich = _logging.getLogger(__name__)
+
+    marker_dict = getattr(CFG, 'marker_dict', None) or {}
+    has_markers = bool(marker_dict)
+    n_stab_seeds = getattr(CFG, 'multi_metric_n_stability_seeds', 5)
+    ratio_threshold = getattr(CFG, 'multi_metric_coverage_ratio_threshold', 1.5)
+
+    # Group results by n_neighbors
+    from itertools import groupby
+    by_n = {}
+    for r in results_summary:
+        n = r.get('n_neighbors')
+        by_n.setdefault(n, []).append(r)
+
+    for n_val, group in by_n.items():
+        # Rebuild KNN graph for this n_neighbors group
+        try:
+            sc.pp.neighbors(
+                adata, n_neighbors=n_val,
+                n_pcs=CFG.n_pcs_use, use_rep=use_rep,
+                random_state=CFG.random_seed,
+            )
+        except Exception as e:
+            _log_enrich.warning("KNN rebuild failed for n_neighbors=%d: %s — skipping group", n_val, e)
+            continue
+
+        # Pre-compute per_cell_scores once per group (only if markers available AND adata.raw exists)
+        per_cell_scores = {}
+        if has_markers and adata.raw is not None:
+            try:
+                for ct, genes in marker_dict.items():
+                    valid_genes = [g for g in genes if g in adata.raw.var_names]
+                    if valid_genes:
+                        sc.tl.score_genes(adata, gene_list=valid_genes, score_name=f'_score_{ct}')
+                        per_cell_scores[ct] = adata.obs[f'_score_{ct}'].values.copy()
+                # Clean up temporary score columns
+                for col in list(adata.obs.columns):
+                    if col.startswith('_score_'):
+                    if col.startswith('_score_') and col in adata.obs.columns:
+                        adata.obs.drop(columns=[col], inplace=True)
+            except Exception as e:
+                _log_enrich.warning("Marker score pre-computation failed: %s — falling back to no markers", e)
+                has_markers = False
+        elif has_markers and adata.raw is None:
+            _log_enrich.warning("adata.raw is None — cannot compute marker coverage. Degrading to silhouette+stability only.")
+            has_markers = False
+
+        # Compute stability + marker_coverage for each combo in this group
+        for entry in group:
+            try:
+                resolution = entry['resolution']
+                ck = entry['cluster_key']
+                entry['stability_score'] = _compute_stability(
+                    adata, resolution=resolution, leiden_flavor=CFG.leiden_flavor,
+                    n_seeds=n_stab_seeds,
+                )
+                if has_markers and per_cell_scores:
+                    entry['marker_coverage'] = _compute_marker_coverage(
+                        adata, ck, per_cell_scores, ratio_threshold=ratio_threshold,
+                    )
+            except Exception as e:
+                _log_enrich.warning("Enrichment failed for n_neighbors=%d, resolution=%.1f: %s",
+                                    entry.get('n_neighbors'), entry.get('resolution'), e)
+                entry['stability_score'] = None
+                entry['marker_coverage'] = None
+
     # ── Single-param UMAP plots ──
     for n in n_neighbors_grid:
         for res in resolutions_grid:
@@ -166,6 +235,7 @@ def main():
         method=method,
         best_resolution=CFG.best_resolution if method is None else None,
         best_n_neighbors=getattr(CFG, 'best_n_neighbors', 0) if method is None else 0,
+        multi_metric_weights=getattr(CFG, 'multi_metric_weights', None),
     )
 
     log.info("Selected best params via %s: n_neighbors=%d, resolution=%.1f (%s)",
