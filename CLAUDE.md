@@ -142,11 +142,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 **Path resolution.** `data_root()` reads `FUXI_DATA_ROOT` env var (with `SCRNA_DATA_ROOT` as legacy fallback). WSL paths are auto-detected. `Config.resolve_paths()` resolves all relative paths against `project_dir` and creates output directories.
 
 **Cluster selection method.** `CFG.cluster_selection_method` controls how the pipeline chooses the best (n_neighbors, resolution) from the parameter grid search in Step 04:
-- `"pareto_elbow"` (default): Computes the Pareto frontier over (n_clusters, silhouette_score), then picks the point closest to the ideal (min clusters, max silhouette) via normalized elbow detection. Penalizes marginal silhouette gains from over-clustering.
+- `"multi_metric"` (RNA default): Weighted ensemble of silhouette, stability, and marker_coverage. Normalizes each metric to [0,1] and computes a composite score (default weights: silhouette=0.3, stability=0.3, marker_coverage=0.4; configurable via `CFG.multi_metric_weights`). Requires `marker_dict` + per-cell scores for marker_coverage; auto-degrades to silhouette+stability if unavailable. **RNA-only — ATAC/Spatial enrichment not yet implemented.**
+- `"pareto_elbow"` (ATAC/Spatial default): Computes the Pareto frontier over (n_clusters, silhouette_score), then picks the point closest to the ideal (min clusters, max silhouette) via normalized elbow detection. Penalizes marginal silhouette gains from over-clustering.
 - `"silhouette"`: Simple max silhouette score (old auto-select behavior, now explicit).
 - `None`: Manual mode — uses `CFG.best_resolution` and `CFG.best_n_neighbors` directly (backward compatible). Set `best_n_neighbors=0` to auto-pick the best silhouette at the given resolution.
 
-The implementation lives in `rna/utils/cluster_evaluation.py` (`select_best_params()`), shared by RNA, ATAC, and Spatial step scripts.
+The core implementation lives in `rna/utils/cluster_evaluation.py` (`select_best_params()`), shared by all modalities. The multi-metric helpers (`_select_multi_metric`, `_compute_stability`, `_compute_marker_coverage`) are invoked only by the RNA step. ATAC and Spatial steps use `pareto_elbow` as their config default.
 
 **snRNA-seq detection & QC adaptation.** The pipeline auto-detects single-nucleus RNA-seq (snRNA-seq) vs single-cell RNA-seq (scRNA-seq) from NCBI GEO metadata keywords:
 

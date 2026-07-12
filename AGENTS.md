@@ -61,6 +61,7 @@ local paper materials first:
 - Config loaded dynamically: `CFG = resolve_config(args.config)`
 - `data_root()` requires `FUXI_DATA_ROOT` env var (no hardcoded defaults)
 - Import pattern: `from core.utils import ...`, `from core.ai_caller import ...`
+- `CFG.cluster_selection_method` defaults to `"multi_metric"` (RNA) or `"pareto_elbow"` (ATAC, Spatial). Multi-metric is RNA-only — ATAC/Spatial enrichment not yet implemented.
 
 ## Commit message discipline
 

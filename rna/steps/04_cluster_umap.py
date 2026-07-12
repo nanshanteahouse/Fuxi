@@ -157,7 +157,6 @@ def main():
                         per_cell_scores[ct] = adata.obs[f'_score_{ct}'].values.copy()
                 # Clean up temporary score columns
                 for col in list(adata.obs.columns):
-                    if col.startswith('_score_'):
                     if col.startswith('_score_') and col in adata.obs.columns:
                         adata.obs.drop(columns=[col], inplace=True)
             except Exception as e:
