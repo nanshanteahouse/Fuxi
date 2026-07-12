@@ -509,3 +509,105 @@ class TestSelectMultiMetricIntegration:
         assert best_n == 15
         assert best_r == pytest.approx(0.6)
         assert method == "multi_metric"
+
+
+
+class TestAdaptiveBehaviors:
+    """Adaptive degrade behaviors for _select_multi_metric.
+
+    Tests the two degrade paths: marker-coverage absence (no key in entries)
+    vs. marker-coverage mismatch (all entries have marker_coverage < 0.1).
+    """
+
+    def test_marker_mismatch_degrade(self, caplog) -> None:
+        """All entries have marker_coverage < 0.1 → warning + degrade to sil+stab."""
+        entries = [
+            {
+                "n_neighbors": 10, "resolution": 0.5,
+                "n_clusters": 3, "silhouette_score": 0.4,
+                "stability_score": 0.8, "marker_coverage": 0.0,
+            },
+            {
+                "n_neighbors": 20, "resolution": 0.8,
+                "n_clusters": 6, "silhouette_score": 0.7,
+                "stability_score": 0.9, "marker_coverage": 0.02,
+            },
+            {
+                "n_neighbors": 30, "resolution": 1.0,
+                "n_clusters": 9, "silhouette_score": 0.6,
+                "stability_score": 0.7, "marker_coverage": 0.05,
+            },
+        ]
+
+        with caplog.at_level(logging.WARNING):
+            best_n, best_r, method, reason = _select_multi_metric(entries)
+
+        # ── Warning emitted ──
+        assert any(
+            "mismatch" in rec.message or "Degrading" in rec.message
+            for rec in caplog.records
+        ), "Expected a warning about marker mismatch degrade"
+
+        # ── Valid 4-tuple with multi_metric method ──
+        assert method == "multi_metric"
+        assert isinstance(best_n, int)
+        assert isinstance(best_r, float)
+
+        # ── Degraded: marker_cov=0.000, not a differentiating factor ──
+        assert "marker_cov=0.000" in reason
+        assert "sil=" in reason
+        assert "stab=" in reason
+
+    def test_no_marker_degrade_vs_mismatch_different_paths(self, caplog) -> None:
+        """Absent marker_coverage key vs low-coverage entries both degrade but
+        via different code paths: absence = no 'marker_coverage' key ever set;
+        mismatch = keys present but all values < 0.1."""
+        # ── Absence path: entries lack marker_coverage key entirely ──
+        no_mc_entries = [
+            {
+                "n_neighbors": 10, "resolution": 0.5,
+                "n_clusters": 3, "silhouette_score": 0.4,
+                "stability_score": 0.8,
+            },
+            {
+                "n_neighbors": 20, "resolution": 0.8,
+                "n_clusters": 6, "silhouette_score": 0.7,
+                "stability_score": 0.9,
+            },
+        ]
+        caplog.clear()
+        n1, r1, m1, reason1 = _select_multi_metric(no_mc_entries)
+        assert m1 == "multi_metric"
+        assert isinstance(n1, int)
+        assert isinstance(r1, float)
+        assert "marker_cov=0.000" in reason1
+        # Absence path logs no mismatch warning
+        assert not any(
+            "mismatch" in rec.message or "Degrading" in rec.message
+            for rec in caplog.records
+        ), "Absence path should NOT log a mismatch warning"
+
+        # ── Mismatch path: entries have marker_coverage but all < 0.1 ──
+        mismatch_entries = [
+            {
+                "n_neighbors": 15, "resolution": 0.6,
+                "n_clusters": 4, "silhouette_score": 0.5,
+                "stability_score": 0.85, "marker_coverage": 0.0,
+            },
+            {
+                "n_neighbors": 25, "resolution": 1.2,
+                "n_clusters": 7, "silhouette_score": 0.7,
+                "stability_score": 0.9, "marker_coverage": 0.01,
+            },
+        ]
+        caplog.clear()
+        n2, r2, m2, reason2 = _select_multi_metric(mismatch_entries)
+        assert m2 == "multi_metric"
+        assert isinstance(n2, int)
+        assert isinstance(r2, float)
+        assert "marker_cov=0.000" in reason2
+        # Mismatch path DOES log a warning
+        assert any(
+            "mismatch" in rec.message or "Degrading" in rec.message
+            for rec in caplog.records
+        ), "Mismatch path SHOULD log a warning about marker mismatch degrade"

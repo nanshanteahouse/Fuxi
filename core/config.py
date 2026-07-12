@@ -450,11 +450,12 @@ class Config:
     best_n_neighbors: int = 0       # Only used when cluster_selection_method is None; 0 = auto-pick best silhouette at the given resolution
 
     # ── Cluster parameter selection (from grid search) ──
-    # "pareto_elbow": Pareto frontier + normalized elbow (default, recommended)
-    # "silhouette":   Max silhouette score (old auto-select behavior)
-    # None:           Manual — specify both best_resolution + best_n_neighbors
-    #                   (0 = auto-pick best silhouette at given resolution)
-    cluster_selection_method: str | None = "pareto_elbow"
+    # "multi_metric":  Weighted ensemble of silhouette, stability, marker coverage (default)
+    # "pareto_elbow":  Pareto frontier + normalized elbow
+    # "silhouette":    Max silhouette score (old auto-select behavior)
+    # None:              Manual — specify both best_resolution + best_n_neighbors
+    #                    (0 = auto-pick best silhouette at given resolution)
+    cluster_selection_method: str | None = "multi_metric"
 
     # ── Multi-metric clustering (weighted ensemble) ──
     # Weights for the multi-metric consensus approach that combines
