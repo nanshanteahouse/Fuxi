@@ -490,8 +490,8 @@ def main():
 
             _perf_report.n_cells = n_cells
             _perf_report.n_genes = n_genes
-            ckpt_size = os.path.getsize(ckpt_path) / 1e6 if ckpt_path and os.path.exists(ckpt_path) and '*' not in ckpt_path else 0.0
-            _perf_report.checkpoint_mb = round(ckpt_size, 1)
+            ckpt_size = os.path.getsize(ckpt_path) / (1024 * 1024) if ckpt_path and os.path.exists(ckpt_path) and '*' not in ckpt_path else 0.0
+            _perf_report.checkpoint_mib = round(ckpt_size, 1)
 
             pipeline_summary.add_step(num, desc, _perf_report)
 

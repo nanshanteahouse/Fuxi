@@ -18,12 +18,12 @@ class PerformanceReport:
     step: str = ""
     wall_sec: float = 0.0
     cpu_sec: float = 0.0
-    peak_rss_mb: float = 0.0
+    peak_rss_mib: float = 0.0          # MiB = 1024² bytes
     avg_cpu_pct: float = 0.0
     gpu_mem_mb: float = -1.0
     n_cells: int = 0
     n_genes: int = 0
-    checkpoint_mb: float = 0.0
+    checkpoint_mib: float = 0.0        # MiB = 1024² bytes
 
 
 @contextmanager
@@ -79,7 +79,8 @@ def monitor_performance(step_name: str = "", log=None, child_pid: Optional[int] 
                 report.cpu_sec = 0.0
         else:
             report.cpu_sec = round(_time.process_time() - tcpu0_parent, 1)
-        report.peak_rss_mb = round(peak_rss / 1e6, 1)
+        # psutil memory_info().rss returns bytes → convert to MiB (1024²)
+        report.peak_rss_mib = round(peak_rss / (1024 * 1024), 1)
         report.avg_cpu_pct = round(sum(cpu_samples) / max(len(cpu_samples), 1), 1)
         try:
             out = _sp.check_output(["nvidia-smi","--query-gpu=memory.used",
@@ -88,8 +89,8 @@ def monitor_performance(step_name: str = "", log=None, child_pid: Optional[int] 
         except Exception:
             report.gpu_mem_mb = -1.0
         if log:
-            log.info("[perf] wall=%.1fs cpu=%.1fs mem=%.1fMB cpu%%=%.1f%% gpu=%.0fMB",
-                     report.wall_sec, report.cpu_sec, report.peak_rss_mb,
+            log.info("[perf] wall=%.1fs cpu=%.1fs mem=%.1fMiB cpu%%=%.1f%% gpu=%.0fMB",
+                     report.wall_sec, report.cpu_sec, report.peak_rss_mib,
                      report.avg_cpu_pct, report.gpu_mem_mb)
 
 
@@ -106,12 +107,12 @@ class PerformanceSummary:
             step=f"{step_num} {desc}",
             wall_sec=perf.wall_sec,
             cpu_sec=perf.cpu_sec,
-            peak_rss_mb=perf.peak_rss_mb,
+            peak_rss_mib=perf.peak_rss_mib,
             avg_cpu_pct=perf.avg_cpu_pct,
             gpu_mem_mb=perf.gpu_mem_mb,
             n_cells=perf.n_cells,
             n_genes=perf.n_genes,
-            checkpoint_mb=perf.checkpoint_mb,
+            checkpoint_mib=perf.checkpoint_mib,
         )
         self.steps.append(clone)
 
@@ -123,18 +124,18 @@ class PerformanceSummary:
                 "step": s.step,
                 "wall_sec": s.wall_sec,
                 "cpu_sec": s.cpu_sec,
-                "peak_rss_mb": s.peak_rss_mb,
+                "peak_rss_mib": s.peak_rss_mib,
                 "avg_cpu_pct": s.avg_cpu_pct,
                 "gpu_mem_mb": s.gpu_mem_mb,
                 "n_cells": s.n_cells,
                 "n_genes": s.n_genes,
-                "checkpoint_mb": s.checkpoint_mb,
+                "checkpoint_mib": s.checkpoint_mib,
             })
 
         if steps_list:
             total_wall = sum(s["wall_sec"] for s in steps_list)
-            max_rss = max(s["peak_rss_mb"] for s in steps_list)
-            max_rss_step = max(steps_list, key=lambda x: x["peak_rss_mb"])["step"]
+            max_rss = max(s["peak_rss_mib"] for s in steps_list)
+            max_rss_step = max(steps_list, key=lambda x: x["peak_rss_mib"])["step"]
         else:
             total_wall = 0.0
             max_rss = 0.0
@@ -146,7 +147,7 @@ class PerformanceSummary:
             "summary": {
                 "n_steps": len(steps_list),
                 "total_wall_sec": total_wall,
-                "max_peak_rss_mb": max_rss,
+                "max_peak_rss_mib": max_rss,
                 "max_peak_rss_step": max_rss_step,
             },
         }
@@ -197,7 +198,7 @@ class PerformanceSummary:
         sep = f"├{_h(c_step)}┼{_h(c_desc)}┼{_h(c_wall)}┼{_h(c_cpu)}┼{_h(c_mem)}┼{_h(c_cells)}┤"
         header = (
             f"{_b}{'Step':<{c_step}}{_b}{'Description':<{c_desc}}{_b}"
-            f"{'Wall':<{c_wall}}{_b}{'CPU':<{c_cpu}}{_b}{'Mem(MB)':<{c_mem}}{_b}{'Cells':<{c_cells}}{_b}"
+            f"{'Wall':<{c_wall}}{_b}{'CPU':<{c_cpu}}{_b}{'Mem(MiB)':<{c_mem}}{_b}{'Cells':<{c_cells}}{_b}"
         )
         bot_sep = f"├{_h(c_step)}┴{_h(c_desc)}┼{_h(c_wall)}┼{_h(c_cpu)}┼{_h(c_mem)}┼{_h(c_cells)}┤"
         bot = f"└{_h(total_w - 2)}┘"
@@ -213,7 +214,7 @@ class PerformanceSummary:
                 f"{_b}{step_label:<{c_step}}{_b}{desc:<{c_desc}}{_b}"
                 f"{f'{s["wall_sec"]:.1f}s':>{c_wall}}{_b}"
                 f"{f'{s["cpu_sec"]:.1f}s':>{c_cpu}}{_b}"
-                f"{f'{s["peak_rss_mb"]:,.0f}':>{c_mem}}{_b}"
+                f"{f'{s["peak_rss_mib"]:,.0f}':>{c_mem}}{_b}"
                 f"{cells_str:>{c_cells}}{_b}"
             )
 
@@ -223,7 +224,7 @@ class PerformanceSummary:
         total_str = f"Total: {summary['total_wall_sec']:.1f}s wall"
         if n_jobs:
             total_str += f" ({n_jobs} jobs)"
-        peak_str = f"Peak: {summary['max_peak_rss_mb']:,.0f} MB"
+        peak_str = f"Peak: {summary['max_peak_rss_mib']:,.0f} MiB"
         if summary.get("max_peak_rss_step"):
             peak_str += f" ({summary['max_peak_rss_step']})"
         left_w = c_step + 1 + c_desc  # merged left cell width
@@ -234,33 +235,33 @@ class PerformanceSummary:
         n_genes_val = next((s["n_genes"] for s in steps_list if s["n_genes"]), 0)
         n_cells_total = sum(s["n_cells"] for s in steps_list) if steps_list else 0
         if n_cells_total and n_genes_val:
-            mem_per_1k = summary["max_peak_rss_mb"] / (n_cells_total / 1000)
-            mem_line = f" 📐 Memory reference: ~{mem_per_1k:.2f} MB per 1k cells at {n_genes_val:,} genes"
+            mem_per_1k = summary["max_peak_rss_mib"] / (n_cells_total / 1000)
+            mem_line = f" \U0001f4d0 Memory reference: ~{mem_per_1k:.2f} MiB per 1k cells at {n_genes_val:,} genes"
             print(f"{_b}{mem_line:<{total_w - 2}}{_b}")
             est = self._estimate_memory(
-                summary["max_peak_rss_mb"], n_cells_total, n_genes_val
+                summary["max_peak_rss_mib"], n_cells_total, n_genes_val
             )
             parts = []
             for k, v in est.items():
-                parts.append(f"{k} × {n_genes_val:,}: ~{v:.1f} GB")
-            est_line = "    → " + "  ".join(parts)
+                parts.append(f"{k} × {n_genes_val:,}: ~{v:.1f} GiB")
+            est_line = "    \u2192 " + "  ".join(parts)
             print(f"{_b}{est_line:<{total_w - 2}}{_b}")
             print(f"{_b}{'(linear estimate, actual varies)':<{total_w - 2}}{_b}")
 
         print(bot)
 
     @staticmethod
-    def _estimate_memory(peak_rss_mb: float, n_cells: int, n_genes: int) -> dict[str, float]:
+    def _estimate_memory(peak_rss_mib: float, n_cells: int, n_genes: int) -> dict[str, float]:
         """Estimate memory requirements at scale based on current measurement.
 
-        Returns estimated GB for 50k/100k/200k/500k cells at same gene density.
+        Returns estimated GiB for 50k/100k/200k/500k cells at same gene density.
         """
         if n_cells == 0 or n_genes == 0:
             return {}
-        per_cell_gene_mb = peak_rss_mb / (n_cells * n_genes)
+        per_cell_gene_mib = peak_rss_mib / (n_cells * n_genes)
         return {
-            "50k": round(50_000 * n_genes * per_cell_gene_mb / 1024, 1),
-            "100k": round(100_000 * n_genes * per_cell_gene_mb / 1024, 1),
-            "200k": round(200_000 * n_genes * per_cell_gene_mb / 1024, 1),
-            "500k": round(500_000 * n_genes * per_cell_gene_mb / 1024, 1),
+            "50k": round(50_000 * n_genes * per_cell_gene_mib / 1024, 1),
+            "100k": round(100_000 * n_genes * per_cell_gene_mib / 1024, 1),
+            "200k": round(200_000 * n_genes * per_cell_gene_mib / 1024, 1),
+            "500k": round(500_000 * n_genes * per_cell_gene_mib / 1024, 1),
         }
