@@ -213,9 +213,9 @@ class KbValidator:
         Strips Macaca-specific Ensembl suffixes (``_p``, ``_n``) and compares
         uppercase-normalised names.
         """
-        target = _normalize_gene_name(str(gene)).upper()
+        target = _normalize_gene_name(str(gene))
         for v in var_names:
-            if _normalize_gene_name(str(v)).upper() == target:
+            if _normalize_gene_name(str(v)) == target:
                 return str(v)
         return None
 

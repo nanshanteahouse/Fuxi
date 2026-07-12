@@ -81,22 +81,23 @@ _RE_MACACA_SUFFIX = re.compile(r'_[pn]\d*$')
 
 
 def _normalize_gene_name(name: str) -> str:
-    """Strip Macaca-specific Ensembl suffixes (``_p``, ``_n``) from gene names.
+    """Normalise gene symbol for KB matching.
 
-    Returns the base gene symbol for KB matching.  Only affects names
-    ending with known Ensembl Macaca annotation suffixes; clean human /
-    mouse symbols pass through unchanged.
+    1. Strip Macaca-specific Ensembl suffixes (``_p``, ``_n``).
+    2. Uppercase for case-insensitive cross-species comparison.
+
+    Returns the normalised gene symbol for KB matching.
 
     Examples
     --------
     >>> _normalize_gene_name('GAD1_p')
     'GAD1'
-    >>> _normalize_gene_name('GAD2_n')
-    'GAD2'
-    >>> _normalize_gene_name('POU4F2')
-    'POU4F2'
+    >>> _normalize_gene_name('fabp11a')
+    'FABP11A'
+    >>> _normalize_gene_name('her4.2')
+    'HER4.2'
     """
-    return _RE_MACACA_SUFFIX.sub('', str(name))
+    return _RE_MACACA_SUFFIX.sub('', str(name)).upper()
 
 # ── Consensus-weight map ──────────────────────────────────────────────
 # Mirrors merge.compute_consensus_level() — maps qualitative label to a
@@ -275,7 +276,8 @@ def _negative_marker_penalty(kb: Dict[str, Any], type_key: str,
     if not neg_markers:
         return False
 
-    top10 = set(cluster_markers.head(10)["names"].tolist())
+    top10 = set(_normalize_gene_name(g)
+                for g in cluster_markers.head(10)["names"].tolist())
     found = sum(1 for m in neg_markers if m in top10)
     return found >= 2
 
@@ -732,7 +734,8 @@ def score_cluster_against_kb(kb: Dict[str, Any],
         )
 
         # ── 2. Cosine similarity score ──────────────────────────────
-        all_genes = list(set(top_markers["names"].tolist() + positive_markers))
+        all_genes = list(set(_normalize_gene_name(g)
+                             for g in top_markers["names"].tolist() + positive_markers))
         cluster_vec = np.array(
             [1.0 if g in top_gene_set else 0.0 for g in all_genes]
         )
