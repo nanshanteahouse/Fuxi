@@ -430,6 +430,10 @@ class PmcXmlSource(PaperSource):
             title_el = sec.find('title')
             title = _elem_text(title_el) if title_el is not None else ''
             text = ''.join(sec.itertext()).strip()
+            # itertext() includes the title text at the start — separate it
+            if title and text.startswith(title):
+                body = text[len(title):].lstrip()
+                text = f'{title}\n{body}' if body else title
 
             key = self._section_key(title)
             if key in sections:

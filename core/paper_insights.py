@@ -42,7 +42,7 @@ from core.paper_converter import PaperSource, PmcXmlSource, MarkdownSource, Pymu
 logger = logging.getLogger(__name__)
 
 # ── Section / figure regex patterns ────────────────────────────────────────────
-_SECTION_RE = re.compile(r'^(?:#+\s*)?(SUMMARY|Abstract|Introduction|Results|Discussion|Methods|Materials\s*(?:and|&)\s*Methods|Experimental\s*Procedures)\b', re.MULTILINE | re.IGNORECASE)
+_SECTION_RE = re.compile(r'^(?:#+\s*)?(SUMMARY|Abstract|Introduction|Results|Discussion|Methods|Materials\s*(?:and|&)\s*Methods|Experimental\s*Procedures)(?!(?-i:[a-z]))', re.MULTILINE | re.IGNORECASE)
 _FIGURE_RE = re.compile(r'(?:Figure|Fig\.?)\s+\d+[a-z]?', re.IGNORECASE)
 
 _METHOD_KEYWORDS = [
@@ -132,7 +132,11 @@ def _yaml_dump(data: Any, indent: int = 0) -> list[str]:
         for k, v in data.items():
             ks = str(k)
             sub = _yaml_dump(v, indent + 1)
-            if len(sub) == 1 and not sub[0].startswith("  " * (indent + 1) + "-"):
+            if isinstance(v, dict):
+                # Dict values always need multiline YAML format
+                lines.append(f"{pfx}{ks}:")
+                lines.extend(sub)
+            elif len(sub) == 1 and not sub[0].startswith("  " * (indent + 1) + "-"):
                 lines.append(f"{pfx}{ks}: {sub[0].strip()}")
             else:
                 lines.append(f"{pfx}{ks}:")
