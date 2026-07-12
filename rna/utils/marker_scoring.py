@@ -170,7 +170,8 @@ def _get_canonical_markers(kb: Dict[str, Any], type_key: str,
 
     if species:
         type_species = type_data.get("species", [])
-        if species not in type_species:
+        # Empty species list means "no restriction" (works for all species).
+        if type_species and species not in type_species:
             # Try common-name ↔ scientific-name normalisation.
             if _species_matches(species, type_species):
                 # Species matches after normalisation — keep markers.
