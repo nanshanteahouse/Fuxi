@@ -1,12 +1,16 @@
 """Numerical tests for rna/utils/cluster_evaluation.py."""
 
 import logging
+import numpy as np
 
 import pytest
 
 from rna.utils.cluster_evaluation import (
     select_best_params,
     select_best_umap_params,
+    _compute_stability,
+    _compute_marker_coverage,
+    _select_multi_metric,
 )
 
 
@@ -167,3 +171,243 @@ class TestSelectBestUmapParams:
         assert best_sp == pytest.approx(1.5)
         assert method_label == "manual"
         assert sweep_results == []
+
+
+class TestComputeStability:
+    """Numerical assertions for _compute_stability."""
+
+    def test_compute_stability_well_separated(self) -> None:
+        """3 clearly separated clusters via scanpy leiden → stability > 0.6."""
+        import scanpy as sc
+
+        n_cells = 300
+        n_genes = 50
+        rng = np.random.RandomState(42)
+        X = rng.normal(0, 0.3, (n_cells, n_genes))
+        # Create 3 well-separated clusters
+        X[:100, :10] += rng.normal(5, 0.3, (100, 10))
+        X[100:200, 10:20] += rng.normal(5, 0.3, (100, 10))
+        X[200:300, 20:30] += rng.normal(5, 0.3, (100, 10))
+        adata = sc.AnnData(X)
+
+        sc.pp.pca(adata, n_comps=10)
+        sc.pp.neighbors(adata, n_neighbors=15)
+
+        stability = _compute_stability(adata, resolution=0.5, n_seeds=3)
+        assert stability > 0.6, f"Expected stability > 0.6, got {stability}"
+
+    def test_compute_stability_single_cluster(self) -> None:
+        """Single-cluster AnnData → stability == 1.0."""
+        import scanpy as sc
+
+        n_cells = 100
+        n_genes = 20
+        rng = np.random.RandomState(42)
+        X = rng.normal(0, 0.05, (n_cells, n_genes))
+        adata = sc.AnnData(X)
+
+        sc.pp.pca(adata, n_comps=5)
+        sc.pp.neighbors(adata, n_neighbors=10)
+
+        # Very low resolution → should get single cluster consistently
+        stability = _compute_stability(adata, resolution=0.01, n_seeds=3)
+        assert stability == pytest.approx(1.0, abs=0.01), (
+            f"Expected stability ~1.0, got {stability}"
+        )
+
+    def test_compute_stability_n_seeds(self) -> None:
+        """n_seeds=1 returns 1.0; n_seeds=3 returns valid mean."""
+        import scanpy as sc
+
+        n_cells = 200
+        n_genes = 30
+        rng = np.random.RandomState(42)
+        X = rng.normal(0, 0.5, (n_cells, n_genes))
+        # Make 2 moderate clusters
+        X[:100, :8] += rng.normal(4, 0.3, (100, 8))
+        X[100:, 8:16] += rng.normal(4, 0.3, (100, 8))
+        adata = sc.AnnData(X)
+
+        sc.pp.pca(adata, n_comps=10)
+        sc.pp.neighbors(adata, n_neighbors=15)
+
+        # n_seeds=1 should return exactly 1.0
+        stab_1 = _compute_stability(adata, resolution=0.3, n_seeds=1)
+        assert stab_1 == 1.0, f"n_seeds=1 should return 1.0, got {stab_1}"
+
+        # n_seeds=3 should produce a valid float between 0 and 1
+        stab_3 = _compute_stability(adata, resolution=0.3, n_seeds=3)
+        assert 0.0 <= stab_3 <= 1.0, (
+            f"n_seeds=3 should be in [0,1], got {stab_3}"
+        )
+
+
+class TestComputeMarkerCoverage:
+    """Numerical assertions for _compute_marker_coverage."""
+
+    def test_compute_marker_coverage_perfect_match(self) -> None:
+        """AnnData with clusters that express known markers → coverage > 0.8."""
+        import scanpy as sc
+
+        n_cells = 300
+        rng = np.random.RandomState(42)
+
+        # 3 clusters, 100 cells each
+        adata = sc.AnnData(X=rng.randn(n_cells, 20))
+        adata.obs["leiden_15_0.5"] = (
+            ["0"] * 100 + ["1"] * 100 + ["2"] * 100
+        )
+
+        # per_cell_scores: each cell type boosted in its matching cluster
+        per_cell_scores: dict[str, np.ndarray] = {}
+        for i in range(3):
+            scores = rng.normal(0, 0.5, n_cells)
+            cluster_mask = adata.obs["leiden_15_0.5"] == str(i)
+            scores[cluster_mask.values] += 5.0
+            per_cell_scores[f"Type{i}"] = scores
+
+        coverage = _compute_marker_coverage(
+            adata, cluster_key="leiden_15_0.5",
+            per_cell_scores=per_cell_scores,
+        )
+        assert coverage > 0.8, (
+            f"Expected coverage > 0.8 for perfect match, got {coverage}"
+        )
+
+    def test_compute_marker_coverage_random(self) -> None:
+        """Random expression → coverage < 0.5."""
+        import scanpy as sc
+
+        n_cells = 200
+        rng = np.random.RandomState(42)
+
+        adata = sc.AnnData(X=rng.randn(n_cells, 20))
+        adata.obs["leiden_15_0.5"] = (
+            ["0"] * 50 + ["1"] * 50 + ["2"] * 50 + ["3"] * 50
+        )
+
+        # 5 cell types → harder for any single type to randomly dominate a cluster
+        per_cell_scores = {
+            f"Type{c}": rng.randn(n_cells) for c in range(5)
+        }
+
+        coverage = _compute_marker_coverage(
+            adata, cluster_key="leiden_15_0.5",
+            per_cell_scores=per_cell_scores,
+        )
+        assert coverage < 0.6, (
+            f"Expected coverage < 0.6 for random scores, got {coverage}"
+        )
+
+    def test_compute_marker_coverage_empty_scores(self) -> None:
+        """Empty per_cell_scores dict → returns 1.0."""
+        import scanpy as sc
+
+        adata = sc.AnnData(X=np.random.randn(50, 10))
+        adata.obs["leiden"] = ["0"] * 50
+
+        coverage = _compute_marker_coverage(
+            adata, cluster_key="leiden",
+            per_cell_scores={},
+        )
+        assert coverage == 1.0, (
+            f"Empty scores should return 1.0, got {coverage}"
+        )
+
+    def test_compute_marker_coverage_missing_genes(self) -> None:
+        """Cell type scores with None entries → graceful, still returns valid coverage."""
+        import scanpy as sc
+
+        n_cells = 150
+        rng = np.random.RandomState(42)
+
+        adata = sc.AnnData(X=rng.randn(n_cells, 20))
+        adata.obs["leiden"] = ["0"] * 50 + ["1"] * 50 + ["2"] * 50
+
+        # One valid score, one None
+        good_scores = rng.normal(0, 0.5, n_cells)
+        good_scores[:50] += 5.0  # boost in cluster 0
+
+        per_cell_scores: dict[str, np.ndarray | None] = {
+            "TypeA": good_scores,
+            "TypeB": None,  # missing data
+        }
+
+        coverage = _compute_marker_coverage(
+            adata, cluster_key="leiden",
+            per_cell_scores=per_cell_scores,
+        )
+        assert 0.0 <= coverage <= 1.0, (
+            f"Should return valid coverage even with missing genes, got {coverage}"
+        )
+
+
+class TestSelectMultiMetric:
+    """Numerical assertions for _select_multi_metric."""
+
+    def test_select_multi_metric(self) -> None:
+        """with/without marker_coverage keys, verify composite returns correctly."""
+        # ── Without marker_coverage ──
+        valid_no_mc = [
+            {
+                "n_neighbors": 10, "resolution": 0.5,
+                "n_clusters": 3, "silhouette_score": 0.4,
+                "stability_score": 0.8,
+            },
+            {
+                "n_neighbors": 20, "resolution": 0.8,
+                "n_clusters": 6, "silhouette_score": 0.7,
+                "stability_score": 0.9,
+            },
+            {
+                "n_neighbors": 30, "resolution": 1.0,
+                "n_clusters": 9, "silhouette_score": 0.6,
+                "stability_score": 0.7,
+            },
+        ]
+
+        best_n, best_r, method, reason = _select_multi_metric(valid_no_mc)
+        assert method == "multi_metric"
+        assert isinstance(best_n, int)
+        assert isinstance(best_r, float)
+        assert "sil=" in reason
+        assert "stab=" in reason
+
+        # ── With marker_coverage ──
+        valid_with_mc = [
+            {
+                "n_neighbors": 10, "resolution": 0.5,
+                "n_clusters": 3, "silhouette_score": 0.4,
+                "stability_score": 0.8, "marker_coverage": 0.6,
+            },
+            {
+                "n_neighbors": 20, "resolution": 0.8,
+                "n_clusters": 6, "silhouette_score": 0.7,
+                "stability_score": 0.9, "marker_coverage": 0.5,
+            },
+            {
+                "n_neighbors": 30, "resolution": 1.0,
+                "n_clusters": 9, "silhouette_score": 0.6,
+                "stability_score": 0.7, "marker_coverage": 0.7,
+            },
+        ]
+
+        best_n2, best_r2, method2, reason2 = _select_multi_metric(valid_with_mc)
+        assert method2 == "multi_metric"
+        assert isinstance(best_n2, int)
+        assert isinstance(best_r2, float)
+        assert "marker_cov=" in reason2
+
+        # ── Single entry (edge case) ──
+        valid_single = [
+            {
+                "n_neighbors": 15, "resolution": 0.6,
+                "n_clusters": 4, "silhouette_score": 0.5,
+                "stability_score": 0.85, "marker_coverage": 0.4,
+            },
+        ]
+
+        best_n3, best_r3, method3, _reason3 = _select_multi_metric(valid_single)
+        assert best_n3 == 15
+        assert best_r3 == pytest.approx(0.6)
+        assert method3 == "multi_metric"
