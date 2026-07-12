@@ -456,6 +456,25 @@ class Config:
     #                   (0 = auto-pick best silhouette at given resolution)
     cluster_selection_method: str | None = "pareto_elbow"
 
+    # ── Multi-metric clustering (weighted ensemble) ──
+    # Weights for the multi-metric consensus approach that combines
+    # silhouette score, cluster stability, and marker coverage into a single
+    # quality score. Higher weight = more influence on final cluster selection.
+    multi_metric_weights: dict = field(default_factory=lambda: {
+        "silhouette": 0.3,
+        "stability": 0.3,
+        "marker_coverage": 0.4,
+    })
+    # Number of subsampling seeds used to assess cluster stability.
+    # Higher values give more robust stability estimates at the cost of compute.
+    multi_metric_n_stability_seeds: int = 5
+    # If True, automatically adjust resolution range based on dataset size and
+    # complexity before the grid search sweep.
+    multi_metric_adaptive_resolution: bool = True
+    # Ratio threshold for detecting excessive marker coverage imbalance.
+    # Values > 1.5 trigger a warning that clustering may be too coarse.
+    multi_metric_coverage_ratio_threshold: float = 1.5
+
     # ── UMAP visualization parameter sweep ──
     # After best (n_neighbors, resolution) is selected, optionally sweep
     # min_dist × spread (same KNN graph — cheap).  Selection method:

@@ -45,6 +45,14 @@ def main():
     # ── 参数网格 ──
     n_neighbors_grid = getattr(CFG, 'param_grid_n_neighbors', [15, 20, 30])
     resolutions_grid = getattr(CFG, 'param_grid_resolutions', [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
+    # ── Adaptive resolution expansion for small datasets ──
+    if getattr(CFG, 'multi_metric_adaptive_resolution', False):
+        if adata.n_obs < 3000:
+            extra = [r for r in [3.0, 5.0] if r not in resolutions_grid]
+            if extra:
+                resolutions_grid = sorted(resolutions_grid + extra)
+                log.info("Adaptive resolution expansion (n_cells=%d < 3000): added %s → %s",
+                         adata.n_obs, extra, resolutions_grid)
     log.info("Parameter grid: n_neighbors=%s, resolutions=%s", n_neighbors_grid, resolutions_grid)
 
     fig_dir = os.path.join(CFG.figure_dir, '04_cluster')

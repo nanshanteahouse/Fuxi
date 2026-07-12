@@ -437,6 +437,16 @@ def _select_multi_metric(valid, weights=None):
     if not has_marker_coverage:
         active_weights.pop('marker_coverage', None)
 
+    # ── Marker mismatch auto-degrade: if all entries have marker_coverage < 0.1 ──
+    if has_marker_coverage and float(np.max(mc_scores)) < 0.1:
+        logger.warning(
+            "Max marker_coverage=%.4f < 0.1 across all entries — marker_dict may be mismatched. "
+            "Degrading to silhouette+stability only.",
+            float(np.max(mc_scores)),
+        )
+        has_marker_coverage = False
+        active_weights = {'silhouette': 0.5, 'stability': 0.5}
+
     # ── Low-variance guard (on raw scores) ──
     metrics_raw = {
         'silhouette': sil_scores,
