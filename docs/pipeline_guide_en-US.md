@@ -1001,7 +1001,7 @@ CFG.n_neighbors_grid = [15, 20, 30]              # UMAP neighbor count candidate
 CFG.resolution_grid = [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]  # Leiden resolution candidates
 CFG.best_resolution = None                        # Set to a specific value in manual mode
 CFG.best_n_neighbors = 0                           # Set to a specific value in manual mode (0 = auto)
-CFG.cluster_selection_method = "pareto_elbow"          # "pareto_elbow" (default) | "silhouette" | None
+CFG.cluster_selection_method = "multi_metric"          # "multi_metric" (default) | "pareto_elbow" | "silhouette" | None
 
 # UMAP visualization sweep — runs AFTER best cluster params selected; reuses KNN graph (fast)
 CFG.umap_selection_method = "convex_hull"            # "convex_hull" (auto, default) | None (manual)

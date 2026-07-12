@@ -1001,7 +1001,7 @@ CFG.n_neighbors_grid = [15, 20, 30]        # UMAP 邻居数候选值
 CFG.resolution_grid = [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]  # Leiden 分辨率候选值
 CFG.best_resolution = None                  # 手动模式下设为具体值
 CFG.best_n_neighbors = 0                     # 手动模式下设为具体值（0 = 自动）
-CFG.cluster_selection_method = "pareto_elbow"  # "pareto_elbow" (默认) | "silhouette" | None
+CFG.cluster_selection_method = "multi_metric"  # "multi_metric" (默认) | "pareto_elbow" | "silhouette" | None
 
 # UMAP 可视化参数扫描——在最佳聚类参数选定后进行，复用 KNN 图（很快）
 CFG.umap_selection_method = "convex_hull"  # "convex_hull" (自动，默认) | None (手动)

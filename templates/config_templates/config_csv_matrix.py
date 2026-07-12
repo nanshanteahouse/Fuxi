@@ -89,7 +89,7 @@ CFG.n_pcs_use = 50
 CFG.leiden_resolutions = [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
 CFG.best_resolution = 1.0   # Only used when cluster_selection_method is None
 CFG.best_n_neighbors = 0     # Only used when cluster_selection_method is None; 0 = auto-pick
-CFG.cluster_selection_method = "pareto_elbow"  # "pareto_elbow" | "silhouette" | None
+CFG.cluster_selection_method = "multi_metric"  # "multi_metric" (default) | "pareto_elbow" | "silhouette" | None
 # UMAP visualization parameter sweep — tried AFTER best cluster params selected.
 # Selection method:  "convex_hull" (auto, default) | None (manual: use umap_min_dist/spread)
 CFG.umap_selection_method = "convex_hull"
