@@ -714,6 +714,156 @@ def _detect_granularity(results_summary: list[dict], cv_threshold: float = 0.05,
         )
         return "tissue"
 
+def _select_de_gated(valid, adata, de_gate_threshold=25):
+    """Select best resolution using DE-gated criterion for subtype-level data.
+
+    For subtype-level data where silhouette scores are flat across resolutions,
+    this method selects the highest resolution that maintains a minimum number of
+    differentially expressed genes between every cluster pair.
+
+    Algorithm follows Shekhar 2016 merge.clusters.DE pattern (inverted):
+    select highest resolution where pairwise DE >= threshold.
+
+    Parameters
+    ----------
+    valid : list[dict]
+        Grid-search entries with keys: n_clusters, resolution, cluster_key.
+        Must be unique by resolution.
+    adata : AnnData
+        Annotated data matrix.
+    de_gate_threshold : int
+        Minimum number of DE genes required between every cluster pair.
+        Default 25.
+
+    Returns
+    -------
+    tuple[int, float, str, str]
+        (n_clusters, resolution, cluster_key, reason_str)
+    """
+    import scanpy as sc
+
+    # Edge case: single entry -> return as-is
+    if len(valid) <= 1:
+        entry = valid[0]
+        return (
+            entry["n_clusters"],
+            entry["resolution"],
+            entry["cluster_key"],
+            "de_gated(single_entry, min_pairwise_de=N/A)",
+        )
+
+    # Sort by resolution ascending for deterministic iteration
+    sorted_entries = sorted(valid, key=lambda e: e.get("resolution", 0.0))
+
+    # Collect (entry, min_pairwise_de) for each resolution
+    candidates = []  # list of (entry, min_pairwise_de)
+
+    for entry in sorted_entries:
+        cluster_key = entry["cluster_key"]
+
+        # Check if rank_genes_groups already computed for this groupby key
+        existing_rg = adata.uns.get("rank_genes_groups")
+        recompute = True
+        if existing_rg is not None:
+            existing_params = existing_rg.get("params", {})
+            if existing_params.get("groupby") == cluster_key:
+                recompute = False
+
+        if recompute:
+            try:
+                sc.tl.rank_genes_groups(
+                    adata,
+                    groupby=cluster_key,
+                    method="wilcoxon",
+                    n_genes=50,
+                    use_raw=True,
+                )
+            except Exception as e:
+                logger.warning(
+                    "rank_genes_groups failed for cluster_key=%s (resolution=%.2f): %s",
+                    cluster_key, entry["resolution"], e,
+                )
+                continue
+
+        # Extract min pairwise DE count: for each group, count genes with
+        # padj < 0.05 AND log2FC > 1.0, then take the minimum across groups.
+        try:
+            rg = adata.uns["rank_genes_groups"]
+            pvals_adj = rg["pvals_adj"]
+            logfoldchanges = rg["logfoldchanges"]
+            group_names = pvals_adj.dtype.names
+
+            if group_names is None or len(group_names) == 0:
+                logger.warning(
+                    "No cluster groups in rank_genes_groups output for cluster_key=%s",
+                    cluster_key,
+                )
+                continue
+
+            de_counts = []
+            for group in group_names:
+                padj = pvals_adj[group]
+                lfc = logfoldchanges[group]
+                n_de = int(np.sum((padj < 0.05) & (lfc > 1.0)))
+                de_counts.append(n_de)
+
+            min_pairwise_de = int(min(de_counts))
+        except Exception as e:
+            logger.warning(
+                "Failed to extract DE counts for cluster_key=%s: %s",
+                cluster_key, e,
+            )
+            continue
+
+        candidates.append((entry, min_pairwise_de))
+
+    if not candidates:
+        # All entries failed -> fallback to first entry
+        logger.warning(
+            "DE-gated selection: all rank_genes_groups calls failed -- "
+            "fallback to first entry"
+        )
+        entry = sorted_entries[0]
+        return (
+            entry["n_clusters"],
+            entry["resolution"],
+            entry["cluster_key"],
+            "de_gated(all_failed, min_pairwise_de=N/A)",
+        )
+
+    # Select entry with highest n_clusters where min_pairwise_de >= threshold
+    candidates_by_n = sorted(
+        candidates, key=lambda c: c[0]["n_clusters"], reverse=True,
+    )
+    best_entry = None
+    best_min_de = -1
+    for entry, min_de in candidates_by_n:
+        if min_de >= de_gate_threshold:
+            best_entry = entry
+            best_min_de = min_de
+            break
+
+    # If no entry meets threshold, fallback to lowest resolution (most conservative)
+    if best_entry is None:
+        best_entry, best_min_de = candidates[0]
+        logger.info(
+            "DE-gated selection: best_resolution=%.2f, min_pairwise_de=%d "
+            "(fallback: no entry met threshold=%d)",
+            best_entry["resolution"], best_min_de, de_gate_threshold,
+        )
+    else:
+        logger.info(
+            "DE-gated selection: best_resolution=%.2f, min_pairwise_de=%d",
+            best_entry["resolution"], best_min_de,
+        )
+
+    return (
+        best_entry["n_clusters"],
+        best_entry["resolution"],
+        best_entry["cluster_key"],
+        f"de_gated(min_pairwise_de={best_min_de})",
+    )
+
 
 def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, CFG, use_rep, log):
     """Sweep min_dist × spread on the best (n_neighbors) neighbor graph,
