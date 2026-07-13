@@ -26,7 +26,8 @@ DEFAULT_MULTI_METRIC_WEIGHTS = {
     'silhouette': 0.2,
     'stability': 0.2,
     'cluster_coherence': 0.3,
-    'splitting_gain': 0.3,
+    'splitting_gain': 0.2,
+    'kb_annotatable_rate': 0.1,
 }
 
 
@@ -55,8 +56,9 @@ def select_best_params(results_summary, method="pareto_elbow", best_resolution=N
         silhouette at the given resolution.
     multi_metric_weights : dict[str, float] | None
         Only used when method is "multi_metric".  Custom metric weights.
-        Defaults to :data:`DEFAULT_MULTI_METRIC_WEIGHTS` (silhouette=0.3,
-        stability=0.3, cluster_coherence=0.4) when None.
+        Defaults to :data:`DEFAULT_MULTI_METRIC_WEIGHTS` (silhouette=0.2,
+        stability=0.2, cluster_coherence=0.3, splitting_gain=0.2,
+        kb_annotatable_rate=0.1) when None.
 
     Returns
     -------
