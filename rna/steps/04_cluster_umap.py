@@ -129,14 +129,14 @@ def main():
         log.info("Subtype-level data detected — skipping marker enrichment (Wave 4)")
     else:
         # ── Multi-metric enrichment (for multi_metric selection method) ──
-        from rna.utils.cluster_evaluation import _compute_stability, _compute_marker_coverage
+        from rna.utils.cluster_evaluation import _compute_stability, _compute_cluster_coherence
         import logging as _logging
         _log_enrich = _logging.getLogger(__name__)
 
         marker_dict = getattr(CFG, 'marker_dict', None) or {}
         has_markers = bool(marker_dict)
         n_stab_seeds = getattr(CFG, 'multi_metric_n_stability_seeds', 5)
-        ratio_threshold = getattr(CFG, 'multi_metric_coverage_ratio_threshold', 1.5)
+        dominance_threshold = getattr(CFG, 'multi_metric_coverage_ratio_threshold', 1.5)
 
         # Group results by n_neighbors
         from itertools import groupby
@@ -187,14 +187,14 @@ def main():
                         n_seeds=n_stab_seeds,
                     )
                     if has_markers and per_cell_scores:
-                        entry['marker_coverage'] = _compute_marker_coverage(
-                            adata, ck, per_cell_scores, ratio_threshold=ratio_threshold,
+                        entry['cluster_coherence'] = _compute_cluster_coherence(
+                            adata, ck, per_cell_scores, dominance_threshold=dominance_threshold,
                         )
                 except Exception as e:
                     _log_enrich.warning("Enrichment failed for n_neighbors=%d, resolution=%.1f: %s",
                                         entry.get('n_neighbors'), entry.get('resolution'), e)
                     entry['stability_score'] = None
-                    entry['marker_coverage'] = None
+                    entry['cluster_coherence'] = None
     # ── Single-param UMAP plots ──
     for n in n_neighbors_grid:
         for res in resolutions_grid:

@@ -9,7 +9,7 @@ from rna.utils.cluster_evaluation import (
     select_best_params,
     select_best_umap_params,
     _compute_stability,
-    _compute_marker_coverage,
+    _compute_cluster_coherence,
     _select_multi_metric,
     _detect_granularity,
 )
@@ -267,7 +267,7 @@ class TestComputeMarkerCoverage:
             scores[cluster_mask.values] += 5.0
             per_cell_scores[f"Type{i}"] = scores
 
-        coverage = _compute_marker_coverage(
+        coverage = _compute_cluster_coherence(
             adata, cluster_key="leiden_15_0.5",
             per_cell_scores=per_cell_scores,
         )
@@ -292,7 +292,7 @@ class TestComputeMarkerCoverage:
             f"Type{c}": rng.randn(n_cells) for c in range(5)
         }
 
-        coverage = _compute_marker_coverage(
+        coverage = _compute_cluster_coherence(
             adata, cluster_key="leiden_15_0.5",
             per_cell_scores=per_cell_scores,
         )
@@ -307,7 +307,7 @@ class TestComputeMarkerCoverage:
         adata = sc.AnnData(X=np.random.randn(50, 10))
         adata.obs["leiden"] = ["0"] * 50
 
-        coverage = _compute_marker_coverage(
+        coverage = _compute_cluster_coherence(
             adata, cluster_key="leiden",
             per_cell_scores={},
         )
@@ -334,7 +334,7 @@ class TestComputeMarkerCoverage:
             "TypeB": None,  # missing data
         }
 
-        coverage = _compute_marker_coverage(
+        coverage = _compute_cluster_coherence(
             adata, cluster_key="leiden",
             per_cell_scores=per_cell_scores,
         )
@@ -374,22 +374,22 @@ class TestSelectMultiMetric:
         assert "sil=" in reason
         assert "stab=" in reason
 
-        # ── With marker_coverage ──
+        # -- With cluster_coherence --
         valid_with_mc = [
             {
                 "n_neighbors": 10, "resolution": 0.5,
                 "n_clusters": 3, "silhouette_score": 0.4,
-                "stability_score": 0.8, "marker_coverage": 0.6,
+                "stability_score": 0.8, "cluster_coherence": 0.6,
             },
             {
                 "n_neighbors": 20, "resolution": 0.8,
                 "n_clusters": 6, "silhouette_score": 0.7,
-                "stability_score": 0.9, "marker_coverage": 0.5,
+                "stability_score": 0.9, "cluster_coherence": 0.5,
             },
             {
                 "n_neighbors": 30, "resolution": 1.0,
                 "n_clusters": 9, "silhouette_score": 0.6,
-                "stability_score": 0.7, "marker_coverage": 0.7,
+                "stability_score": 0.7, "cluster_coherence": 0.7,
             },
         ]
 
@@ -397,14 +397,14 @@ class TestSelectMultiMetric:
         assert method2 == "multi_metric"
         assert isinstance(best_n2, int)
         assert isinstance(best_r2, float)
-        assert "marker_cov=" in reason2
+        assert "coherence=" in reason2
 
         # ── Single entry (edge case) ──
         valid_single = [
             {
                 "n_neighbors": 15, "resolution": 0.6,
                 "n_clusters": 4, "silhouette_score": 0.5,
-                "stability_score": 0.85, "marker_coverage": 0.4,
+                "stability_score": 0.85, "cluster_coherence": 0.4,
             },
         ]
 
@@ -427,28 +427,28 @@ class TestSelectMultiMetricIntegration:
         valid = [
             {"n_neighbors": 10, "resolution": 0.5, "n_clusters": 3,
              "silhouette_score": 0.4, "stability_score": 0.7,
-             "marker_coverage": 0.3, "cluster_key": "leiden_10_0.5"},
+             "cluster_coherence": 0.3, "cluster_key": "leiden_10_0.5"},
             {"n_neighbors": 10, "resolution": 1.0, "n_clusters": 5,
              "silhouette_score": 0.4, "stability_score": 0.7,
-             "marker_coverage": 0.6, "cluster_key": "leiden_10_1.0"},
+             "cluster_coherence": 0.6, "cluster_key": "leiden_10_1.0"},
             {"n_neighbors": 20, "resolution": 0.5, "n_clusters": 6,
              "silhouette_score": 0.6, "stability_score": 0.85,
-             "marker_coverage": 0.5, "cluster_key": "leiden_20_0.5"},
+             "cluster_coherence": 0.5, "cluster_key": "leiden_20_0.5"},
             {"n_neighbors": 20, "resolution": 1.0, "n_clusters": 8,
              "silhouette_score": 0.6, "stability_score": 0.85,
-             "marker_coverage": 0.8, "cluster_key": "leiden_20_1.0"},
+             "cluster_coherence": 0.8, "cluster_key": "leiden_20_1.0"},
             {"n_neighbors": 30, "resolution": 0.5, "n_clusters": 9,
              "silhouette_score": 0.5, "stability_score": 0.75,
-             "marker_coverage": 0.7, "cluster_key": "leiden_30_0.5"},
+             "cluster_coherence": 0.7, "cluster_key": "leiden_30_0.5"},
             {"n_neighbors": 30, "resolution": 1.0, "n_clusters": 12,
              "silhouette_score": 0.5, "stability_score": 0.75,
-             "marker_coverage": 0.9, "cluster_key": "leiden_30_1.0"},
+             "cluster_coherence": 0.9, "cluster_key": "leiden_30_1.0"},
         ]
         best_n, best_r, method, reason = _select_multi_metric(valid)
         assert method == "multi_metric"
         assert isinstance(best_n, int)
         assert isinstance(best_r, float)
-        assert "marker_cov=" in reason
+        assert "coherence=" in reason
         assert "composite=" in reason
         assert best_n == 20
         assert best_r == pytest.approx(1.0)
@@ -477,7 +477,7 @@ class TestSelectMultiMetricIntegration:
         ]
         best_n, best_r, method, reason = _select_multi_metric(valid)
         assert method == "multi_metric"
-        assert "marker_cov=0.000" in reason
+        assert "coherence=0.000" in reason
         assert "sil=" in reason and "stab=" in reason
         assert best_n == 20
         assert best_r == pytest.approx(0.5)
@@ -494,7 +494,7 @@ class TestSelectMultiMetricIntegration:
         ]
         best_n, best_r, method, reason = _select_multi_metric(valid)
         assert method == "multi_metric"
-        assert "marker_cov=0.000" in reason
+        assert "coherence=0.000" in reason
         assert "sil=" in reason and "stab=" in reason
         assert best_n == 25
         assert best_r == pytest.approx(1.2)
@@ -504,7 +504,7 @@ class TestSelectMultiMetricIntegration:
         valid = [
             {"n_neighbors": 15, "resolution": 0.6, "n_clusters": 4,
              "silhouette_score": 0.5, "stability_score": 0.85,
-             "marker_coverage": 0.4, "cluster_key": "leiden_15_0.6"},
+             "cluster_coherence": 0.4, "cluster_key": "leiden_15_0.6"},
         ]
         best_n, best_r, method, _reason = _select_multi_metric(valid)
         assert best_n == 15
@@ -526,17 +526,17 @@ class TestAdaptiveBehaviors:
             {
                 "n_neighbors": 10, "resolution": 0.5,
                 "n_clusters": 3, "silhouette_score": 0.4,
-                "stability_score": 0.8, "marker_coverage": 0.0,
+                "stability_score": 0.8, "cluster_coherence": 0.0,
             },
             {
                 "n_neighbors": 20, "resolution": 0.8,
                 "n_clusters": 6, "silhouette_score": 0.7,
-                "stability_score": 0.9, "marker_coverage": 0.02,
+                "stability_score": 0.9, "cluster_coherence": 0.02,
             },
             {
                 "n_neighbors": 30, "resolution": 1.0,
                 "n_clusters": 9, "silhouette_score": 0.6,
-                "stability_score": 0.7, "marker_coverage": 0.05,
+                "stability_score": 0.7, "cluster_coherence": 0.05,
             },
         ]
 
@@ -555,7 +555,7 @@ class TestAdaptiveBehaviors:
         assert isinstance(best_r, float)
 
         # ── Degraded: marker_cov=0.000, not a differentiating factor ──
-        assert "marker_cov=0.000" in reason
+        assert "coherence=0.000" in reason
         assert "sil=" in reason
         assert "stab=" in reason
 
@@ -581,7 +581,7 @@ class TestAdaptiveBehaviors:
         assert m1 == "multi_metric"
         assert isinstance(n1, int)
         assert isinstance(r1, float)
-        assert "marker_cov=0.000" in reason1
+        assert "coherence=0.000" in reason1
         # Absence path logs no mismatch warning
         assert not any(
             "mismatch" in rec.message or "Degrading" in rec.message
@@ -593,12 +593,12 @@ class TestAdaptiveBehaviors:
             {
                 "n_neighbors": 15, "resolution": 0.6,
                 "n_clusters": 4, "silhouette_score": 0.5,
-                "stability_score": 0.85, "marker_coverage": 0.0,
+                "stability_score": 0.85, "cluster_coherence": 0.0,
             },
             {
                 "n_neighbors": 25, "resolution": 1.2,
                 "n_clusters": 7, "silhouette_score": 0.7,
-                "stability_score": 0.9, "marker_coverage": 0.01,
+                "stability_score": 0.9, "cluster_coherence": 0.01,
             },
         ]
         caplog.clear()
@@ -606,7 +606,7 @@ class TestAdaptiveBehaviors:
         assert m2 == "multi_metric"
         assert isinstance(n2, int)
         assert isinstance(r2, float)
-        assert "marker_cov=0.000" in reason2
+        assert "coherence=0.000" in reason2
         # Mismatch path DOES log a warning
         assert any(
             "mismatch" in rec.message or "Degrading" in rec.message

@@ -11,7 +11,7 @@ Exports:
     select_best_params(results_summary, method, best_resolution=None, best_n_neighbors=0, multi_metric_weights=None)
         -> (best_n, best_r, method_label, reason_str)
     _compute_stability(adata, resolution, ...) -> float
-    _compute_marker_coverage(adata, cluster_key, per_cell_scores, ...) -> float
+    _compute_cluster_coherence(adata, cluster_key, per_cell_scores, ...) -> float
 """
 
 import numpy as np
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_MULTI_METRIC_WEIGHTS = {
     'silhouette': 0.3,
     'stability': 0.3,
-    'marker_coverage': 0.4,
+    'cluster_coherence': 0.4,
 }
 
 
@@ -40,7 +40,7 @@ def select_best_params(results_summary, method="pareto_elbow", best_resolution=N
     method : str or None
         "pareto_elbow"  — Pareto frontier + normalized elbow detection
         "silhouette"    — Pick max silhouette score
-        "multi_metric"  — Composite scoring: silhouette + stability + marker coverage
+        "multi_metric"  — Composite scoring: silhouette + stability + cluster coherence
         None            — Manual via best_resolution + best_n_neighbors
                            (falls back to max silhouette within matching
                            resolution if n_neighbors=0, then globally if
@@ -55,7 +55,7 @@ def select_best_params(results_summary, method="pareto_elbow", best_resolution=N
     multi_metric_weights : dict[str, float] | None
         Only used when method is "multi_metric".  Custom metric weights.
         Defaults to :data:`DEFAULT_MULTI_METRIC_WEIGHTS` (silhouette=0.3,
-        stability=0.3, marker_coverage=0.4) when None.
+        stability=0.3, cluster_coherence=0.4) when None.
 
     Returns
     -------
@@ -320,12 +320,18 @@ def _compute_stability(adata, resolution, leiden_flavor: Literal['leidenalg', 'i
     return float(np.mean(aris))
 
 
-def _compute_marker_coverage(adata, cluster_key, per_cell_scores, ratio_threshold=1.5):
-    """Compute fraction of clusters with a clear marker-gene match.
+def _compute_cluster_coherence(adata, cluster_key, per_cell_scores, dominance_threshold=1.5, min_expression=0.05):
+    """Per-cluster marker coherence metric that peaks at intermediate resolution.
 
-    For each cluster, computes the mean per-cell score for each cell type.
-    A cluster is "matched" if the top cell type's mean score is at least
-    *ratio_threshold* × the second-best score.
+    For each cluster label in adata.obs[cluster_key]:
+      - Compute mean of per_cell_scores per cell type
+      - Find best_score (max) and second_best_score
+      - A cluster is "coherent" if:
+        (a) best_score > min_expression (not noise)
+        (b) best_score / max(second_best, 1e-10) > dominance_threshold
+      - This ensures the cluster has ONE clearly dominant cell type
+
+    coherence = n_coherent / n_total_clusters
 
     Parameters
     ----------
@@ -335,13 +341,15 @@ def _compute_marker_coverage(adata, cluster_key, per_cell_scores, ratio_threshol
     per_cell_scores : dict[str, np.ndarray]
         Cell-type → per-cell score array (shape: n_cells,).  Pre-computed
         by the caller (e.g. via ``sc.tl.score_genes()``).
-    ratio_threshold : float
-        Minimum ratio of top score to second-best for a match.
+    dominance_threshold : float
+        Minimum ratio of best score to second-best for coherence.
+    min_expression : float
+        Minimum mean expression for a cluster to be considered (not noise).
 
     Returns
     -------
     float
-        Fraction of clusters with a clear marker match (0.0–1.0).
+        Fraction of clusters that are coherent (0.0-1.0).
         1.0 if *per_cell_scores* is empty or has no valid entries.
     """
     if not per_cell_scores:
@@ -361,7 +369,7 @@ def _compute_marker_coverage(adata, cluster_key, per_cell_scores, ratio_threshol
 
     cell_types = list(per_cell_scores.keys())
     n_cells = len(cluster_labels)
-    n_matched = 0
+    n_coherent = 0
 
     for cluster in unique_clusters:
         mask = cluster_labels == cluster
@@ -378,24 +386,24 @@ def _compute_marker_coverage(adata, cluster_key, per_cell_scores, ratio_threshol
         mean_scores.sort(key=lambda x: x[1], reverse=True)
         top_score = mean_scores[0][1]
 
-        if top_score <= 0.0:
+        if top_score <= min_expression:
             continue
 
         if len(mean_scores) == 1:
-            n_matched += 1
+            n_coherent += 1
         else:
             second_score = mean_scores[1][1]
-            if top_score >= ratio_threshold * second_score:
-                n_matched += 1
+            if top_score / max(second_score, 1e-10) > dominance_threshold:
+                n_coherent += 1
 
-    return n_matched / n_clusters
+    return n_coherent / n_clusters
 
 
 def _select_multi_metric(valid, weights=None):
     """Select best clustering via composite multi-metric scoring.
 
     Reads precomputed ``silhouette_score``, ``stability_score``, and
-    ``marker_coverage`` from each entry dict, normalises each metric to
+    ``cluster_coherence`` from each entry dict, normalises each metric to
     [0, 1] across all entries, then computes a weighted composite.
     Returns argmax.
 
@@ -406,7 +414,7 @@ def _select_multi_metric(valid, weights=None):
     weights : dict[str, float] | None
         Metric weights.  Defaults to :data:`DEFAULT_MULTI_METRIC_WEIGHTS`.
         Degrades to silhouette+stability (0.5/0.5) when no entry has
-        ``marker_coverage``.
+        ``cluster_coherence``.
 
     Returns
     -------
@@ -419,32 +427,32 @@ def _select_multi_metric(valid, weights=None):
     sil_scores = np.array([r['silhouette_score'] for r in valid])
     stab_scores = np.array([r.get('stability_score', 0.0) for r in valid])
 
-    has_marker_coverage = any('marker_coverage' in r for r in valid)
-    mc_scores: np.ndarray = np.zeros(n)
-    if has_marker_coverage:
-        mc_scores = np.array([r.get('marker_coverage', 0.0) for r in valid])
+    has_coherence = any('cluster_coherence' in r for r in valid)
+    coh_scores: np.ndarray = np.zeros(n)
+    if has_coherence:
+        coh_scores = np.array([r.get('cluster_coherence', 0.0) for r in valid])
 
     # ── Determine initial weights ──
     if weights is None:
-        if has_marker_coverage:
+        if has_coherence:
             active_weights = dict(DEFAULT_MULTI_METRIC_WEIGHTS)
         else:
             active_weights = {'silhouette': 0.5, 'stability': 0.5}
     else:
         active_weights = dict(weights)
 
-    # Remove marker_coverage from weights if entries lack it
-    if not has_marker_coverage:
-        active_weights.pop('marker_coverage', None)
+    # Remove cluster_coherence from weights if entries lack it
+    if not has_coherence:
+        active_weights.pop('cluster_coherence', None)
 
-    # ── Marker mismatch auto-degrade: if all entries have marker_coverage < 0.1 ──
-    if has_marker_coverage and float(np.max(mc_scores)) < 0.1:
+    # -- Coherence mismatch auto-degrade: if all entries have cluster_coherence < 0.1 --
+    if has_coherence and float(np.max(coh_scores)) < 0.1:
         logger.warning(
-            "Max marker_coverage=%.4f < 0.1 across all entries — marker_dict may be mismatched. "
+            "Max cluster_coherence=%.4f < 0.1 across all entries — marker_dict may be mismatched. "
             "Degrading to silhouette+stability only.",
-            float(np.max(mc_scores)),
+            float(np.max(coh_scores)),
         )
-        has_marker_coverage = False
+        has_coherence = False
         active_weights = {'silhouette': 0.5, 'stability': 0.5}
 
     # ── Low-variance guard (on raw scores) ──
@@ -452,8 +460,8 @@ def _select_multi_metric(valid, weights=None):
         'silhouette': sil_scores,
         'stability': stab_scores,
     }
-    if has_marker_coverage:
-        metrics_raw['marker_coverage'] = mc_scores
+    if has_coherence:
+        metrics_raw['cluster_coherence'] = coh_scores
 
     for metric_name in list(active_weights.keys()):
         scores = metrics_raw.get(metric_name)
@@ -489,8 +497,8 @@ def _select_multi_metric(valid, weights=None):
         norm['silhouette'] = _normalize(sil_scores)
     if 'stability' in active_weights:
         norm['stability'] = _normalize(stab_scores)
-    if 'marker_coverage' in active_weights and has_marker_coverage:
-        norm['marker_coverage'] = _normalize(mc_scores)
+    if 'cluster_coherence' in active_weights and has_coherence:
+        norm['cluster_coherence'] = _normalize(coh_scores)
 
     # ── Composite score ──
     composite = np.zeros(n)
@@ -503,7 +511,7 @@ def _select_multi_metric(valid, weights=None):
     # ── Build reason string ──
     sil_val = best['silhouette_score']
     stab_val = best.get('stability_score', 0.0)
-    mc_val = best.get('marker_coverage', 0.0) if has_marker_coverage else 0.0
+    coh_val = best.get('cluster_coherence', 0.0) if has_coherence else 0.0
     k = best['n_clusters']
 
     sil_norm_val = norm.get('silhouette', np.zeros(n))[best_idx]
@@ -513,7 +521,7 @@ def _select_multi_metric(valid, weights=None):
         f"composite={composite[best_idx]:.4f} "
         f"sil={sil_val:.4f}(n={sil_norm_val:.2f}) "
         f"stab={stab_val:.3f}(n={stab_norm_val:.2f}) "
-        f"marker_cov={mc_val:.3f} k={k}"
+        f"coherence={coh_val:.3f} k={k}"
     )
 
     return (

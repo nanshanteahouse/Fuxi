@@ -23,7 +23,7 @@ select_best_params(results, method='pareto_elbow')
 _compute_stability(adata, resolution, ...) -> float
     Re-export from ``rna.utils.cluster_evaluation``.
 
-_compute_marker_coverage(adata, cluster_key, per_cell_scores, ...) -> float
+_compute_cluster_coherence(adata, cluster_key, per_cell_scores, ...) -> float
     Re-export from ``rna.utils.cluster_evaluation``.
 
 
@@ -41,7 +41,7 @@ from typing import Any
 import numpy as np
 
 # Re-export the existing Pareto selection logic — no duplication.
-from rna.utils.cluster_evaluation import select_best_params, _compute_stability, _compute_marker_coverage  # noqa: F401
+from rna.utils.cluster_evaluation import select_best_params, _compute_stability, _compute_cluster_coherence  # noqa: F401
 
 # ---------------------------------------------------------------------------
 #  Public API
