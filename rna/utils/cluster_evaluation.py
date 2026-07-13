@@ -524,6 +524,121 @@ def _select_multi_metric(valid, weights=None):
     )
 
 
+
+def _detect_granularity(results_summary: list[dict], cv_threshold: float = 0.05, min_clusters: int = 10) -> str:
+    """Determine whether the data is tissue-level or subtype-level.
+
+    Two-path architecture for cluster granularity detection. This function
+    analyses grid-search results to decide between two downstream strategies:
+
+    - "tissue": multiple distinct cell types → use full DE pipeline
+    - "subtype": FACS-enriched / similar cells → use gated DE (Wave 4)
+
+    The decision is based on the coefficient of variation (CV) of silhouette
+    scores within the median n_neighbors group. Low CV means silhouette
+    scores are flat across resolutions — typical of subtype data where all
+    partitions are similarly mediocre. Combined with a low maximum cluster
+    count, this signals subtype-level resolution.
+
+    Algorithm
+    ---------
+    1. Group entries by n_neighbors, pick the median-size group.
+    2. From that group, sort by resolution, collect silhouette scores
+       and n_clusters.
+    3. Compute CV = std(silhouette_scores) / mean(silhouette_scores).
+    4. If CV < cv_threshold AND max_n_clusters < min_clusters: "subtype".
+    5. Otherwise: "tissue" (conservative default).
+
+    Edge cases (all return "tissue"):
+    - Empty results_summary
+    - Single entry
+    - Mean silhouette = 0 (division guard)
+
+    Parameters
+    ----------
+    results_summary : list of dict
+        Grid-search summary entries with keys: n_neighbors, resolution,
+        n_clusters, silhouette_score.
+    cv_threshold : float
+        CV threshold below which silhouette flatness signals subtype data.
+    min_clusters : int
+        Maximum n_clusters below which (combined with low CV) signals
+        subtype data.
+
+    Returns
+    -------
+    str
+        "tissue" or "subtype"
+    """
+    # Edge case: empty or single entry → conservative default
+    if not results_summary or len(results_summary) <= 1:
+        return "tissue"
+
+    # 1. Group entries by n_neighbors
+    groups: dict[int, list[dict]] = {}
+    for entry in results_summary:
+        if 'n_neighbors' not in entry:
+            continue
+        nn = entry['n_neighbors']
+        groups.setdefault(nn, []).append(entry)
+
+    if not groups:
+        return "tissue"
+
+    # Pick median-size group (by number of entries)
+    group_sizes = sorted(groups.items(), key=lambda kv: len(kv[1]))
+    median_idx = len(group_sizes) // 2
+    _median_nn, median_group = group_sizes[median_idx]
+
+    # 2. Collect silhouette scores and n_clusters from the median group
+    #    Sort by resolution for deterministic ordering
+    median_group_sorted = sorted(median_group, key=lambda e: e.get('resolution', 0.0))
+
+    silhouette_values = []
+    n_clusters_values = []
+    for entry in median_group_sorted:
+        if 'silhouette_score' not in entry or entry['silhouette_score'] is None:
+            continue
+        if 'n_clusters' not in entry or entry['n_clusters'] is None:
+            continue
+        silhouette_values.append(entry['silhouette_score'])
+        n_clusters_values.append(entry['n_clusters'])
+
+    if not silhouette_values:
+        return "tissue"
+
+    # 3. Compute CV of silhouette scores
+    sil_arr = np.array(silhouette_values, dtype=float)
+    mean_sil = float(np.mean(sil_arr))
+    if mean_sil == 0.0:
+        logger.debug(
+            "_detect_granularity: mean silhouette is 0 → conservative 'tissue' "
+            f"(n_neighbors={_median_nn})"
+        )
+        return "tissue"
+
+    std_sil = float(np.std(sil_arr))
+    cv = std_sil / mean_sil
+
+    # 4. & 5. Decision
+    max_n_clusters = max(n_clusters_values) if n_clusters_values else 0
+
+    if cv < cv_threshold and max_n_clusters < min_clusters:
+        logger.debug(
+            f"_detect_granularity: CV={cv:.5f} < {cv_threshold} AND "
+            f"max_n_clusters={max_n_clusters} < {min_clusters} → 'subtype' "
+            f"(n_neighbors={_median_nn}, n_entries={len(median_group)})"
+        )
+        return "subtype"
+    else:
+        logger.debug(
+            f"_detect_granularity: CV={cv:.5f} (threshold={cv_threshold}), "
+            f"max_n_clusters={max_n_clusters} (threshold={min_clusters}) → 'tissue' "
+            f"(n_neighbors={_median_nn}, n_entries={len(median_group)})"
+        )
+        return "tissue"
+
+
 def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, CFG, use_rep, log):
     """Sweep min_dist × spread on the best (n_neighbors) neighbor graph,
     or use manual fallback.
