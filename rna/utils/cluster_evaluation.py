@@ -486,11 +486,18 @@ def _select_multi_metric(valid, weights=None):
     split_scores: np.ndarray = np.zeros(n)
     if has_splitting_gain:
         split_scores = np.array([r.get('splitting_gain', 0.0) for r in valid])
+    has_kb_rate = any('kb_annotatable_rate' in r for r in valid)
+    kb_scores: np.ndarray = np.zeros(n)
+    if has_kb_rate:
+        kb_scores = np.array([r.get('kb_annotatable_rate', 0.0) for r in valid])
 
     # ── Determine initial weights ──
     if weights is None:
-        if has_coherence and has_splitting_gain:
+        if has_coherence and has_splitting_gain and has_kb_rate:
             active_weights = dict(DEFAULT_MULTI_METRIC_WEIGHTS)
+        elif has_coherence and has_splitting_gain:
+            # Degrade to 4-metric (no kb_annotatable_rate)
+            active_weights = {'silhouette': 0.2, 'stability': 0.2, 'cluster_coherence': 0.35, 'splitting_gain': 0.25}
         elif has_coherence:
             # Degrade to 3-metric (no splitting_gain)
             active_weights = {'silhouette': 0.25, 'stability': 0.25, 'cluster_coherence': 0.5}
@@ -506,6 +513,10 @@ def _select_multi_metric(valid, weights=None):
     # Remove splitting_gain from weights if entries lack it
     if not has_splitting_gain:
         active_weights.pop('splitting_gain', None)
+
+    # Remove kb_annotatable_rate from weights if entries lack it
+    if not has_kb_rate:
+        active_weights.pop('kb_annotatable_rate', None)
 
     # -- Coherence mismatch auto-degrade: if all entries have cluster_coherence < 0.1 --
     if has_coherence and float(np.max(coh_scores)) < 0.1:
@@ -526,6 +537,8 @@ def _select_multi_metric(valid, weights=None):
         metrics_raw['cluster_coherence'] = coh_scores
     if has_splitting_gain:
         metrics_raw['splitting_gain'] = split_scores
+    if has_kb_rate:
+        metrics_raw['kb_annotatable_rate'] = kb_scores
 
     for metric_name in list(active_weights.keys()):
         scores = metrics_raw.get(metric_name)
@@ -565,6 +578,8 @@ def _select_multi_metric(valid, weights=None):
         norm['cluster_coherence'] = _normalize(coh_scores)
     if 'splitting_gain' in active_weights and has_splitting_gain:
         norm['splitting_gain'] = _normalize(split_scores)
+    if 'kb_annotatable_rate' in active_weights and has_kb_rate:
+        norm['kb_annotatable_rate'] = _normalize(kb_scores)
 
     # ── Composite score ──
     composite = np.zeros(n)
@@ -579,6 +594,7 @@ def _select_multi_metric(valid, weights=None):
     stab_val = best.get('stability_score', 0.0)
     coh_val = best.get('cluster_coherence', 0.0) if has_coherence else 0.0
     split_val = best.get('splitting_gain', 0.0) if has_splitting_gain else 0.0
+    kb_val = best.get('kb_annotatable_rate', 0.0) if has_kb_rate else 0.0
     k = best['n_clusters']
 
     sil_norm_val = norm.get('silhouette', np.zeros(n))[best_idx]
@@ -589,7 +605,7 @@ def _select_multi_metric(valid, weights=None):
         f"sil={sil_val:.4f}(n={sil_norm_val:.2f}) "
         f"stab={stab_val:.3f}(n={stab_norm_val:.2f}) "
         f"coherence={coh_val:.3f} "
-        f"split_gain={split_val:.3f} k={k}"
+        f"split_gain={split_val:.3f} kb_rate={kb_val:.3f} k={k}"
     )
 
     return (
