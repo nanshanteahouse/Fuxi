@@ -66,8 +66,13 @@ def main():
     log = setup_logger("10_exploratory", os.path.join(CFG.log_dir, "10_exploratory.log"))
     log.info("Step 10: Exploratory analysis")
 
-    adata = sc.read(CFG.cluster_h5ad)
-    log.info("Loaded: %s — %d cells", CFG.cluster_h5ad, adata.n_obs)
+    # Prefer annotated h5ad (has cell_type), fall back to clustered
+    annotated_path = os.path.join(CFG.h5ad_dir, "05_annotated.h5ad")
+    input_path = annotated_path if os.path.exists(annotated_path) else CFG.cluster_h5ad
+    if not os.path.exists(annotated_path):
+        log.warning("05_annotated.h5ad not found, falling back to: %s", CFG.cluster_h5ad)
+    adata = sc.read(input_path)
+    log.info("Loaded: %s — %d cells", input_path, adata.n_obs)
 
     fig_dir = os.path.join(CFG.figure_dir, '10_exploratory')
     os.makedirs(fig_dir, exist_ok=True)
@@ -104,8 +109,9 @@ def main():
 
     # 4. 标记基因 dotplot
     if all_markers:
+        group_col = 'cell_type' if 'cell_type' in adata.obs else 'leiden'
         safe_plot(sc.pl.dotplot, adata, var_names=all_markers,
-                  groupby='cell_type', show=False, save='_10_marker_dotplot.pdf')
+                  groupby=group_col, show=False, save='_10_marker_dotplot.pdf')
 
     # 5. 聚类大小统计
     for group_col in ['cell_type', 'leiden']:

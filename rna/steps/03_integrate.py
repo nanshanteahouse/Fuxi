@@ -103,16 +103,23 @@ def main():
     log.info("X subset to HVGs: %s", adata.shape)
 
     # ── 归一化 (HVG 子集) ──
-    log.info("Normalizing (target_sum=%.0f) + log1p...", CFG.normalize_target_sum)
-    sc.pp.normalize_total(adata, target_sum=CFG.normalize_target_sum)
-    sc.pp.log1p(adata)
+    skip_norm = getattr(CFG, 'expression_type', 'raw_counts') == 'log1p_counts'
+    if skip_norm:
+        log.info("expression_type='log1p_counts' — data already normalized, skipping normalize_total+log1p")
+    else:
+        log.info("Normalizing (target_sum=%.0f) + log1p...", CFG.normalize_target_sum)
+        sc.pp.normalize_total(adata, target_sum=CFG.normalize_target_sum)
+        sc.pp.log1p(adata)
 
     # ── 数据完整性检查：归一化后 ──
     validate_adata(adata, stage_name="normalize+log1p", logger=log)
 
     # ── 归一化全基因副本（用于细胞周期打分和 .raw）──
-    sc.pp.normalize_total(adata_full, target_sum=CFG.normalize_target_sum)
-    sc.pp.log1p(adata_full)
+    if skip_norm:
+        log.info("  expression_type='log1p_counts' — full-gene copy also pre-normalized")
+    else:
+        sc.pp.normalize_total(adata_full, target_sum=CFG.normalize_target_sum)
+        sc.pp.log1p(adata_full)
 
     # ── 可选: 细胞周期打分 ──
     if CFG.score_cell_cycle:
@@ -143,6 +150,16 @@ def main():
             log.warning("regress_out (pct_counts_mt) failed (skipped): %s", e)
     else:
         log.info("Cell cycle scoring disabled, use_regress_out=False — skipping regress_out")
+
+    # ── 可选: 回归自定义基因 ──
+    if CFG.regress_out_genes:
+        valid_genes = [g for g in CFG.regress_out_genes if g in adata.var_names]
+        if valid_genes:
+            log.info("Regressing custom genes: %s ...", valid_genes)
+            sc.pp.regress_out(adata, valid_genes)
+            log.info("  regress_out (custom genes) complete")
+        else:
+            log.warning("regress_out_genes specified but none found in data: %s", CFG.regress_out_genes)
 
     # ── regress_out 后降回 float32（regress_out 会产生 float64 中间体）──
     if getattr(CFG, 'use_float32', False):

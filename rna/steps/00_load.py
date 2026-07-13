@@ -38,6 +38,37 @@ def _read_features_with_header_detection(features_path: str, sep=None) -> pd.Dat
         return pd.read_csv(features_path, sep=sep)
     return pd.read_csv(features_path, header=None, names=['gene_symbol'], sep=sep)
 
+def _parse_barcodes(adata, CFG, log):
+    """Parse barcode names using configurable regex patterns.
+
+    Supports single string or list of patterns (first match wins).
+    Extracted groups are added as obs columns per CFG.barcode_parse_groups.
+    """
+    if not CFG.barcode_parse_regex:
+        return
+
+    log.info("Using barcode regex parsing: %s", CFG.barcode_parse_regex)
+
+    regex_patterns = CFG.barcode_parse_regex
+    if isinstance(regex_patterns, str):
+        regex_patterns = [regex_patterns]
+
+    parsed = None
+    for i, pattern in enumerate(regex_patterns):
+        candidates = adata.obs_names.to_series().str.extract(pattern)
+        if candidates.iloc[:, 0].notna().any():
+            log.info("  Regex pattern #%d matched: %s", i + 1, pattern)
+            parsed = candidates
+            break
+
+    if parsed is None:
+        log.warning("  No barcode regex pattern matched; skipping barcode_parse_groups")
+    else:
+        for obs_col, group_key in CFG.barcode_parse_groups.items():
+            if group_key in parsed.columns or (isinstance(group_key, int) and group_key < len(parsed.columns)):
+                adata.obs[obs_col] = parsed[group_key].values
+                log.info("  Extracted %s from barcode", obs_col)
+
 
 def main():
     t0 = time.time()
@@ -99,30 +130,8 @@ def main():
                 for s, cnt in adata.obs['sample'].value_counts().items():
                     log.info("  %-20s %5d cells", s, cnt)
 
-        # 可配置 barcode 正则解析（非 10X 格式用，如 CSV/per_sample_csv）
-        # 支持单字符串或列表（多级回退：first match wins）
-        if CFG.barcode_parse_regex:
-            log.info("Using barcode regex parsing: %s", CFG.barcode_parse_regex)
-
-            regex_patterns = CFG.barcode_parse_regex
-            if isinstance(regex_patterns, str):
-                regex_patterns = [regex_patterns]
-
-            parsed = None
-            for i, pattern in enumerate(regex_patterns):
-                candidates = adata.obs_names.to_series().str.extract(pattern)
-                if candidates.iloc[:, 0].notna().any():
-                    log.info("  Regex pattern #%d matched: %s", i + 1, pattern)
-                    parsed = candidates
-                    break
-
-            if parsed is None:
-                log.warning("  No barcode regex pattern matched; skipping barcode_parse_groups")
-            else:
-                for obs_col, group_key in CFG.barcode_parse_groups.items():
-                    if group_key in parsed.columns or (isinstance(group_key, int) and group_key < len(parsed.columns)):
-                        adata.obs[obs_col] = parsed[group_key].values
-                        log.info("  Extracted %s from barcode", obs_col)
+        # 可配置 barcode 正则解析
+        _parse_barcodes(adata, CFG, log)
 
         # 清理 gene_ids 列（如果有）
         if 'gene_ids' in adata.var:
@@ -134,7 +143,7 @@ def main():
         if matrix_ext in ('.csv',):
             # True CSV format: gene × cell, first column = gene names
             log.info("Loading from CSV: %s", CFG.matrix_file)
-            sep = getattr(CFG, 'csv_sep', None)
+            sep = getattr(CFG, 'csv_sep', ',')
             decimal = getattr(CFG, 'csv_decimal', '.')
             df = pd.read_csv(CFG.matrix_file, index_col=0, sep=sep)
             if decimal != '.':
@@ -226,6 +235,7 @@ def main():
 
             adata = sc.AnnData(X=mtx, obs=metadata, var=pd.DataFrame(index=gene_names))
 
+        _parse_barcodes(adata, CFG, log)
         log.info("Loading complete: %d cells × %d genes", adata.n_obs, adata.n_vars)
 
     elif CFG.data_format == "h5ad":
@@ -233,6 +243,7 @@ def main():
         backed = getattr(CFG, 'backed', None) or None
         adata = sc.read(CFG.input_h5ad, backed=backed) if backed else sc.read(CFG.input_h5ad)
         log.info("Loading complete: %d cells × %d genes", adata.n_obs, adata.n_vars)
+        _parse_barcodes(adata, CFG, log)
 
     elif CFG.data_format == "10X_h5":
         import glob as glob_mod
@@ -285,12 +296,17 @@ def main():
 
         if 'gene_ids' in adata.var:
             adata.var.drop(columns=['gene_ids'], inplace=True)
+        _parse_barcodes(adata, CFG, log)
 
     else:
         log.error("Unknown data_format: %s", CFG.data_format)
         sys.exit(1)
 
     # ── 统一稀疏格式: CSR (行优先) ──
+    # Handle backed mode before CSR conversion
+    if adata.isbacked:
+        log.info("Backed mode detected — loading fully into memory for processing")
+        adata = adata.to_memory()
     force_csr = getattr(CFG, 'force_csr', True)
     if force_csr:
         if sp.issparse(adata.X):

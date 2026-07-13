@@ -51,6 +51,15 @@ def safe_write(adata, target: str,
     logger = logging.getLogger(__name__)
     logger.info("Saved %s (%.1f MB)", os.path.basename(target), size_mb)
 
+    # Verify file integrity
+    try:
+        import scanpy as sc
+        _verify = sc.read(target, backed='r')
+        logger.info("Integrity check: %s verified OK", os.path.basename(target))
+    except Exception as e:
+        logger.error("Integrity check FAILED for %s: %s — file may be corrupted!",
+                     os.path.basename(target), e)
+
 
 def safe_plot(func, *args, **kwargs):
     """

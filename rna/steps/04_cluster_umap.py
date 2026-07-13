@@ -178,6 +178,8 @@ def main():
             # Pre-compute per_cell_scores once per group (only if markers available AND adata.raw exists)
             per_cell_scores = {}
             if has_markers and adata.raw is not None:
+                from anndata import utils as anndata_utils
+                adata.raw._var.index = anndata_utils.make_index_unique(adata.raw._var.index, join="-")
                 try:
                     for ct, genes in marker_dict.items():
                         valid_genes = [g for g in genes if g in adata.raw.var_names]
@@ -305,6 +307,10 @@ def main():
 
     log.info("Selected best params via %s: n_neighbors=%d, resolution=%.1f (%s)",
              method_name, best_n, best_r, reason)
+
+    adata.uns['best_resolution'] = best_r
+    adata.uns['best_n_neighbors'] = best_n
+    adata.uns['cluster_selection_method'] = method_name
 
     leiden_col = f'leiden_{best_n}_{best_r}'
     umap_col = f'umap_{best_n}_{best_r}'

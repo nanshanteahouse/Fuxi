@@ -54,6 +54,11 @@ def layer1_markers(adata, CFG, log, group_col):
     log.info("  Exported (filtered): %s (%d rows)", filtered_path, len(result))
 
     # Step C: log filtered top5
+    # Guard: empty result when all groups have same label
+    if result is None or result.empty:
+        log.warning("  No marker genes found for column %s - all groups may have the same label", group_col)
+        return result, result_all
+
     for group in adata.obs[group_col].cat.categories:
         top5 = result[result['group'] == group].head(5)
         if len(top5) > 0:

@@ -76,7 +76,7 @@ class RNAConfig:
     matrix_file: str = ""
     barcodes_file: str = ""
     features_file: str = ""
-    csv_sep: Optional[str] = None
+    csv_sep: str = ','
     csv_decimal: str = '.'
     gene_symbol_column: str = ''
     input_h5ad: str = ""
@@ -124,6 +124,7 @@ class RNAConfig:
     hvg_batch_key: str = "sample"
     use_regress_out: bool = True
     score_cell_cycle: bool = False   # 可选: 在 normalize+log1p 后回归 S/G2M 分数
+    regress_out_genes: List[str] = field(default_factory=list)
 
 
     # ── RNA PCA ──
