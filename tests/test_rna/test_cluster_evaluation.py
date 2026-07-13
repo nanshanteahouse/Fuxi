@@ -11,6 +11,7 @@ from rna.utils.cluster_evaluation import (
     _compute_stability,
     _compute_marker_coverage,
     _select_multi_metric,
+    _detect_granularity,
 )
 
 
@@ -611,3 +612,44 @@ class TestAdaptiveBehaviors:
             "mismatch" in rec.message or "Degrading" in rec.message
             for rec in caplog.records
         ), "Mismatch path SHOULD log a warning about marker mismatch degrade"
+
+class TestDetectGranularity:
+    """Tests for _detect_granularity function."""
+
+    def test_detect_granularity_tissue_level(self) -> None:
+        """High CV + many clusters → tissue-level."""
+        r = [
+            {'n_neighbors': 15, 'resolution': 0.3, 'n_clusters': 5, 'silhouette_score': 0.20},
+            {'n_neighbors': 15, 'resolution': 0.5, 'n_clusters': 8, 'silhouette_score': 0.18},
+            {'n_neighbors': 15, 'resolution': 0.8, 'n_clusters': 12, 'silhouette_score': 0.12},
+            {'n_neighbors': 15, 'resolution': 1.0, 'n_clusters': 14, 'silhouette_score': 0.09},
+            {'n_neighbors': 15, 'resolution': 1.5, 'n_clusters': 18, 'silhouette_score': 0.06},
+        ]
+        assert _detect_granularity(r) == "tissue"
+
+    def test_detect_granularity_subtype_level(self) -> None:
+        """Low CV + few clusters → subtype-level. Flat silhouette across resolutions."""
+        r = [
+            {'n_neighbors': 15, 'resolution': 0.3, 'n_clusters': 4, 'silhouette_score': 0.08},
+            {'n_neighbors': 15, 'resolution': 0.5, 'n_clusters': 5, 'silhouette_score': 0.08},
+            {'n_neighbors': 15, 'resolution': 0.8, 'n_clusters': 6, 'silhouette_score': 0.08},
+            {'n_neighbors': 15, 'resolution': 1.0, 'n_clusters': 7, 'silhouette_score': 0.08},
+        ]
+        assert _detect_granularity(r) == "subtype"
+
+    def test_detect_granularity_empty(self) -> None:
+        """Empty list → tissue (conservative default)."""
+        assert _detect_granularity([]) == "tissue"
+
+    def test_detect_granularity_single_entry(self) -> None:
+        """Single entry → tissue (conservative default)."""
+        r = [{'n_neighbors': 15, 'resolution': 0.5, 'n_clusters': 5, 'silhouette_score': 0.10}]
+        assert _detect_granularity(r) == "tissue"
+
+    def test_detect_granularity_missing_keys(self) -> None:
+        """Entries missing silhouette_score → gracefully handled."""
+        r = [
+            {'n_neighbors': 15, 'resolution': 0.5, 'n_clusters': 5},
+            {'n_neighbors': 15, 'resolution': 1.0, 'n_clusters': 7, 'silhouette_score': None},
+        ]
+        assert _detect_granularity(r) == "tissue"
