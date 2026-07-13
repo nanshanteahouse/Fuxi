@@ -190,11 +190,33 @@ def main():
                         entry['cluster_coherence'] = _compute_cluster_coherence(
                             adata, ck, per_cell_scores, dominance_threshold=dominance_threshold,
                         )
+                    # ── KB annotatable rate ──
+                    if getattr(CFG, 'tissue_kb', None) and per_cell_scores:
+                        labels = adata.obs[ck].values
+                        unique_clusters = np.unique(labels)
+                        n_total = len(unique_clusters)
+                        n_annotatable = 0
+                        for cl in unique_clusters:
+                            mask = labels == cl
+                            best_score = 0.0
+                            for ct in per_cell_scores:
+                                scores = per_cell_scores[ct]
+                                if scores is not None and len(scores) == len(labels):
+                                    mean_val = float(np.mean(scores[mask]))
+                                    if mean_val > best_score:
+                                        best_score = mean_val
+                            if best_score > 0.5:
+                                n_annotatable += 1
+                        rate = n_annotatable / n_total if n_total > 0 else 0.0
+                        entry['kb_annotatable_rate'] = rate
+                        _log_enrich.info(f"KB annotatable rate: {rate:.3f}")
+
                 except Exception as e:
                     _log_enrich.warning("Enrichment failed for n_neighbors=%d, resolution=%.1f: %s",
                                         entry.get('n_neighbors'), entry.get('resolution'), e)
                     entry['stability_score'] = None
                     entry['cluster_coherence'] = None
+                    entry['kb_annotatable_rate'] = None
 
             # ── Compute splitting_gain for this n_neighbors group ──
             if len(group) >= 2:

@@ -459,12 +459,15 @@ class Config:
 
     # ── Multi-metric clustering (weighted ensemble) ──
     # Weights for the multi-metric consensus approach that combines
-    # silhouette score, cluster stability, and marker coverage into a single
-    # quality score. Higher weight = more influence on final cluster selection.
+    # silhouette, stability, cluster_coherence, splitting_gain, and
+    # kb_annotatable_rate into a single quality score. Higher weight = more
+    # influence on final cluster selection.
     multi_metric_weights: dict = field(default_factory=lambda: {
-        "silhouette": 0.3,
-        "stability": 0.3,
-        "marker_coverage": 0.4,
+        "silhouette": 0.2,
+        "stability": 0.2,
+        "cluster_coherence": 0.3,
+        "splitting_gain": 0.2,
+        "kb_annotatable_rate": 0.1
     })
     # Number of subsampling seeds used to assess cluster stability.
     # Higher values give more robust stability estimates at the cost of compute.
@@ -475,6 +478,15 @@ class Config:
     # Ratio threshold for detecting excessive marker coverage imbalance.
     # Values > 1.5 trigger a warning that clustering may be too coarse.
     multi_metric_coverage_ratio_threshold: float = 1.5
+    # 当 cluster_coherence 权重主导时，coherence 分数需超过该倍数的次优解
+    # 才会被选中；否则降级为多指标均衡投票。
+    multi_metric_coherence_dominance: float = 1.5
+    # 候选分辨率簇数的变异系数（CV）阈值；CV ≤ 此值认为粒度稳定。
+    multi_metric_granularity_cv_threshold: float = 0.05
+    # 粒度稳定的最低簇数要求；低于此值视为粒度不足。
+    multi_metric_granularity_min_clusters: int = 10
+    # DE 基因数量门控阈值；当 DE 基因数 < 此值时拒绝对该分辨率的正选。
+    multi_metric_de_gate_threshold: int = 25
 
     # ── UMAP visualization parameter sweep ──
     # After best (n_neighbors, resolution) is selected, optionally sweep

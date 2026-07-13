@@ -142,12 +142,28 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 **Path resolution.** `data_root()` reads `FUXI_DATA_ROOT` env var (with `SCRNA_DATA_ROOT` as legacy fallback). WSL paths are auto-detected. `Config.resolve_paths()` resolves all relative paths against `project_dir` and creates output directories.
 
 **Cluster selection method.** `CFG.cluster_selection_method` controls how the pipeline chooses the best (n_neighbors, resolution) from the parameter grid search in Step 04:
-- `"multi_metric"` (RNA default): Weighted ensemble of silhouette, stability, and marker_coverage. Normalizes each metric to [0,1] and computes a composite score (default weights: silhouette=0.3, stability=0.3, marker_coverage=0.4; configurable via `CFG.multi_metric_weights`). Requires `marker_dict` + per-cell scores for marker_coverage; auto-degrades to silhouette+stability if unavailable. **RNA-only — ATAC/Spatial enrichment not yet implemented.**
+- `"multi_metric"` (RNA default, MMACS v2): Weighted ensemble of silhouette (0.2), stability (0.2), per-cluster coherence (0.3), splitting gain (0.2), and KB annotatable rate (0.1). Replaces the legacy 3-metric system (silhouette+stability+marker_coverage). See Cluster Coherence & DE-Gated Selection below for detailed routing. **RNA-only — ATAC/Spatial enrichment not yet implemented.**
 - `"pareto_elbow"` (ATAC/Spatial default): Computes the Pareto frontier over (n_clusters, silhouette_score), then picks the point closest to the ideal (min clusters, max silhouette) via normalized elbow detection. Penalizes marginal silhouette gains from over-clustering.
 - `"silhouette"`: Simple max silhouette score (old auto-select behavior, now explicit).
 - `None`: Manual mode — uses `CFG.best_resolution` and `CFG.best_n_neighbors` directly (backward compatible). Set `best_n_neighbors=0` to auto-pick the best silhouette at the given resolution.
 
-The core implementation lives in `rna/utils/cluster_evaluation.py` (`select_best_params()`), shared by all modalities. The multi-metric helpers (`_select_multi_metric`, `_compute_stability`, `_compute_marker_coverage`) are invoked only by the RNA step. ATAC and Spatial steps use `pareto_elbow` as their config default.
+The core implementation lives in `rna/utils/cluster_evaluation.py` (`select_best_params()`), shared by all modalities. The multi-metric helpers (`_select_multi_metric`, `_compute_stability`, `_compute_cluster_coherence`, `_compute_splitting_gain`, `_detect_granularity`, `_select_de_gated`) are invoked only by the RNA step. ATAC and Spatial steps use `pareto_elbow` as their config default.
+
+### Cluster Coherence & DE-Gated Selection
+
+The RNA Step 04 pipeline uses a two-phase approach. **Granularity detection** (`_detect_granularity`) runs BEFORE the enrichment loop, classifying data by analyzing the silhouette~resolution curve. Data with low silhouette CV (< `multi_metric_granularity_cv_threshold`, default 0.05) AND few clusters (< `multi_metric_granularity_min_clusters`, default 10) is classified as `"subtype"`; otherwise `"tissue"`. This routing fixes a known failure mode (e.g., GSE81905 FACS-enriched bipolar cells) where all three legacy metrics collapse.
+
+- **Tissue path** → enrichment loop computing stability, per-cluster coherence, splitting gain, and optional KB annotatable rate → `_select_multi_metric()` with the 5-metric composite:
+  1. **Silhouette** (0.2): Cluster separation quality.
+  2. **Stability** (0.2): Jaccard similarity across bootstrapped subsamples.
+  3. **Per-cluster coherence** (0.3): Replaces the old global `marker_coverage`. For each cluster, computes the fraction of its top-50 DEGs present in the Knowledge Base. Peaks at intermediate resolutions — naturally deprecates both under-clustering (multi-type clusters dilute signal) and over-clustering (fragments lack enough DEGs).
+  4. **Splitting gain** (0.2): Marker richness differential between consecutive resolutions. Positive values reward resolution jumps where new clusters bring distinct marker specificity.
+  5. **KB annotatable rate** (0.1): Fraction of clusters with a KB marker score > 0.5. Lightweight annotation-quality proxy. Only computed when `CFG.tissue_kb` is populated; absent → weights degrade to sil=0.2, stab=0.2, coherence=0.35, split_gain=0.25.
+
+- **Subtype path** → bypasses the entire enrichment loop → `_select_de_gated()` directly. Runs `sc.tl.rank_genes_groups()` per resolution, computes pairwise DE counts (padj < 0.05, log2FC > 1.0) between all cluster pairs, and selects the highest resolution where the minimum pairwise DE count exceeds `CFG.multi_metric_de_gate_threshold` (default 25). Follows Shekhar 2016's merge.clusters.DE pattern (merge when < 50 DE), inverted to prefer finer resolution as long as every cluster pair maintains sufficient transcriptional distinction.
+
+New config fields in `core/config.py`: `multi_metric_coherence_dominance` (default 1.5), `multi_metric_granularity_cv_threshold` (0.05), `multi_metric_granularity_min_clusters` (10), `multi_metric_de_gate_threshold` (25). Composite weights default to `{silhouette: 0.2, stability: 0.2, cluster_coherence: 0.3, splitting_gain: 0.2, kb_annotatable_rate: 0.1}` (configurable via `CFG.multi_metric_weights`).
+
 
 **snRNA-seq detection & QC adaptation.** The pipeline auto-detects single-nucleus RNA-seq (snRNA-seq) vs single-cell RNA-seq (scRNA-seq) from NCBI GEO metadata keywords:
 
