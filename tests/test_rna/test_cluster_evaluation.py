@@ -5,6 +5,8 @@ import numpy as np
 
 import pytest
 
+from unittest.mock import MagicMock, patch
+
 from rna.utils.cluster_evaluation import (
     select_best_params,
     select_best_umap_params,
@@ -13,6 +15,7 @@ from rna.utils.cluster_evaluation import (
     _compute_splitting_gain,
     _select_multi_metric,
     _detect_granularity,
+    _select_de_gated,
 )
 
 
@@ -702,3 +705,296 @@ class TestComputeSplittingGain:
             {'n_neighbors': 15, 'resolution': 1.0, 'n_clusters': 7, 'silhouette_score': None},
         ]
         assert _detect_granularity(r) == "tissue"
+
+# ── Helper for DE-gated tests ──
+
+
+def _make_mock_rank_results(
+    n_clusters: int, n_genes: int = 50, n_de_genes: int = 30,
+    rng: np.random.RandomState | None = None,
+) -> dict:
+    """Create mock rank_genes_groups results dict with structured arrays.
+
+    padj < 0.05 AND lfc > 1.0 holds for exactly *n_de_genes* per group.
+    """
+    if rng is None:
+        rng = np.random.RandomState(42)
+    group_names = [str(i) for i in range(n_clusters)]
+    dtype = np.dtype([(g, np.float64) for g in group_names])
+
+    pvals_adj = np.zeros(n_genes, dtype=dtype)
+    logfoldchanges = np.zeros(n_genes, dtype=dtype)
+
+    for g in group_names:
+        de_mask = np.arange(n_genes) < n_de_genes
+        pvals_adj[g][de_mask] = rng.uniform(0.001, 0.04, n_de_genes)
+        pvals_adj[g][~de_mask] = rng.uniform(0.05, 0.5, n_genes - n_de_genes)
+        logfoldchanges[g][de_mask] = rng.uniform(1.1, 3.0, n_de_genes)
+        logfoldchanges[g][~de_mask] = rng.uniform(-0.5, 0.8, n_genes - n_de_genes)
+
+    return {
+        "pvals_adj": pvals_adj,
+        "logfoldchanges": logfoldchanges,
+    }
+
+
+class TestSelectMultiMetricKBRate:
+    """Tests for _select_multi_metric with kb_annotatable_rate key."""
+
+    def test_with_kb_rate(self) -> None:
+        """Entries with kb_annotatable_rate -> 5-metric scoring selects correctly."""
+        valid = [
+            {
+                "n_neighbors": 10, "resolution": 0.5, "n_clusters": 3,
+                "silhouette_score": 0.3, "stability_score": 0.6,
+                "cluster_coherence": 0.4, "splitting_gain": 1.0,
+                "kb_annotatable_rate": 0.2,
+            },
+            {
+                "n_neighbors": 20, "resolution": 0.8, "n_clusters": 6,
+                "silhouette_score": 0.7, "stability_score": 0.9,
+                "cluster_coherence": 0.8, "splitting_gain": 3.0,
+                "kb_annotatable_rate": 0.9,
+            },
+            {
+                "n_neighbors": 30, "resolution": 1.0, "n_clusters": 9,
+                "silhouette_score": 0.5, "stability_score": 0.7,
+                "cluster_coherence": 0.6, "splitting_gain": 2.0,
+                "kb_annotatable_rate": 0.5,
+            },
+        ]
+        best_n, best_r, method, reason = _select_multi_metric(valid)
+        assert method == "multi_metric"
+        assert "kb_rate=" in reason
+        assert best_n == 20
+        assert best_r == pytest.approx(0.8)
+
+    def test_without_kb_rate_degrade(self) -> None:
+        """Entries lack kb_annotatable_rate -> degrade to 4-metric weights."""
+        valid = [
+            {
+                "n_neighbors": 10, "resolution": 0.5, "n_clusters": 3,
+                "silhouette_score": 0.3, "stability_score": 0.6,
+                "cluster_coherence": 0.4, "splitting_gain": 1.0,
+            },
+            {
+                "n_neighbors": 20, "resolution": 0.8, "n_clusters": 6,
+                "silhouette_score": 0.7, "stability_score": 0.9,
+                "cluster_coherence": 0.8, "splitting_gain": 3.0,
+            },
+            {
+                "n_neighbors": 30, "resolution": 1.0, "n_clusters": 9,
+                "silhouette_score": 0.5, "stability_score": 0.7,
+                "cluster_coherence": 0.6, "splitting_gain": 2.0,
+            },
+        ]
+        best_n, best_r, method, reason = _select_multi_metric(valid)
+        assert method == "multi_metric"
+        # When has_kb_rate=False, kb_val defaults to 0.0 in the reason string
+        assert "kb_rate=0.000" in reason
+        assert isinstance(best_n, int)
+        assert isinstance(best_r, float)
+
+    def test_kb_rate_edge_cases(self) -> None:
+        """Single entry and same-kb-rate entries handled gracefully."""
+        # Single entry with kb_annotatable_rate
+        single = [
+            {
+                "n_neighbors": 15, "resolution": 0.6, "n_clusters": 4,
+                "silhouette_score": 0.5, "stability_score": 0.85,
+                "cluster_coherence": 0.4, "splitting_gain": 1.5,
+                "kb_annotatable_rate": 0.7,
+            },
+        ]
+        best_n, best_r, method, _reason = _select_multi_metric(single)
+        assert best_n == 15
+        assert best_r == pytest.approx(0.6)
+        assert method == "multi_metric"
+
+        # All entries share identical kb_annotatable_rate
+        same_kb = [
+            {
+                "n_neighbors": 10, "resolution": 0.5, "n_clusters": 3,
+                "silhouette_score": 0.3, "stability_score": 0.5,
+                "cluster_coherence": 0.3, "splitting_gain": 1.0,
+                "kb_annotatable_rate": 0.5,
+            },
+            {
+                "n_neighbors": 20, "resolution": 0.8, "n_clusters": 6,
+                "silhouette_score": 0.8, "stability_score": 0.9,
+                "cluster_coherence": 0.9, "splitting_gain": 4.0,
+                "kb_annotatable_rate": 0.5,
+            },
+            {
+                "n_neighbors": 30, "resolution": 1.0, "n_clusters": 9,
+                "silhouette_score": 0.4, "stability_score": 0.6,
+                "cluster_coherence": 0.4, "splitting_gain": 2.0,
+                "kb_annotatable_rate": 0.5,
+            },
+        ]
+        best_n2, best_r2, method2, _reason2 = _select_multi_metric(same_kb)
+        assert method2 == "multi_metric"
+        assert isinstance(best_n2, int)
+        assert isinstance(best_r2, float)
+        # Low kb variance -> metric dropped; entry 2 dominates other metrics
+        assert best_n2 == 20
+        assert best_r2 == pytest.approx(0.8)
+
+
+class TestSelectDeGated:
+    """Tests for _select_de_gated with mocked rank_genes_groups."""
+
+    def test_highest_res_above_threshold(self) -> None:
+        """High-res entries have DE >= threshold -> highest selected."""
+        valid = [
+            {
+                "n_clusters": 5, "resolution": 0.5,
+                "cluster_key": "leiden_0.5", "n_neighbors": 15,
+            },
+            {
+                "n_clusters": 10, "resolution": 1.0,
+                "cluster_key": "leiden_1.0", "n_neighbors": 15,
+            },
+            {
+                "n_clusters": 20, "resolution": 2.0,
+                "cluster_key": "leiden_2.0", "n_neighbors": 15,
+            },
+        ]
+        adata = MagicMock()
+        adata.uns = {}
+
+        rng = np.random.RandomState(42)
+
+        de_by_key = {
+            "leiden_0.5": 10,
+            "leiden_1.0": 20,
+            "leiden_2.0": 30,
+        }
+        n_clusters_by_key = {
+            "leiden_0.5": 5,
+            "leiden_1.0": 10,
+            "leiden_2.0": 20,
+        }
+
+        def rank_side_effect(adata, groupby, **kwargs):
+            nk = n_clusters_by_key.get(groupby, 5)
+            nd = de_by_key.get(groupby, 0)
+            mock_results = _make_mock_rank_results(
+                nk, n_genes=50, n_de_genes=nd, rng=rng,
+            )
+            adata.uns["rank_genes_groups"] = mock_results
+
+        with patch("scanpy.tl.rank_genes_groups") as mock_rank:
+            mock_rank.side_effect = rank_side_effect
+            result = _select_de_gated(valid, adata, de_gate_threshold=25)
+
+        n_clusters, resolution, cluster_key, reason = result
+        assert n_clusters == 20
+        assert resolution == pytest.approx(2.0)
+        assert cluster_key == "leiden_2.0"
+        assert "de_gated" in reason
+
+    def test_all_below_threshold(self) -> None:
+        """All DE counts below threshold -> fallback to lowest resolution."""
+        valid = [
+            {
+                "n_clusters": 5, "resolution": 0.5,
+                "cluster_key": "leiden_0.5", "n_neighbors": 15,
+            },
+            {
+                "n_clusters": 10, "resolution": 1.0,
+                "cluster_key": "leiden_1.0", "n_neighbors": 15,
+            },
+            {
+                "n_clusters": 20, "resolution": 2.0,
+                "cluster_key": "leiden_2.0", "n_neighbors": 15,
+            },
+        ]
+        adata = MagicMock()
+        adata.uns = {}
+
+        rng = np.random.RandomState(42)
+
+        de_by_key = {
+            "leiden_0.5": 5,
+            "leiden_1.0": 10,
+            "leiden_2.0": 15,
+        }
+        n_clusters_by_key = {
+            "leiden_0.5": 5,
+            "leiden_1.0": 10,
+            "leiden_2.0": 20,
+        }
+
+        def rank_side_effect(adata, groupby, **kwargs):
+            nk = n_clusters_by_key.get(groupby, 5)
+            nd = de_by_key.get(groupby, 0)
+            mock_results = _make_mock_rank_results(
+                nk, n_genes=50, n_de_genes=nd, rng=rng,
+            )
+            adata.uns["rank_genes_groups"] = mock_results
+
+        with patch("scanpy.tl.rank_genes_groups") as mock_rank:
+            mock_rank.side_effect = rank_side_effect
+            result = _select_de_gated(valid, adata, de_gate_threshold=25)
+
+        n_clusters, resolution, cluster_key, reason = result
+        assert n_clusters == 5
+        assert resolution == pytest.approx(0.5)
+        assert cluster_key == "leiden_0.5"
+        assert "de_gated" in reason
+
+    def test_single_entry(self) -> None:
+        """Single entry -> returned as-is, no rank_genes_groups call."""
+        valid = [
+            {
+                "n_clusters": 8, "resolution": 1.0,
+                "cluster_key": "leiden_1.0", "n_neighbors": 20,
+            },
+        ]
+        adata = MagicMock()
+        adata.uns = {}
+
+        with patch("scanpy.tl.rank_genes_groups") as mock_rank:
+            result = _select_de_gated(valid, adata)
+
+        mock_rank.assert_not_called()
+        n_clusters, resolution, cluster_key, reason = result
+        assert n_clusters == 8
+        assert resolution == pytest.approx(1.0)
+        assert cluster_key == "leiden_1.0"
+        assert "single_entry" in reason
+
+    def test_return_format(self) -> None:
+        """Returns 4-tuple (n_clusters, resolution, cluster_key, reason)."""
+        valid = [
+            {
+                "n_clusters": 5, "resolution": 0.5,
+                "cluster_key": "leiden_0.5", "n_neighbors": 15,
+            },
+            {
+                "n_clusters": 10, "resolution": 1.0,
+                "cluster_key": "leiden_1.0", "n_neighbors": 15,
+            },
+        ]
+        adata = MagicMock()
+        adata.uns = {}
+
+        rng = np.random.RandomState(42)
+
+        def rank_side_effect(adata, groupby, **kwargs):
+            mock_results = _make_mock_rank_results(
+                n_clusters=10, n_genes=50, n_de_genes=30, rng=rng,
+            )
+            adata.uns["rank_genes_groups"] = mock_results
+
+        with patch("scanpy.tl.rank_genes_groups") as mock_rank:
+            mock_rank.side_effect = rank_side_effect
+            result = _select_de_gated(valid, adata, de_gate_threshold=25)
+
+        assert isinstance(result, tuple)
+        assert len(result) == 4
+        assert isinstance(result[0], int)
+        assert isinstance(result[1], float)
+        assert isinstance(result[2], str)
+        assert isinstance(result[3], str)
