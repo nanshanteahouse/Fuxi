@@ -23,9 +23,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 DEFAULT_MULTI_METRIC_WEIGHTS = {
-    'silhouette': 0.3,
-    'stability': 0.3,
-    'cluster_coherence': 0.4,
+    'silhouette': 0.2,
+    'stability': 0.2,
+    'cluster_coherence': 0.3,
+    'splitting_gain': 0.3,
 }
 
 
@@ -399,11 +400,57 @@ def _compute_cluster_coherence(adata, cluster_key, per_cell_scores, dominance_th
     return n_coherent / n_clusters
 
 
+def _compute_splitting_gain(valid_by_resolution: list[dict]) -> dict[float, float]:
+    """Compute splitting gain per resolution.
+
+    Splitting gain measures how many new clusters are created per unit
+    resolution increase. For each resolution r_i (except the lowest):
+        splitting_gain(r_i) = max(0, (n_clusters(r_i) - n_clusters(r_{i-1})) / (r_i - r_{i-1}))
+
+    Parameters
+    ----------
+    valid_by_resolution : list of dict
+        List of results_summary entries sorted by resolution ascending,
+        all from the SAME n_neighbors group.
+
+    Returns
+    -------
+    dict[float, float]
+        {resolution_value: splitting_gain_value}
+        Empty dict if fewer than 2 resolutions.
+    """
+    if len(valid_by_resolution) < 2:
+        return {}
+
+    # Ensure sorted by resolution
+    sorted_entries = sorted(valid_by_resolution, key=lambda e: e.get('resolution', 0.0))
+
+    gains = {}
+    for i in range(1, len(sorted_entries)):
+        prev = sorted_entries[i - 1]
+        curr = sorted_entries[i]
+        r_prev = prev['resolution']
+        r_curr = curr['resolution']
+        k_prev = prev['n_clusters']
+        k_curr = curr['n_clusters']
+
+        delta_k = k_curr - k_prev
+        delta_r = r_curr - r_prev
+
+        if delta_r > 0:
+            gain = max(0.0, delta_k / delta_r)
+        else:
+            gain = 0.0
+
+        gains[r_curr] = gain
+
+    return gains
+
 def _select_multi_metric(valid, weights=None):
     """Select best clustering via composite multi-metric scoring.
 
-    Reads precomputed ``silhouette_score``, ``stability_score``, and
-    ``cluster_coherence`` from each entry dict, normalises each metric to
+    Reads precomputed ``silhouette_score``, ``stability_score``,
+    ``cluster_coherence``, and ``splitting_gain`` from each entry dict, normalises each metric to
     [0, 1] across all entries, then computes a weighted composite.
     Returns argmax.
 
@@ -413,8 +460,9 @@ def _select_multi_metric(valid, weights=None):
         Pre-filtered entries (must have valid ``silhouette_score``).
     weights : dict[str, float] | None
         Metric weights.  Defaults to :data:`DEFAULT_MULTI_METRIC_WEIGHTS`.
-        Degrades to silhouette+stability (0.5/0.5) when no entry has
-        ``cluster_coherence``.
+        Degrades from 4-metric to 3-metric when no entry has
+        ``splitting_gain``, and to silhouette+stability when no entry
+        has ``cluster_coherence``.
 
     Returns
     -------
@@ -432,10 +480,18 @@ def _select_multi_metric(valid, weights=None):
     if has_coherence:
         coh_scores = np.array([r.get('cluster_coherence', 0.0) for r in valid])
 
+    has_splitting_gain = any('splitting_gain' in r for r in valid)
+    split_scores: np.ndarray = np.zeros(n)
+    if has_splitting_gain:
+        split_scores = np.array([r.get('splitting_gain', 0.0) for r in valid])
+
     # ── Determine initial weights ──
     if weights is None:
-        if has_coherence:
+        if has_coherence and has_splitting_gain:
             active_weights = dict(DEFAULT_MULTI_METRIC_WEIGHTS)
+        elif has_coherence:
+            # Degrade to 3-metric (no splitting_gain)
+            active_weights = {'silhouette': 0.25, 'stability': 0.25, 'cluster_coherence': 0.5}
         else:
             active_weights = {'silhouette': 0.5, 'stability': 0.5}
     else:
@@ -444,6 +500,10 @@ def _select_multi_metric(valid, weights=None):
     # Remove cluster_coherence from weights if entries lack it
     if not has_coherence:
         active_weights.pop('cluster_coherence', None)
+
+    # Remove splitting_gain from weights if entries lack it
+    if not has_splitting_gain:
+        active_weights.pop('splitting_gain', None)
 
     # -- Coherence mismatch auto-degrade: if all entries have cluster_coherence < 0.1 --
     if has_coherence and float(np.max(coh_scores)) < 0.1:
@@ -462,6 +522,8 @@ def _select_multi_metric(valid, weights=None):
     }
     if has_coherence:
         metrics_raw['cluster_coherence'] = coh_scores
+    if has_splitting_gain:
+        metrics_raw['splitting_gain'] = split_scores
 
     for metric_name in list(active_weights.keys()):
         scores = metrics_raw.get(metric_name)
@@ -499,6 +561,8 @@ def _select_multi_metric(valid, weights=None):
         norm['stability'] = _normalize(stab_scores)
     if 'cluster_coherence' in active_weights and has_coherence:
         norm['cluster_coherence'] = _normalize(coh_scores)
+    if 'splitting_gain' in active_weights and has_splitting_gain:
+        norm['splitting_gain'] = _normalize(split_scores)
 
     # ── Composite score ──
     composite = np.zeros(n)
@@ -512,6 +576,7 @@ def _select_multi_metric(valid, weights=None):
     sil_val = best['silhouette_score']
     stab_val = best.get('stability_score', 0.0)
     coh_val = best.get('cluster_coherence', 0.0) if has_coherence else 0.0
+    split_val = best.get('splitting_gain', 0.0) if has_splitting_gain else 0.0
     k = best['n_clusters']
 
     sil_norm_val = norm.get('silhouette', np.zeros(n))[best_idx]
@@ -521,7 +586,8 @@ def _select_multi_metric(valid, weights=None):
         f"composite={composite[best_idx]:.4f} "
         f"sil={sil_val:.4f}(n={sil_norm_val:.2f}) "
         f"stab={stab_val:.3f}(n={stab_norm_val:.2f}) "
-        f"coherence={coh_val:.3f} k={k}"
+        f"coherence={coh_val:.3f} "
+        f"split_gain={split_val:.3f} k={k}"
     )
 
     return (

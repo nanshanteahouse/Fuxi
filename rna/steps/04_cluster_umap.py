@@ -129,7 +129,7 @@ def main():
         log.info("Subtype-level data detected — skipping marker enrichment (Wave 4)")
     else:
         # ── Multi-metric enrichment (for multi_metric selection method) ──
-        from rna.utils.cluster_evaluation import _compute_stability, _compute_cluster_coherence
+        from rna.utils.cluster_evaluation import _compute_stability, _compute_cluster_coherence, _compute_splitting_gain
         import logging as _logging
         _log_enrich = _logging.getLogger(__name__)
 
@@ -195,6 +195,13 @@ def main():
                                         entry.get('n_neighbors'), entry.get('resolution'), e)
                     entry['stability_score'] = None
                     entry['cluster_coherence'] = None
+
+            # ── Compute splitting_gain for this n_neighbors group ──
+            if len(group) >= 2:
+                group_sorted = sorted(group, key=lambda e: e.get('resolution', 0.0))
+                gains = _compute_splitting_gain(group_sorted)
+                for entry in group:
+                    entry['splitting_gain'] = gains.get(entry['resolution'], 0.0)
     # ── Single-param UMAP plots ──
     for n in n_neighbors_grid:
         for res in resolutions_grid:

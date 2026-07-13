@@ -10,6 +10,7 @@ from rna.utils.cluster_evaluation import (
     select_best_umap_params,
     _compute_stability,
     _compute_cluster_coherence,
+    _compute_splitting_gain,
     _select_multi_metric,
     _detect_granularity,
 )
@@ -243,10 +244,10 @@ class TestComputeStability:
         )
 
 
-class TestComputeMarkerCoverage:
+class TestComputeClusterCoherence:
     """Numerical assertions for _compute_marker_coverage."""
 
-    def test_compute_marker_coverage_perfect_match(self) -> None:
+    def test_cluster_coherence_perfect_match(self) -> None:
         """AnnData with clusters that express known markers → coverage > 0.8."""
         import scanpy as sc
 
@@ -275,7 +276,7 @@ class TestComputeMarkerCoverage:
             f"Expected coverage > 0.8 for perfect match, got {coverage}"
         )
 
-    def test_compute_marker_coverage_random(self) -> None:
+    def test_cluster_coherence_random(self) -> None:
         """Random expression → coverage < 0.5."""
         import scanpy as sc
 
@@ -300,7 +301,7 @@ class TestComputeMarkerCoverage:
             f"Expected coverage < 0.6 for random scores, got {coverage}"
         )
 
-    def test_compute_marker_coverage_empty_scores(self) -> None:
+    def test_cluster_coherence_empty_scores(self) -> None:
         """Empty per_cell_scores dict → returns 1.0."""
         import scanpy as sc
 
@@ -315,7 +316,7 @@ class TestComputeMarkerCoverage:
             f"Empty scores should return 1.0, got {coverage}"
         )
 
-    def test_compute_marker_coverage_missing_genes(self) -> None:
+    def test_cluster_coherence_missing_genes(self) -> None:
         """Cell type scores with None entries → graceful, still returns valid coverage."""
         import scanpy as sc
 
@@ -645,6 +646,54 @@ class TestDetectGranularity:
         """Single entry → tissue (conservative default)."""
         r = [{'n_neighbors': 15, 'resolution': 0.5, 'n_clusters': 5, 'silhouette_score': 0.10}]
         assert _detect_granularity(r) == "tissue"
+
+
+class TestComputeSplittingGain:
+    """Numerical assertions for _compute_splitting_gain."""
+
+    def test_splitting_gain_identical(self) -> None:
+        """Same n_clusters across all resolutions → gain=0 for all entries."""
+        entries = [
+            {'resolution': 0.3, 'n_clusters': 5},
+            {'resolution': 0.5, 'n_clusters': 5},
+            {'resolution': 0.8, 'n_clusters': 5},
+            {'resolution': 1.0, 'n_clusters': 5},
+        ]
+        gains = _compute_splitting_gain(entries)
+        assert gains == {0.5: 0.0, 0.8: 0.0, 1.0: 0.0}
+
+    def test_splitting_gain_positive(self) -> None:
+        """Increasing n_clusters → positive splitting gain."""
+        entries = [
+            {'resolution': 0.3, 'n_clusters': 3},
+            {'resolution': 0.5, 'n_clusters': 5},
+            {'resolution': 0.8, 'n_clusters': 10},
+            {'resolution': 1.0, 'n_clusters': 12},
+        ]
+        # gain(0.5) = max(0, (5-3)/(0.5-0.3)) = 2/0.2 = 10.0
+        # gain(0.8) = max(0, (10-5)/(0.8-0.5)) = 5/0.3 ≈ 16.667
+        # gain(1.0) = max(0, (12-10)/(1.0-0.8)) = 2/0.2 = 10.0
+        gains = _compute_splitting_gain(entries)
+        assert gains[0.5] == pytest.approx(10.0)
+        assert gains[0.8] == pytest.approx(16.6667, abs=0.01)
+        assert gains[1.0] == pytest.approx(10.0)
+
+    def test_splitting_gain_single(self) -> None:
+        """Single resolution → empty dict."""
+        entries = [{'resolution': 0.5, 'n_clusters': 3}]
+        gains = _compute_splitting_gain(entries)
+        assert gains == {}
+
+    def test_splitting_gain_unsorted_input(self) -> None:
+        """Unsorted input → function sorts internally, produces correct gains."""
+        entries = [
+            {'resolution': 1.0, 'n_clusters': 12},
+            {'resolution': 0.3, 'n_clusters': 3},
+            {'resolution': 0.5, 'n_clusters': 5},
+        ]
+        gains = _compute_splitting_gain(entries)
+        assert gains[0.5] == pytest.approx(10.0)
+        assert gains[1.0] == pytest.approx(7.0 / 0.5)  # (12-5)/(1.0-0.5) = 14.0
 
     def test_detect_granularity_missing_keys(self) -> None:
         """Entries missing silhouette_score → gracefully handled."""
