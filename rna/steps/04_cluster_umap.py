@@ -121,12 +121,30 @@ def main():
     from rna.utils.cluster_evaluation import _detect_granularity
     granularity = _detect_granularity(results_summary)
     log.info("Granularity classification: %s", granularity)
+    _de_gated_selected = False
 
     if granularity == "subtype":
-        # Subtype-level data → skip enrichment, use DE-gated selection
-        # _select_de_gated implementation is in Wave 4; for now skip enrichment
-        # and proceed with the raw results_summary (no enrichment computed)
-        log.info("Subtype-level data detected — skipping marker enrichment (Wave 4)")
+        _de_gated_selected = True
+        from rna.utils.cluster_evaluation import _select_de_gated
+        log.info("Granularity=subtype — using DE-gated resolution selection (bypassing enrichment)")
+        n_clusters, resolution, cluster_key, reason_str = _select_de_gated(
+            results_summary, adata,
+            de_gate_threshold=getattr(CFG, 'multi_metric_de_gate_threshold', 25),
+        )
+        # Extract n_neighbors from selected entry
+        best_n = None
+        for r in results_summary:
+            if r.get('resolution') == resolution and r.get('cluster_key') == cluster_key:
+                best_n = r['n_neighbors']
+                break
+        if best_n is None:
+            best_n = results_summary[0]['n_neighbors']
+            log.warning("DE-gated: resolution=%.2f entry not found, using n_neighbors=%d",
+                        resolution, best_n)
+        best_r = resolution
+        method_name = "de_gated"
+        reason = reason_str
+        log.info("DE-gated selection: n_neighbors=%d, resolution=%.2f (%s)", best_n, best_r, reason)
     else:
         # ── Multi-metric enrichment (for multi_metric selection method) ──
         from rna.utils.cluster_evaluation import _compute_stability, _compute_cluster_coherence, _compute_splitting_gain
@@ -276,13 +294,14 @@ def main():
             CFG.best_resolution, getattr(CFG, 'best_n_neighbors', 0), method,
         )
 
-    best_n, best_r, method_name, reason = select_best_params(
-        results_summary,
-        method=method,
-        best_resolution=CFG.best_resolution if method is None else None,
-        best_n_neighbors=getattr(CFG, 'best_n_neighbors', 0) if method is None else 0,
-        multi_metric_weights=getattr(CFG, 'multi_metric_weights', None),
-    )
+    if not _de_gated_selected:
+        best_n, best_r, method_name, reason = select_best_params(
+            results_summary,
+            method=method,
+            best_resolution=CFG.best_resolution if method is None else None,
+            best_n_neighbors=getattr(CFG, 'best_n_neighbors', 0) if method is None else 0,
+            multi_metric_weights=getattr(CFG, 'multi_metric_weights', None),
+        )
 
     log.info("Selected best params via %s: n_neighbors=%d, resolution=%.1f (%s)",
              method_name, best_n, best_r, reason)
