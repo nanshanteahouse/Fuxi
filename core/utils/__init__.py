@@ -41,7 +41,7 @@ from core.utils._io import safe_write, safe_plot
 from core.utils._logging import setup_logger
 from core.utils._config import (
     resolve_config, _validate_species, _KNOWN_SPECIES_KEYS,
-    _find_dataset_yaml, _has_explicit_is_nuclei,
+    _find_dataset_yaml,
 )
 from core.utils._cross_modality import (
     find_rna_h5ad, find_rna_marker_csv, load_scRNA_markers,

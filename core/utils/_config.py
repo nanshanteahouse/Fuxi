@@ -2,9 +2,11 @@
 
 import logging
 import os
-import sys
 from typing import Optional
 
+import yaml
+
+from core.config import Config
 from core.dataset_schema import load_dataset
 
 
@@ -21,69 +23,67 @@ def _find_dataset_yaml(cfg) -> Optional[str]:
     return None
 
 
-def _has_explicit_is_nuclei(config_path: str) -> bool:
-    """Check if config.py explicitly references 'is_nuclei'."""
-    try:
-        with open(config_path) as f:
-            return 'is_nuclei' in f.read()
-    except OSError:
-        return False
 
-
-def resolve_config(config_path: Optional[str] = None):
+def resolve_config(config_path: Optional[str] = None) -> Config:
     """
-    解析 --config 参数，返回配置模块的 CFG 对象。
+    Load a YAML config file and return a resolved Config instance.
 
-    所有步骤脚本统一使用本函数加载配置。
+    Replaces the old importlib-based .py loading with Pydantic v2 YAML loading.
     """
     if config_path is None:
-        # 默认寻找父目录的 config.py
+        # Default: look for config.yaml in parent directory
         config_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "config.py",
+            "config.yaml",
         )
 
     config_path = os.path.abspath(config_path)
     if not os.path.exists(config_path):
-        raise FileNotFoundError(f"配置文件不存在: {config_path}")
+        raise FileNotFoundError(f"Config file not found: {config_path}")
 
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("pipeline_config", config_path)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules["pipeline_config"] = mod
-    spec.loader.exec_module(mod)
+    if config_path.endswith('.py'):
+        raise ValueError(
+            f"Python configs are no longer supported: {config_path}\n"
+            f"Migrate to YAML format using: python core/migrate_configs.py --gse <GSE_ID>"
+        )
+    if not config_path.endswith('.yaml'):
+        raise ValueError(f"Config file must be .yaml format: {config_path}")
 
-    # Auto-detect project_dir from config file location if not explicitly set.
-    if not mod.CFG.project_dir:
-        mod.CFG.project_dir = os.path.dirname(config_path)
+    # ── Load YAML and validate ──
+    with open(config_path) as f:
+        data = yaml.safe_load(f)
 
-    # ── Resolve n_jobs ───────────────────────────────────────────────
-    # 0 means "auto-detect" but joblib.Parallel rejects 0 outright.
-    # Resolve here so both standalone step scripts and subprocess steps
-    # get a usable value (run_pipeline.py also does this, but steps
-    # shouldn't depend on the launcher).
-    _nc = getattr(mod.CFG, 'n_jobs', 0)
-    if _nc == 0:
-        mod.CFG.n_jobs = os.cpu_count() or 1
+    cfg = Config.model_validate(data)
 
-    mod.CFG.resolve_paths()
+    # Auto-detect project_dir from config file location
+    if not cfg.project_dir:
+        cfg.project_dir = os.path.dirname(config_path)
+
+    # ── Resolve n_jobs ──
+    if cfg.execution.n_jobs == 0:
+        cfg.execution.n_jobs = os.cpu_count() or 1
 
     # ── Auto-fill is_nuclei from dataset.yaml ──
-    if not _has_explicit_is_nuclei(config_path):
-        _yaml = _find_dataset_yaml(mod.CFG)
+    # Check if is_nuclei is explicitly set in YAML config first
+    if not cfg.qc.is_nuclei:
+        _yaml = _find_dataset_yaml(cfg)
         if _yaml:
             try:
                 _ds = load_dataset(_yaml)
-                if getattr(_ds, 'assay_type', None) == 'snRNAseq' and not mod.CFG.is_nuclei:
-                    mod.CFG.is_nuclei = True
+                if getattr(_ds, 'assay_type', None) == 'snRNAseq':
+                    cfg.qc.is_nuclei = True
                     print(f"[Config] Auto-set is_nuclei=True from {_yaml}")
             except Exception:
                 pass  # Graceful: no crash on invalid yaml
 
-    # ── Species sanity check ───────────────────────────────────────────
-    _validate_species(mod.CFG)
+    # ── Species sanity check ──
+    _validate_species(cfg)
 
-    return mod.CFG
+    # ── Create output directories ──
+    for d in [cfg.results_dir, cfg.h5ad_dir, cfg.figure_dir, cfg.table_dir, cfg.log_dir]:
+        os.makedirs(d, exist_ok=True)
+
+    return cfg
 
 
 # Species pipeline-keys known to rna/ortholog.py and rna/utils/marker_scoring.py.
