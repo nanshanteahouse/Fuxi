@@ -1003,6 +1003,16 @@ CFG.score_cell_cycle = False        # 可选: 回归 S/G2M 细胞周期分数
 # CFG.harmony_max_iter = 10          # Harmony 最大迭代次数
 ```
 
+| 配置项 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `harmony.use_harmony` | bool | `True` | 启用 Harmony 批次校正 |
+| `harmony.batch_key` | string | `"sample"` | 批次变量列名 |
+| `harmony.max_iter` | int | `10` | Harmony 最大迭代次数 |
+| `harmony.diagnose` | bool | `true` | 是否启用批次效应自动诊断（Gini 系数 + 纯度验证） |
+| `harmony.diagnose_report` | bool | `true` | 是否生成诊断 PDF 报告 |
+| `harmony.gini_batch_threshold` | float | `0.3` | Gini <= 此值判为批次候选 |
+| `harmony.gini_biology_threshold` | float | `0.6` | Gini >= 此值判为生物学候选 |
+
 ### 9.6 聚类参数
 
 ```python

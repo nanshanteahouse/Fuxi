@@ -1006,6 +1006,16 @@ CFG.score_cell_cycle = False        # Optional: regress S/G2M cell cycle scores 
 # CFG.harmony_max_iter = 10          # Harmony max iterations
 ```
 
+| Config field | Type | Default | Description |
+|---|---|---|---|
+| `harmony.use_harmony` | bool | `True` | Enable Harmony batch correction |
+| `harmony.batch_key` | string | `"sample"` | Batch variable column name |
+| `harmony.max_iter` | int | `10` | Harmony maximum iterations |
+| `harmony.diagnose` | bool | `true` | Enable automatic batch-effect diagnosis (Gini coefficient + purity validation) |
+| `harmony.diagnose_report` | bool | `true` | Generate diagnosis PDF report |
+| `harmony.gini_batch_threshold` | float | `0.3` | Gini <= this value = batch candidate |
+| `harmony.gini_biology_threshold` | float | `0.6` | Gini >= this value = biology candidate |
+
 ### 9.6 Clustering parameters
 
 ```python
