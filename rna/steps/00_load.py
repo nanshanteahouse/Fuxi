@@ -344,7 +344,7 @@ def main():
             log.error("Sample has %d rows — too few to detect boundary", n_sampled)
             sys.exit(1)
 
-        # Two-metric classification: numeric ratio + cardinality
+        # Three-metric classification: numeric ratio → sparsity → cardinality
         classifications = []
         for col in sample.columns:
             numeric = pd.to_numeric(sample[col], errors='coerce')
@@ -353,6 +353,12 @@ def main():
                 classifications.append('M')   # mostly non-numeric → metadata
             else:
                 non_na = numeric.dropna()
+                # Step 1: Sparsity check — if >80% of values are zero, it's expression
+                zero_frac = (non_na == 0).sum() / len(non_na) if len(non_na) > 0 else 0
+                if zero_frac > 0.8:
+                    classifications.append('E')  # sparse numeric → expression
+                    continue
+                # Step 2: Small-integer categorical metadata (e.g. cluster labels)
                 is_small_int = False
                 if len(non_na) > 0:
                     if all(v == int(v) for v in non_na):
@@ -362,6 +368,7 @@ def main():
                 if is_small_int:
                     classifications.append('M')  # integer-coded meta
                 else:
+                    # Step 3: Cardinality — high-cardinality numeric = expression
                     unique_ratio = numeric.nunique() / n_sampled
                     if unique_ratio < 0.5:
                         classifications.append('M')  # low-cardinality meta
