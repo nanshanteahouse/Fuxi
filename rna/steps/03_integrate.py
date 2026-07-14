@@ -210,44 +210,104 @@ def main():
     plt.close(fig)
     log.info("  PCA elbow plot saved")
 
-    # ── Harmony ──
-    if CFG.harmony.use_harmony:
-        from harmony import harmonize
-        batch_key = CFG.harmony.batch_key
-        if batch_key not in adata.obs:
-            log.warning("Harmony batch_key '%s' not in obs, skipping correction", batch_key)
-        else:
-            # Check for NaN in batch_key column
-            if bool(adata.obs[batch_key].isna().any()):
-                n_nan = adata.obs[batch_key].isna().sum()
-                log.warning("batch_key '%s' contains %d NaN — these cells will be removed", batch_key, n_nan)
-                adata._inplace_subset_obs(~adata.obs[batch_key].isna())
-            log.info("Harmony correction (batch_key=%s)...", batch_key)
-            try:
-                Z = harmonize(
-                    adata.obsm['X_pca'][:, :CFG.pca.n_pcs_use],
-                    adata.obs,
-                    batch_key=batch_key,
-                    random_state=CFG.execution.random_seed,
-                    max_iter_harmony=CFG.harmony.max_iter,
-                )
-                adata.obsm['X_pca_harmony'] = Z
-                log.info("  Harmony complete, output shape: %s", Z.shape)
-            except Exception as e:
-                log.warning("Harmony correction failed (%s) — continuing with raw PCA", e)
-                adata.obsm['X_pca_harmony'] = adata.obsm['X_pca'].copy()
-            # 对比图
-            fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-            sc.pl.embedding(adata, basis='X_pca', color=batch_key,
-                            ax=axes[0], show=False, title='PCA (before Harmony)')
-            sc.pl.embedding(adata, basis='X_pca_harmony', color=batch_key,
-                            ax=axes[1], show=False, title='Harmony-corrected')
-            fig.tight_layout()
-            fig.savefig(os.path.join(fig_dir, 'harmony_comparison.png'), dpi=150)
-            plt.close(fig)
-            log.info("  Harmony comparison plot saved")
+    # ── Batch diagnosis (v4.x+) ──
+    if CFG.harmony.diagnose:
+        from rna.utils.batch_diagnostics import diagnose_batch_candidates, plot_diagnosis_report
+        adata_orig = adata.copy()
+        gini_b = CFG.harmony.gini_batch_threshold
+        gini_ = CFG.harmony.gini_biology_threshold
+        log.info("Running batch diagnosis ...")
+        try:
+            report = diagnose_batch_candidates(
+                adata, n_pcs=CFG.pca.n_pcs_use,
+                gini_batch_threshold=gini_b,
+                gini_biology_threshold=gini_,
+            )
+            log.info(
+                "[batch-diagnosis] batch_cols=%s, biology_cols=%s, ambiguous=%s",
+                report.batch_cols, report.biology_cols, report.ambiguous_cols,
+            )
+            # Augment batch_key with auto-detected batch columns
+            augment = report.batch_cols if report.batch_cols else []
+            user_key = CFG.harmony.batch_key
+            bk_list = [user_key] if isinstance(user_key, str) else list(user_key)
+            batch_keys = list(dict.fromkeys(bk_list + [c for c in augment if c in adata.obs]))
+            for w in report.warnings:
+                log.warning("[batch-diagnosis] %s", w)
+            if CFG.harmony.diagnose_report:
+                os.makedirs(fig_dir, exist_ok=True)
+                report_path = os.path.join(fig_dir, "_batch_diagnosis.pdf")
+                plot_diagnosis_report(report, report_path)
+                log.info("  Diagnosis report saved to %s", report_path)
+        except Exception as e:
+            log.warning("Batch diagnosis failed (%s) — continuing without diagnosis", e)
+            batch_keys = [CFG.harmony.batch_key] if isinstance(CFG.harmony.batch_key, str) else list(CFG.harmony.batch_key)
     else:
-        log.info("Harmony disabled, using raw PCA.")
+        batch_keys = [CFG.harmony.batch_key] if isinstance(CFG.harmony.batch_key, str) else list(CFG.harmony.batch_key)
+
+    # ── Harmony ──
+    bk_list = [b for b in batch_keys if b in adata.obs]
+    if CFG.harmony.use_harmony and bk_list:
+        from harmony import harmonize
+        # Unified NaN detection across all batch keys
+        nan_mask = adata.obs[bk_list].isna().any(axis=1)
+        if nan_mask.any():
+            n_nan = nan_mask.sum()
+            log.warning(
+                "batch_keys %s contain %d NaN rows — these cells will be removed",
+                bk_list, n_nan,
+            )
+            adata._inplace_subset_obs(~nan_mask)
+        log.info("Harmony correction (batch_keys=%s)...", bk_list)
+        try:
+            Z = harmonize(
+                adata.obsm['X_pca'][:, :CFG.pca.n_pcs_use],
+                adata.obs,
+                batch_key=bk_list,
+                random_state=CFG.execution.random_seed,
+                max_iter_harmony=CFG.harmony.max_iter,
+            )
+            adata.obsm['X_pca_harmony'] = Z
+            log.info("  Harmony complete, output shape: %s", Z.shape)
+        except Exception as e:
+            log.warning("Harmony correction failed (%s) — continuing with raw PCA", e)
+            adata.obsm['X_pca_harmony'] = adata.obsm['X_pca'].copy()
+        # 对比图
+        primary_key = bk_list[0]
+        fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+        sc.pl.embedding(adata, basis='X_pca', color=primary_key,
+                        ax=axes[0], show=False, title='PCA (before Harmony)')
+        sc.pl.embedding(adata, basis='X_pca_harmony', color=primary_key,
+                        ax=axes[1], show=False, title='Harmony-corrected')
+        fig.tight_layout()
+        fig.savefig(os.path.join(fig_dir, 'harmony_comparison.png'), dpi=150)
+        plt.close(fig)
+        log.info("  Harmony comparison plot saved")
+        # ── Post-Harmony preservation check ──
+        if CFG.harmony.diagnose and 'report' in dir() and report.biology_cols:
+            try:
+                from rna.utils.batch_diagnostics import validate_harmony_preservation
+                preservation = validate_harmony_preservation(
+                    adata_orig, adata, report.biology_cols
+                )
+                for col, ratio in preservation.items():
+                    if ratio < 0.9:
+                        log.warning(
+                            "[preservation-check] %s: purity dropped to %.2fx — "
+                            "biological signal may be degraded",
+                            col, ratio,
+                        )
+                    else:
+                        log.info(
+                            "[preservation-check] %s: purity preserved at %.2fx", col, ratio
+                        )
+            except Exception as e:
+                log.warning("Preservation check failed (%s) — skipping", e)
+    else:
+        if CFG.harmony.use_harmony and not bk_list:
+            log.warning("No valid batch keys found in obs, skipping Harmony")
+        else:
+            log.info("Harmony disabled, using raw PCA.")
         adata.obsm['X_pca_harmony'] = adata.obsm['X_pca'].copy()
 
     # ── 保存 ──
