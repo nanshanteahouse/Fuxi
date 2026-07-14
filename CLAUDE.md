@@ -6,264 +6,170 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Fuxi (伏羲) is a unified single-cell multi-omics pipeline monorepo, formed by merging previously separate `scRNAseq_pipeline` (Scanpy-based) and `ATACseq_pipeline` (Snapatac2-based) codebases. Python 3.14+, running on WSL2.
 
-## Build / Run / Test
+### Supported Modalities
+
+| Modality | Engine | Steps | Status |
+|----------|--------|:-----:|:------:|
+| `rna` (scRNA-seq) | Scanpy 1.10+ | 13 (00–12) | Production |
+| `atac` (scATAC-seq) | Snapatac2 2.9 | 10 (00–09) | Production |
+| `spatial` | Squidpy 1.8+ | 11 (00–10) | Production |
+
+### Architecture
+
+```
+core/              Shared infrastructure (no biology libs)
+  config.py          Pydantic Config model + 20 topic sub-models
+  run_pipeline.py    CLI orchestrator — subprocess dispatch
+  ai_caller.py       LLM client (OpenAI SDK) — retry, caching
+  ai_prompts.py      RNA + ATAC annotation prompt templates
+  utils/             resolve_config, _perf (monitoring), etc.
+  preprocess/        Format detection, archive extract, config gen
+  anatomy.py         CCI anatomy constraint system
+  enrichment_tissue.py / grn_tissue.py  Tissue-aware scoring
+  paper_insights.py / paper_registry.py / run_reproduce.py
+
+rna/               scRNA-seq module
+  steps/            13 pipeline steps (00_load → 12_cell_interaction)
+  utils/            marker_scoring, evidence_fusion, cluster_evaluation,
+                    cell_interaction, sex_detection
+  annotation_standardizer.py / ortholog.py / tissue_ontologies/
+
+atac/              scATAC-seq module (Snapatac2 2.9+)
+  steps/            10 pipeline steps (00_load → 09_integrate)
+
+spatial/           Spatial module (Squidpy)
+  steps/            11 pipeline steps (00_load → 10_cell_interaction)
+
+cross_paper/       Cross-paper pathway comparison
+projects/          Dataset configs, projects/{modality}/{GSE_ID}/
+templates/         Config templates for different input formats
+tests/             Test files (no CI framework)
+```
+
+## Development conventions
+
+**Commit message.** Use [Conventional Commits](https://www.conventionalcommits.org/):
+```
+<type>(<scope>): <subject>
+```
+Types: `feat` / `fix` / `docs` / `refactor` / `perf` / `test` / `chore`
+Scope: semantic name (e.g. `enrichment`), NOT step number (e.g. `09_enrichment`)
+Subject: imperative, lowercase, ≤72 chars. Body explains *why*, not *what*.
+
+**Config access.** Always use nested topic paths:
+`CFG.hvg.n_top_genes`, `CFG.clustering.cluster_selection_method`, `CFG.qc.min_genes`.
+`.py` configs are rejected — use `.yaml`. See `core/config.py` for all 20 topic models.
+
+**Core scripts.** Step scripts under `rna/steps/`, `atac/steps/`, `spatial/steps/` must not be edited in place. Copy to `projects/{modality}/{GSE_ID}/` for dataset-specific changes, then run the copy directly. Write a note to `notes/suggestions/` after.
+
+**Code organization.** 500 LOC soft cap for core modules and step scripts; 400 for utility modules. Algorithm engines under `*_utils/` at 500 LOC.
+
+## Running methods
 
 ### Environment
 
 ```bash
-# WSL: create and activate virtual environment
 cd <repo_root>
-python -m venv .venv
-source .venv/bin/activate
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt          # all modalities
-pip install -r requirements/rna.txt        # scRNA-seq only
-pip install -r requirements/atac.txt       # scATAC-seq only
+pip install -r requirements/rna.txt      # scRNA-seq only
+pip install -r requirements/atac.txt     # scATAC-seq only
 
-# Required env var before any pipeline run
 export FUXI_DATA_ROOT=<path_to_geo_datasets>
 ```
 
-### Running the Pipeline
+### Pipeline
 
 ```bash
-# List available steps for a modality
+# List steps
 python core/run_pipeline.py --modality rna --list
 python core/run_pipeline.py --modality atac --list
 python core/run_pipeline.py --modality spatial --list
 
-# Run full pipeline
+# Run full / single step / range / resume
 python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config_<GSE_ID>.yaml
-
-# Run a single step (0-indexed)
-python core/run_pipeline.py --modality atac --step 0 --config projects/atac/<GSE_ID>/config_<GSE_ID>.yaml
-
-# Run a range or selection of steps
+python core/run_pipeline.py --modality atac --step 0 --config ...
 python core/run_pipeline.py --modality rna --steps 0-2 --config ...
-python core/run_pipeline.py --modality rna --steps 1,3,5 --config ...
-
-# Resume from first incomplete checkpoint
 python core/run_pipeline.py --modality rna --resume --config ...
 
-# Run subclustering on a specific cell type (RNA Step 06)
+# Subclustering (RNA Step 06)
 python core/run_pipeline.py --modality rna --step 6 --cell-type "Müller Glia" --config ...
+
+# Subset pipeline (filter cells by sample/obs criteria)
+python core/run_pipeline.py --modality rna --config config_pcw8.yaml
+# Config: CFG.downsample.sample_keep=["SCR205"] or CFG.downsample.obs_filter="stage=='PCW8'"
 ```
 
-# Run subset pipeline (filter cells by sample/obs criteria, auto-output to *_subset/)
-python core/run_pipeline.py --modality rna --config config_pcw8.yaml
-#   config 中设置 CFG.sample_keep=["SCR205"] or CFG.obs_filter="stage=='PCW8'"
+### Running modes
 
-### Testing
+Pipeline supports two modes, chosen by the Agent based on user preference:
 
-There is no test runner or linting configuration in this repo. The `tests/` directory exists but contains only `__init__.py` files. There is no `pyproject.toml`, `setup.py`, `Makefile`, or CI configuration.
+**Auto mode** — Run full step range with all default settings. Suitable for familiar datasets or batch reproduction:
+```bash
+python core/run_pipeline.py --modality rna --resume --config <config>.yaml
+```
+
+**Interactive mode** — Agent runs `--step N` one at a time. After each step, present results to the user, ask questions, offer options, and wait for confirmation before proceeding. Suitable for exploratory analysis or new datasets.
+
+### Paper tools
+
+```bash
+python core/paper_insights.py --pmid <PMID>       # AI paper interpretation
+python core/paper_registry.py --build              # build paper→GSE→config index
+python core/paper_registry.py --verify             # check registry consistency
+python core/run_reproduce.py --all --dry-run       # preview reproducibility
+python core/run_reproduce.py <paper_dir>           # reproduce a single paper
+```
 
 ### Adding a Dataset
 
-**Option A — Automated (recommended):**
-
+**Automated (recommended):**
 ```bash
-# The preprocessor auto-detects format, extracts archives, and generates config + dataset.yaml
 python core/preprocess/preprocessor.py --gse <GSE_ID> --data-root $FUXI_DATA_ROOT
 ```
+**Manual:** Create `projects/{modality}/{GSE_ID}/config_<GSE_ID>.yaml` from `templates/config_templates/`.
 
-**Option B — Manual:**
+### Testing
 
-1. Create `projects/{modality}/{GSE_ID}/` with a `config_<GSE_ID>.yaml` — use templates from `templates/config_templates/` as starting points
-2. Place raw data in `$FUXI_DATA_ROOT/{GSE_ID}/`
-3. Use config templates from `templates/config_templates/` as starting points
-
-## Architecture
-
-### Module Layout
-
-```
-core/               Shared infrastructure (no biology libs imported)
-  config.py           Pydantic BaseModel (Config + 20 topic sub-models); CFG singleton
-  run_pipeline.py     CLI orchestrator — dispatches steps via subprocess
-  ai_caller.py        LLM client (OpenAI SDK) — retry, caching, model discovery
-  ai_prompts.py       RNA + ATAC annotation prompt templates + build_annotation_prompt()
-  utils.py            safe_write, safe_plot, setup_logger, resolve_config, validate_adata, data_root()
-  dataset_schema.py   Python model for dataset.yaml files (now includes assay_type field for scRNA/snRNA detection)
-  dataset_detector.py Auto-detect modality from file patterns
-  preprocess/         Preprocessing pipeline (format detect, archive extract, config gen)
-    preprocessor.py     Main entry point — GEO download → ready-to-run
-    format_detector.py  Extended format detection (archives, 10X dir structure)
-    archive_extractor.py Archive extraction (tar.gz, zip, gz, bz2)
-    superseries_detector.py SuperSeries detection + sub-series splitting + assay_type auto-detection (NCBI keyword matching)
-
-rna/                scRNA-seq module (Scanpy 1.10+)
-  steps/             13 pipeline steps (00_load → 12_cell_interaction), each a standalone script
-  utils/
-    marker_scoring.py  Hypergeometric + cosine scoring of clusters against Knowledge Base
-    evidence_fusion.py 5-tier decision engine merging marker scores, expert rules, AI
-    annotation_patcher.py Safe annotation patch utility (v3.1.0+)
-    cluster_evaluation.py Pareto elbow + silhouette selection for grid search auto-param
-    cell_interaction.py  LIANA+ LR database loading, permutation testing, spatial bivariate metrics
-  annotation_standardizer.py  6-tier name standardization for cell type annotations
-  ortholog.py        Cross-species Ensembl→human gene symbol mapping
-  tissue_ontologies/ Expert Knowledge Bases — currently retina only, with markers + synonyms
-
-atac/               scATAC-seq module (Snapatac2 2.9+)
-  steps/             10 pipeline steps (00_load → 09_integrate)
-
-spatial/            Spatial transcriptomics module (Squidpy)
-  steps/             11 pipeline steps (00_load → 10_cell_interaction)
-
-cross_paper/        Cross-paper pathway comparison framework
-  analyzer.py         CrossPaperAnalyzer — pathway-agnostic, YAML-configured
-  __init__.py          YAML loader helpers + default config getters
-
-projects/           Dataset-specific configs, organized as projects/{modality}/{GSE_ID}/
-templates/          Config templates for different input formats
-tests/              Test directory (mostly empty)
+No CI. Run test files directly:
+```bash
+python -m pytest tests/test_config_parity.py -v
 ```
 
 ### Key Design Patterns
 
-**Step dispatch model.** `run_pipeline.py` does NOT import step modules. It runs each step as a separate `subprocess.run()` call, passing `--config=<path>`. Steps self-identify their checkpoint files. This means steps are loosely coupled and can be run independently. However, each step script must add the repo root to `sys.path` manually:
+**Step dispatch.** `run_pipeline.py` runs each step as a separate `subprocess.run()` — never import steps directly. Steps self-identify checkpoint files; steps skip if output checkpoint exists. `--resume` scans for first missing checkpoint.
+
+**Config loading.** `resolve_config()` loads `.yaml` via `yaml.safe_load()` + `Config.model_validate()`. Each call returns a new Config instance. Path resolution via `model_post_init` hook.
+
+**Three annotation modes (RNA Step 05):**
+1. **Unified KB** (if `CFG.tissue_kb` set): marker scoring → evidence fusion → optional AI fallback
+2. **AI** (if `CFG.ai.enabled` + `CFG.ai.ai_annotation`): LLM with StandardOntology normalization
+3. **Score_genes** (fallback): `sc.tl.score_genes()` with `CFG.marker.marker_dict`
+
+**Cluster selection (Step 04).** Controlled by `CFG.clustering.cluster_selection_method`:
+- `"multi_metric"` (RNA default, MMACS v2): 5-metric composite. Tissue path (enrichment loop) or Subtype path (DE-gated for homogenous data)
+- `"pareto_elbow"` (ATAC/Spatial default): Pareto frontier over n_clusters vs silhouette
+- `"silhouette"` / `None` (manual)
+- UMAP sweep auto-selects `min_dist`/`spread` via convex hull area.
+
+**snRNA-seq adaptation.** Auto-detected from GEO keywords → `CFG.qc.is_nuclei=True`. Tightens mito threshold to `max_pct_mito_nuclei` (default 3.0%) and MAD multiplier to 1.5×.
+
+**Subset filtering.** Step 00 supports `CFG.downsample.sample_keep` and `CFG.downsample.obs_filter`. Output dirs auto-append `_subset`.
+
+**Import path hack.** No `pyproject.toml`, so every step must prepend repo root to `sys.path`:
 ```python
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 ```
 
-**Config loading.** `resolve_config()` in `core/utils.py` loads a `.yaml` config file via `yaml.safe_load()`, then validates it against the Pydantic `Config` model via `Config.model_validate()`. Config files are YAML with nested topic keys (e.g. `qc: { min_genes: 500 }`). The old importlib-based `.py` loading is deprecated — `.py` configs are rejected with a migration error.
+### Pipeline Steps
 
-**Checkpoint system.** Each step reads from a specific checkpoint file and optionally writes one. `run_pipeline.py` maintains step registries (`RNA_STEPS`, `ATAC_STEPS`, `SPATIAL_STEPS`) and checkpoint file mappings. Steps skip if their output checkpoint already exists. The `--resume` flag scans for the first missing checkpoint.
-
-**Subset filtering.** Step 00 supports config-driven cell filtering before downsample (`core/downsample.py:filter_by_config()`). Set `CFG.sample_keep` (sample name whitelist) or `CFG.obs_filter` (pandas query string on `adata.obs`) to process only a subset of cells through the full pipeline. When active, output directories auto-append `_subset` suffix to avoid overwriting full results. Config fields: `sample_keep`, `obs_filter`, `subset_suffix` — all default to empty/falsy for backward compatibility.
-
-**Three annotation modes for RNA Step 05:**
-1. **Unified KB mode** (if `CFG.tissue_kb` is set): Full pipeline — marker scoring → expert rules → evidence fusion → optional AI fallback for low-confidence clusters
-2. **AI mode** (if `CFG.ai.enabled` + `CFG.ai.ai_annotation`): LLM-based annotation with `StandardOntology` normalization
-3. **Score_genes mode** (fallback): Simple `sc.tl.score_genes()` with `CFG.marker_dict`
-
-**AI caller.** All LLM calls go through `core/ai_caller.py`'s `ai_query()`. It uses the OpenAI SDK, auto-detects available models on 404, retries empty responses up to 3×, caches responses to disk (SHA-256 keyed), and automatically boosts `max_tokens` to 32768 when thinking mode is enabled.
-
-**Knowledge Base format.** Tissue KBs are Python dicts with per-cell-type marker genes (organized as `confirm`/`add`/`refine` tiers, each gene mapped to PMID references), negative markers, species lists, synonyms, and optional `expert_rules` (priority-ordered deterministic matching rules).
-
-**Path resolution.** `data_root()` reads `FUXI_DATA_ROOT` env var (with `SCRNA_DATA_ROOT` as legacy fallback). WSL paths are auto-detected. `Config.resolve_paths()` resolves all relative paths against `project_dir` and creates output directories.
-
-**Cluster selection method.** `CFG.cluster_selection_method` controls how the pipeline chooses the best (n_neighbors, resolution) from the parameter grid search in Step 04:
-- `"multi_metric"` (RNA default, MMACS v2): Weighted ensemble of silhouette (0.2), stability (0.2), per-cluster coherence (0.3), splitting gain (0.2), and KB annotatable rate (0.1). Replaces the legacy 3-metric system (silhouette+stability+marker_coverage). See Cluster Coherence & DE-Gated Selection below for detailed routing. **RNA-only — ATAC/Spatial enrichment not yet implemented.**
-- `"pareto_elbow"` (ATAC/Spatial default): Computes the Pareto frontier over (n_clusters, silhouette_score), then picks the point closest to the ideal (min clusters, max silhouette) via normalized elbow detection. Penalizes marginal silhouette gains from over-clustering.
-- `"silhouette"`: Simple max silhouette score (old auto-select behavior, now explicit).
-- `None`: Manual mode — uses `CFG.best_resolution` and `CFG.best_n_neighbors` directly (backward compatible). Set `best_n_neighbors=0` to auto-pick the best silhouette at the given resolution.
-
-The core implementation lives in `rna/utils/cluster_evaluation.py` (`select_best_params()`), shared by all modalities. The multi-metric helpers (`_select_multi_metric`, `_compute_stability`, `_compute_cluster_coherence`, `_compute_splitting_gain`, `_detect_granularity`, `_select_de_gated`) are invoked only by the RNA step. ATAC and Spatial steps use `pareto_elbow` as their config default.
-
-### Cluster Coherence & DE-Gated Selection
-
-The RNA Step 04 pipeline uses a two-phase approach. **Granularity detection** (`_detect_granularity`) runs BEFORE the enrichment loop, classifying data by analyzing the silhouette~resolution curve. Data with low silhouette CV (< `multi_metric_granularity_cv_threshold`, default 0.05) AND few clusters (< `multi_metric_granularity_min_clusters`, default 10) is classified as `"subtype"`; otherwise `"tissue"`. This routing fixes a known failure mode (e.g., GSE81905 FACS-enriched bipolar cells) where all three legacy metrics collapse.
-
-- **Tissue path** → enrichment loop computing stability, per-cluster coherence, splitting gain, and optional KB annotatable rate → `_select_multi_metric()` with the 5-metric composite:
-  1. **Silhouette** (0.2): Cluster separation quality.
-  2. **Stability** (0.2): Jaccard similarity across bootstrapped subsamples.
-  3. **Per-cluster coherence** (0.3): Replaces the old global `marker_coverage`. For each cluster, computes the fraction of its top-50 DEGs present in the Knowledge Base. Peaks at intermediate resolutions — naturally deprecates both under-clustering (multi-type clusters dilute signal) and over-clustering (fragments lack enough DEGs).
-  4. **Splitting gain** (0.2): Marker richness differential between consecutive resolutions. Positive values reward resolution jumps where new clusters bring distinct marker specificity.
-  5. **KB annotatable rate** (0.1): Fraction of clusters with a KB marker score > 0.5. Lightweight annotation-quality proxy. Only computed when `CFG.tissue_kb` is populated; absent → weights degrade to sil=0.2, stab=0.2, coherence=0.35, split_gain=0.25.
-
-- **Subtype path** → bypasses the entire enrichment loop → `_select_de_gated()` directly. Runs `sc.tl.rank_genes_groups()` per resolution, computes pairwise DE counts (padj < 0.05, log2FC > 1.0) between all cluster pairs, and selects the highest resolution where the minimum pairwise DE count exceeds `CFG.multi_metric_de_gate_threshold` (default 25). Follows Shekhar 2016's merge.clusters.DE pattern (merge when < 50 DE), inverted to prefer finer resolution as long as every cluster pair maintains sufficient transcriptional distinction.
-
-New config fields in `core/config.py` (Pydantic sub-models): `multi_metric_coherence_dominance` (default 1.5), `multi_metric_granularity_cv_threshold` (0.05), `multi_metric_granularity_min_clusters` (10), `multi_metric_de_gate_threshold` (25). Composite weights default to `{silhouette: 0.2, stability: 0.2, cluster_coherence: 0.3, splitting_gain: 0.2, kb_annotatable_rate: 0.1}` (configurable via `CFG.clustering.multi_metric_weights`).
-
-
-**snRNA-seq detection & QC adaptation.** The pipeline auto-detects single-nucleus RNA-seq (snRNA-seq) vs single-cell RNA-seq (scRNA-seq) from NCBI GEO metadata keywords:
-
-- `core/preprocess/superseries_detector.py._classify_assay_type(title, summary)` — pure function that matches snRNA-seq/scRNA-seq keywords in GEO title+summary text. Returns `"snRNAseq"`, `"scRNAseq"`, `"ambiguous"`, or `None`.
-- Integrated into `detect_superseries()` returned dict as `'assay_type'` key.
-- `dataset.yaml` `assay_type` field on both `DatasetMeta` and `ModalityEntry`.
-- Preprocessor auto-detects assay_type when `--query-ncbi` is passed. Multiome modality defaults to `snRNAseq` (10x Multiome protocol is nucleus-based).
-- `core/utils.py.resolve_config()` auto-fills `Config.is_nuclei` from `dataset.yaml` (searches project_dir then data_dir). Respects explicit user config (reads `qc.is_nuclei` from YAML config).
-
-**Config fields for snRNA-seq:**
-- `Config.is_nuclei: bool = False` — set to True for snRNA-seq (delegated to `RNAConfig` via `__getattr__`)
-- `Config.max_pct_mito_nuclei: float = 3.0` — mitochondrial cap for snRNA-seq (vs `max_pct_mito=20.0` for scRNA-seq)
-
-**QC adaptation in `rna/steps/02_qc.py`:**
-- `_mad_thresholds()`: uses MAD multiplier 1.5× (vs 3.0×) and caps at `max_pct_mito_nuclei` when `is_nuclei=True`
-- `_hard_thresholds()`: uses `max_pct_mito_nuclei` instead of `max_pct_mito` when `is_nuclei=True`
-- `compute_qc_metrics()` and `_plot_qc_diagnostics()`: log/annotate snRNA-seq mode with interpretive message (mito reads = cytoplasmic residue, not cell stress)
-
-In snRNA-seq, mitochondrial reads indicate incomplete cytoplasmic stripping during nuclei isolation — NOT cell death. Thresholds are much stricter: machine-assisted <0.5%, gradient 1-3%, column 2-4%. The pipeline defaults to 3.0% (conservative). Three-layer priority: config.yaml explicit > dataset.yaml auto-fill > NCBI auto-detect.
-
-**UMAP visualization sweep.** AFTER the best (n_neighbors, resolution) is selected, the pipeline optionally sweeps `min_dist` × `spread` to find the most spread-out UMAP layout. Unlike the cluster-parameter grid, this reuses the same KNN graph (cheap — ~3 UMAP runs × ~2 sec each). Controlled by:
-- `CFG.umap_selection_method`:
-  - `"convex_hull"` (default): auto-sweep `param_grid_min_dist` × `param_grid_spread`, pick largest convex-hull area.
-  - `None`: manual — use `CFG.umap_min_dist` / `CFG.umap_spread` directly.
-- `CFG.param_grid_min_dist` (default `[0.1, 0.3, 0.5]`): values to sweep in `"convex_hull"` mode.
-- `CFG.param_grid_spread` (default `[1.0]`): values to sweep in `"convex_hull"` mode.
-
-Does NOT affect clustering — only UMAP coordinates in the checkpoint. Outputs: `umap_min_dist_sweep_summary.csv` (ranked by convex-hull area) and `umap_min_dist_comparison.png` (multi-panel comparison). Implementation in `rna/utils/cluster_evaluation.py` (`select_best_umap_params()`), invoked from the RNA and Spatial Step 04 scripts.
-
-### RNA Pipeline Steps
-
-| Step | Script | Key Output |
-|------|--------|-----------|
-|| 00 | `00_load.py` | 00_raw.h5ad (可选细胞过滤 + 内联降采样) |
-| 01 | `01_doublet.py` | 01_doublet.h5ad |
-| 02 | `02_qc.py` | 02_qc.h5ad |
-| 03 | `03_integrate.py` | 03_integrated.h5ad |
-| 04 | `04_cluster_umap.py` | 04_clustered.h5ad | 使用 `cluster_selection_method` 选择最优参数 |
-| 05 | `05_annotate_major.py` | 05_annotated.h5ad |
-| 06 | `06_subcluster.py` | (requires --cell-type) |
-| 07 | `07_markers_de.py` | marker CSVs |
-| 08 | `08_trajectory.py` | trajectory h5ad |
-| 09 | `09_enrichment.py` | enrichment CSVs |
-| 10 | `10_exploratory.py` | summary figures + CSVs |
-| 11 | `11_grn.py` | 11_grn.h5ad + TF activity heatmap + TF target edge tables |
-| 12 | `12_cell_interaction.py` | CCI tables + figures (LIANA+ permutation) |
-
-### ATAC Pipeline Steps
-
-| Step | Script | Key Output |
-|------|--------|-----------|
-| 00 | `00_load.py` | 00_raw.h5ad |
-| 01 | `01_qc.py` | 01_filtered.h5ad |
-| 02 | `02_process.py` | 02_processed.h5ad |
-| 03 | `03_cluster.py` | 03_clustered.h5ad |
-| 04 | `04_annotate.py` | 04_annotated.h5ad |
-| 05 | `05_marker_peaks.py` | marker_peaks.csv |
-| 06 | `06_motif.py` | motif_results.csv |
-| 07 | `07_trajectory.py` | 07_trajectory.h5ad |
-| 08 | `08_enrichment.py` | enrichment CSVs |
-| 09 | `09_integrate.py` | 09_integrated.h5ad (RNA+ATAC) |
-
-### Spatial Pipeline Steps
-
-| Step | Script | Key Output |
-|------|--------|-----------|
-| 00 | `00_load.py` | 00_raw.h5ad (coords + image) |
-| 01 | `01_qc.py` | 01_qc.h5ad |
-| 02 | `02_image.py` | 02_image.h5ad |
-| 03 | `03_normalize.py` | 03_processed.h5ad |
-| 04 | `04_cluster.py` | 04_clustered.h5ad |
-| 05 | `05_annotate.py` | 05_annotated.h5ad |
-| 06 | `06_spatial_de.py` | marker & SVG CSVs |
-| 07 | `07_trajectory.py` | 07_trajectory.h5ad |
-| 08 | `08_enrichment.py` | enrichment CSVs |
-| 09 | `09_exploratory.py` | spatial figures + CSVs |
-| 10 | `10_cell_interaction.py` | spatial CCI tables + figures (LIANA+ bivariate) |
-
-### Import Path Hack
-
-Because this repo has no `pyproject.toml` or `setup.py`, step scripts cannot do `from fuxi.core import ...`. Instead every step prepends the repo root to `sys.path`:
-```python
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
-```
-This means `from core.utils import ...` works from any step script. The `annotation_standardizer.py` also patches `sys.path` to avoid name collisions with a local `utils/` package.
-
-### Modifying Scripts for a Dataset
-
-Core step scripts (`rna/steps/*.py`, `atac/steps/*.py`, `spatial/steps/*.py`) **must not be edited in place**. When a dataset exposes a bug or requires a one-off adaptation:
-
-1. Copy the script into the project directory: `projects/{modality}/{GSE_ID}/`
-2. Modify the copy — the original under `rna/steps/`, `atac/steps/`, or `spatial/steps/` stays untouched
-3. Run the copy directly instead of through `run_pipeline.py`
-4. After the run completes, write a note to `notes/suggestions/{modality}_{GSE_ID}.md` describing:
-   - What broke and why
-   - What the workaround was
-   - Whether the root cause should be fixed in the core script
-
-This keeps core scripts reference-stable and builds a searchable record of edge cases that inform future pipeline improvements. See the existing `notes/suggestions/` directory for examples.
+| Modality | Steps |
+|----------|-------|
+| RNA | 00_load → 01_doublet → 02_qc → 03_integrate → 04_cluster_umap → 05_annotate_major → 06_subcluster → 07_markers_de → 08_trajectory → 09_enrichment → 10_exploratory → 11_grn → 12_cell_interaction |
+| ATAC | 00_load → 01_qc → 02_process → 03_cluster → 04_annotate → 05_marker_peaks → 06_motif → 07_trajectory → 08_enrichment → 09_integrate |
+| Spatial | 00_load → 01_qc → 02_image → 03_normalize → 04_cluster → 05_annotate → 06_spatial_de → 07_trajectory → 08_enrichment → 09_exploratory → 10_cell_interaction |
 
 ### 更新文档
 
-如果用户明确要求"更新文档"，先总结本次会话已完成的工作，然后通读 `CLAUDE.md`、`README.md`、`docs/`（含 tutorial）、`.claude/SKILL.md`，评估哪些内容需要更新。按照原有规范格式，删除/修改过时信息，补充新内容。**给出改动摘要让用户确认后再写入。**
+如果用户明确要求"更新文档"，先总结本次会话已完成的工作，然后通读 `CLAUDE.md`、`README.md`、`docs/`（含 tutorial），评估哪些内容需要更新。按照原有规范格式，删除/修改过时信息，补充新内容。**给出改动摘要让用户确认后再写入。**

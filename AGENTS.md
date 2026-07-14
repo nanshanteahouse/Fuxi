@@ -1,103 +1,78 @@
-# Fuxi (伏羲) — Agent Quick Reference
+# Fuxi (伏羲)
 
-> Full knowledge base: [CLAUDE.md](CLAUDE.md)
+Unified single-cell multi-omics pipeline — scRNA-seq (Scanpy), scATAC-seq (Snapatac2), Spatial (Squidpy). Python 3.14+ on WSL2.
 
-## One-liners
+## Development conventions
+
+**Commit message.** Use [Conventional Commits](https://www.conventionalcommits.org/):
+```
+<type>(<scope>): <subject>
+```
+Types: `feat` / `fix` / `docs` / `refactor` / `perf` / `test` / `chore`
+Scope: semantic name (e.g. `enrichment`), NOT step number (e.g. `09_enrichment`)
+Subject: imperative, lowercase, ≤72 chars. Body explains *why*, not *what*.
+
+**Config access.** Use nested topic paths: `CFG.hvg.n_top_genes`, `CFG.clustering.cluster_selection_method`. `.py` configs are rejected — use `.yaml`.
+
+**Core scripts.** Step scripts under `rna/steps/`, `atac/steps/`, `spatial/steps/` must not be edited in place. Copy to `projects/{modality}/{GSE_ID}/` first.
+
+## Running methods
+
+### Running modes
+
+Pipeline supports two modes, chosen by the Agent based on user preference:
+
+**Auto mode** — Run full step range with all default settings. Suitable for familiar datasets or batch reproduction:
+```bash
+python core/run_pipeline.py --modality rna --resume --config <config>.yaml
+```
+
+**Interactive mode** — Agent runs `--step N` one at a time. After each step, present results to the user, ask questions, offer options, and wait for confirmation before proceeding. Suitable for exploratory analysis or new datasets.
+
 
 ```bash
+# List steps
 python core/run_pipeline.py --modality rna --list
 python core/run_pipeline.py --modality atac --list
+
+# Run full pipeline / single step / resume
 python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config_<GSE_ID>.yaml
+python core/run_pipeline.py --modality atac --step 0 --config ...
+python core/run_pipeline.py --modality rna --resume --config ...
+
+# Paper tools
 python core/paper_insights.py --pmid <PMID>       # AI paper interpretation
 python core/paper_registry.py --build              # build paper→GSE→config index
 python core/paper_registry.py --verify             # check registry consistency
-python core/run_reproduce.py --all --dry-run       # preview reproducibility for all papers
-python core/run_reproduce.py <paper_dir>           # reproduce a single paper's pipeline
+python core/run_reproduce.py --all --dry-run       # preview reproducibility
+python core/run_reproduce.py <paper_dir>           # reproduce a single paper
 ```
 
-> Paper interpretation guide: [docs/paper_insights_zh-CN.md](docs/paper_insights_zh-CN.md)
-
-
-## Key paths
+### Key paths
 
 | Module | Location |
 |--------|----------|
-| Shared core | `core/` (config, utils, ai_caller, ai_prompts, run_pipeline, preprocess) |
-| RNA steps | `rna/steps/` (12 scripts) |
-| ATAC steps | `atac/steps/` (10 scripts) |
-| Paper insights | `core/paper_insights.py`, `core/paper_converter.py` |
-| Paper registry | `core/paper_registry.py`, `core/paper_registry_models.py` |
-| Reproduce mode | `core/run_reproduce.py` |
-| Paper insights docs | `docs/paper_insights_zh-CN.md` |
+| RNA steps | `rna/steps/` (13 steps: 00_load → 12_cell_interaction) |
+| ATAC steps | `atac/steps/` (10 steps: 00_load → 09_integrate) |
+| Spatial steps | `spatial/steps/` (11 steps: 00_load → 10_cell_interaction) |
+| Shared core | `core/` (config, utils, ai_caller, preprocess) |
+| Paper tools | `core/paper_insights.py`, `core/paper_registry.py`, `core/run_reproduce.py` |
 | Project configs | `projects/{modality}/{GSE_ID}/config_*.yaml` |
-| Paper index | `projects/papers/paper_index.html`, `projects/papers/registry.yaml` |
-## Paper research workflow
+| Config templates | `templates/config_templates/*.yaml` |
 
-When running a pipeline or investigating a GSE dataset, always consult
-local paper materials first:
+### Paper workflow
 
-1. **Check registry** — find papers linked to a GSE:
-   `python core/paper_registry.py --verify` for overview, or grep
-   `projects/papers/registry.yaml` for `gse_id:. <GSE_ID>`.
-2. **Read local insights** — `projects/papers/<paper_dir>/insights.yaml`
-   contains AI-extracted metadata: species, tissue, modalities,
-   experimental design, data access, key findings.
-3. **Optional cross-validate with NCBI** — if local data seems incomplete,
-   `python core/paper_insights.py --pmid <PMID>` fetches PMC full-text
-   XML for fresh AI interpretation.
-
-   > Note: 41 retina papers are already indexed in the registry with
-   > verified geo_ids mapped to 60 GSE datasets (sourced from
-   > `FUXI_DATA_ROOT/dataset_audit.md`). Most papers have PMC XML cached
-   > in their directories; only 3 required PDF fallback.
+1. **Check registry** — `python core/paper_registry.py --verify` or grep `projects/papers/registry.yaml`
+2. **Read insights** — `projects/papers/<paper_dir>/insights.yaml`
+3. **Cross-validate** — `python core/paper_insights.py --pmid <PMID>`
 
 
-## Critical conventions
+### Critical conventions
 
-- Use `.venv/bin/python` for all Python commands unless explicitly told otherwise
-- Always source `.env` before running pipeline scripts: `set -a && source .env && set +a`
-- Steps run as **subprocesses** via `run_pipeline.py` — never imported directly
-- Every step script must add repo root to `sys.path`: `sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))`
-- Config loaded dynamically: `CFG = resolve_config(args.config)` — resolves `.yaml` files via Pydantic v2
-- `data_root()` requires `FUXI_DATA_ROOT` env var (no hardcoded defaults)
+- Use `.venv/bin/python` for all Python commands
+- Source `.env` first: `set -a && source .env && set +a`
+- Steps run as **subprocesses** — never import step scripts directly
+- Every step must prepend repo root to `sys.path`
+- Config: `.yaml` + `resolve_config()` → Pydantic v2; `.py` rejected
+- `data_root()` requires `FUXI_DATA_ROOT` env var
 - Import pattern: `from core.utils import ...`, `from core.ai_caller import ...`
-- `CFG.cluster_selection_method` defaults to `"multi_metric"` (RNA) or `"pareto_elbow"` (ATAC, Spatial). Multi-metric is RNA-only — ATAC/Spatial enrichment not yet implemented.
-
-## Commit message discipline
-
-使用 [Conventional Commits](https://www.conventionalcommits.org/) 规范：
-
-```
-<type>(<scope>): <subject>
-
-<body>
-
-<footer>
-```
-
-常用 `<type>`：`feat` / `fix` / `docs` / `refactor` / `perf` / `test` / `chore` / `style` / `ci`
-`<scope>` 选填，用语义名（如 `enrichment`、`config`），**不要** 用流水线序号（如 `09_enrichment`）
-subject 用祈使语气、首字母小写、不超过 72 字符
-body 回答「为什么」而非「做了什么」
-
-历史遗留的 `Cx`/`Mx`/`Nx`/`mx`/`Sx` 前缀不再用于新 commit；
-若已有声明未实现，在该 commit 的 `git notes` 中标记 `UNFIXED`
-
-## Code organization
-
-**拆分/合并原则**：按代码逻辑与调度边界决策，不按硬性行数指标强行拆。内容高度内聚、单一职责的文件，即使较长也优于强行拆散后相互依赖的碎片。一组总是一起 import 的微型文件可考虑合并。
-
-**按文件类型的行数参考上限**（软性指引，不是硬规则）：
-
-| 文件类型 | 参考上限 | 说明 |
-|---------|---------|------|
-| 核心模块 (`core/*.py`) | 500 LOC | 跨模态共享逻辑，允许较大但应保持内聚 |
-| 步骤脚本 (`steps/*.py`) | 500 LOC | Pipeline 顺序逻辑，天然长，不鼓励拆分 |
-| 工具函数集 (`*_utils/*.py`) | 400 LOC | 纯函数集合，按主题分组；超出时拆分独立模块 |
-| 测试文件 | 不限 | 覆盖率优先，行数不是质量指标 |
-| KB 知识库 (`sources/*.py`) | 不限 | 数据驱动，无逻辑复杂度 |
-| Config 文件 | 不限 | 字段声明集中管理更易维护 |
-
-> **算法模块注意**：如果文件路径虽含 `utils` 但内容是完整的算法引擎（如 `rna/utils/marker_scoring.py`、`rna/utils/evidence_fusion.py`），应适用核心模块上限（500 LOC）而非工具函数上限。分类看**职责**，不只看路径。
-
-**数值依据**：基于 194 个 Python 文件（~38,921 LOC）的实际规模分布（中位数 161，P75=284，P90=431）。各类型上限落在对应 P90 附近或略上方，保留合理缓冲，避免对正常代码产生持续噪声。
