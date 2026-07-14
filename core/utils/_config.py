@@ -53,11 +53,12 @@ def resolve_config(config_path: Optional[str] = None) -> Config:
     with open(config_path) as f:
         data = yaml.safe_load(f)
 
-    cfg = Config.model_validate(data)
+    # Auto-detect project_dir from config file location BEFORE validation
+    # (must precede model_validate so model_post_init sees correct project_dir)
+    if not data.get('project_dir'):
+        data['project_dir'] = os.path.dirname(config_path)
 
-    # Auto-detect project_dir from config file location
-    if not cfg.project_dir:
-        cfg.project_dir = os.path.dirname(config_path)
+    cfg = Config.model_validate(data)
 
     # ── Resolve n_jobs ──
     if cfg.execution.n_jobs == 0:
