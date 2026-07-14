@@ -13,6 +13,7 @@ downsample.py — 细胞降采样核心逻辑 (config-driven + 手动 CLI 共同
 import numpy as np
 import scanpy as sc
 import scipy.sparse as sp
+import pandas as pd
 
 
 def _check_sample_col(adata: sc.AnnData, sample_key: str, log) -> str | None:
@@ -151,8 +152,8 @@ def filter_by_config(adata: sc.AnnData, cfg, logger) -> sc.AnnData:
     Returns:
         过滤后的 AnnData（如果没有过滤条件则返回原始对象）。
     """
-    sample_keep = getattr(cfg, 'sample_keep', None) or []
-    obs_filter = getattr(cfg, 'obs_filter', None) or ''
+    sample_keep = getattr(cfg.downsample, 'sample_keep', None) or []
+    obs_filter = getattr(cfg.downsample, 'obs_filter', None) or ''
 
     if not sample_keep and not obs_filter:
         return adata
@@ -164,9 +165,11 @@ def filter_by_config(adata: sc.AnnData, cfg, logger) -> sc.AnnData:
 
     if obs_filter:
         n_before = adata.n_obs
-        adata = adata[adata.obs.query(obs_filter).index].copy()
+        mask = adata.obs.eval(obs_filter)
+        if not isinstance(mask, pd.Series):
+            mask = adata.obs.apply(lambda row: eval(obs_filter, {"__builtins__": {}}, dict(row)), axis=1)
+        adata = adata[mask.values].copy()
         logger.info("obs_filter filter: %d → %d cells", n_before, adata.n_obs)
-
     return adata
 def downsample_by_config(adata: sc.AnnData, cfg, logger) -> sc.AnnData:
     """根据 config 设置对 adata 降采样。作为 pipeline 内联调用入口。
