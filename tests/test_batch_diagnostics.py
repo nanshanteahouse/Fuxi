@@ -53,7 +53,7 @@ def _make_adata(
     X_raw = rng.randn(n_cells, n_genes).astype(np.float32)
     adata = AnnData(
         X=csr_matrix(rng.negative_binomial(2, 0.5, size=(n_cells, n_genes)).astype(np.float32)),
-        obs=pd.DataFrame(obs_dict),
+        obs=pd.DataFrame(obs_dict, index=[f"cell_{i}" for i in range(n_cells)]),
     )
     pca = PCA(n_components=n_pcs, random_state=seed)
     adata.obsm["X_pca"] = pca.fit_transform(X_raw)
@@ -101,6 +101,7 @@ def adata_clean() -> AnnData:
                 ),
                 "n_counts": np.random.poisson(1000, n_cells).astype(float),
             },
+            index=[f"cell_{i}" for i in range(n_cells)],
         ),
     )
 
@@ -129,6 +130,7 @@ def adata_collinear() -> AnnData:
                 "batch": pd.Categorical(labels),
                 "biology": pd.Categorical(labels.copy()),
             },
+            index=[f"cell_{i}" for i in range(100)],
         ),
     )
     pca = PCA(n_components=5, random_state=42)
@@ -289,6 +291,7 @@ def test_single_unique_value_skipped() -> None:
         X=csr_matrix(X_raw.copy()),
         obs=pd.DataFrame(
             {"constant": pd.Categorical(["A"] * n_cells)},
+            index=[f"cell_{i}" for i in range(n_cells)],
         ),
     )
     pca = PCA(n_components=5, random_state=42)
@@ -313,7 +316,7 @@ def test_permutation_test_ambiguous() -> None:
 
     adata = AnnData(
         X=csr_matrix(X),
-        obs=pd.DataFrame({"moderate": pd.Categorical(labels)}),
+        obs=pd.DataFrame({"moderate": pd.Categorical(labels)}, index=[f"cell_{i}" for i in range(n_cells)]),
     )
     pca = PCA(n_components=5, random_state=123)
     adata.obsm["X_pca"] = pca.fit_transform(X)
@@ -367,6 +370,7 @@ def test_small_ncells_fallback_purity() -> None:
         X=csr_matrix(X_raw.copy()),
         obs=pd.DataFrame(
             {"batch": pd.Categorical(["A", "B"])},
+            index=[f"cell_{i}" for i in range(2)],
         ),
     )
     pca = PCA(n_components=2, random_state=42)
