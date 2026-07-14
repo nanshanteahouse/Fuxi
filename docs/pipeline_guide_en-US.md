@@ -106,13 +106,13 @@ Fuxi — RNA-seq pipeline step list
 ### 3.2 Run the full pipeline in one command
 
 ```bash
-# scRNA-seq full workflow (12 steps, from scratch to GRN)
+# scRNA-seq full workflow (13 steps, from scratch to cell-cell interaction)
 python core/run_pipeline.py --modality rna --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 
 # scATAC-seq full workflow (10 steps)
 python core/run_pipeline.py --modality atac --config projects/atac/{dataset_id}/config_{dataset_id}.yaml
 
-# Spatial transcriptomics full workflow (10 steps)
+# Spatial transcriptomics full workflow (11 steps)
 python core/run_pipeline.py --modality spatial --config projects/spatial/{dataset_id}/config_{dataset_id}.yaml
 ```
 
@@ -165,13 +165,14 @@ python core/run_pipeline.py --modality rna --steps 0,2,4,11 --config projects/rn
 
 ## 4. scRNA-seq pipeline in detail
 
-The scRNA-seq pipeline has 12 steps (numbered 00–11), with data flowing sequentially:
+The scRNA-seq pipeline has 13 steps (numbered 00–12), with data flowing sequentially:
 
 ```
 Raw data → 00_load → 01_doublet → 02_qc
          → 03_integrate → 04_cluster → 05_annotate
          → 06_subcluster → 07_markers → 08_trajectory
          → 09_enrichment → 10_exploratory → 11_grn
+         → 12_cell_interaction
 ```
 
 ### Step 00: Data loading
@@ -303,7 +304,7 @@ If neither KB nor AI is available, the pipeline falls back to classic marker gen
 Performs fine-grained subtype analysis on a specific cell type (e.g., "Müller Glia"):
 
 ```bash
-python core/run_pipeline.py --modality rna --step 7 \
+python core/run_pipeline.py --modality rna --step 6 \
     --cell-type "Müller Glia" \
     --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 ```
@@ -447,7 +448,7 @@ CFG.cci_adjacency_types = []      # Adjacency type whitelist (empty = all types 
 
 ---
 
-### Spatial transcriptomics CCI (Spatial Step 10)
+### Appendix: Spatial transcriptomics CCI (Spatial Step 10)
 
 The spatial pipeline additionally provides **spatially-constrained LR co-expression analysis** (`liana.mt.bivariate`) in Step 10:
 
@@ -482,7 +483,7 @@ Since spatial CCI already enforces physical proximity via `cci_spatial_distance`
 
 ## 5. scATAC-seq pipeline in detail
 
-The scATAC-seq pipeline has 10 steps (numbered 00–09):
+The scATAC-seq pipeline has 10 steps (numbered 00–09), with data flowing sequentially:
 
 ```
 Raw data → 00_load → 01_qc → 02_process → 03_cluster
@@ -560,12 +561,13 @@ If you have paired multiome data (RNA-seq + ATAC-seq from the same cells):
 
 ## 6. Spatial transcriptomics pipeline in detail
 
-The spatial transcriptomics pipeline has 10 steps (numbered 00-09), designed for 10X Visium data (and extensible to other platforms):
+The spatial transcriptomics pipeline has 11 steps (numbered 00-10), designed for 10X Visium data (and extensible to other platforms):
 
 ```
 Raw data → 00_load → 01_qc → 02_image → 03_normalize
          → 04_cluster → 05_annotate → 06_spatial_de
          → 07_trajectory → 08_enrichment → 09_exploratory
+         → 10_cell_interaction
 ```
 
 For a detailed pipeline report including real-world issues and fixes, see `notes/suggestions/spatial_<GSE_ID>.md`.
@@ -747,6 +749,8 @@ results/
 ├── h5ad/                          # Intermediate checkpoint files
 │   ├── 00_raw.h5ad                # Raw data
 │   ├── 01_doublet.h5ad            # After doublet detection
+│   ├── 00_raw.h5ad                # Raw data
+│   ├── 01_doublet.h5ad            # After doublet detection
 │   ├── 02_qc.h5ad                 # After QC filtering
 │   ├── 03_integrated.h5ad         # After batch integration
 │   ├── 04_clustered.h5ad          # After clustering + UMAP
@@ -783,8 +787,11 @@ results/
 │   ├── 10_exploratory/            # Exploratory analysis
 │   │   ├── composition_by_stage_*.png
 │   │   └── _06_marker_dotplot.pdf
-│   └── 11_grn/                    # GRN analysis
-│       └── tf_activity_heatmap.png
+│   ├── 11_grn/                    # GRN analysis
+│   │   └── tf_activity_heatmap.png
+│   └── 12_cell_interaction/       # Cell-cell interaction
+│       ├── cci_heatmap.png
+│       └── cci_dotplot.png
 │
 └── tables/                        # Data tables
     ├── marker_genes_per_group.csv # Marker genes
@@ -805,27 +812,30 @@ results/
     │   └── ai_interpretation_summary.txt
     ├── 10_exploratory/            # Exploratory results
     │   └── composition_by_stage_*.csv
-    └── 11_grn/                    # GRN results
-        ├── tf_activity_per_cell_type.csv
-        ├── tf_activity_pvals.csv
-        ├── tf_target_edges.csv
-        └── tf_target_counts.csv
+    ├── 11_grn/                    # GRN results
+    │   ├── tf_activity_per_cell_type.csv
+    │   ├── tf_activity_pvals.csv
+    │   ├── tf_target_edges.csv
+    │   └── tf_target_counts.csv
+    └── 12_cell_interaction/       # Cell-cell interaction (CCI)
+        ├── cci_interactions.csv
+        └── cci_top_interactions.csv
 ```
 
-> 💡 The starred ★ `05_annotated.h5ad` is the most important output — it contains the final annotation labels for every cell and serves as the starting point for most downstream analyses (DE, trajectory, enrichment).
+> 💡 The starred ★ `05_annotated.h5ad` (cell annotation) and `11_grn.h5ad` (GRN) are the most important outputs — the former contains final annotation labels for every cell and serves as the starting point for DE, trajectory, and enrichment analyses; the latter contains pseudobulk-aggregated TF activity matrices.
 
 ---
 
 ## 8. Practical tips
 
-### 7.1 Check pipeline progress
+### 8.1 Check pipeline progress
 
 ```bash
 # List all steps with their checkpoint files
 python core/run_pipeline.py --modality rna --list --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 ```
 
-### 7.2 Resume from checkpoint
+### 8.2 Resume from checkpoint
 
 ```bash
 # Auto-detect the first incomplete step and continue from there
@@ -834,7 +844,7 @@ python core/run_pipeline.py --modality rna --resume --config projects/rna/{datas
 
 The pipeline scans checkpoint files and skips completed steps. Whether the interruption was due to network issues, memory exhaustion, or manual termination, the same command resumes correctly.
 
-### 7.3 Re-run specific steps only
+### 8.3 Re-run specific steps only
 
 If you're not satisfied with a step's results and want to adjust parameters:
 
@@ -843,10 +853,10 @@ If you're not satisfied with a step's results and want to adjust parameters:
 python core/run_pipeline.py --modality rna --step 5 --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 
 # Re-run from annotation onward
-python core/run_pipeline.py --modality rna --steps 6-11 --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
+python core/run_pipeline.py --modality rna --steps 6-12 --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 ```
 
-### 7.4 Skip time-consuming steps
+### 8.4 Skip time-consuming steps
 
 If you only care about certain analyses:
 
@@ -855,7 +865,7 @@ If you only care about certain analyses:
 python core/run_pipeline.py --modality rna --steps 0-6 --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 ```
 
-### 7.5 Clean up intermediate files
+### 8.5 Clean up intermediate files
 
 The pipeline generates multiple intermediate checkpoint files (each h5ad may be hundreds of MB to several GB). If disk space is tight, auto-delete upstream files after each step:
 
@@ -863,7 +873,7 @@ The pipeline generates multiple intermediate checkpoint files (each h5ad may be 
 python core/run_pipeline.py --modality rna --cleanup --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 ```
 
-### 7.6 Subclustering
+### 8.6 Subclustering
 
 Fine-grained subtype analysis on an already-annotated cell type:
 
@@ -875,7 +885,7 @@ python core/run_pipeline.py --modality rna --step 7 \
 
 You can run this for multiple cell types; results are automatically merged back into the main annotation file.
 
-### 7.7 Multiome data workflow
+### 8.7 Multiome data workflow
 
 ```bash
 # Step 1: Run RNA and ATAC separately
@@ -887,7 +897,7 @@ python core/run_pipeline.py --modality atac --config projects/atac/{dataset_id}/
 python core/run_pipeline.py --modality atac --step 9 --config projects/atac/{dataset_id}/config_{dataset_id}.yaml
 ```
 
-### 7.8 Cross-modality scRNA → spatial marker transfer
+### 8.8 Cross-modality scRNA → spatial marker transfer
 
 If you have scRNA-seq data from matched samples, you can transfer per-cell-type marker genes into spatial annotation:
 
@@ -910,7 +920,7 @@ The `--list` command will show whether scRNA marker auto-discovery succeeded.
 
 The configuration file (`config_{dataset_id}.yaml`) is a Python script that controls all pipeline behavior by mutating the global `CFG` object. Below are the most commonly adjusted settings:
 
-### 8.1 Data input
+### 9.1 Data input
 
 ```python
 # Data format (must match your actual file format)
@@ -927,7 +937,7 @@ CFG.barcodes_file = 'barcodes.tsv.gz'
 CFG.features_file = 'features.tsv.gz'
 ```
 
-### 8.2 Sample & stage mapping
+### 9.2 Sample & stage mapping
 
 ```python
 # Barcode suffix → sample name
@@ -944,7 +954,7 @@ CFG.stage_map = {
 CFG.stage_order = ['E14.5', 'P0']  # Temporal order (used for time-series analysis)
 ```
 
-### 8.3 Annotation (core)
+### 9.3 Annotation (core)
 
 ```python
 # Option 1: Use a knowledge base (if your tissue has KB support)
@@ -965,7 +975,7 @@ CFG.ai.model = "deepseek-chat"              # Model name
 CFG.ai.api_base = "https://api.deepseek.com/v1"
 ```
 
-### 8.4 Quality control
+### 9.4 Quality control
 
 ```python
 CFG.expression_type = "raw_counts"     # raw_counts | TPM | FPKM | CPM | log1p_counts
@@ -986,7 +996,7 @@ CFG.qc_ncount_max_mad = 5.0            # Wider MAD multiplier for nCount upper b
 # CFG.min_mad_upper_genes_nuclei = 3000 # n_genes MAD upper safe floor (nuclei)
 ```
 
-### 8.5 Batch correction
+### 9.5 Batch correction
 
 ```python
 CFG.use_harmony = True              # Enable Harmony batch correction
@@ -996,7 +1006,7 @@ CFG.score_cell_cycle = False        # Optional: regress S/G2M cell cycle scores 
 # CFG.harmony_max_iter = 10          # Harmony max iterations
 ```
 
-### 8.6 Clustering parameters
+### 9.6 Clustering parameters
 
 ```python
 CFG.n_neighbors_grid = [15, 20, 30]              # UMAP neighbor count candidates
@@ -1013,7 +1023,7 @@ CFG.umap_min_dist = 0.3                              # fixed value in manual mod
 CFG.umap_spread = 1.0
 ```
 
-### 8.7 Species & genome
+### 9.7 Species & genome
 
 ```python
 CFG.species = 'human'    # Species (affects MT gene pattern, enrichment database, etc.)
@@ -1021,7 +1031,7 @@ CFG.tissue = 'retina'    # Tissue name
 CFG.genome = 'hg38'      # Reference genome (required for ATAC pipeline)
 ```
 
-### 8.8 Spatial transcriptomics
+### 9.8 Spatial transcriptomics
 
 ```python
 # Platform and input

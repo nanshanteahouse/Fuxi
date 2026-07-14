@@ -106,13 +106,13 @@ Fuxi — RNA-seq pipeline step list
 ### 3.2 一键运行全流程
 
 ```bash
-# scRNA-seq 全流程（12 步，从数据加载到 GRN 分析）
+# scRNA-seq 全流程（13 步，从数据加载到细胞互作分析）
 python core/run_pipeline.py --modality rna --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 
 # scATAC-seq 全流程（10 步）
 python core/run_pipeline.py --modality atac --config projects/atac/{数据集ID}/config_{数据集ID}.yaml
 
-# 空间转录组全流程（10 步）
+# 空间转录组全流程（11 步）
 python core/run_pipeline.py --modality spatial --config projects/spatial/{数据集ID}/config_{数据集ID}.yaml
 ```
 
@@ -165,13 +165,14 @@ python core/run_pipeline.py --modality rna --steps 0,2,4 --config projects/rna/{
 
 ## 4. scRNA-seq 管线详解
 
-scRNA-seq 管线包含 12 个步骤（编号 00-11），数据依次流转：
+scRNA-seq 管线包含 13 个步骤（编号 00-12），数据依次流转：
 
 ```
 原始数据 → 00_load → 01_doublet → 02_qc
          → 03_integrate → 04_cluster → 05_annotate
          → 06_subcluster → 07_markers → 08_trajectory
          → 09_enrichment → 10_exploratory → 11_grn
+         → 12_cell_interaction
 ```
 
 ### Step 00：数据加载
@@ -303,7 +304,7 @@ CFG.ai.ai_annotation = True
 对某个特定细胞类型（如"Müller Glia"）进行精细亚型分析：
 
 ```bash
-python core/run_pipeline.py --modality rna --step 7 \
+python core/run_pipeline.py --modality rna --step 6 \
     --cell-type "Müller Glia" \
     --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 ```
@@ -447,7 +448,7 @@ CFG.cci_adjacency_types = []      # 连接类型白名单（空 = 全部放行�
 
 ---
 
-### 空间转录组 CCI（Spatial Step 10）
+### 附：空间转录组 CCI 详解（Spatial Step 10）
 
 空间管线在 Step 10 中额外提供了**空间约束的配体-受体共表达分析**（`liana.mt.bivariate`）：
 
@@ -482,7 +483,7 @@ CFG.cci_adjacency_types = []      # 连接类型白名单
 
 ## 5. scATAC-seq 管线详解
 
-scATAC-seq 管线包含 10 个步骤（编号 00-09）：
+scATAC-seq 管线包含 10 个步骤（编号 00-09），数据依次流转：
 
 ```
 原始数据 → 00_load → 01_qc → 02_process → 03_cluster
@@ -560,12 +561,13 @@ scATAC-seq 管线包含 10 个步骤（编号 00-09）：
 
 ## 6. 空间转录组管线详解
 
-空间转录组管线包含 10 个步骤（编号 00-09），针对 10X Visium 数据设计（可扩展至其他平台）：
+空间转录组管线包含 11 个步骤（编号 00-10），针对 10X Visium 数据设计（可扩展至其他平台）：
 
 ```
 原始数据 → 00_load → 01_qc → 02_image → 03_normalize
          → 04_cluster → 05_annotate → 06_spatial_de
          → 07_trajectory → 08_enrichment → 09_exploratory
+         → 10_cell_interaction
 ```
 
 详细的空间管线运行报告（含遇到的实际问题与修复方法），见 `notes/suggestions/spatial_<GSE_ID>.md`。
@@ -737,7 +739,6 @@ CFG.rna_marker_logfc_min = 0.0           # 最小 logfoldchanges
 ```
 
 ---
-
 ## 7. 结果文件说明
 
 管线运行完毕后，所有结果统一存放在数据集的 `results/` 目录下，按类型分为三个子目录：
@@ -783,8 +784,11 @@ results/
 │   ├── 10_exploratory/            # 探索性分析
 │   │   ├── composition_by_stage_*.png
 │   │   └── _06_marker_dotplot.pdf
-│   └── 11_grn/                    # GRN 调控网络
-│       └── tf_activity_heatmap.png
+│   ├── 11_grn/                    # GRN 调控网络
+│   │   └── tf_activity_heatmap.png
+│   └── 12_cell_interaction/       # 细胞互作分析
+│       ├── cci_heatmap.png
+│       └── cci_dotplot.png
 │
 └── tables/                        # 数据表格
     ├── marker_genes_per_group.csv # 标记基因
@@ -805,27 +809,30 @@ results/
     │   └── ai_interpretation_summary.txt
     ├── 10_exploratory/            # 探索性分析
     │   └── composition_by_stage_*.csv
-    └── 11_grn/                    # GRN 调控网络
-        ├── tf_activity_per_cell_type.csv
-        ├── tf_activity_pvals.csv
-        ├── tf_target_edges.csv
-        └── tf_target_counts.csv
+    ├── 11_grn/                    # GRN 调控网络
+    │   ├── tf_activity_per_cell_type.csv
+    │   ├── tf_activity_pvals.csv
+    │   ├── tf_target_edges.csv
+    │   └── tf_target_counts.csv
+    └── 12_cell_interaction/       # 细胞互作分析 (CCI)
+        ├── cci_interactions.csv
+        └── cci_top_interactions.csv
 ```
 
-> 💡 加 ★ 的 `05_annotated.h5ad` 是最重要的输出文件——它包含每个细胞的最终注释标签，是绝大多数下游分析（差异表达、轨迹、富集）的起点。
+> 💡 加 ★ 的 `05_annotated.h5ad`（细胞注释）和 `11_grn.h5ad`（GRN 调控网络）是最重要的输出文件——前者包含每个细胞的最终注释标签，是差异表达、轨迹、富集等下游分析的起点；后者包含伪细胞聚合后的 TF 活性矩阵。
 
 ---
 
 ## 8. 常用运行技巧
 
-### 7.1 查看管线进度
+### 8.1 查看管线进度
 
 ```bash
 # 列出所有步骤及其对应的检查点文件
 python core/run_pipeline.py --modality rna --list --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 ```
 
-### 7.2 从断点恢复
+### 8.2 从断点恢复
 
 ```bash
 # 自动检测第一个未完成的步骤，从那里继续
@@ -834,7 +841,7 @@ python core/run_pipeline.py --modality rna --resume --config projects/rna/{数�
 
 管线会自动扫描检查点文件，跳过已完成的步骤。无论中断原因是网络问题、内存不足还是手动终止，都可以用同一条命令恢复。
 
-### 7.3 只重跑特定步骤
+### 8.3 只重跑特定步骤
 
 如果你对某一步的结果不满意，调整配置参数后：
 
@@ -843,10 +850,10 @@ python core/run_pipeline.py --modality rna --resume --config projects/rna/{数�
 python core/run_pipeline.py --modality rna --step 5 --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 
 # 重跑后面的所有步骤
-python core/run_pipeline.py --modality rna --steps 6-11 --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
+python core/run_pipeline.py --modality rna --steps 6-12 --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 ```
 
-### 7.4 跳过慢步骤
+### 8.4 跳过慢步骤
 
 如果你只关注部分分析结果：
 
@@ -855,7 +862,7 @@ python core/run_pipeline.py --modality rna --steps 6-11 --config projects/rna/{�
 python core/run_pipeline.py --modality rna --steps 0-6 --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 ```
 
-### 7.5 清理中间文件
+### 8.5 清理中间文件
 
 管线运行过程中会产生多个中间检查点文件（每个 h5ad 可能数百 MB 到数 GB）。如果你磁盘空间有限，可以在每步完成后自动删除上游文件：
 
@@ -863,7 +870,7 @@ python core/run_pipeline.py --modality rna --steps 0-6 --config projects/rna/{�
 python core/run_pipeline.py --modality rna --cleanup --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 ```
 
-### 7.6 子聚类分析
+### 8.6 子聚类分析
 
 对某个已注释的细胞类型进行精细亚型分析：
 
@@ -875,7 +882,7 @@ python core/run_pipeline.py --modality rna --step 7 \
 
 你可以对多个细胞类型分别运行，结果会自动合并回主注释文件。
 
-### 7.7 多组学数据处理
+### 8.7 多组学数据处理
 
 ```bash
 # 第一步：分别跑 RNA 和 ATAC
@@ -887,7 +894,7 @@ python core/run_pipeline.py --modality atac --config projects/atac/{数据集ID}
 python core/run_pipeline.py --modality atac --step 9 --config projects/atac/{数据集ID}/config_{数据集ID}.yaml
 ```
 
-### 7.8 跨组学 scRNA → spatial 标记迁移
+### 8.8 跨组学 scRNA → spatial 标记迁移
 
 如果你有匹配样本的 scRNA-seq 数据，可将每个细胞类型的标记基因迁移到空间注释中：
 
@@ -910,7 +917,7 @@ python core/run_pipeline.py --modality spatial --config projects/spatial/{空间
 
 配置文件（`config_{数据集ID}.yaml`）是一个 Python 脚本，通过修改全局 `CFG` 对象来控制管线的所有行为。以下是最常需要调整的配置项：
 
-### 8.1 数据输入配置
+### 9.1 数据输入配置
 
 ```python
 # 数据格式（必须与你的文件格式匹配）
@@ -927,7 +934,7 @@ CFG.barcodes_file = 'barcodes.tsv.gz'
 CFG.features_file = 'features.tsv.gz'
 ```
 
-### 8.2 样本与阶段映射
+### 9.2 样本与阶段映射
 
 ```python
 # barcode 后缀 → 样本名称
@@ -944,7 +951,7 @@ CFG.stage_map = {
 CFG.stage_order = ['E14.5', 'P0']  # 阶段的时间顺序（用于时序分析）
 ```
 
-### 8.3 注释配置（核心）
+### 9.3 注释配置（核心）
 
 ```python
 # 方式一：使用知识库（如果你的组织有 KB 支持）
@@ -965,7 +972,7 @@ CFG.ai.model = "deepseek-chat"              # 模型名称
 CFG.ai.api_base = "https://api.deepseek.com/v1"
 ```
 
-### 8.4 质量控制
+### 9.4 质量控制
 
 ```python
 CFG.expression_type = "raw_counts"     # raw_counts | TPM | FPKM | CPM | log1p_counts
@@ -986,7 +993,7 @@ CFG.qc_ncount_max_mad = 5.0            # nCount 上限的 MAD 倍数
 # CFG.min_mad_upper_genes_nuclei = 3000 # n_genes MAD 上限安全地板（核）
 ```
 
-### 8.5 批次校正
+### 9.5 批次校正
 
 ```python
 CFG.use_harmony = True              # 启用 Harmony 批次校正
@@ -996,7 +1003,7 @@ CFG.score_cell_cycle = False        # 可选: 回归 S/G2M 细胞周期分数
 # CFG.harmony_max_iter = 10          # Harmony 最大迭代次数
 ```
 
-### 8.6 聚类参数
+### 9.6 聚类参数
 
 ```python
 CFG.n_neighbors_grid = [15, 20, 30]        # UMAP 邻居数候选值
@@ -1013,7 +1020,7 @@ CFG.umap_min_dist = 0.3                    # 手动模式下的固定值
 CFG.umap_spread = 1.0
 ```
 
-### 8.7 物种与基因组
+### 9.7 物种与基因组
 
 ```python
 CFG.species = 'human'    # 物种（影响线粒体基因模式、富集分析数据库等）
@@ -1021,7 +1028,7 @@ CFG.tissue = 'retina'    # 组织名称
 CFG.genome = 'hg38'      # 参考基因组（ATAC 管线必需）
 ```
 
-### 8.8 空间转录组
+### 9.8 空间转录组
 
 ```python
 # 平台与输入

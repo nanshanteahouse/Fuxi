@@ -50,8 +50,6 @@ pip install -r requirements/rna.txt  # 或 requirements.txt（全部模态）
 ```bash
 export FUXI_DATA_ROOT=/data/geo_datasets    # Linux 用户
 export FUXI_DATA_ROOT=/mnt/c/geo_datasets  # WSL 用户（根据你的实际挂载路径修改）
-# 或
-export FUXI_DATA_ROOT=/data/geo_datasets    # Linux 用户
 ```
 
 > 💡 这就是你存放所有 GEO 下载文件的顶层目录。预处理脚本会从 `$FUXI_DATA_ROOT/GSE12345/` 找到对应数据集。

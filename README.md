@@ -10,7 +10,7 @@ Fuxi is a unified monorepo for single-cell multi-omics analysis, merging the pre
 
 | Modality | Engine | Steps | Status |
 |----------|--------|:-----:|:------:|
-| `rna` | Scanpy 1.10+ | 12 (00-12) | ✅ Production |
+| `rna` | Scanpy 1.10+ | 13 (00-12) | ✅ Production |
 | `atac` | Snapatac2 2.9 | 10 (00-09) | ✅ Production |
 | `spatial` | Squidpy 1.8+ | 11 (00-10) | ✅ Production |
 
@@ -18,13 +18,13 @@ Fuxi is a unified monorepo for single-cell multi-omics analysis, merging the pre
 
 | Format | data_format | Modality | Template |
 |--------|-------------|----------|----------|
-| 10X HDF5 (.h5) | `10X_h5` | RNA | `config_10X_h5.py` |
-| 10X MTX (matrix.mtx + barcodes + features) | `10X_mtx` | RNA | `config_10X_mtx.py` |
-| CSV / TSV count matrix | `csv_matrix` | RNA | `config_csv_matrix.py` |
+| 10X HDF5 (.h5) | `10X_h5` | RNA | `config_10X_h5.yaml` |
+| 10X MTX (matrix.mtx + barcodes + features) | `10X_mtx` | RNA | `config_10X_mtx.yaml` |
+| CSV / TSV count matrix | `csv_matrix` | RNA | `config_csv_matrix.yaml` |
 | Pre-existing h5ad | `h5ad` | RNA | — |
 | Preprocessed TSV (metadata cols + expression) | `preprocessed` | RNA | `config_preprocessed.yaml` |
-| 10X Fragments (fragments.tsv.gz) | `10x_fragments` | ATAC | `config_fragments.py` |
-| 10X Visium (SpaceRanger output) | `visium` | Spatial | `config_visium.py` |
+| 10X Fragments (fragments.tsv.gz) | `10x_fragments` | ATAC | `config_fragments.yaml` |
+| 10X Visium (SpaceRanger output) | `visium` | Spatial | `config_visium.yaml` |
 
 **R / Seurat formats (.rds, .qs)** — not natively supported. Use the companion tool [r2h5ad](https://github.com/nanshanteahouse/r2h5ad) to convert RDS/QS files to h5ad before loading with `data_format = "h5ad"`:
 
@@ -33,8 +33,8 @@ Fuxi is a unified monorepo for single-cell multi-omics analysis, merging the pre
 ```
 fuxi/
 ├── core/              # Shared infrastructure (utils, ai_caller, config, run_pipeline)
-│   └── preprocess/    #   Preprocessing pipeline (format detect → extract → config gen)
-│   ├── rna/               # scRNA-seq module (13 steps, utils, tissue_ontologies)
+│   └── preprocess/    # Preprocessing pipeline (format detect → extract → config gen)
+├── rna/               # scRNA-seq module (13 steps, utils, tissue_ontologies)
 ├── atac/              # scATAC-seq module (steps)
 ├── spatial/           # Spatial transcriptomics module (steps)
 ├── projects/          # Dataset-specific configs, organized by modality

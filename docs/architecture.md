@@ -173,7 +173,7 @@ decisions, quality = fuse_all_clusters(
 fuxi/
 ├── core/                    # Shared infrastructure
 │   ├── config.py            # Unified Config + nested modality configs
-│   ├── utils.py             # safe_write, safe_plot, resolve_config, ...
+│   ├── utils/             # safe_write, safe_plot, resolve_config, ...
 │   ├── ai_caller.py         # LLM calls with retry + caching
 │   ├── ai_prompts.py        # Annotation / interpretation templates
 │   ├── run_pipeline.py      # CLI dispatcher (--modality rna|atac|spatial)
