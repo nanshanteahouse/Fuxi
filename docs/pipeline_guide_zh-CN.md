@@ -25,7 +25,7 @@
 
 | 阶段 | 做了什么 | 生物学意义 |
 |------|---------|-----------|
-| 🔬 数据加载 | 自动识别并读取 6 种常见单细胞数据格式 | 统一为内部格式，屏蔽格式差异 |
+| 🔬 数据加载 | 自动识别并读取 7 种常见单细胞数据格式 | 统一为内部格式，屏蔽格式差异 |
 | 🧹 质量控制 | 去除双细胞、死细胞、低质量细胞 | 保证下游分析基于可靠数据 |
 | 🔗 批次整合 | 归一化 + 高变基因 + PCA + 批次校正 | 消除技术差异，保留生物学信号 |
 | 🗺️ 聚类与可视化 | 多参数网格搜索 + UMAP 降维 | 发现细胞亚群，呈现数据结构 |
@@ -186,6 +186,7 @@ scRNA-seq 管线包含 12 个步骤（编号 00-11），数据依次流转：
 | `10X_mtx` | `matrix.mtx.gz` + `barcodes.tsv.gz` + `features.tsv.gz` | Cell Ranger 原始输出 |
 | `csv_matrix` | 基因×细胞计数矩阵（CSV/TSV/MTX） | 自定义实验、Smart-seq2 等 |
 | `h5ad` | `*.h5ad` | 已预处理的数据 |
+| `preprocessed` | 元数据列嵌入的 TSV/CSV 矩阵（GEO 预归一化数据） | GEO 导出的已标记数据 |
 
 > **R 格式（`.rds` / `.qs`）**：管线不原生支持。可使用 [r2h5ad](https://github.com/nanshanteahouse/r2h5ad) 转为 h5ad 后加载。
 
@@ -914,6 +915,7 @@ python core/run_pipeline.py --modality spatial --config projects/spatial/{空间
 ```python
 # 数据格式（必须与你的文件格式匹配）
 CFG.data_format = '10X_mtx'     # 选项: 10X_h5, 10X_mtx, csv_matrix, h5ad, 10x_fragments, 10x_peak_h5
+# CFG.data_format = 'preprocessed'  # 元数据列嵌入的 TSV（自动检测元数据/表达边界）
 
 # 10X MTX 格式相关
 CFG.mtx_dir = ''               # 留空则自动解析为 $FUXI_DATA_ROOT/{数据集ID} (推荐)

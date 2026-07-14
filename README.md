@@ -22,6 +22,7 @@ Fuxi is a unified monorepo for single-cell multi-omics analysis, merging the pre
 | 10X MTX (matrix.mtx + barcodes + features) | `10X_mtx` | RNA | `config_10X_mtx.py` |
 | CSV / TSV count matrix | `csv_matrix` | RNA | `config_csv_matrix.py` |
 | Pre-existing h5ad | `h5ad` | RNA | — |
+| Preprocessed TSV (metadata cols + expression) | `preprocessed` | RNA | `config_preprocessed.yaml` |
 | 10X Fragments (fragments.tsv.gz) | `10x_fragments` | ATAC | `config_fragments.py` |
 | 10X Visium (SpaceRanger output) | `visium` | Spatial | `config_visium.py` |
 

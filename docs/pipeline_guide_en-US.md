@@ -25,7 +25,7 @@ After you've downloaded single-cell data from GEO and run the preprocessor to ge
 
 | Stage | What it does | Biological significance |
 |-------|-------------|------------------------|
-| 🔬 Data loading | Auto-detects and reads 6 common single-cell data formats | Unifies all formats into a single internal representation |
+| 🔬 Data loading | Auto-detects and reads 7 common single-cell data formats | Unifies all formats into a single internal representation |
 | 🧹 Quality control | Removes doublets, dead cells, and low-quality cells | Ensures downstream analysis is based on reliable data |
 | 🔗 Batch integration | Normalization + HVG + PCA + batch correction | Removes technical variation while preserving biological signal |
 | 🗺️ Clustering & visualization | Multi-parameter grid search + UMAP | Discovers cell subpopulations, reveals data structure |
@@ -186,6 +186,7 @@ The pipeline auto-detects and loads one of the following formats:
 | `10X_mtx` | `matrix.mtx.gz` + `barcodes.tsv.gz` + `features.tsv.gz` | Cell Ranger raw output |
 | `csv_matrix` | Gene × cell count matrix (CSV/TSV/MTX) | Custom protocols, Smart-seq2, etc. |
 | `h5ad` | `*.h5ad` | Pre-processed data |
+| `preprocessed` | TSV/CSV with embedded metadata columns (GEO pre-normalized) | Pre-processed GEO exports |
 
 > **R formats (`.rds` / `.qs`)**: Not natively supported. Use [r2h5ad](https://github.com/nanshanteahouse/r2h5ad) to convert to h5ad before loading.
 
@@ -914,6 +915,7 @@ The configuration file (`config_{dataset_id}.yaml`) is a Python script that cont
 ```python
 # Data format (must match your actual file format)
 CFG.data_format = '10X_mtx'     # Options: 10X_h5, 10X_mtx, csv_matrix, h5ad, 10x_fragments, 10x_peak_h5
+# CFG.data_format = 'preprocessed'  # TSV/CSV with embedded metadata (auto-detects meta/expr boundary)
 
 # For 10X MTX format
 CFG.mtx_dir = ''               # Leave empty to auto-resolve to $FUXI_DATA_ROOT/{dataset_id} (recommended)
