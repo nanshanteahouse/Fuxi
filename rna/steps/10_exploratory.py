@@ -84,7 +84,7 @@ def main():
     for g in group_by:
         if g in adata.obs:
             plot_composition(adata, g, 'stage' if 'stage' in adata.obs else 'sample',
-                             CFG.stage_order, fig_dir, CFG.table_dir, log)
+                             CFG.sample_meta.stage_order, fig_dir, CFG.table_dir, log)
 
     # 2. UMAP: QC 指标
     qc_metrics = ['n_genes_by_counts', 'total_counts', 'pct_counts_mt']
@@ -95,7 +95,7 @@ def main():
 
     # 3. UMAP: 标记基因
     all_markers = []
-    for genes in CFG.marker_dict.values():
+    for genes in CFG.marker.marker_dict.values():
         all_markers.extend([g for g in genes if g in adata.raw.var_names][:2])
     all_markers = list(dict.fromkeys(all_markers))  # deduplicate preserving order
     if all_markers:
@@ -127,11 +127,11 @@ def main():
     # 6. 额外元数据分组可视化
     # 来源 A: 用户显式配置的 meta_columns
     extra_cols = set()
-    for obs_col in getattr(CFG, 'meta_columns', {}).values():
+    for obs_col in getattr(CFG.sample_meta, 'meta_columns', {}).values():
         if obs_col and obs_col in adata.obs:
             extra_cols.add(obs_col)
     # 来源 B: 用户手动指定的 step10_groupby 覆盖
-    for obs_col in getattr(CFG, 'step10_groupby', []):
+    for obs_col in getattr(CFG.marker, 'step10_groupby', []):
         if obs_col in adata.obs:
             extra_cols.add(obs_col)
     # 来源 C: 自动发现非 pipeline 分类列 (meta_columns 覆盖不到的)

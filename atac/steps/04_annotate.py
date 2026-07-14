@@ -50,7 +50,7 @@ def main():
     log.info("Using: %s (%d clusters)", cluster_col, data.obs[cluster_col].nunique())
 
     # ── Marker regions per cluster (SnapATAC2 2.9 returns dict, not stored in uns) ──
-    markers = snap.tl.marker_regions(data, groupby=cluster_col, pvalue=CFG.marker_peaks_fdr)
+    markers = snap.tl.marker_regions(data, groupby=cluster_col, pvalue=CFG.atac.marker_peaks_fdr)
     # markers is Dict[str, pd.Index] — cluster -> peak names
 
     cluster_summary = []

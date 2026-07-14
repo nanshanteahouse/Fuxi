@@ -176,7 +176,7 @@ def _ora_one_group(
     """Run ORA for a single group via Enrichr API (used by ThreadPoolExecutor)."""
     grp_up_df = (
         grp_df[grp_df['logfoldchanges'] > 0]
-        .nsmallest(CFG.enrichment_n_top_genes, 'pvals_adj')
+        .nsmallest(CFG.enrichment.n_top_genes, 'pvals_adj')
         [['names']]
         .copy()
     )
@@ -185,9 +185,9 @@ def _ora_one_group(
         grp_up_df, 'gene', log=log, context=f"{grp} ORA"
     )
     grp_up = grp_up_df['gene'].tolist()
-    if len(grp_up) < CFG.enrichment_min_size:
+    if len(grp_up) < CFG.enrichment.min_size:
         log.info("  %s: insufficient up-regulated genes (%d < %d), skipping ORA",
-                 grp, len(grp_up), CFG.enrichment_min_size)
+                 grp, len(grp_up), CFG.enrichment.min_size)
         return (grp, None)
 
     try:
@@ -205,7 +205,7 @@ def _ora_one_group(
         return (grp, None)
     res['cluster'] = grp
     res['n_genes_input'] = len(grp_up)
-    n_sig = (res['Adjusted P-value'] < CFG.enrichment_pval_cutoff).sum()
+    n_sig = (res['Adjusted P-value'] < CFG.enrichment.pval_cutoff).sum()
     log.info("  %s: %d/%d significant pathways (ORA, %s)",
              grp, n_sig, len(res), gene_set.split('_')[0])
     return (grp, res)
@@ -227,7 +227,7 @@ def run_ora(
 
     groups = marker_df['group'].unique()
     # ORA calls Enrichr API — conservative cap to avoid HTTP 429
-    max_workers = min(5, getattr(CFG, 'n_jobs', 4))
+    max_workers = min(5, getattr(CFG.execution, 'n_jobs', 4))
     results = {}
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -265,15 +265,15 @@ def _prerank_one_group(
 
     df = grp_df.dropna(subset=['scores', 'names']).copy()
     df['gene'] = df['names'].apply(_extract_gene_symbol)
-    if len(df) < CFG.enrichment_min_size:
+    if len(df) < CFG.enrichment.min_size:
         log.info("  %s: insufficient genes (%d < %d), skipping GSEA",
-                 grp, len(df), CFG.enrichment_min_size)
+                 grp, len(df), CFG.enrichment.min_size)
         return (grp, None)
 
     df = _normalize_gene_symbols(df, 'gene', log=log, context=f"{grp} GSEA")
-    if len(df) < CFG.enrichment_min_size:
+    if len(df) < CFG.enrichment.min_size:
         log.info("  %s: insufficient genes (%d < %d), skipping GSEA",
-                 grp, len(df), CFG.enrichment_min_size)
+                 grp, len(df), CFG.enrichment.min_size)
         return (grp, None)
 
     rnk = df.set_index('gene')['scores']
@@ -282,12 +282,12 @@ def _prerank_one_group(
         pre_res = gp.prerank(
             rnk=rnk,
             gene_sets=gene_set,
-            min_size=CFG.enrichment_min_size,
-            max_size=CFG.enrichment_max_size,
-            permutation_num=CFG.enrichment_permutations,
+            min_size=CFG.enrichment.min_size,
+            max_size=CFG.enrichment.max_size,
+            permutation_num=CFG.enrichment.permutations,
             threads=1,
             outdir=None,
-            seed=CFG.random_seed,
+            seed=CFG.execution.random_seed,
             verbose=False,
             no_plot=True,
         )
@@ -300,7 +300,7 @@ def _prerank_one_group(
         return (grp, None)
     res['cluster'] = grp
     res['n_genes_input'] = len(rnk)
-    n_sig = (res['FDR q-val'] < CFG.enrichment_pval_cutoff).sum()
+    n_sig = (res['FDR q-val'] < CFG.enrichment.pval_cutoff).sum()
     log.info("  %s: %d/%d significant pathways (GSEA, %s)",
              grp, n_sig, len(res), gene_set.split('_')[0])
     return (grp, res)
@@ -322,7 +322,7 @@ def run_prerank(
 
     groups = marker_df['group'].unique()
     # Prerank is local computation — no API rate limit, but GIL limits actual gain
-    max_workers = getattr(CFG, 'n_jobs', 4)
+    max_workers = getattr(CFG.execution, 'n_jobs', 4)
     results = {}
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -345,7 +345,7 @@ def run_prerank(
             "  GSEA no results for '%s': no gene sets passed filtering. "
             "Consider adjusting enrichment_min_size=%d / enrichment_max_size=%d "
             "or using a different gene set library.",
-            gene_set, CFG.enrichment_min_size, CFG.enrichment_max_size,
+            gene_set, CFG.enrichment.min_size, CFG.enrichment.max_size,
         )
         return pd.DataFrame()
 
@@ -366,9 +366,9 @@ def save_results(
     os.makedirs(fig_dir, exist_ok=True)
 
     # ── 1. Tissue-aware post-processing (v4.0+) ──
-    tissue_mode = getattr(CFG, 'enrichment_tissue_mode', 'off')
-    do_redundancy = getattr(CFG, 'enrichment_redundancy_cluster', False)
-    do_kb = getattr(CFG, 'enrichment_use_kb_relevance', False)
+    tissue_mode = getattr(CFG.enrichment, 'tissue_mode', 'off')
+    do_redundancy = getattr(CFG.enrichment, 'redundancy_cluster', False)
+    do_kb = getattr(CFG.enrichment, 'use_kb_relevance', False)
 
     if tissue_mode != 'off' or do_redundancy or do_kb:
         from core.enrichment_tissue import (
@@ -392,16 +392,16 @@ def save_results(
                 log.info("  KB not available for '%s' — skip kb_relevance", CFG.tissue)
 
         # 加载通路元数据
-        pathway_whitelist = list(getattr(CFG, 'enrichment_tissue_pathways_whitelist', []))
-        pathway_blacklist = list(getattr(CFG, 'enrichment_tissue_pathways_blacklist', []))
+        pathway_whitelist = list(getattr(CFG.enrichment, 'tissue_pathways_whitelist', []))
+        pathway_blacklist = list(getattr(CFG.enrichment, 'tissue_pathways_blacklist', []))
         if do_kb and CFG.tissue:
             try:
                 from rna.tissue_ontologies import load_pathway_relevance
                 pr = load_pathway_relevance(CFG.tissue)
                 if pr:
-                    if not getattr(CFG, 'enrichment_tissue_pathways_whitelist', []):
+                    if not getattr(CFG.enrichment, 'tissue_pathways_whitelist', []):
                         pathway_whitelist = pr.get('key_pathways', [])
-                    if not getattr(CFG, 'enrichment_tissue_pathways_blacklist', []):
+                    if not getattr(CFG.enrichment, 'tissue_pathways_blacklist', []):
                         pathway_blacklist = pr.get('generic_pathways', [])
             except Exception:
                 pass
@@ -418,7 +418,7 @@ def save_results(
                 if do_redundancy and 'Overlap' in df.columns:
                     df = cluster_redundant_pathways(
                         df, 'Term', 'Overlap',
-                        getattr(CFG, 'enrichment_redundancy_threshold', 0.6),
+                        getattr(CFG.enrichment, 'redundancy_threshold', 0.6),
                     )
                 # Step C: 组织过滤
                 if tissue_mode != 'off':
@@ -496,13 +496,13 @@ def plot_ora_bubble(
     """ORA 气泡图: x=cluster, y=Term, size=Overlap, color=Adjusted P-value"""
     import matplotlib.pyplot as plt
 
-    sig = df[df['Adjusted P-value'] < CFG.enrichment_pval_cutoff].copy()
+    sig = df[df['Adjusted P-value'] < CFG.enrichment.pval_cutoff].copy()
     if sig.empty:
         sig = df.head(5)
     top_per_cluster = (
         sig.sort_values('Adjusted P-value')
         .groupby('cluster', observed=True)
-        .head(CFG.enrichment_n_top_genes // max(1, sig['cluster'].nunique()))
+        .head(CFG.enrichment.n_top_genes // max(1, sig['cluster'].nunique()))
     )
     if len(top_per_cluster) < 3:
         log.info("  Skipping bubble plot (%s): insufficient significant pathways", gs_name)
@@ -554,13 +554,13 @@ def plot_prerank_bubble(
     """Pre-ranked GSEA 气泡图: color=NES, size=-log10(FDR)"""
     import matplotlib.pyplot as plt
 
-    sig = df[df['FDR q-val'] < CFG.enrichment_pval_cutoff].copy()
+    sig = df[df['FDR q-val'] < CFG.enrichment.pval_cutoff].copy()
     if sig.empty:
         sig = df.head(10)
     top_per_cluster = (
         sig.sort_values('FDR q-val')
         .groupby('cluster', observed=True)
-        .head(CFG.enrichment_n_top_genes // max(1, sig['cluster'].nunique()))
+        .head(CFG.enrichment.n_top_genes // max(1, sig['cluster'].nunique()))
     )
     if len(top_per_cluster) < 3:
         return
@@ -608,13 +608,13 @@ def main():
                         os.path.join(CFG.log_dir, "09_enrichment.log"))
     log.info("Step 09: Enrichment analysis (GO/KEGG)")
 
-    if not CFG.run_enrichment:
+    if not CFG.enrichment.run:
         log.info("Enrichment analysis disabled (run_enrichment=False)")
         return
 
     marker_df = read_marker_csv(CFG.table_dir, log)
-    log.info("Gene set libraries: %s", CFG.enrichment_gene_sets)
-    log.info("Method: %s", CFG.enrichment_method)
+    log.info("Gene set libraries: %s", CFG.enrichment.gene_sets)
+    log.info("Method: %s", CFG.enrichment.method)
 
     # Quality awareness (v3.1.0+): check marker_validation from annotated h5ad
     try:
@@ -632,7 +632,7 @@ def main():
                 _pass_cells = (_a.obs['marker_validation'] == 'PASS').sum()
                 _pass_rate = _pass_cells / _a.n_obs
         if _pass_rate is not None:
-            _pass_rate_min = getattr(CFG, 'marker_validation_pass_rate_min', 0.1)
+            _pass_rate_min = getattr(CFG.marker, 'validation_pass_rate_min', 0.1)
             if _pass_rate < _pass_rate_min:
                 log.warning(
                     "⚠  marker_validation PASS rate %.1f%% (<%.0f%%) — "
@@ -648,8 +648,8 @@ def main():
     prerank_results = {}
 
     # ── Load tissue-specific gene sets (v4.0+) ──
-    tissue_gene_sets = getattr(CFG, 'enrichment_gene_sets_tissue', [])
-    all_gene_sets = list(CFG.enrichment_gene_sets)
+    tissue_gene_sets = getattr(CFG.enrichment, 'gene_sets_tissue', [])
+    all_gene_sets = list(CFG.enrichment.gene_sets)
     if tissue_gene_sets:
         log.info("Tissue-specific gene set libraries: %s", tissue_gene_sets)
         all_gene_sets.extend(tissue_gene_sets)
@@ -657,13 +657,13 @@ def main():
     for gs in all_gene_sets:
         gs_name = gs.replace(' ', '_').replace('/', '_')
 
-        if CFG.enrichment_method in ('ora', 'both'):
+        if CFG.enrichment.method in ('ora', 'both'):
             log.info("[ORA] Gene set: %s", gs)
             ora_df = run_ora(marker_df, gs, CFG, log)
             if ora_df is not None and not ora_df.empty:
                 ora_results[gs_name] = ora_df
 
-        if CFG.enrichment_method in ('prerank', 'both'):
+        if CFG.enrichment.method in ('prerank', 'both'):
             log.info("[GSEA] Gene set: %s", gs)
             prerank_df = run_prerank(marker_df, gs, CFG, log)
             if prerank_df is not None and not prerank_df.empty:
@@ -679,7 +679,7 @@ def main():
     save_results(ora_results, prerank_results, CFG, log)
 
     # ── Tissue-aware enrichment summary ──
-    tissue_mode = getattr(CFG, 'enrichment_tissue_mode', 'off')
+    tissue_mode = getattr(CFG.enrichment, 'tissue_mode', 'off')
     if tissue_mode != 'off':
         total_all = 0
         total_relevant = 0
@@ -704,7 +704,7 @@ def main():
             for gs_name, df in ora_results.items():
                 if df.empty:
                     continue
-                sig = df[df['Adjusted P-value'] < CFG.enrichment_pval_cutoff]
+                sig = df[df['Adjusted P-value'] < CFG.enrichment.pval_cutoff]
                 for cluster in sig['cluster'].unique():
                     cluster_sig = sig[sig['cluster'] == cluster].head(5)
                     summary_data.append({

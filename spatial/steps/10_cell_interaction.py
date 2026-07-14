@@ -173,7 +173,7 @@ def main():
     log.info("Step 10: Spatial Cell-Cell Interaction (CCI) via LIANA+ bivariate")
 
     # ── Gate check ──────────────────────────────────────────────────────
-    if not getattr(CFG, "run_cci", True):
+    if not getattr(CFG.cci, "run", True):
         log.info("run_cci=False — skipping")
         return
 
@@ -199,7 +199,7 @@ def main():
     log.info("Spatial connectivities: %d spots, avg degree %.1f", n_spots, avg_degree)
 
     # Optionally rebuild spatial neighbors with custom radius
-    cci_distance = getattr(CFG, "cci_spatial_distance", 0.0)
+    cci_distance = getattr(CFG.cci, "spatial_distance", 0.0)
     if cci_distance > 0:
         import squidpy as sq
         log.info("Rebuilding spatial neighbors with radius=%.0f px", cci_distance)
@@ -220,10 +220,10 @@ def main():
 
     # ── Load anatomical adjacency (v4.0+) ────────────────────────────
     from core.anatomy import load_adjacency
-    adj_tissue = getattr(CFG, "cci_tissue", "") or CFG.tissue
-    adj_file = getattr(CFG, "cci_adjacency_file", "")
+    adj_tissue = getattr(CFG.cci, "tissue", "") or CFG.tissue
+    adj_file = getattr(CFG.cci, "adjacency_file", "")
     adjacency_df = load_adjacency(tissue=adj_tissue, custom_file=adj_file, log=log)
-    adj_mode = getattr(CFG, "cci_adjacency", "off")
+    adj_mode = getattr(CFG.cci, "adjacency", "off")
     if adj_mode != "off":
         log.info(
             "CCI adjacency constraint: mode=%s, tissue=%s, %d adjacency pairs",
@@ -242,11 +242,11 @@ def main():
 
     lr_res = run_cci_spatial(
         adata,
-        resource_name=CFG.cci_lr_database,
+        resource_name=CFG.cci.lr_database,
         connectivity_key="spatial_connectivities",
         local_name="cosine",
         global_name="morans",
-        n_perms=CFG.cci_permutations,
+        n_perms=CFG.cci.permutations,
         log=log,
     )
 
@@ -256,7 +256,7 @@ def main():
     sort_col = "morans" if "morans" in lr_res.columns else lr_res.columns[0]
     top_df = format_cci_results(
         lr_res,
-        n_top=CFG.cci_n_top_interactions,
+        n_top=CFG.cci.n_top_interactions,
         pval_col=sort_col,
         ascending=False,
         log=log,

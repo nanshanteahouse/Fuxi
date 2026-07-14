@@ -11,7 +11,7 @@ preprocessor.py — Fuxi 预处理管线
   Phase 2 — SuperSeries 检测
   Phase 3 — 格式检测 & 模态推断
   Phase 4 — 生成 dataset.yaml
-  Phase 5 — 生成 config_GSE_ID.py
+  Phase 5 — 生成 config_GSE_ID.yaml
   Phase 6 — 汇总报告
 
 用法:
@@ -570,13 +570,13 @@ def run_preprocess(gse_id: Optional[str] = None,
                     print(f"    {os.path.join(child_dir, 'dataset.yaml')}  (files moved to {child_dir}/)")
                     for mod in modalities_out:
                         out_dir = _resolve_project_dir(mod, child_gse, output_dir)
-                        print(f"    {os.path.join(out_dir, f'config_{child_gse}.py')}")
+                        print(f"    {os.path.join(out_dir, 'config_' + child_gse + '.yaml')}")
                 print(f"    {os.path.join(gse_dir, 'dataset.yaml')}  (parent index)")
             else:
                 for mod in modalities_out:
                     out_dir = _resolve_project_dir(mod, gse_id, output_dir)
                     print(f"    {os.path.join(out_dir, 'dataset.yaml')}")
-                    print(f"    {os.path.join(out_dir, f'config_{gse_id}.py')}")
+                    print(f"    {os.path.join(out_dir, 'config_' + gse_id + '.yaml')}")
         print(f"\n  Next steps:")
         if superseries_info.get('is_superseries'):
             print(f"    Each sub-series is an independent project. Review and edit")
@@ -585,14 +585,14 @@ def run_preprocess(gse_id: Optional[str] = None,
                 for mod in modalities_out:
                     cfg_path = os.path.join(
                         _resolve_project_dir(mod, child_gse, output_dir),
-                        f'config_{child_gse}.py',
+                        f'config_{child_gse}.yaml',
                     )
                     print(f"       python core/run_pipeline.py --modality {mod} --config {cfg_path}")
         else:
             print(f"    1. Review and edit the generated files")
             print(f"    2. Run the pipeline:")
             for mod in modalities_out:
-                cfg_path = os.path.join(_resolve_project_dir(mod, gse_id, output_dir), f'config_{gse_id}.py')
+                cfg_path = os.path.join(_resolve_project_dir(mod, gse_id, output_dir), f'config_{gse_id}.yaml')
                 print(f"       python core/run_pipeline.py --modality {mod} --config {cfg_path}")
         print()
 

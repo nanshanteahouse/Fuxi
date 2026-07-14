@@ -2,14 +2,10 @@
 """
 matrix_loader.py — Phase 5 of the Fuxi preprocessing pipeline.
 
-Detects primary matrix formats and generates ``config_GSE_ID.py``
+Detects primary matrix formats and generates ``config_GSE_ID.yaml``
 files from config templates.
-
-Extracted from :mod:`core.preprocess.preprocessor` (Phase 5) to
-keep the main preprocessor focused on orchestration.
 """
 
-import ast
 import os
 import sys
 from typing import Optional
@@ -23,12 +19,12 @@ from core.preprocess import format_detector as fd
 # ── Template mapping: format → template file ──────────────────────────
 
 TEMPLATE_MAP = {
-    '10X_h5':       'config_10X_h5.py',
-    '10X_mtx':      'config_10X_mtx.py',
-    'csv_matrix':   'config_csv_matrix.py',
-    'h5ad':         'config_10X_h5.py',       # reuse 10X_h5 template
-    '10x_fragments': 'config_fragments.py',
-    '10x_peak_h5':  'config_fragments.py',    # reuse ATAC template
+    '10X_h5':       'config_10X_h5.yaml',
+    '10X_mtx':      'config_10X_mtx.yaml',
+    'csv_matrix':   'config_csv_matrix.yaml',
+    'h5ad':         'config_10X_h5.yaml',       # reuse 10X_h5 template
+    '10x_fragments': 'config_fragments.yaml',
+    '10x_peak_h5':  'config_fragments.yaml',    # reuse ATAC template
 }
 
 
@@ -112,120 +108,53 @@ def _fill_template(template_text: str, replacements: dict) -> str:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def _post_process_config(config_path: str, paper_context: dict,
+def _post_process_yaml(config_path: str, paper_context: dict,
                       inject: Optional[dict] = None) -> None:
-    """Inject paper-derived CFG fields using ast manipulation.
+    """Append paper-derived fields to a generated YAML config.
 
-    Uses Python's ``ast`` module to parse the generated config, find
-    existing ``CFG.*`` assignments, and inject or replace fields
-    (``marker_dict``, ``is_nuclei``, ``tissue_kb``, ``tissue_ontology``),
-    plus additional arbitrary ``CFG.*`` values from the *inject* dict.
-
-    **Idempotent**: if a field already exists, its value is replaced
-    in-place rather than duplicate lines being appended.
+    Since the output is YAML (not Python), AST manipulation is no longer
+    needed.  Instead we append additional YAML key-value lines.
 
     Args:
-        config_path:   Path to the generated ``config_GSE_ID.py`` file.
+        config_path:   Path to the generated ``config_GSE_ID.yaml`` file.
         paper_context: Dict with optional keys ``features``, ``is_nuclei``,
                        ``tissue_kb``, ``tissue_ontology``.
-        inject:        Optional dict of arbitrary ``CFG.*`` key/value pairs
-                       to inject (e.g. ``{'sample_keep': ['GSM1'], 'subset_suffix': '_test'}``).
-                       Uses ``repr(val)`` to preserve Python literals.
+        inject:        Optional dict of arbitrary key/value pairs to append.
     """
     if not paper_context and not inject:
         return
 
-    with open(config_path, 'r', encoding='utf-8') as f:
-        source = f.read()
-
-    try:
-        tree = ast.parse(source)
-    except SyntaxError:
-        # If ast parsing fails, skip gracefully
-        return
-
-    # Determine which fields to inject
-    injections: dict[str, str] = {}
+    lines_to_append: list[str] = []
 
     # -- paper_context (existing behaviour) --
     if paper_context:
         features = paper_context.get('features')
         if features is not None:
-            marker_dict_repr = repr({'extracted': list(features)})
-            injections['marker_dict'] = f"CFG.marker_dict = {marker_dict_repr}"
+            genes_yaml = ', '.join(repr(g) for g in list(features))
+            lines_to_append.append(f"marker:")
+            lines_to_append.append(f"  marker_dict: {{extracted: [{genes_yaml}]}}")
 
         if paper_context.get('is_nuclei'):
-            injections['is_nuclei'] = 'CFG.is_nuclei = True'
+            lines_to_append.append("qc:")
+            lines_to_append.append("  is_nuclei: true")
 
         for key in ('tissue_kb', 'tissue_ontology'):
             val = paper_context.get(key)
             if val is not None:
-                injections[key] = f"CFG.{key} = {repr(str(val))}"
+                lines_to_append.append(f"{key}: {repr(str(val))}")
 
-    # -- inject dict (arbitrary CFG.* value injection) --
+    # -- inject dict (arbitrary key/value pairs) --
     if inject:
         for key, val in inject.items():
-            injections[key] = f"CFG.{key} = {repr(val)}"
+            lines_to_append.append(f"{key}: {repr(val)}")
 
-    if not injections:
+    if not lines_to_append:
         return
 
-    # Find all CFG assignments and the last CFG assignment end line
-    existing_attrs: dict[str, tuple[int, int]] = {}
-    last_cfg_end: int = 0
-
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Assign):
-            for target in node.targets:
-                if (
-                    isinstance(target, ast.Attribute)
-                    and isinstance(target.value, ast.Name)
-                    and target.value.id == 'CFG'
-                ):
-                    attr = target.attr
-                    start_line = node.lineno
-                    end_line = getattr(node, 'end_lineno', start_line)
-                    existing_attrs[attr] = (start_line, end_line)
-                    if end_line > last_cfg_end:
-                        last_cfg_end = end_line
-
-    lines = source.splitlines()
-
-    # Phase 1: Replace existing fields (bottom-to-top to preserve indices)
-    replace_ops = [(s, e, injections[a]) for a, (s, e) in existing_attrs.items() if a in injections]
-    for start, end, new_line in sorted(replace_ops, key=lambda x: x[0], reverse=True):
-        lines[start - 1:end] = [new_line]
-
-    # Phase 2: Append new fields after the last CFG assignment
-    new_fields = {k: v for k, v in injections.items() if k not in existing_attrs}
-    if new_fields:
-        # Re-parse modified source to find the new last CFG end
-        modified_source = '\n'.join(lines)
-        try:
-            new_tree = ast.parse(modified_source)
-            new_last_end: int = 0
-            for node in ast.walk(new_tree):
-                if isinstance(node, ast.Assign):
-                    for target in node.targets:
-                        if (
-                            isinstance(target, ast.Attribute)
-                            and isinstance(target.value, ast.Name)
-                            and target.value.id == 'CFG'
-                        ):
-                            end = getattr(node, 'end_lineno', node.lineno)
-                            if end > new_last_end:
-                                new_last_end = end
-            insert_idx = new_last_end  # 1-indexed → line after last CFG assign
-        except SyntaxError:
-            insert_idx = len(lines)
-
-        for new_line in new_fields.values():
-            lines.insert(insert_idx, new_line)
-            insert_idx += 1
-
-    with open(config_path, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(lines))
-
+    with open(config_path, 'a', encoding='utf-8') as f:
+        f.write('\n')
+        f.write('\n'.join(lines_to_append))
+        f.write('\n')
 
 # ═══════════════════════════════════════════════════════════════════════
 #  Phase 5: Config generation
@@ -363,7 +292,7 @@ def generate_config(gse_id: str,
     filled = _fill_template(template_text, replacements)
 
     os.makedirs(output_dir, exist_ok=True)
-    config_path = os.path.join(output_dir, f'config_{gse_id}.py')
+    config_path = os.path.join(output_dir, f'config_{gse_id}.yaml')
 
     if dry_run:
         print(f"  [DRY-RUN] Would write: {config_path}")
@@ -377,9 +306,9 @@ def generate_config(gse_id: str,
     with open(config_path, 'w', encoding='utf-8') as f:
         f.write(filled)
 
-    # Post-process: inject paper-derived CFG fields (marker_dict, is_nuclei, etc.)
+    # Post-process: append paper-derived fields (marker_dict, is_nuclei, etc.)
     if paper_context:
-        _post_process_config(config_path, paper_context)
+        _post_process_yaml(config_path, paper_context)
 
     print(f"  Written: {config_path}")
     return config_path

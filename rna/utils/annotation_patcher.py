@@ -9,11 +9,11 @@ for changed ones.
 Usage from a one-liner patch script::
 
     import scanpy as sc
-    from core.config import CFG
+    from core.utils._config import resolve_config
     from rna.annotation_standardizer import StandardOntology
     from rna.utils.annotation_patcher import apply_annotation_patches
 
-    CFG.resolve_paths()
+    CFG = resolve_config()
     adata = sc.read(CFG.annotated_h5ad)
     std = StandardOntology(CFG.tissue_ontology or CFG.tissue_kb)
     apply_annotation_patches(

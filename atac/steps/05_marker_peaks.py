@@ -38,7 +38,7 @@ def main():
         log.error("No clustering column found."); sys.exit(1)
 
     # SnapATAC2 2.9 marker_regions returns Dict[str, Index], not stored in uns
-    markers = snap.tl.marker_regions(data, groupby=groupby, pvalue=CFG.marker_peaks_fdr)
+    markers = snap.tl.marker_regions(data, groupby=groupby, pvalue=CFG.atac.marker_peaks_fdr)
     # markers is Dict[str, pd.Index] — group -> peak names
     rows = []
     for grp, peaks in markers.items():

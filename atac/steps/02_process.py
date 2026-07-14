@@ -47,7 +47,7 @@ def main():
         log.info("Removed %d doublets → %d cells", d, data.n_obs)
 
     # ── Feature selection (out-of-core, works on backed data) ──
-    snap.pp.select_features(data, n_features=CFG.n_features)
+    snap.pp.select_features(data, n_features=CFG.atac.n_features)
 
     # ── Ensure float64 for SnapATAC2 spectral (Rust backend requires it) ──
     if sp.issparse(data.X) and data.X.dtype != np.float64:
@@ -57,17 +57,17 @@ def main():
     # ── Spectral embedding (matrix-free Lanczos) ──
     # Use sample_size for large datasets to enable Nyström approximation
     spectral_kwargs = dict(
-        n_comps=CFG.n_spectral,
-        random_state=CFG.random_seed,
+        n_comps=CFG.atac.n_spectral,
+        random_state=CFG.execution.random_seed,
     )
-    sample_size = getattr(CFG, 'spectral_sample_size', None)
+    sample_size = getattr(CFG.atac, 'spectral_sample_size', None)
     if sample_size and data.n_obs > sample_size:
         spectral_kwargs['sample_size'] = sample_size
         log.info("Spectral with Nyström (sample_size=%s)", sample_size)
     snap.tl.spectral(data, **spectral_kwargs)
 
     # ── KNN graph ──
-    snap.pp.knn(data, n_neighbors=CFG.n_neighbors)
+    snap.pp.knn(data, n_neighbors=CFG.clustering.n_neighbors)
 
     validate_adata(data, stage_name="02_process", logger=log)
     safe_write(data, CFG.processed_h5ad, cfg=CFG, compression_override=None)

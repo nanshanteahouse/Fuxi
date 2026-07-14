@@ -36,7 +36,7 @@ def main():
     if 'X_umap' not in data.obsm:
         if not data.isbacked:
             try:
-                snap.tl.umap(data, random_state=CFG.random_seed)
+                snap.tl.umap(data, random_state=CFG.execution.random_seed)
             except Exception:
                 pass
         else:

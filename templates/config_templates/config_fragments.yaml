@@ -1,0 +1,104 @@
+# ── Modality & data format ──
+modality: atac
+data_format: 10x_fragments
+
+# ── Data input ──
+data_input:
+  fragment_file: "{{FRAGMENT_FILE}}"
+  barcodes_file: "{{BARCODES_FILE}}"
+
+# ── ATAC-specific config ──
+atac:
+  # Reference genome
+  genome: "{{GENOME}}"
+  # chrom_sizes: ""
+  # blacklist_bed: ""
+  # tss_bed: ""
+
+  # QC
+  min_fragments: 1000
+  max_fragments: 50000
+  min_tsse: 7.0
+  # max_blacklist_ratio: 0.05
+  # min_peak_region_fragments: 300
+
+  # Peak calling
+  peak_qval: 0.05
+  peak_width: 500
+  # use_macs3: true
+
+  # Feature selection / dimensionality reduction
+  n_features: 50000
+  n_spectral: 30
+
+  # Differential accessibility
+  marker_peaks_log2fc: 0.5
+  marker_peaks_fdr: 0.05
+
+  # Motif analysis
+  motif_db: JASPAR2024
+
+# ── Dataset metadata ──
+tissue: "{{TISSUE}}"
+# tissue_maturity: "unknown"   # "developing" | "adult" | "unknown"
+species: "{{SPECIES}}"
+
+# ── Clustering ──
+clustering:
+  n_neighbors: 15
+  param_grid_n_neighbors: [15, 20, 30]
+  param_grid_resolutions: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
+  umap_selection_method: "convex_hull"
+  param_grid_min_dist: [0.1, 0.3, 0.5]
+  param_grid_spread: [1.0]
+  umap_min_dist: 0.3
+  umap_spread: 1.0
+
+# ── Trajectory ──
+trajectory:
+  root_cell_types: []
+  # terminal_cell_types: []
+
+# ── Peak-to-gene enrichment ──
+enrichment:
+  peak_gene_distance: 100000
+  # gene_annotation_bed: ""
+  gene_sets: [GO_Biological_Process_2023, KEGG_2021_Human]
+  organism: human
+  # method: both
+  # n_top_genes: 2000
+  # pval_cutoff: 0.05
+  # min_size: 15
+  # max_size: 500
+  # permutations: 1000
+
+# ── RNA integration (multiome / paired RNA+ATAC) ──
+# rna_h5ad: ""
+# rna_marker_top_n: 200
+# rna_marker_pval_threshold: 0.05
+# rna_marker_logfc_min: 0.25
+
+# ── AI settings (uncomment to enable) ──
+# ai:
+#   enabled: true
+#   api_base: https://api.deepseek.com/v1
+#   model: deepseek-v4-pro
+#   max_tokens: 32768
+#   temperature: 0.1
+#   thinking_enabled: true
+#   reasoning_effort: high
+#   annotation: true
+#   cache_responses: true
+
+# ── Execution ──
+execution:
+  n_jobs: 0
+  random_seed: 42
+  # force_csr: true
+  # use_float32: true
+  # limit_blas_threads: true
+  # scanpy_verbosity: 2
+
+h5ad_tempdir: /tmp/Fuxi
+# h5ad_compression: gzip
+# cleanup_intermediates: true

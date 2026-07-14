@@ -1,0 +1,132 @@
+# ── Modality & data format ──
+modality: spatial
+data_format: visium
+
+# ── Spatial platform ──
+spatial:
+  platform: visium
+  library_id: "{{LIBRARY_ID}}"
+  img_path: ""
+  crop_image: true
+  img_rescale: 1.0
+
+  # Spatial graph
+  neighbors_n: 6
+  neighbors_radius: 0.0
+
+  # Spatially variable genes
+  run_autocorr: true
+  svg_n_top: 2000
+  moran_percentile: 90
+
+# ── Dataset metadata ──
+tissue: "{{TISSUE}}"
+# tissue_maturity: "unknown"   # "developing" | "adult" | "unknown"
+species: "{{SPECIES}}"
+
+# ── QC ──
+qc:
+  min_genes: 500
+  max_genes: 7500
+  max_pct_mito: 20.0
+  min_genes_per_umi: 0.7
+  min_cells_per_gene: 3
+  # use_adaptive_thresholds: true
+  # mad_n_mads: 3.0
+
+# ── HVG ──
+hvg:
+  n_top_genes: 4000
+  flavor: seurat_v3
+  # use_regress_out: false
+
+# ── PCA ──
+pca:
+  n_pcs_full: 100
+  n_pcs_use: 50
+
+# ── Clustering ──
+clustering:
+  n_neighbors: 30
+  leiden_resolutions: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
+  best_resolution: 1.0
+  best_n_neighbors: 0
+  cluster_selection_method: "pareto_elbow"
+  leiden_flavor: igraph
+  umap_selection_method: "convex_hull"
+  param_grid_min_dist: [0.1, 0.3, 0.5]
+  param_grid_spread: [1.0]
+  umap_min_dist: 0.3
+  umap_spread: 1.0
+
+# ── Cell type markers ──
+# TODO: Add known marker genes for {{TISSUE}} tissue.
+marker:
+  marker_dict: {}
+  # tissue_kb: ""
+
+# ── Differential expression ──
+de:
+  method: wilcoxon
+  n_genes: 50
+  pval_cutoff: 0.05
+  logfc_cutoff: 0.25
+  stage_pairwise: true
+  # auto_switch_on_low_quality: true
+
+# ── Trajectory ──
+trajectory:
+  root_cell_types: []
+  # root_markers: [SOX2, PAX6, NES]
+  n_diffmap_comps: 15
+  n_branchings: 2
+
+# ── Enrichment ──
+enrichment:
+  run: true
+  method: both
+  gene_sets:
+    - GO_Biological_Process_2023
+    - KEGG_2021_Human
+  organism: human
+  # n_top_genes: 2000
+  # pval_cutoff: 0.05
+  # min_size: 15
+  # max_size: 500
+  # permutations: 1000
+
+# ── CCI spatial cell-cell interaction analysis ──
+cci:
+  run: true
+  # method: liana
+  # lr_database: consensus
+  # permutations: 1000
+  # n_top_interactions: 50
+  # spatial_method: liana_spatial
+  # spatial_distance: 0.0
+  # lr_cache_dir: ""
+
+# ── AI settings (uncomment to enable) ──
+# ai:
+#   enabled: true
+#   api_base: https://api.deepseek.com/v1
+#   model: deepseek-v4-pro
+#   max_tokens: 32768
+#   temperature: 0.1
+#   thinking_enabled: true
+#   reasoning_effort: high
+#   annotation: true
+#   interpretation: true
+#   cache_responses: true
+
+# ── Execution ──
+execution:
+  n_jobs: 0
+  random_seed: 42
+  # force_csr: true
+  # use_float32: true
+  # limit_blas_threads: true
+  # scanpy_verbosity: 2
+
+# h5ad_compression: gzip
+# h5ad_tempdir: /tmp/Fuxi

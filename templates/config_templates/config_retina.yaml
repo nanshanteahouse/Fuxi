@@ -1,0 +1,172 @@
+# ── Data format (CSV matrix) ──
+data_format: csv_matrix
+
+# ── Data input ──
+data_input:
+  matrix_file: "<GSE_ID>_matrix.mtx.gz"
+  barcodes_file: "<GSE_ID>_barcodes.csv.gz"
+  features_file: "<GSE_ID>_genes.csv.gz"
+
+  # CSV metadata column mapping
+  meta_columns:
+    sample: sample
+    stage: age
+    tissue: sample_type
+
+# ── Sample metadata ──
+sample_meta:
+  # Stage mapping is done manually in step 04 using pandas map.
+  # See rna/steps/04_cluster_umap.py _map_stages().
+  stage_map: {}
+  stage_order: [Organoid, EarlyFetal, MidFetal, LateFetal, Postnatal, Adult]
+
+# ── QC ──
+qc:
+  min_genes: 200
+  max_genes: 7500
+  max_pct_mito: 20.0
+  min_cells_per_gene: 3
+  # use_adaptive_thresholds: true
+  # mad_n_mads: 3.0
+
+  # ── Single-nucleus (snRNA-seq) ──
+  # is_nuclei: true
+  # max_pct_mito_nuclei: 5.0
+
+# ── Scrublet (doublet detection) ──
+scrublet:
+  run: true
+
+# ── HVG ──
+hvg:
+  n_top_genes: 5000
+  batch_key: sample
+  flavor: seurat_v3
+  # use_regress_out: false
+
+# ── Batch correction / Harmony ──
+harmony:
+  use_harmony: true
+  batch_key: age
+  max_iter: 20
+
+# ── PCA ──
+pca:
+  n_pcs_full: 100
+  n_pcs_use: 50
+
+# ── Clustering ──
+clustering:
+  leiden_resolutions: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
+  best_resolution: 1.0
+  best_n_neighbors: 0
+  cluster_selection_method: "multi_metric"
+  umap_selection_method: "convex_hull"
+  param_grid_min_dist: [0.1, 0.3, 0.5]
+  param_grid_spread: [1.0]
+  umap_min_dist: 0.3
+  umap_spread: 1.0
+
+# ── Known retina cell type markers ──
+marker:
+  marker_dict:
+    RPCs: [VSX2, PAX6, SOX2, HES1, NOTCH1]
+    Neurogenic Cells: [ASCL1, NEUROG2, TUBB3, DCX, STMN2]
+    RGCs: [POU4F2, POU4F1, NEFM, NEFL, ELAVL4]
+    Cones: [ARR3, OPN1SW, GNAT2, PDE6C, RCVRN]
+    Rods: [NRL, RHO, GNAT1, PDE6B, SAG]
+    Horizontal: [ONECUT1, ONECUT2, PROX1, CALB1, LHX1]
+    Bipolar: [VSX1, PRKCA, TRPM1, GRM6, CABP5]
+    Amacrine: [GAD1, GAD2, SLC6A9, TFAP2A, TFAP2B]
+    Muller Glia: [RLBP1, GFAP, VIM, SLC1A3, GLUL]
+    BC/Photo_Precurs: [CRX, OTX2, VSX1]
+    AC/HC_Precurs: [PTF1A, TFAP2A, PROX1, ONECUT1]
+    Microglia: [AIF1, P2RY12, CSF1R, CX3CR1, CD74]
+    Astrocytes: [GFAP, AQP4, ALDH1L1, S100B, SOX9]
+    Pericytes: [PDGFRB, CSPG4, RGS5, ANPEP, ACTA2]
+    RPE: [RPE65, BEST1, LRAT, TIMP3, RDH10]
+    Endothelial: [PECAM1, VWF, CDH5, CLDN5, EGFL7]
+    Oligodendrocytes: [MBP, PLP1, MOG, OLIG2, SOX10]
+    Fibroblast: [COL1A1, DCN, LUM, COL3A1, COL1A2]
+  # subcluster_types: [RPCs, Muller Glia]
+  # subcluster_resolution: 0.4
+  # min_cells_subcluster: 50
+
+# ── Knowledge base ──
+# tissue_kb: ""
+
+# ── Differential expression ──
+de:
+  method: wilcoxon
+  n_genes: 50
+  pval_cutoff: 0.05
+  logfc_cutoff: 0.25
+  stage_pairwise: true
+  # auto_switch_on_low_quality: true
+
+# ── Trajectory ──
+trajectory:
+  root_markers: [VSX2, PAX6, SOX2, HES1, NOTCH1]
+  # root_cell_types: []
+  # n_diffmap_comps: 15
+  # n_branchings: 2
+
+# ── Enrichment (uncomment to enable) ──
+# enrichment:
+#   run: true
+#   method: both
+#   gene_sets: [GO_Biological_Process_2023, KEGG_2021_Human]
+#   organism: human
+
+# ── GRN regulatory network analysis ──
+grn:
+  run: true
+  method: decoupler
+  species: human
+  n_top_regulons: 50
+  min_regulon_size: 5
+  # confidence_levels: [A, B, C]
+  tissue_mode: soft
+  use_kb_relevance: true
+  # export_filtered: false
+
+# ── CCI cell-cell interaction analysis ──
+cci:
+  run: true
+  # method: liana
+  # lr_database: consensus
+  # permutations: 1000
+  # n_top_interactions: 50
+  # spatial_method: liana_spatial
+  # spatial_distance: 0.0
+  # lr_cache_dir: ""
+
+# ── AI settings (uncomment to enable) ──
+# ai:
+#   enabled: true
+#   api_base: https://api.deepseek.com/v1
+#   model: deepseek-v4-pro
+#   max_tokens: 32768
+#   temperature: 0.1
+#   thinking_enabled: true
+#   reasoning_effort: high
+#   annotation: true
+#   subcluster: true
+#   interpretation: true
+#   cache_responses: true
+
+# ── Execution ──
+execution:
+  n_jobs: 0
+  random_seed: 42
+  # force_csr: true
+  # use_float32: true
+  # limit_blas_threads: true
+  # scanpy_verbosity: 2
+
+# h5ad_compression: gzip
+
+# ── Downsampling (optional) ──
+# downsample:
+#   target: 5000
+#   strategy: random

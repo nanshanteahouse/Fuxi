@@ -78,7 +78,7 @@ def _evaluate_n_neighbor_atac(data, n, resolutions, CFG, log):
             umap_fn=_atac_umap_fn,
             evaluation_fn=_atac_evaluation_fn,
             group_key='n_neighbors',
-            random_seed=CFG.random_seed,
+            random_seed=CFG.execution.random_seed,
         )
     except Exception as e:
         log.error("Grid search failed (n_neighbors=%d): %s", n, e)
@@ -139,13 +139,13 @@ def main():
         if col.startswith('leiden_'):
             del data.obs[col]
 
-    nns = getattr(CFG, 'param_grid_n_neighbors', [15, 20, 30])
-    resolutions = getattr(CFG, 'param_grid_resolutions', [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
+    nns = getattr(CFG.clustering, 'param_grid_n_neighbors', [15, 20, 30])
+    resolutions = getattr(CFG.clustering, 'param_grid_resolutions', [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
 
     results_summary = []
 
     # ── Parallel outer loop over n_neighbors ──
-    n_jobs = min(getattr(CFG, 'n_jobs', 4) or os.cpu_count() or 1, len(nns))
+    n_jobs = min(getattr(CFG.execution, 'n_jobs', 4) or os.cpu_count() or 1, len(nns))
     log.info("Evaluating %d n_neighbors values with n_jobs=%d", len(nns), n_jobs)
     parallel_results = Parallel(n_jobs=n_jobs, prefer='threads')(
         delayed(_evaluate_n_neighbor_atac)(data, n, resolutions, CFG, log)
@@ -169,20 +169,20 @@ def main():
         sys.exit(1)
 
     # ── Keep only the best combination in obsm/obs (reduces saved file size) ──
-    method = getattr(CFG, 'cluster_selection_method', 'pareto_elbow')
+    method = getattr(CFG.clustering, 'cluster_selection_method', 'pareto_elbow')
 
-    if method is not None and (getattr(CFG, 'best_resolution', 1.0) != 1.0 or getattr(CFG, 'best_n_neighbors', 0) != 0):
+    if method is not None and (getattr(CFG.clustering, 'best_resolution', 1.0) != 1.0 or getattr(CFG.clustering, 'best_n_neighbors', 0) != 0):
         log.warning(
             "best_resolution=%.1f / best_n_neighbors=%d are set but cluster_selection_method=%r will ignore them. "
             "Set cluster_selection_method=None to use manual mode.",
-            CFG.best_resolution, getattr(CFG, 'best_n_neighbors', 0), method,
+            CFG.clustering.best_resolution, getattr(CFG.clustering, 'best_n_neighbors', 0), method,
         )
 
     best_n, best_r, method_name, reason = select_best_params(
         results_summary,
         method=method,
-        best_resolution=CFG.best_resolution if method is None else None,
-        best_n_neighbors=getattr(CFG, 'best_n_neighbors', 0) if method is None else 0,
+        best_resolution=CFG.clustering.best_resolution if method is None else None,
+        best_n_neighbors=getattr(CFG.clustering, 'best_n_neighbors', 0) if method is None else 0,
     )
 
     log.info("Selected best params via %s: n_neighbors=%d, resolution=%.1f (%s)",

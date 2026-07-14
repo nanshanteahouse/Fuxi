@@ -29,12 +29,12 @@ def recompute_neighbors(adata, CFG, log):
     if 'neighbors' not in adata.uns:
         log.info("Recomputing neighbors...")
         use_rep = 'X_pca_harmony' if 'X_pca_harmony' in adata.obsm else 'X_pca'
-        sc.pp.neighbors(adata, n_pcs=CFG.n_pcs_use,
-                        n_neighbors=CFG.n_neighbors,
-                        use_rep=use_rep, random_state=CFG.random_seed)
+        sc.pp.neighbors(adata, n_pcs=CFG.pca.n_pcs_use,
+                        n_neighbors=CFG.clustering.n_neighbors,
+                        use_rep=use_rep, random_state=CFG.execution.random_seed)
     if 'X_umap' not in adata.obsm:
         log.info("Recomputing UMAP...")
-        sc.tl.umap(adata, random_state=CFG.random_seed)
+        sc.tl.umap(adata, random_state=CFG.execution.random_seed)
     log.info("Neighbors + UMAP ready")
 
 def run_paga(adata, CFG, log):
@@ -54,15 +54,15 @@ def run_paga(adata, CFG, log):
 def find_root_cells(adata, CFG, log):
     """自动识别根细胞"""
     # 方法 1: 指定根细胞类型
-    if CFG.root_cell_types:
-        log.info("Root cells: type %s + earliest stage", CFG.root_cell_types)
-        if 'stage' in adata.obs and CFG.stage_order:
+    if CFG.trajectory.root_cell_types:
+        log.info("Root cells: type %s + earliest stage", CFG.trajectory.root_cell_types)
+        if 'stage' in adata.obs and CFG.sample_meta.stage_order:
             root_mask = (
-                adata.obs['cell_type'].isin(CFG.root_cell_types)
-                & (adata.obs['stage'] == CFG.stage_order[0])
+                adata.obs['cell_type'].isin(CFG.trajectory.root_cell_types)
+                & (adata.obs['stage'] == CFG.sample_meta.stage_order[0])
             )
         else:
-            root_mask = adata.obs['cell_type'].isin(CFG.root_cell_types)
+            root_mask = adata.obs['cell_type'].isin(CFG.trajectory.root_cell_types)
         if root_mask.sum() > 0:
             log.info("  Root cells: %d", root_mask.sum())
             return root_mask.values
@@ -70,9 +70,9 @@ def find_root_cells(adata, CFG, log):
             log.warning("  Root cells of specified type not found, trying marker gene method")
 
     # 方法 2: 标记基因自动检测
-    if CFG.root_markers:
-        log.info("Root cells: marker gene method %s", CFG.root_markers)
-        markers_present = [g for g in CFG.root_markers if g in adata.raw.var_names]
+    if CFG.trajectory.root_markers:
+        log.info("Root cells: marker gene method %s", CFG.trajectory.root_markers)
+        markers_present = [g for g in CFG.trajectory.root_markers if g in adata.raw.var_names]
         if markers_present:
             group_col = 'cell_type' if 'cell_type' in adata.obs else 'leiden'
             cluster_scores = []
@@ -95,9 +95,9 @@ def find_root_cells(adata, CFG, log):
 
     # 方法 3: 回退到最早阶段的细胞
     log.warning("  Cannot auto-determine root, using earliest stage cells.")
-    if 'stage' in adata.obs and CFG.stage_order:
-        root_mask = adata.obs['stage'] == CFG.stage_order[0]
-        log.info("  Root cells: %d (earliest stage %s)", root_mask.sum(), CFG.stage_order[0])
+    if 'stage' in adata.obs and CFG.sample_meta.stage_order:
+        root_mask = adata.obs['stage'] == CFG.sample_meta.stage_order[0]
+        log.info("  Root cells: %d (earliest stage %s)", root_mask.sum(), CFG.sample_meta.stage_order[0])
         return root_mask.values
     # 最终回退: 第一个细胞
     log.warning("  Final fallback: using first cell as root.")
@@ -107,12 +107,12 @@ def find_root_cells(adata, CFG, log):
 
 def compute_dpt(adata, root_mask, CFG, log):
     """扩散图 + 扩散伪时间"""
-    log.info("Diffusion map (n_comps=%d)...", CFG.n_diffmap_comps)
-    sc.tl.diffmap(adata, n_comps=CFG.n_diffmap_comps)
+    log.info("Diffusion map (n_comps=%d)...", CFG.trajectory.n_diffmap_comps)
+    sc.tl.diffmap(adata, n_comps=CFG.trajectory.n_diffmap_comps)
 
     log.info("Diffusion pseudotime...")
     adata.uns['iroot'] = np.flatnonzero(root_mask)[0]
-    for nb in [CFG.n_branchings, 1, 0]:
+    for nb in [CFG.trajectory.n_branchings, 1, 0]:
         try:
             sc.tl.dpt(adata, n_branchings=nb)
             log.info("  DPT complete (n_branchings=%d)", nb)
@@ -166,11 +166,11 @@ def branch_analysis(adata, CFG, log) -> Optional[pd.DataFrame]:
             sc.tl.rank_genes_groups(
                 sub, groupby='cell_type', groups=[child], reference=parent,
                 method='wilcoxon', n_genes=50, use_raw=True,
-                random_state=CFG.random_seed,
+                random_state=CFG.execution.random_seed,
             )
             de_df = sc.get.rank_genes_groups_df(sub, group=child)
-            if CFG.de_pval_cutoff is not None:
-                de_df = de_df[de_df['pvals_adj'] < CFG.de_pval_cutoff].copy()
+            if CFG.de.pval_cutoff is not None:
+                de_df = de_df[de_df['pvals_adj'] < CFG.de.pval_cutoff].copy()
             de_df['branch'] = f'{child}_vs_{parent}'
             branch_results.append(de_df)
             n_up = (de_df['logfoldchanges'] > 0).sum()
@@ -272,14 +272,14 @@ def _select_pseudotime_correlated(adata, CFG) -> Tuple[List[str], pd.DataFrame]:
     # 5. Filter by adjusted p-value and correlation strength
     selected = []
     for i in range(len(gene_names)):
-        if pvals_adj is not None and pvals_adj[i] < CFG.pseudotime_cor_pval and abs(rhos[i]) > 0.2:
+        if pvals_adj is not None and pvals_adj[i] < CFG.trajectory.pseudotime_cor_pval and abs(rhos[i]) > 0.2:
             selected.append((gene_names[i], rhos[i]))
 
     # 6. Sort by |rho| descending
     selected.sort(key=lambda x: abs(x[1]), reverse=True)
 
     # 7. Balanced split: up to half from each sign
-    n = CFG.pseudotime_n_correlated
+    n = CFG.trajectory.pseudotime_n_correlated
     half_n = n // 2
     pos = [(g, r) for g, r in selected if r > 0]
     neg = [(g, r) for g, r in selected if r < 0]
@@ -312,7 +312,7 @@ def gene_trends(adata, CFG, log, branch_results: Optional[pd.DataFrame] = None):
         try:
             if all(c in branch_results.columns for c in ['names', 'scores', 'pvals_adj']):
                 branch_de = branch_results.sort_values('scores', ascending=False)
-                branch_top = branch_de['names'].drop_duplicates().head(CFG.pseudotime_n_branch_de).tolist()
+                branch_top = branch_de['names'].drop_duplicates().head(CFG.trajectory.pseudotime_n_branch_de).tolist()
                 branch_top = [g for g in branch_top if g in adata.raw.var_names]
                 selected_genes.extend(branch_top)
                 source_counts['branch_DE'] = len(branch_top)
@@ -332,11 +332,11 @@ def gene_trends(adata, CFG, log, branch_results: Optional[pd.DataFrame] = None):
         log.warning("Failed to compute pseudotime correlation: %s", e)
 
     # Source 3: CFG override
-    if CFG.pseudotime_genes:
-        override = [g for g in CFG.pseudotime_genes if g in adata.raw.var_names]
-        excluded = set(CFG.pseudotime_genes) - set(override)
+    if CFG.trajectory.pseudotime_genes:
+        override = [g for g in CFG.trajectory.pseudotime_genes if g in adata.raw.var_names]
+        excluded = set(CFG.trajectory.pseudotime_genes) - set(override)
         if excluded:
-            log.warning("CFG.pseudotime_genes excluded (not in var_names): %s", excluded)
+            log.warning("CFG.trajectory.pseudotime_genes excluded (not in var_names): %s", excluded)
         selected_genes.extend(override)
         source_counts['CFG_override'] = len(override)
 
@@ -370,7 +370,7 @@ def gene_trends(adata, CFG, log, branch_results: Optional[pd.DataFrame] = None):
             union_genes.append(g)
 
     # Cap total
-    max_genes = CFG.pseudotime_n_correlated * 2
+    max_genes = CFG.trajectory.pseudotime_n_correlated * 2
     union_genes = union_genes[:max_genes]
 
     # Export Spearman correlation full results
@@ -384,7 +384,7 @@ def gene_trends(adata, CFG, log, branch_results: Optional[pd.DataFrame] = None):
     for g in union_genes:
         if g in branch_top: source_map.setdefault(g, set()).add('branch_DE')
         if g in corr_genes: source_map.setdefault(g, set()).add('pseudotime_correlation')
-        if g in CFG.pseudotime_genes: source_map.setdefault(g, set()).add('CFG_override')
+        if g in CFG.trajectory.pseudotime_genes: source_map.setdefault(g, set()).add('CFG_override')
         if g in kb_genes: source_map.setdefault(g, set()).add('KB_markers')
     sel_df = pd.DataFrame(
         {'gene': list(source_map.keys()), 'source': ['+'.join(sorted(v)) for v in source_map.values()]},
@@ -443,7 +443,7 @@ def main():
     if 'marker_validation' in adata.obs and adata.n_obs > 0:
         pass_cells = (adata.obs['marker_validation'] == 'PASS').sum()
         pass_rate = pass_cells / adata.n_obs
-        pass_rate_min = getattr(CFG, 'marker_validation_pass_rate_min', 0.1)
+        pass_rate_min = getattr(CFG.marker, 'validation_pass_rate_min', 0.1)
         if pass_rate < pass_rate_min:
             if getattr(CFG, 'interactive', False):
                 print(

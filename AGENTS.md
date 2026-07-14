@@ -7,7 +7,7 @@
 ```bash
 python core/run_pipeline.py --modality rna --list
 python core/run_pipeline.py --modality atac --list
-python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config_<GSE_ID>.py
+python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config_<GSE_ID>.yaml
 python core/paper_insights.py --pmid <PMID>       # AI paper interpretation
 python core/paper_registry.py --build              # build paper→GSE→config index
 python core/paper_registry.py --verify             # check registry consistency
@@ -29,7 +29,7 @@ python core/run_reproduce.py <paper_dir>           # reproduce a single paper's 
 | Paper registry | `core/paper_registry.py`, `core/paper_registry_models.py` |
 | Reproduce mode | `core/run_reproduce.py` |
 | Paper insights docs | `docs/paper_insights_zh-CN.md` |
-| Project configs | `projects/{modality}/{GSE_ID}/config_*.py` |
+| Project configs | `projects/{modality}/{GSE_ID}/config_*.yaml` |
 | Paper index | `projects/papers/paper_index.html`, `projects/papers/registry.yaml` |
 ## Paper research workflow
 
@@ -58,7 +58,7 @@ local paper materials first:
 - Always source `.env` before running pipeline scripts: `set -a && source .env && set +a`
 - Steps run as **subprocesses** via `run_pipeline.py` — never imported directly
 - Every step script must add repo root to `sys.path`: `sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))`
-- Config loaded dynamically: `CFG = resolve_config(args.config)`
+- Config loaded dynamically: `CFG = resolve_config(args.config)` — resolves `.yaml` files via Pydantic v2
 - `data_root()` requires `FUXI_DATA_ROOT` env var (no hardcoded defaults)
 - Import pattern: `from core.utils import ...`, `from core.ai_caller import ...`
 - `CFG.cluster_selection_method` defaults to `"multi_metric"` (RNA) or `"pareto_elbow"` (ATAC, Spatial). Multi-metric is RNA-only — ATAC/Spatial enrichment not yet implemented.

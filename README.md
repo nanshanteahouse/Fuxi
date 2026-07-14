@@ -70,13 +70,13 @@ python core/run_pipeline.py --modality atac --list
 python core/run_pipeline.py --modality spatial --list
 
 # Run a full pipeline
-python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config_<GSE_ID>.py
+python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config_<GSE_ID>.yaml
 
 # Run a single step
-python core/run_pipeline.py --modality atac --step 0 --config projects/atac/<GSE_ID>/config_<GSE_ID>.py
+python core/run_pipeline.py --modality atac --step 0 --config projects/atac/<GSE_ID>/config_<GSE_ID>.yaml
 
 # Resume from checkpoint
-python core/run_pipeline.py --modality rna --resume --config projects/rna/<GSE_ID>/config_<GSE_ID>.py
+python core/run_pipeline.py --modality rna --resume --config projects/rna/<GSE_ID>/config_<GSE_ID>.yaml
 ```
 
 ### Data Organization
@@ -90,9 +90,45 @@ export FUXI_DATA_ROOT=/mnt/e/data              # WSL
 set FUXI_DATA_ROOT=E:/data                     # Windows
 ```
 
-## Project Config Pattern
+## Project Config Pattern (YAML)
 
-```python
+```yaml
+# projects/rna/<GSE_ID>/config_<GSE_ID>.yaml
+modality: rna
+species: human
+tissue: retina
+
+# Data input
+data_input:
+  mtx_prefix: "GSE12345_Sample1_"
+
+# QC thresholds
+qc:
+  min_genes: 500
+  max_genes: 7500
+  max_pct_mito: 20.0
+
+# HVG selection
+hvg:
+  n_top_genes: 4000
+  flavor: seurat_v3
+
+# Clustering
+clustering:
+  cluster_selection_method: multi_metric
+  param_grid_n_neighbors: [15, 20, 30]
+  param_grid_resolutions: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
+
+# Annotation
+marker:
+  marker_dict:
+    "Rod Photoreceptor": ["RHO", "GNAT1"]
+    "Müller Glia": ["RLBP1", "GLUL"]
+
+# AI annotation
+ai:
+  enabled: false
+```
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', '..'))
 from core.config import Config, AIConfig

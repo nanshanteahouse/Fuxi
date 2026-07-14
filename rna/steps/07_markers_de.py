@@ -28,14 +28,14 @@ def layer1_markers(adata, CFG, log, group_col):
     log.info("[Layer 1] Marker gene detection: groupby=%s", group_col)
     sc.tl.rank_genes_groups(
         adata, groupby=group_col, method='wilcoxon',
-        n_genes=CFG.de_n_genes * 2, use_raw=True, pts=True,
-        random_state=CFG.random_seed,
+        n_genes=CFG.de.n_genes * 2, use_raw=True, pts=True,
+        random_state=CFG.execution.random_seed,
     )
 
     # Step A: export unfiltered (full markers for downstream Steps 09/10)
     result_all = sc.get.rank_genes_groups_df(adata, group=None)
-    if CFG.de_pval_cutoff is not None:
-        result_all = result_all[result_all['pvals_adj'] < CFG.de_pval_cutoff]
+    if CFG.de.pval_cutoff is not None:
+        result_all = result_all[result_all['pvals_adj'] < CFG.de.pval_cutoff]
     out_path = os.path.join(CFG.table_dir, f'marker_genes_per_group_{group_col}.csv')
     result_all.to_csv(out_path, index=False)
     log.info("  Exported (unfiltered): %s (%d rows)", out_path, len(result_all))
@@ -79,12 +79,12 @@ def _layer2_one_pair(ct, s1, s2, adata, ct_col, CFG, log):
     try:
         sc.tl.rank_genes_groups(
             sub, groupby='stage', groups=[s2], reference=s1,
-            method='t-test', n_genes=CFG.de_n_genes,
-            use_raw=True, random_state=CFG.random_seed,
+            method='t-test', n_genes=CFG.de.n_genes,
+            use_raw=True, random_state=CFG.execution.random_seed,
         )
         de_df = sc.get.rank_genes_groups_df(sub, group=s2)
-        if CFG.de_pval_cutoff is not None:
-            de_df = de_df[de_df['pvals_adj'] < CFG.de_pval_cutoff].copy()
+        if CFG.de.pval_cutoff is not None:
+            de_df = de_df[de_df['pvals_adj'] < CFG.de.pval_cutoff].copy()
         de_df['cell_type'] = ct
         de_df['comparison'] = f'{s2}_vs_{s1}'
         result = (f'{ct}_{s2}_vs_{s1}', de_df)
@@ -99,13 +99,13 @@ def _layer2_one_pair(ct, s1, s2, adata, ct_col, CFG, log):
 
 def layer2_pairwise_de(adata, CFG, log, primary_col=None):
     """相邻发育阶段配对差异表达"""
-    if 'stage' not in adata.obs or not CFG.stage_order:
+    if 'stage' not in adata.obs or not CFG.sample_meta.stage_order:
         log.info("[Layer 2] No stage info, skipping.")
         return {}
-    if not getattr(CFG, 'de_stage_pairwise', True):
+    if not getattr(CFG.de, 'stage_pairwise', True):
         log.info("[Layer 2] de_stage_pairwise=False, skipping.")
         return {}
-    stage_pairs = list(zip(CFG.stage_order[:-1], CFG.stage_order[1:]))
+    stage_pairs = list(zip(CFG.sample_meta.stage_order[:-1], CFG.sample_meta.stage_order[1:]))
     ct_col = primary_col if primary_col else ('cell_type' if 'cell_type' in adata.obs else 'leiden')
     all_results = {}
     log.info("[Layer 2] Adjacent stage pairwise DE (%d pairs, %d types)...",
@@ -118,7 +118,7 @@ def layer2_pairwise_de(adata, CFG, log, primary_col=None):
     ]
 
     if tasks:
-        n_jobs = min(getattr(CFG, 'n_jobs', 4) or os.cpu_count() or 1, len(tasks))
+        n_jobs = min(getattr(CFG.execution, 'n_jobs', 4) or os.cpu_count() or 1, len(tasks))
         results = Parallel(n_jobs=n_jobs, prefer='threads', require='sharedmem')(
             delayed(_layer2_one_pair)(ct, s1, s2, adata, ct_col, CFG, log)
             for ct, s1, s2 in tasks
@@ -137,11 +137,11 @@ def layer2_pairwise_de(adata, CFG, log, primary_col=None):
 
 def layer3_temporal_trends(adata, CFG, log, primary_col=None):
     """发育时间趋势基因 (Spearman 相关 vs 发育顺序)"""
-    if 'stage' not in adata.obs or not CFG.stage_order:
+    if 'stage' not in adata.obs or not CFG.sample_meta.stage_order:
         log.info("[Layer 3] No stage info, skipping.")
         return pd.DataFrame()
 
-    stage_numeric = {s: i for i, s in enumerate(CFG.stage_order)}
+    stage_numeric = {s: i for i, s in enumerate(CFG.sample_meta.stage_order)}
     ct_col = primary_col if primary_col else ('cell_type' if 'cell_type' in adata.obs else 'leiden')
     log.info("[Layer 3] Temporal trend analysis (per %s)...", ct_col)
     results = []
@@ -153,7 +153,7 @@ def layer3_temporal_trends(adata, CFG, log, primary_col=None):
             continue
         stages = adata.obs.loc[ct_mask, 'stage']
         # 至少 3 个阶段且每阶段 >= 5 细胞
-        valid_stages = [s for s in CFG.stage_order
+        valid_stages = [s for s in CFG.sample_meta.stage_order
                         if s in stages.values and (stages == s).sum() >= 5]
         if len(valid_stages) < 3:
             continue
@@ -232,9 +232,9 @@ def generate_figures(adata, markers_df, CFG, log, primary_col=None):
                   groupby=group_col, show=False, save='_07_marker_heatmap.pdf')
 
     # 关键标记基因 dotplot
-    if CFG.marker_dict:
+    if CFG.marker.marker_dict:
         all_markers = []
-        for genes in CFG.marker_dict.values():
+        for genes in CFG.marker.marker_dict.values():
             all_markers.extend([g for g in genes if g in adata.raw.var_names][:2])
         all_markers = list(dict.fromkeys(all_markers))
         if all_markers:
@@ -264,7 +264,7 @@ def main():
         _pass_cells = (adata.obs['marker_validation'] == 'PASS').sum()
         _pass_rate = _pass_cells / adata.n_obs
         log.info("marker_validation PASS rate: %.1f%%", _pass_rate * 100)
-        _pass_rate_min = getattr(CFG, 'marker_validation_pass_rate_min', 0.1)
+        _pass_rate_min = getattr(CFG.marker, 'validation_pass_rate_min', 0.1)
         if _pass_rate < _pass_rate_min:
             log.warning(
                 "⚠  marker_validation PASS rate %.1f%% (<%.0f%%) — "
@@ -296,7 +296,7 @@ def main():
     # 非主列并行（仅在有多列时）
     if len(annotation_cols) > 1:
         non_primary_cols = annotation_cols[1:]
-        n_jobs = min(getattr(CFG, 'n_jobs', 4) or os.cpu_count() or 1, len(non_primary_cols))
+        n_jobs = min(getattr(CFG.execution, 'n_jobs', 4) or os.cpu_count() or 1, len(non_primary_cols))
         log.info("Layer 1: parallel marker detection across %d annotation cols (n_jobs=%d)",
                  len(non_primary_cols), n_jobs)
         parallel_layer1 = Parallel(n_jobs=n_jobs, prefer='threads')(

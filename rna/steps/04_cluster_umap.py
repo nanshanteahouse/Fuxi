@@ -43,10 +43,10 @@ def main():
     log.info("use_rep: %s", use_rep)
 
     # ── 参数网格 ──
-    n_neighbors_grid = getattr(CFG, 'param_grid_n_neighbors', [15, 20, 30])
-    resolutions_grid = getattr(CFG, 'param_grid_resolutions', [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
+    n_neighbors_grid = getattr(CFG.clustering, 'param_grid_n_neighbors', [15, 20, 30])
+    resolutions_grid = getattr(CFG.clustering, 'param_grid_resolutions', [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
     # ── Adaptive resolution expansion for small datasets ──
-    if getattr(CFG, 'multi_metric_adaptive_resolution', False):
+    if getattr(CFG.clustering, 'multi_metric_adaptive_resolution', False):
         if adata.n_obs < 3000:
             extra = [r for r in [3.0, 5.0] if r not in resolutions_grid]
             if extra:
@@ -58,8 +58,8 @@ def main():
     fig_dir = os.path.join(CFG.figure_dir, '04_cluster')
     os.makedirs(fig_dir, exist_ok=True)
 
-    umap_min_dist = getattr(CFG, 'umap_min_dist', 0.3)
-    umap_spread = getattr(CFG, 'umap_spread', 1.0)
+    umap_min_dist = getattr(CFG.clustering, 'umap_min_dist', 0.3)
+    umap_spread = getattr(CFG.clustering, 'umap_spread', 1.0)
 
     # ── Grid search via shared core ──
 
@@ -67,35 +67,35 @@ def main():
     def _neighbors_fn(adata, n_neighbors=15, **kwargs):
         sc.pp.neighbors(
             adata, n_neighbors=n_neighbors,
-            n_pcs=CFG.n_pcs_use, use_rep=use_rep,
-            random_state=CFG.random_seed,
+            n_pcs=CFG.pca.n_pcs_use, use_rep=use_rep,
+            random_state=CFG.execution.random_seed,
         )
 
     def _umap_fn(adata, **kwargs):
         sc.tl.umap(adata, min_dist=umap_min_dist,
                    spread=umap_spread,
-                   random_state=CFG.random_seed)
+                   random_state=CFG.execution.random_seed)
 
     def _clusterer_fn(adata, resolution=1.0, n_neighbors=15, **kwargs):
         leiden_key = f'leiden_{n_neighbors}_{resolution}'
         umap_key = f'umap_{n_neighbors}_{resolution}'
         sc.tl.leiden(adata, resolution=resolution, key_added=leiden_key,
-                     random_state=CFG.random_seed, flavor=CFG.leiden_flavor)
+                     random_state=CFG.execution.random_seed, flavor=CFG.clustering.leiden_flavor)
         adata.obsm[umap_key] = adata.obsm['X_umap'].copy()
         return leiden_key
 
     def _evaluation_fn(adata, cluster_key, **kwargs):
         labels = adata.obs[cluster_key].values
         if adata.n_obs > SILHOUETTE_SAMPLE_THRESHOLD:
-            rng = np.random.RandomState(CFG.random_seed)
+            rng = np.random.RandomState(CFG.execution.random_seed)
             idx = rng.choice(adata.n_obs, SILHOUETTE_SAMPLE_THRESHOLD, replace=False)
             return float(silhouette_score(
-                adata.obsm[use_rep][idx, :CFG.n_pcs_use],
+                adata.obsm[use_rep][idx, :CFG.pca.n_pcs_use],
                 labels[idx],
             ))
         else:
             return float(silhouette_score(
-                adata.obsm[use_rep][:, :CFG.n_pcs_use],
+                adata.obsm[use_rep][:, :CFG.pca.n_pcs_use],
                 labels,
             ))
 
@@ -110,7 +110,7 @@ def main():
         umap_fn=_umap_fn,
         evaluation_fn=_evaluation_fn,
         group_key='n_neighbors',
-        random_seed=CFG.random_seed,
+        random_seed=CFG.execution.random_seed,
     )
 
     # Rename score → silhouette_score for select_best_params compatibility
@@ -129,7 +129,7 @@ def main():
         log.info("Granularity=subtype — using DE-gated resolution selection (bypassing enrichment)")
         n_clusters, resolution, cluster_key, reason_str = _select_de_gated(
             results_summary, adata,
-            de_gate_threshold=getattr(CFG, 'multi_metric_de_gate_threshold', 25),
+            de_gate_threshold=getattr(CFG.clustering, 'multi_metric_de_gate_threshold', 25),
         )
         # Extract n_neighbors from selected entry
         best_n = None
@@ -151,10 +151,10 @@ def main():
         import logging as _logging
         _log_enrich = _logging.getLogger(__name__)
 
-        marker_dict = getattr(CFG, 'marker_dict', None) or {}
+        marker_dict = getattr(CFG.marker, 'marker_dict', None) or {}
         has_markers = bool(marker_dict)
-        n_stab_seeds = getattr(CFG, 'multi_metric_n_stability_seeds', 5)
-        dominance_threshold = getattr(CFG, 'multi_metric_coverage_ratio_threshold', 1.5)
+        n_stab_seeds = getattr(CFG.clustering, 'multi_metric_n_stability_seeds', 5)
+        dominance_threshold = getattr(CFG.clustering, 'multi_metric_coverage_ratio_threshold', 1.5)
 
         # Group results by n_neighbors
         from itertools import groupby
@@ -168,8 +168,8 @@ def main():
             try:
                 sc.pp.neighbors(
                     adata, n_neighbors=n_val,
-                    n_pcs=CFG.n_pcs_use, use_rep=use_rep,
-                    random_state=CFG.random_seed,
+                    n_pcs=CFG.pca.n_pcs_use, use_rep=use_rep,
+                    random_state=CFG.execution.random_seed,
                 )
             except Exception as e:
                 _log_enrich.warning("KNN rebuild failed for n_neighbors=%d: %s — skipping group", n_val, e)
@@ -203,7 +203,7 @@ def main():
                     resolution = entry['resolution']
                     ck = entry['cluster_key']
                     entry['stability_score'] = _compute_stability(
-                        adata, resolution=resolution, leiden_flavor=CFG.leiden_flavor,
+                        adata, resolution=resolution, leiden_flavor=CFG.clustering.leiden_flavor,
                         n_seeds=n_stab_seeds,
                     )
                     if has_markers and per_cell_scores:
@@ -286,23 +286,23 @@ def main():
     df_summary = pd.DataFrame(results_summary)
 
 
-    method = getattr(CFG, 'cluster_selection_method', 'pareto_elbow')
+    method = getattr(CFG.clustering, 'cluster_selection_method', 'pareto_elbow')
 
     # Warn if best_resolution is explicitly set to non-default but will be ignored
-    if method is not None and (getattr(CFG, 'best_resolution', 1.0) != 1.0 or getattr(CFG, 'best_n_neighbors', 0) != 0):
+    if method is not None and (getattr(CFG.clustering, 'best_resolution', 1.0) != 1.0 or getattr(CFG.clustering, 'best_n_neighbors', 0) != 0):
         log.warning(
             "best_resolution=%.1f / best_n_neighbors=%d are set but cluster_selection_method=%r will ignore them. "
             "Set cluster_selection_method=None to use manual mode.",
-            CFG.best_resolution, getattr(CFG, 'best_n_neighbors', 0), method,
+            CFG.clustering.best_resolution, getattr(CFG.clustering, 'best_n_neighbors', 0), method,
         )
 
     if not _de_gated_selected:
         best_n, best_r, method_name, reason = select_best_params(
             results_summary,
             method=method,
-            best_resolution=CFG.best_resolution if method is None else None,
-            best_n_neighbors=getattr(CFG, 'best_n_neighbors', 0) if method is None else 0,
-            multi_metric_weights=getattr(CFG, 'multi_metric_weights', None),
+            best_resolution=CFG.clustering.best_resolution if method is None else None,
+            best_n_neighbors=getattr(CFG.clustering, 'best_n_neighbors', 0) if method is None else 0,
+            multi_metric_weights=getattr(CFG.clustering, 'multi_metric_weights', None),
         )
 
     log.info("Selected best params via %s: n_neighbors=%d, resolution=%.1f (%s)",
@@ -324,10 +324,10 @@ def main():
         log.warning("Selected param combination (%s, %s) not in results, skipping auto-lock", leiden_col, umap_col)
 
     # ── UMAP 参数扫描 (min_dist × spread) ──────────────────────────────────
-    min_dist_grid = getattr(CFG, 'param_grid_min_dist', [0.3])
-    spread_grid = getattr(CFG, 'param_grid_spread', [1.0])
-    umap_method = getattr(CFG, 'umap_selection_method', 'convex_hull')
-    use_paga = getattr(CFG, 'umap_paga_init', False)
+    min_dist_grid = getattr(CFG.clustering, 'param_grid_min_dist', [0.3])
+    spread_grid = getattr(CFG.clustering, 'param_grid_spread', [1.0])
+    umap_method = getattr(CFG.clustering, 'umap_selection_method', 'convex_hull')
+    use_paga = getattr(CFG.clustering, 'umap_paga_init', False)
 
     # If PAGA init is enabled, compute PAGA backbone first
     if use_paga:
@@ -348,7 +348,7 @@ def main():
     try:
         sc.tl.umap(adata, min_dist=best_md, spread=best_sp,
                    init_pos='paga' if use_paga else 'spectral',
-                   random_state=CFG.random_seed)
+                   random_state=CFG.execution.random_seed)
         safe_write(adata, CFG.cluster_h5ad, cfg=CFG)
         log.info("Checkpoint saved with final UMAP: %s", CFG.cluster_h5ad)
     except Exception as e:
@@ -379,7 +379,7 @@ def main():
                 sp = r['spread']
                 try:
                     sc.tl.umap(adata, min_dist=md, spread=sp,
-                               random_state=CFG.random_seed)
+                               random_state=CFG.execution.random_seed)
                     sc.pl.umap(adata, color='leiden', ax=ax, show=False,
                                legend_fontsize=8,
                                title=f'min_dist={md}, spread={sp}')

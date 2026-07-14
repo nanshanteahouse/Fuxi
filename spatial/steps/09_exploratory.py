@@ -71,8 +71,8 @@ def spatial_gene_plots(adata, CFG, log):
         gene_candidates = gene_candidates[:8]
 
     # Fallback to configured markers
-    if not gene_candidates and CFG.marker_dict:
-        for genes in CFG.marker_dict.values():
+    if not gene_candidates and CFG.marker.marker_dict:
+        for genes in CFG.marker.marker_dict.values():
             gene_candidates.extend(genes[:2])
         gene_candidates = list(dict.fromkeys(gene_candidates))[:8]
 

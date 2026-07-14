@@ -115,10 +115,10 @@ def detect_sex(adata, CFG, log):
             "Mixed-sex dataset detected — sex may act as batch effect."
         )
         log.warning(
-            "  Option 1 (mild):  CFG.harmony_batch_key = 'predicted_sex'"
+            "  Option 1 (mild):  CFG.harmony.batch_key = 'predicted_sex'"
         )
         log.warning(
-            "  Option 2 (strong): CFG.regress_out_genes = [%s]", _gene_hint
+            "  Option 2 (strong): CFG.normalization.regress_out_genes = [%s]", _gene_hint
         )
 
     if "sample" in adata.obs:

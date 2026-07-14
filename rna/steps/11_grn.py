@@ -374,7 +374,7 @@ def main():
     log = setup_logger("11_grn", os.path.join(CFG.log_dir, "11_grn.log"))
     log.info("Step 11: GRN regulatory network analysis (decoupler)")
 
-    if not getattr(CFG, 'run_grn', True):
+    if not getattr(CFG.grn, 'run', True):
         log.info("run_grn=False - skipping")
         return
 
@@ -392,12 +392,12 @@ def main():
     # ---------- Fetch regulon network ----------
     import decoupler as dc
 
-    species = getattr(CFG, 'grn_species', 'human')
+    species = getattr(CFG.grn, 'species', 'human')
     log.info("Regulon: CollecTRI (%s)", species)
     net = dc.op.collectri(organism=species)
     net = net[net['weight'] > 0].copy()
 
-    min_size = getattr(CFG, 'grn_min_regulon_size', 5)
+    min_size = getattr(CFG.grn, 'min_regulon_size', 5)
     net = filter_regulon_net(net, min_genes=min_size, log=log)
 
     # ---------- Run activity inference ----------
@@ -405,8 +405,8 @@ def main():
 
     # ── Load KB markers for tissue-aware TF ranking ────────────────
     kb_markers = None
-    n_top = min(getattr(CFG, 'grn_n_top_regulons', 50), est_df.shape[1])
-    if getattr(CFG, 'grn_use_kb_relevance', False):
+    n_top = min(getattr(CFG.grn, 'n_top_regulons', 50), est_df.shape[1])
+    if getattr(CFG.grn, 'use_kb_relevance', False):
         tissue = getattr(CFG, 'tissue', '') or ''
         if tissue and tissue != "unknown":
             kb_markers = load_all_kb_markers(tissue)
@@ -418,7 +418,7 @@ def main():
             log.info("No tissue configured, skipping KB marker loading")
 
     # ── Mode gating ──────────────────────────────────────────────────
-    grn_mode = getattr(CFG, 'grn_tissue_mode', 'off')
+    grn_mode = getattr(CFG.grn, 'tissue_mode', 'off')
     if grn_mode not in {"off", "soft", "hard"}:
         raise ValueError(f"Invalid grn_tissue_mode: '{grn_mode}'. Must be off, soft, or hard.")
 
@@ -438,7 +438,7 @@ def main():
     log.info("Top-TF edges: %d (from %d total filtered edges)", len(net_top), len(net_filtered))
 
     # In hard mode with grn_export_filtered, also filter to tissue-relevant TFs only
-    if grn_mode == "hard" and tf_ann is not None and getattr(CFG, 'grn_export_filtered', False):
+    if grn_mode == "hard" and tf_ann is not None and getattr(CFG.grn, 'export_filtered', False):
         relevant_tfs = set(tf_ann[tf_ann['kb_overlap_ratio'] > 0]['tf'])
         top_df = top_df[[c for c in top_df.columns if c in relevant_tfs]]
         log.info("hard+export_filtered: reduced to %d tissue-relevant TFs", top_df.shape[1])

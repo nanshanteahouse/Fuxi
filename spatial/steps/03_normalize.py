@@ -47,8 +47,8 @@ def main():
     log.info("Loaded: %s — %d spots × %d genes", input_path, adata.n_obs, adata.n_vars)
 
     # ── 1. Normalize ────────────────────────────────────────────────────
-    log.info("Normalizing to target sum=%.0f...", CFG.normalize_target_sum)
-    sc.pp.normalize_total(adata, target_sum=CFG.normalize_target_sum)
+    log.info("Normalizing to target sum=%.0f...", CFG.normalization.normalize_target_sum)
+    sc.pp.normalize_total(adata, target_sum=CFG.normalization.normalize_target_sum)
     log.info("  Normalization complete")
 
     # ── 2. Log1p ─────────────────────────────────────────────────────────
@@ -60,12 +60,12 @@ def main():
     log.info("  Raw counts stored in adata.raw")
 
     # ── 3. Highly variable genes ────────────────────────────────────────
-    log.info("Selecting %d HVGs (flavor=%s)...", CFG.n_top_genes, CFG.hvg_flavor)
+    log.info("Selecting %d HVGs (flavor=%s)...", CFG.hvg.n_top_genes, CFG.hvg.flavor)
     sc.pp.highly_variable_genes(
         adata,
-        n_top_genes=CFG.n_top_genes,
-        flavor=CFG.hvg_flavor,
-        batch_key=CFG.hvg_batch_key if CFG.has_sample_mapping() else None,
+        n_top_genes=CFG.hvg.n_top_genes,
+        flavor=CFG.hvg.flavor,
+        batch_key=CFG.hvg.batch_key if CFG.has_sample_mapping() else None,
     )
     n_hvg = adata.var['highly_variable'].sum()
     log.info("  Selected %d HVGs", n_hvg)
@@ -77,22 +77,22 @@ def main():
     # ── 4. Spatial neighbor graph ────────────────────────────────────────
     log.info("Building spatial neighbor graph...")
     # Determine connectivity mode
-    if CFG.spatial_neighbors_radius > 0:
+    if CFG.spatial.neighbors_radius > 0:
         sq.gr.spatial_neighbors(
             adata,
-            radius=CFG.spatial_neighbors_radius,
+            radius=CFG.spatial.neighbors_radius,
             library_key=None,
             coord_type='generic',
         )
-        log.info("  Spatial graph: radius=%.1f", CFG.spatial_neighbors_radius)
+        log.info("  Spatial graph: radius=%.1f", CFG.spatial.neighbors_radius)
     else:
         sq.gr.spatial_neighbors(
             adata,
-            n_neighs=CFG.spatial_neighbors_n,
+            n_neighs=CFG.spatial.neighbors_n,
             library_key=None,
             coord_type='generic',
         )
-        log.info("  Spatial graph: n_neighs=%d", CFG.spatial_neighbors_n)
+        log.info("  Spatial graph: n_neighs=%d", CFG.spatial.neighbors_n)
 
     # Verify graph exists
     if 'spatial_connectivities' not in adata.obsp:
@@ -100,15 +100,15 @@ def main():
         sys.exit(1)
 
     # ── 5. PCA ────────────────────────────────────────────────────────────
-    log.info("Computing PCA (n_comps=%d)...", CFG.n_pcs_full)
+    log.info("Computing PCA (n_comps=%d)...", CFG.pca.n_pcs_full)
     sc.pp.pca(
         adata,
-        n_comps=CFG.n_pcs_full,
+        n_comps=CFG.pca.n_pcs_full,
         use_highly_variable=True,
         svd_solver='arpack',
-        random_state=CFG.random_seed,
+        random_state=CFG.execution.random_seed,
     )
-    n_pcs_used = min(CFG.n_pcs_use, adata.obsm['X_pca'].shape[1])
+    n_pcs_used = min(CFG.pca.n_pcs_use, adata.obsm['X_pca'].shape[1])
     log.info("  PCA complete: %d components stored", n_pcs_used)
 
     # ── Save ────────────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 # 如何配置新数据集
 
-> 假设你已经运行过预处理脚本（`core/preprocess/preprocessor.py`），得到了 `dataset.yaml` 和 `config_{GSE}.py` 两个文件。本文档聚焦配置过程中需要做的**概念性决策**，而非每行参数的机械解释。
+> 假设你已经运行过预处理脚本（`core/preprocess/preprocessor.py`），得到了 `dataset.yaml` 和 `config_{GSE}.yaml` 两个文件。本文档聚焦配置过程中需要做的**概念性决策**，而非每行参数的机械解释。
 
 > 具体参数和配置语法见 [Pipeline 使用指南](../pipeline_guide_zh-CN.md#9-配置文件详解)。
 
@@ -66,10 +66,11 @@ Fuxi 目前内置的 Knowledge Base 只覆盖了**视网膜**组织。如果你�
 
 **手动设置**（如自动检测不正确）：
 
-```python
-# 在 config_*.py 中
-CFG.is_nuclei = True                      # 启用核数据模式
-CFG.max_pct_mito_nuclei = 5.0             # 可选：自定义核数据线粒体上限
+```yaml
+# 在 config_*.yaml 中
+qc:
+  is_nuclei: True                      # 启用核数据模式
+  max_pct_mito_nuclei: 5.0             # 可选：自定义核数据线粒体上限
 ```
 
 > **结论**：大多数情况下不需要手动设置。预处理用 `--query-ncbi` 会自动识别。如果知道你的数据是 snRNA-seq 但自动检测未识别（如本地数据），手动设置 `CFG.is_nuclei = True` 即可。
@@ -81,7 +82,7 @@ Fuxi 的注释引擎会自动选择最佳方案：如果 `tissue_kb` 设置且�
 ### 5. 是否要使用 AI 注释？
 
 要使用 AI 注释需要满足以下条件：
-1. 在 `config.py` 中设置 `CFG.ai.enabled = True` 和 `CFG.ai.ai_annotation = True`
+1. 在 `config.yaml` 中设置 `ai.enabled = true` 和 `ai.ai_annotation = true`
 2. 设置环境变量 `LLM_API_KEY`（OpenAI / DeepSeek / vLLM / Ollama）
 3. 有可用的互联网连接（如果使用远程模型）
 

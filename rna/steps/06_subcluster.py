@@ -141,8 +141,8 @@ def main():
     log.info("Step 06: Interactive subclustering")
     log.info("Cell type: %s", args.cell_type)
 
-    # Early exit when neither --cell-type nor CFG.subcluster_types is configured
-    if args.cell_type is None and not CFG.subcluster_types:
+    # Early exit when neither --cell-type nor CFG.marker.subcluster_types is configured
+    if args.cell_type is None and not CFG.marker.subcluster_types:
         log.info("subcluster_types not configured, skipping.")
         sys.exit(2)
 
@@ -218,12 +218,12 @@ def main():
                      sub_raw.n_obs, sub_raw.n_vars)
 
             # Re-select HVGs within the subset
-            hvg_flavors = [CFG.hvg_flavor, 'seurat_v3', 'seurat']
+            hvg_flavors = [CFG.hvg.flavor, 'seurat_v3', 'seurat']
             hvg_ok = False
             for flavor in hvg_flavors:
                 try:
                     sc.pp.highly_variable_genes(
-                        sub_raw, n_top_genes=CFG.n_top_genes, flavor=flavor,
+                        sub_raw, n_top_genes=CFG.hvg.n_top_genes, flavor=flavor,
                     )
                     hvg_ok = True
                     log.info("Subset HVG: flavor=%s, %d genes selected",
@@ -235,28 +235,28 @@ def main():
             if hvg_ok and sub_raw.var['highly_variable'].sum() > 0:
                 # Normalize + log1p on HVG subset
                 sub_raw = sub_raw[:, sub_raw.var['highly_variable']].copy()
-                sc.pp.normalize_total(sub_raw, target_sum=CFG.normalize_target_sum)
+                sc.pp.normalize_total(sub_raw, target_sum=CFG.normalization.normalize_target_sum)
                 sc.pp.log1p(sub_raw)
 
                 # PCA
                 n_comps_sub = min(50, sub_raw.n_obs - 2)
                 sc.pp.pca(sub_raw, n_comps=n_comps_sub, svd_solver='randomized',
-                          random_state=CFG.random_seed)
+                          random_state=CFG.execution.random_seed)
                 log.info("Subset PCA: n_comps=%d", n_comps_sub)
 
                 # Harmony batch correction
-                if CFG.use_harmony and CFG.harmony_batch_key in sub_raw.obs.columns:
+                if CFG.harmony.use_harmony and CFG.harmony.batch_key in sub_raw.obs.columns:
                     from harmony import harmonize
-                    n_pcs_use = min(CFG.n_pcs_use, n_comps_sub)
+                    n_pcs_use = min(CFG.pca.n_pcs_use, n_comps_sub)
                     log.info("Subset Harmony (batch_key=%s, n_pcs_use=%d)...",
-                             CFG.harmony_batch_key, n_pcs_use)
+                             CFG.harmony.batch_key, n_pcs_use)
                     try:
                         Z = harmonize(
                             sub_raw.obsm['X_pca'][:, :n_pcs_use],
                             sub_raw.obs,
-                            batch_key=CFG.harmony_batch_key,
-                            random_state=CFG.random_seed,
-                            max_iter_harmony=CFG.harmony_max_iter,
+                            batch_key=CFG.harmony.batch_key,
+                            random_state=CFG.execution.random_seed,
+                            max_iter_harmony=CFG.harmony.max_iter,
                         )
                         sub_raw.obsm['X_pca_harmony'] = Z
                     except Exception as e:
@@ -286,39 +286,39 @@ def main():
         sc.pp.pca(sub, n_comps=n_comps_sub, svd_solver='arpack')
 
     # ── (e) Neighbors (use Harmony-corrected PCA when available) ─────
-    n_pcs_use = min(CFG.n_pcs_use, n_comps_sub)
+    n_pcs_use = min(CFG.pca.n_pcs_use, n_comps_sub)
     use_rep = 'X_pca_harmony' if 'X_pca_harmony' in sub.obsm else 'X_pca'
     log.info("Computing neighbor graph (use_rep=%s, n_pcs=%d)...",
              use_rep, n_pcs_use)
     sc.pp.neighbors(sub, n_pcs=n_pcs_use, use_rep=use_rep,
-                    random_state=CFG.random_seed)
+                    random_state=CFG.execution.random_seed)
 
     # ── (f) UMAP ──────────────────────────────────────────────────────
     log.info("Computing UMAP...")
-    sc.tl.umap(sub, random_state=CFG.random_seed)
+    sc.tl.umap(sub, random_state=CFG.execution.random_seed)
 
     # ── (g) Multi-resolution Leiden ───────────────────────────────────
-    log.info("Leiden subclustering, resolutions: %s", CFG.leiden_resolutions)
-    for res in CFG.leiden_resolutions:
+    log.info("Leiden subclustering, resolutions: %s", CFG.clustering.leiden_resolutions)
+    for res in CFG.clustering.leiden_resolutions:
         key = f'sub_leiden_r{res}'
         sc.tl.leiden(sub, resolution=res, key_added=key,
-                     random_state=CFG.random_seed, flavor=CFG.leiden_flavor)
+                     random_state=CFG.execution.random_seed, flavor=CFG.clustering.leiden_flavor)
         n_cl = sub.obs[key].nunique()
         log.info("  r=%.1f → %d subclusters", res, n_cl)
 
     # ── (h) Set best-resolution leiden ─────────────────────────────────
-    best_key = f'sub_leiden_r{CFG.subcluster_resolution}'
+    best_key = f'sub_leiden_r{CFG.marker.subcluster_resolution}'
     if best_key in sub.obs:
         sub.obs['leiden'] = sub.obs[best_key].copy()
         log.info("  Subcluster resolution: sub_leiden_r%.1f → leiden set",
-                 CFG.subcluster_resolution)
+                 CFG.marker.subcluster_resolution)
     else:
         # Fallback: try best_resolution, then last available
-        fallback_key = f'sub_leiden_r{CFG.best_resolution}'
+        fallback_key = f'sub_leiden_r{CFG.clustering.best_resolution}'
         if fallback_key in sub.obs:
             sub.obs['leiden'] = sub.obs[fallback_key].copy()
             log.info("  Fallback to best_resolution: %.1f → leiden set",
-                     CFG.best_resolution)
+                     CFG.clustering.best_resolution)
         else:
             avail = [k for k in sub.obs if k.startswith('sub_leiden_')]
             if avail:
@@ -343,7 +343,7 @@ def main():
               title=f'{args.cell_type} — leiden')
 
     # Multi-resolution comparison
-    res_keys = [f'sub_leiden_r{r}' for r in CFG.leiden_resolutions
+    res_keys = [f'sub_leiden_r{r}' for r in CFG.clustering.leiden_resolutions
                 if f'sub_leiden_r{r}' in sub.obs]
     i = -1
     if res_keys:
@@ -490,7 +490,7 @@ def main():
     log.info("  Cell type:       %s", args.cell_type)
     log.info("  Cells:           %d", n_cells)
     log.info("  Subclusters:     %d", n_clusters)
-    log.info("  Resolution:      %.1f", CFG.subcluster_resolution)
+    log.info("  Resolution:      %.1f", CFG.marker.subcluster_resolution)
     log.info("  Per-cluster counts:")
     for cluster_id in sorted(sub.obs['leiden'].unique(),
                              key=lambda x: int(x)):

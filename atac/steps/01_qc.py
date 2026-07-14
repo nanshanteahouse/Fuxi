@@ -44,14 +44,14 @@ def main():
 
     # ── Filter cells (counts only; TSS not available in 2.9) ──
     n0 = data.n_obs
-    snap.pp.filter_cells(data, min_counts=CFG.min_fragments,
-                         max_counts=CFG.max_fragments, min_tsse=None)
+    snap.pp.filter_cells(data, min_counts=CFG.atac.min_fragments,
+                         max_counts=CFG.atac.max_fragments, min_tsse=None)
     log.info("Filtered: %d → %d cells (-%.1f%%)",
              n0, data.n_obs, 100 * (n0 - data.n_obs) / max(n0, 1))
 
     # ── MACS3 peak calling (SnapATAC2 stores result in uns) ──
-    log.info("MACS3 (qval=%.2f)...", CFG.peak_qval)
-    snap.tl.macs3(data, qvalue=CFG.peak_qval, n_jobs=CFG.n_jobs)
+    log.info("MACS3 (qval=%.2f)...", CFG.atac.peak_qval)
+    snap.tl.macs3(data, qvalue=CFG.atac.peak_qval, n_jobs=CFG.execution.n_jobs)
     # In SnapATAC2 2.9 backed mode, uns is PyElemCollection — use subscript, not .get()
     import polars as pl
     try:
@@ -86,7 +86,7 @@ def main():
     # ── Scrublet ──
     log.info("Scrublet doublet detection...")
     try:
-        snap.pp.scrublet(peak_data, features=None, random_state=CFG.random_seed)
+        snap.pp.scrublet(peak_data, features=None, random_state=CFG.execution.random_seed)
         peak_data.obs['predicted_doublet'] = peak_data.obs['doublet_probability'] > 0.5
         n_dbl = peak_data.obs['predicted_doublet'].sum()
         log.info("  Doublets: %d (%.1f%%)", int(n_dbl),

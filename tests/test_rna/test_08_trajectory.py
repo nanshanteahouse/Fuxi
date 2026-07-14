@@ -3,8 +3,7 @@
 import importlib.util
 import logging
 import os
-from dataclasses import dataclass, field
-from typing import List
+
 
 import numpy as np
 import pandas as pd
@@ -29,22 +28,7 @@ gene_trends = trajectory.gene_trends
 _select_pseudotime_correlated = trajectory._select_pseudotime_correlated
 
 
-# ── Mock CFG ──────────────────────────────────────────────────────────────
-@dataclass
-class MockCFG:
-    """Minimal mock CFG with pseudotime-related fields.
-
-    Matches the subset of RNAConfig that gene_trends and
-    _select_pseudotime_correlated actually read.
-    """
-
-    pseudotime_n_branch_de: int = 10
-    pseudotime_n_correlated: int = 10
-    pseudotime_cor_pval: float = 0.05
-    pseudotime_genes: List[str] = field(default_factory=list)
-    tissue_kb: str = ""
-    table_dir: str = "/tmp"
-
+from core.config import Config
 
 # ── Test helpers ──────────────────────────────────────────────────────────
 
@@ -88,13 +72,15 @@ class TestGeneTrends:
         adata = _make_mock_adata(n_cells=100, n_genes=20)
         branch_results = _make_mock_branch_results(n_genes=5)
 
-        cfg = MockCFG(
-            pseudotime_n_branch_de=10,
-            pseudotime_n_correlated=10,
-            pseudotime_cor_pval=0.05,
-            pseudotime_genes=["GENE_0", "GENE_1"],
-            table_dir=str(tmp_path),
-        )
+        cfg = Config.model_validate({
+            "trajectory": {
+                "pseudotime_n_branch_de": 10,
+                "pseudotime_n_correlated": 10,
+                "pseudotime_cor_pval": 0.05,
+                "pseudotime_genes": ["GENE_0", "GENE_1"],
+            },
+            "table_dir": str(tmp_path),
+        })
 
         log = logging.getLogger("test_gene_trends_happy")
         gene_trends(adata, cfg, log, branch_results=branch_results)
@@ -123,7 +109,7 @@ class TestGeneTrends:
 
         adata = _make_mock_adata()
         del adata.obs["dpt_pseudotime"]
-        cfg = MockCFG()
+        cfg = Config()
         log = logging.getLogger("test_gene_trends_no_dpt")
 
         result = gene_trends(adata, cfg, log)
@@ -139,7 +125,7 @@ class TestGeneTrends:
 
         adata = _make_mock_adata()
         adata.raw = None
-        cfg = MockCFG()
+        cfg = Config()
         log = logging.getLogger("test_gene_trends_no_raw")
 
         result = gene_trends(adata, cfg, log)
@@ -172,7 +158,7 @@ class TestSelectPseudotimeCorrelated:
         adata.raw = adata.copy()
         adata.raw.X[:, :3] = pseudotime[:, None] * 10
 
-        cfg = MockCFG(pseudotime_n_correlated=10, pseudotime_cor_pval=0.05)
+        cfg = Config.model_validate({"trajectory": {"pseudotime_n_correlated": 10, "pseudotime_cor_pval": 0.05}})
         result, corr_df = _select_pseudotime_correlated(adata, cfg)
 
         assert isinstance(result, list), f"Expected list, got {type(result)}"
@@ -197,7 +183,7 @@ class TestSelectPseudotimeCorrelated:
         adata = _make_mock_adata()
         adata.obs["dpt_pseudotime"] = np.full(100, 0.5)
 
-        cfg = MockCFG(pseudotime_n_correlated=10, pseudotime_cor_pval=0.05)
+        cfg = Config.model_validate({"trajectory": {"pseudotime_n_correlated": 10, "pseudotime_cor_pval": 0.05}})
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", ConstantInputWarning)
@@ -242,14 +228,16 @@ class TestGenePriorityOrder:
             }
         )
 
-        cfg = MockCFG(
-            pseudotime_n_branch_de=10,
-            pseudotime_n_correlated=10,
-            pseudotime_cor_pval=0.05,
-            pseudotime_genes=["TOP"],  # Source 3 — same gene as source 1
-            tissue_kb="",               # Skip KB source
-            table_dir=str(tmp_path),
-        )
+        cfg = Config.model_validate({
+            "trajectory": {
+                "pseudotime_n_branch_de": 10,
+                "pseudotime_n_correlated": 10,
+                "pseudotime_cor_pval": 0.05,
+                "pseudotime_genes": ["TOP"],
+            },
+            "tissue_kb": "",
+            "table_dir": str(tmp_path),
+        })
 
         log = logging.getLogger("test_gene_priority_order")
         gene_trends(adata, cfg, log, branch_results=branch_results)
@@ -286,12 +274,14 @@ class TestHeatmapBinning:
             }
         )
 
-        cfg = MockCFG(
-            pseudotime_n_branch_de=10,
-            pseudotime_n_correlated=10,
-            pseudotime_cor_pval=0.05,
-            table_dir=str(tmp_path),
-        )
+        cfg = Config.model_validate({
+            "trajectory": {
+                "pseudotime_n_branch_de": 10,
+                "pseudotime_n_correlated": 10,
+                "pseudotime_cor_pval": 0.05,
+            },
+            "table_dir": str(tmp_path),
+        })
         log = logging.getLogger("test_heatmap_binning")
         gene_trends(adata, cfg, log, branch_results=branch_results)
 

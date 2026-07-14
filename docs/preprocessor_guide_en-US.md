@@ -26,7 +26,7 @@ After you've downloaded single-cell data from GEO, ArrayExpress, or other source
 | 📦 Archive extraction | Auto-extracts `.tar.gz`, `.zip`, `.gz` files | `tar -xzf` or right-click extract |
 | 🧬 Modality detection | Determines scRNA-seq, scATAC-seq, or multiome | Read the paper's Methods section |
 | 📋 Generate `dataset.yaml` | Creates a dataset metadata manifest (samples, file paths, formats) | Hand-edit YAML |
-| ⚙️ Generate `config_*.py` | Creates a ready-to-run pipeline configuration (format-matched template) | Write ~80 lines of Python config from scratch |
+| ⚙️ Generate `config_*.yaml` | Creates a ready-to-run pipeline configuration (format-matched template) | Write ~80 lines of YAML config from scratch |
 | 🌐 NCBI query (optional) | Fetches title, species, SuperSeries info | Open browser, look up on GEO website |
 
 **TL;DR: Download data → run one command → config files are generated → next step is the actual pipeline.**
@@ -82,7 +82,7 @@ python core/preprocess/preprocessor.py --gse GSE00001 --query-ncbi
 | SuperSeries detection | ✅ NCBI + directory structure + Series Matrix |
 | `dataset.yaml` | ✅ Fully generated |
 | Assay type (scRNA-seq / snRNA-seq) | ✅ Auto-detected |
-| `config_*.py` | ✅ Fully generated |
+| `config_*.yaml` | ✅ Fully generated |
 
 **Example output:**
 ```
@@ -106,7 +106,7 @@ Data root: /data/geo_datasets
   Assay type: scRNAseq
 
 [Phase 5] Generating config file...
-  Written: projects/rna/GSE00001/config_GSE00001.py
+  Written: projects/rna/GSE00001/config_GSE00001.yaml
 
 ============================================================
 [Summary] GSE00001
@@ -120,12 +120,12 @@ Data root: /data/geo_datasets
 
   Generated:
     projects/rna/GSE00001/dataset.yaml
-    projects/rna/GSE00001/config_GSE00001.py
+    projects/rna/GSE00001/config_GSE00001.yaml
 
   Next steps:
     1. Review and edit the generated files
     2. Run the pipeline:
-       python core/run_pipeline.py --modality rna --config projects/rna/GSE00001/config_GSE00001.py
+       python core/run_pipeline.py --modality rna --config projects/rna/GSE00001/config_GSE00001.yaml
 ```
 
 ---
@@ -143,7 +143,7 @@ python core/preprocess/preprocessor.py --gse GSE00001
 | Dataset title | ❌ Not available — stays empty in `dataset.yaml` |
 | SuperSeries sub-datasets | ⚠️ Detected from directory structure only; may be incomplete |
 
-> ⚠️ **Strong recommendation**: when offline, manually verify the `tissue` and `species` fields. If the preprocessor sets them to `unknown`, edit both `dataset.yaml` and `config_*.py`.
+> ⚠️ **Strong recommendation**: when offline, manually verify the `tissue` and `species` fields. If the preprocessor sets them to `unknown`, edit both `dataset.yaml` and `config_*.yaml`.
 
 ---
 
@@ -179,7 +179,7 @@ python core/preprocess/preprocessor.py \
 | Accession ID | ❌ None (replaced by `--name`) |
 | Archives | If your files are already in standard format, use `--no-extract` to save time |
 
-> ⚠️ **Most critical difference**: in air-gapped environments, species detection is weakest. After generation, manually set `CFG.species` and `CFG.tissue` in the config.
+> ⚠️ **Most critical difference**: in air-gapped environments, species detection is weakest. After generation, manually set `species` and `tissue` in the config.
 
 
 ## 4. What you get: generated files explained
@@ -221,41 +221,40 @@ samples:
 | `tissue` | If `unknown`, fill in manually (e.g. `retina`, `brain`) |
 | `assay_type` | Auto-detected. Override to `snRNAseq` / `scRNAseq` if needed (blank = disabled) |
 
-### 4.2 `config_GSE00001.py` — pipeline configuration
+### 4.2 `config_GSE00001.yaml` — pipeline configuration
 
-```python
-from core.config import CFG
+```yaml
+# data_format: 10X_mtx
+# mtx_prefix: 'GSE00001_Sample1_'
+# mtx_dir: ''               # Leave empty to auto-resolve
 
-CFG.data_format = '10X_mtx'
-CFG.mtx_prefix = 'GSE00001_Sample1_'
-CFG.mtx_dir = ''               # Leave empty to auto-resolve
+tissue: retina        # ← verify
+species: human
 
-CFG.tissue = 'retina'        # ← verify
-CFG.species = 'human'
+# sample_map:           # ← fill in for multi-sample datasets
+#   1: 'sample1'
 
-# CFG.sample_map = {        # ← fill in for multi-sample datasets
-#     1: 'sample1',
-# }
+# marker_dict:          # ← fill in with known markers
+#   CellTypeA:
+#     - GENE1
+#     - GENE2
 
-# CFG.marker_dict = {        # ← fill in with known markers
-#     'CellTypeA': ['GENE1', 'GENE2'],
-# }
-
-# CFG.ai.enabled = True      # ← uncomment to enable AI annotation
-# CFG.ai.api_base = 'https://api.deepseek.com/v1'
+ai:
+  enabled: false       # ← set to true to enable AI annotation
+  # api_base: 'https://api.deepseek.com/v1'
 ```
 
-**Sections you must edit (marked with `# TODO`):**
+**Sections you must edit:**
 
 | Section | Priority | Notes |
 |---------|---------|-------|
-| `CFG.marker_dict` | 🔴 Required | Fill in known marker genes for your tissue. If a KB exists for your tissue, use `CFG.tissue_kb` instead. |
-| `CFG.sample_map` | 🟡 Multi-sample only | Map 10X barcode suffixes to sample names |
-| `CFG.stage_map` | 🟡 Developmental only | Map samples to developmental stages |
-| `CFG.tissue_kb` | 🟢 Recommended | If your tissue (e.g. `retina`, `hypothalamus`) has a KB, set this to skip manual marker curation |
+| `marker.marker_dict` | 🔴 Required | Fill in known marker genes for your tissue. If a KB exists, use `tissue_kb` instead. |
+| `sample_meta.sample_map` | 🟡 Multi-sample only | Map 10X barcode suffixes to sample names |
+| `sample_meta.stage_map` | 🟡 Developmental only | Map samples to developmental stages |
+| `tissue_kb` | 🟢 Recommended | If your tissue (e.g. `retina`) has a KB, set this to skip marker curation |
 | AI settings | 🟢 Recommended | Uncomment and fill in API key for LLM-assisted annotation |
 
-> 💡 **KB-first mode**: If a tissue knowledge base exists under `rna/tissue_ontologies/`, simply set `CFG.tissue_kb = "retina"` instead of filling in `CFG.marker_dict`. KB mode is more accurate than simple gene scoring.
+> 💡 **KB-first mode**: If a tissue knowledge base exists under `rna/tissue_ontologies/`, simply set `tissue_kb: retina` instead of filling in `marker_dict`. KB mode is more accurate than simple gene scoring.
 
 
 ## 5. After generation: running the full pipeline
@@ -264,17 +263,17 @@ CFG.species = 'human'
 
 ```bash
 # Run all 12 steps
-python core/run_pipeline.py --modality rna --config projects/rna/GSE00001/config_GSE00001.py
+python core/run_pipeline.py --modality rna --config projects/rna/GSE00001/config_GSE00001.yaml
 
 # Optional: subcluster a specific cell type
 python core/run_pipeline.py --modality rna --step 7 --cell-type "Müller Glia" \
-    --config projects/rna/GSE00001/config_GSE00001.py
+    --config projects/rna/GSE00001/config_GSE00001.yaml
 ```
 
 ### 5.2 Full scATAC-seq workflow
 
 ```bash
-python core/run_pipeline.py --modality atac --config projects/atac/GSE00001/config_GSE00001.py
+python core/run_pipeline.py --modality atac --config projects/atac/GSE00001/config_GSE00001.yaml
 ```
 
 ### 5.3 Multiome (paired RNA + ATAC) datasets
@@ -282,14 +281,14 @@ python core/run_pipeline.py --modality atac --config projects/atac/GSE00001/conf
 If your dataset contains both RNA and ATAC data, the preprocessor auto-generates **two** configs:
 
 ```
-projects/rna/GSE00001/config_GSE00001.py    ← RNA config
-projects/atac/GSE00001/config_GSE00001.py   ← ATAC config
+projects/rna/GSE00001/config_GSE00001.yaml    ← RNA config
+projects/atac/GSE00001/config_GSE00001.yaml   ← ATAC config
 ```
 
 Run each modality separately first:
 ```bash
-python core/run_pipeline.py --modality rna  --config projects/rna/GSE00001/config_GSE00001.py
-python core/run_pipeline.py --modality atac --config projects/atac/GSE00001/config_GSE00001.py
+python core/run_pipeline.py --modality rna  --config projects/rna/GSE00001/config_GSE00001.yaml
+python core/run_pipeline.py --modality atac --config projects/atac/GSE00001/config_GSE00001.yaml
 ```
 
 ATAC Step 09 will then auto-discover the RNA results for integration.
@@ -297,7 +296,7 @@ ATAC Step 09 will then auto-discover the RNA results for integration.
 ### 5.4 Resume from checkpoint
 
 ```bash
-python core/run_pipeline.py --modality rna --resume --config projects/rna/GSE00001/config_GSE00001.py
+python core/run_pipeline.py --modality rna --resume --config projects/rna/GSE00001/config_GSE00001.yaml
 ```
 
 ### 5.5 Run a single step
@@ -307,7 +306,7 @@ python core/run_pipeline.py --modality rna --resume --config projects/rna/GSE000
 python core/run_pipeline.py --modality rna --list
 
 # Run only the annotation step
-python core/run_pipeline.py --modality rna --step 6 --config projects/rna/GSE00001/config_GSE00001.py
+python core/run_pipeline.py --modality rna --step 6 --config projects/rna/GSE00001/config_GSE00001.yaml
 ```
 
 ### 5.6 Complete workflow summary
@@ -318,7 +317,7 @@ python core/run_pipeline.py --modality rna --step 6 --config projects/rna/GSE000
 2. Preprocess (this guide)
    python core/preprocess/preprocessor.py --gse GSE12345
        ↓
-3. Review generated dataset.yaml + config_*.py
+3. Review generated dataset.yaml + config_*.yaml
    Edit marker_dict / tissue_kb / AI settings
        ↓
 4. Run pipeline
@@ -398,9 +397,9 @@ python core/preprocess/preprocessor.py --input-dir /path/to/data --name my_data
 
 This is **expected**. The preprocessor only auto-fills what it can determine. `# TODO` sections require your input:
 
-- **`CFG.marker_dict`**: Look up known marker genes for your target tissue in the literature.
-- **`CFG.sample_map`**: Extract barcode → sample mappings from GEO metadata.
-- **`CFG.stage_map`**: If your experiment has a time-series or developmental axis, define the stage mapping.
+- **marker_dict**: Look up known marker genes for your target tissue in the literature.
+- **sample_meta.sample_map**: Extract barcode → sample mappings from GEO metadata.
+- **sample_meta.stage_map**: If your experiment has a time-series or developmental axis, define the stage mapping.
 
 ### Q3: The preprocessor misidentified my file format. What now?
 
@@ -412,7 +411,7 @@ python core/preprocess/preprocessor.py --gse GSE12345 --dry-run -v
 python core/preprocess/preprocessor.py --gse GSE12345 --modality atac
 ```
 
-Then manually adjust `CFG.data_format` and file paths in the generated config.
+Then manually adjust `data_format` and file paths in the generated config.
 
 ### Q4: My dataset is a SuperSeries — can the preprocessor handle it?
 
@@ -429,7 +428,7 @@ Partially. Supported custom formats include:
 
 If detection still fails:
 1. Use the templates in `templates/config_templates/` as a starting point for manual config
-2. Create your own `config_*.py` under `projects/{modality}/{dataset_id}/`
+2. Create your own `config_*.yaml` under `projects/{modality}/{dataset_id}/`
 
 ### Q6: Will the preprocessor overwrite my existing config files?
 

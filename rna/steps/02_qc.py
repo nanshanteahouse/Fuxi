@@ -92,21 +92,21 @@ def _mad_thresholds(adata, cfg, log):
     vals = adata.obs['n_genes_by_counts'].values.astype(np.float64)
     med = np.median(vals)
     mad = median_abs_deviation(vals, scale='normal')
-    _maturity_mad = {"developing": 5.0}.get(cfg.tissue_maturity, cfg.mad_n_mads)
+    _maturity_mad = {"developing": 5.0}.get(cfg.tissue_maturity, cfg.qc.mad_n_mads)
     lo_mad = max(med - _maturity_mad * mad, 0)
     hi_mad = med + _maturity_mad * mad
     # 硬阈值做地板/天花板
-    lo = max(lo_mad, cfg.min_genes)
+    lo = max(lo_mad, cfg.qc.min_genes)
     # Safety clamp: MAD 下界不应超过用户硬阈值（参考 ddqc, Subramanian 2022）
-    if lo > cfg.min_genes:
+    if lo > cfg.qc.min_genes:
         lo_orig = lo
-        lo = cfg.min_genes
+        lo = cfg.qc.min_genes
         log.warning(
             '  MAD lower bound (%.0f) exceeds min_genes (%.0f) — clamping to min_genes. MAD is unreliable for this distribution; consider use_adaptive_thresholds=False.',
-            lo_orig, cfg.min_genes,
+            lo_orig, cfg.qc.min_genes,
         )
-    _safe_floor = cfg.min_mad_upper_genes_nuclei if cfg.is_nuclei else cfg.min_mad_upper_genes
-    hi = min(max(hi_mad, _safe_floor), cfg.max_genes)
+    _safe_floor = cfg.qc.min_mad_upper_genes_nuclei if cfg.qc.is_nuclei else cfg.qc.min_mad_upper_genes
+    hi = min(max(hi_mad, _safe_floor), cfg.qc.max_genes)
     thresholds['n_genes_by_counts'] = (lo, hi)
     log.info("  n_genes_by_counts: median=%.0f, MAD=%.0f  →  (lo=%.0f, hi=%.0f)  [adaptive ×%.1f, %s]",
              med, mad, lo, hi, _maturity_mad, cfg.tissue_maturity)
@@ -130,26 +130,26 @@ def _mad_thresholds(adata, cfg, log):
         vals = adata.obs['total_counts'].values.astype(np.float64)
         med = np.median(vals)
         mad = median_abs_deviation(vals, scale='normal')
-        hi = med + cfg.qc_ncount_max_mad * mad
+        hi = med + cfg.qc.ncount_max_mad * mad
         thresholds['total_counts'] = (None, hi)
         log.info("  total_counts:       median=%.0f, MAD=%.0f  →  hi=%.0f  [adaptive ×%.1f]",
-                 med, mad, hi, cfg.qc_ncount_max_mad)
+                 med, mad, hi, cfg.qc.ncount_max_mad)
     else:
         thresholds['total_counts'] = (None, None)
         log.info("  total_counts:       (skipped — expression_type=%s)", cfg.expression_type)
 
     # ---- pct_counts_mt ----
-    if cfg.is_nuclei:
-        hi = cfg.max_pct_mito_nuclei
+    if cfg.qc.is_nuclei:
+        hi = cfg.qc.max_pct_mito_nuclei
         log.info("  pct_counts_mt:      hi=%.2f%%  [snRNA-seq: fixed threshold, MAD skipped]", hi)
     else:
         vals = adata.obs['pct_counts_mt'].values.astype(np.float64)
         med = np.median(vals)
         mad = median_abs_deviation(vals, scale='normal')
-        hi_mad = med + cfg.mad_n_mads * mad
-        hi = min(hi_mad, cfg.max_pct_mito)
+        hi_mad = med + cfg.qc.mad_n_mads * mad
+        hi = min(hi_mad, cfg.qc.max_pct_mito)
         log.info("  pct_counts_mt:      median=%.2f%%, MAD=%.2f%% ->  hi=%.2f%%  [adaptive, factor=%.1f]",
-                 med, mad, hi, cfg.mad_n_mads)
+                 med, mad, hi, cfg.qc.mad_n_mads)
     thresholds['pct_counts_mt'] = (None, hi)
 
     # ---- log_genes_per_umi (complexity) ----
@@ -160,14 +160,14 @@ def _mad_thresholds(adata, cfg, log):
         med = np.median(finite)
         mad = median_abs_deviation(finite, scale='normal')
         lo_mad = max(med - _maturity_mad * mad, 0)
-        lo = max(lo_mad, cfg.min_genes_per_umi)
+        lo = max(lo_mad, cfg.qc.min_genes_per_umi)
         # Safety clamp: MAD 下界不应超过用户硬阈值
-        if lo > cfg.min_genes_per_umi:
+        if lo > cfg.qc.min_genes_per_umi:
             lo_orig = lo
-            lo = cfg.min_genes_per_umi
+            lo = cfg.qc.min_genes_per_umi
             log.warning(
                 '  MAD lower bound (%.4f) exceeds min_genes_per_umi (%.4f) — clamping.',
-                lo_orig, cfg.min_genes_per_umi,
+                lo_orig, cfg.qc.min_genes_per_umi,
             )
         thresholds['log_genes_per_umi'] = (lo, None)
         log.info("  log_genes_per_umi:  median=%.4f, MAD=%.4f →  lo=%.4f  [adaptive ×%.1f, %s]",
@@ -183,19 +183,19 @@ def _hard_thresholds(cfg, log):
     """从 Config 构建硬阈值字典（现有行为）。"""
     is_native = (cfg.expression_type == "raw_counts")
     thresholds = {
-        'n_genes_by_counts': (cfg.min_genes, cfg.max_genes),
+        'n_genes_by_counts': (cfg.qc.min_genes, cfg.qc.max_genes),
         'total_counts':      (None, None),                     # raw_counts 下也未启用硬上限
-        'pct_counts_mt':     (None, cfg.max_pct_mito_nuclei if cfg.is_nuclei else cfg.max_pct_mito),
-        'log_genes_per_umi': (cfg.min_genes_per_umi, None) if is_native else (None, None),
+        'pct_counts_mt':     (None, cfg.qc.max_pct_mito_nuclei if cfg.qc.is_nuclei else cfg.qc.max_pct_mito),
+        'log_genes_per_umi': (cfg.qc.min_genes_per_umi, None) if is_native else (None, None),
     }
     log.info("  Using hard thresholds from config:")
-    log.info("    n_genes_by_counts:  lo=%d, hi=%d", cfg.min_genes, cfg.max_genes)
+    log.info("    n_genes_by_counts:  lo=%d, hi=%d", cfg.qc.min_genes, cfg.qc.max_genes)
     log.info("    total_counts:       (no limit)")
     if is_native:
-        log.info("    pct_counts_mt:      hi=%.1f%%", cfg.max_pct_mito)
-        log.info("    log_genes_per_umi:  lo=%.4f", cfg.min_genes_per_umi)
+        log.info("    pct_counts_mt:      hi=%.1f%%", cfg.qc.max_pct_mito)
+        log.info("    log_genes_per_umi:  lo=%.4f", cfg.qc.min_genes_per_umi)
     else:
-        log.info("    pct_counts_mt:      hi=%.1f%%", cfg.max_pct_mito)
+        log.info("    pct_counts_mt:      hi=%.1f%%", cfg.qc.max_pct_mito)
         log.info("    log_genes_per_umi:  (skipped — expression_type=%s)", cfg.expression_type)
     return thresholds
 
@@ -290,7 +290,7 @@ def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, cfg, log):
                        label=f'hi={hi:.2f}%')
         _ax.set_xlabel('pct_counts_mt (% Mito)')
         _ax.set_ylabel('Number of cells')
-        _suffix = " (snRNA-seq: residual cytoplasm)" if cfg.is_nuclei else ""
+        _suffix = " (snRNA-seq: residual cytoplasm)" if cfg.qc.is_nuclei else ""
         _ax.set_title(f'% Mito distribution (N={len(vals)}, '
                      f'median={np.median(vals):.2f}%, mode={mode_label}){_suffix}')
         if hi is not None:
@@ -321,10 +321,10 @@ def _plot_nfeature_kde(adata, fig_dir, mode_label, cfg, log):
                        label=f'Peak at {px:.0f} genes')
 
         # Threshold lines
-        _ax.axvline(cfg.min_genes, color='red', linestyle='--', linewidth=1.0,
-                   label=f'lo={cfg.min_genes:.0f}')
-        _ax.axvline(cfg.max_genes, color='red', linestyle='--', linewidth=1.0,
-                   label=f'hi={cfg.max_genes:.0f}')
+        _ax.axvline(cfg.qc.min_genes, color='red', linestyle='--', linewidth=1.0,
+                   label=f'lo={cfg.qc.min_genes:.0f}')
+        _ax.axvline(cfg.qc.max_genes, color='red', linestyle='--', linewidth=1.0,
+                   label=f'hi={cfg.qc.max_genes:.0f}')
 
         assessment = 'BIMODAL' if is_multimodal else ('MULTIPEAK' if n_peaks >= 2 else 'UNIMODAL')
         assess_color = '#c0392b' if is_multimodal else ('#e67e22' if n_peaks >= 2 else '#27ae60')
@@ -355,9 +355,9 @@ def _plot_nfeature_kde(adata, fig_dir, mode_label, cfg, log):
 
 def compute_qc_metrics(adata, cfg, log):
     log.info("Computing QC metrics...")
-    mt_mask = adata.var_names.str.startswith(cfg.mt_gene_pattern)
-    if cfg.mt_gene_list:
-        mt_mask = mt_mask | adata.var_names.isin(cfg.mt_gene_list)
+    mt_mask = adata.var_names.str.startswith(cfg.qc.mt_gene_pattern)
+    if cfg.qc.mt_gene_list:
+        mt_mask = mt_mask | adata.var_names.isin(cfg.qc.mt_gene_list)
     adata.var['mt'] = mt_mask
     adata.var['ribo'] = adata.var_names.str.startswith(('RPS', 'RPL'))
     sc.pp.calculate_qc_metrics(
@@ -371,7 +371,7 @@ def compute_qc_metrics(adata, cfg, log):
     log.info("  Median genes/cell: %.0f", adata.obs['n_genes_by_counts'].median())
     log.info("  Median UMIs/cell: %.0f", adata.obs['total_counts'].median())
     log.info("  Median mito%%:    %.2f%%", adata.obs['pct_counts_mt'].median())
-    if cfg.is_nuclei:
+    if cfg.qc.is_nuclei:
         log.info("  [snRNA-seq mode] Mitochondrial reads reflect cytoplasmic residue, not cell stress.")
     log.info("  Median complexity: %.3f", adata.obs['log_genes_per_umi'].median())
 
@@ -460,9 +460,9 @@ def main():
     compute_qc_metrics(adata, CFG, log)
 
     # 2. 确定阈值 (MAD 或硬阈值)
-    if CFG.use_adaptive_thresholds:
+    if CFG.qc.use_adaptive_thresholds:
         log.info("Mode: adaptive (MAD × %.1f, nCount MAD × %.1f)",
-                 CFG.mad_n_mads, CFG.qc_ncount_max_mad)
+                 CFG.qc.mad_n_mads, CFG.qc.ncount_max_mad)
         thresholds = _mad_thresholds(adata, CFG, log)
         mode_label = "adaptive (MAD)"
     else:
@@ -480,7 +480,7 @@ def main():
 
     # 4. 过滤
     adata = filter_cells(adata, thresholds, CFG, log)
-    sc.pp.filter_genes(adata, min_cells=CFG.min_cells_per_gene)
+    sc.pp.filter_genes(adata, min_cells=CFG.qc.min_cells_per_gene)
     log.info("After gene filtering: %d genes", adata.n_vars)
 
     safe_write(adata, CFG.qc_h5ad, cfg=CFG)

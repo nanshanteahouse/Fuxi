@@ -89,13 +89,13 @@ def run_unified_annotation(adata, CFG, logger):
 
     # ── Resolve expert-rule constraint parameters ────────────────────
     rule_top_n, rule_pval = resolve_expert_rule_params(
-        strictness=getattr(CFG, 'expert_rule_strictness', 'default'),
-        top_n=getattr(CFG, 'expert_rule_top_n', 0),
-        pval_cutoff=getattr(CFG, 'expert_rule_pval_cutoff', 0.0),
+        strictness=getattr(CFG.marker, 'expert_rule_strictness', 'default'),
+        top_n=getattr(CFG.marker, 'expert_rule_top_n', 0),
+        pval_cutoff=getattr(CFG.marker, 'expert_rule_pval_cutoff', 0.0),
     )
     logger.info(
         "Expert rules: strictness=%s → top_n=%d, pval_cutoff=%.3f",
-        getattr(CFG, 'expert_rule_strictness', 'default'),
+        getattr(CFG.marker, 'expert_rule_strictness', 'default'),
         rule_top_n, rule_pval,
     )
 
@@ -438,7 +438,7 @@ def _interactive_annotation_review(adata, fusion_quality, CFG, logger):
                 "User chose: re-annotate with strictness='%s'", rec,
             )
             print(f"\nTo re-annotate, set in your config:\n"
-                  f"  CFG.expert_rule_strictness = '{rec}'\n"
+                  f"  CFG.marker.expert_rule_strictness = '{rec}'\n"
                   f"Or pass --config with the updated setting.\n")
         elif choice == 's':
             logger.info("User chose: score_genes fallback")

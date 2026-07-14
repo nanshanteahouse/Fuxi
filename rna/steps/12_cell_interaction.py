@@ -192,7 +192,7 @@ def main():
     log.info("Step 12: Cell-Cell Interaction (CCI) analysis via LIANA+")
 
     # ── Gate check ──────────────────────────────────────────────────────
-    if not getattr(CFG, "run_cci", True):
+    if not getattr(CFG.cci, "run", True):
         log.info("run_cci=False — skipping")
         return
 
@@ -216,17 +216,17 @@ def main():
         log.warning("adata.raw is not available — using adata.X; "
                      "ensure it contains raw/normalized counts suitable for LIANA")
 
-    n_jobs = getattr(CFG, "n_jobs", 1) or 1
+    n_jobs = getattr(CFG.execution, "n_jobs", 1) or 1
     if n_jobs == 0:
         n_jobs = os.cpu_count() or 4
         log.info("n_jobs=0 → auto-detected %d cores", n_jobs)
 
     # ── Load anatomical adjacency (v4.0+) ────────────────────────────
     from core.anatomy import load_adjacency
-    adj_tissue = getattr(CFG, "cci_tissue", "") or CFG.tissue
-    adj_file = getattr(CFG, "cci_adjacency_file", "")
+    adj_tissue = getattr(CFG.cci, "tissue", "") or CFG.tissue
+    adj_file = getattr(CFG.cci, "adjacency_file", "")
     adjacency_df = load_adjacency(tissue=adj_tissue, custom_file=adj_file, log=log)
-    adj_mode = getattr(CFG, "cci_adjacency", "off")
+    adj_mode = getattr(CFG.cci, "adjacency", "off")
     if adj_mode != "off":
         log.info(
             "CCI adjacency constraint: mode=%s, tissue=%s, %d adjacency pairs",
@@ -246,8 +246,8 @@ def main():
     lr_res = run_cci_permutation(
         adata,
         groupby_col=group_col,
-        resource_name=CFG.cci_lr_database,
-        n_perms=CFG.cci_permutations,
+        resource_name=CFG.cci.lr_database,
+        n_perms=CFG.cci.permutations,
         use_raw=use_raw,
         n_jobs=n_jobs,
         log=log,
@@ -256,7 +256,7 @@ def main():
     # ── Format & export ─────────────────────────────────────────────────
     top_df = format_cci_results(
         lr_res,
-        n_top=CFG.cci_n_top_interactions,
+        n_top=CFG.cci.n_top_interactions,
         log=log,
         adjacency=adjacency_df if adj_mode != "off" else None,
         adjacency_mode=adj_mode,

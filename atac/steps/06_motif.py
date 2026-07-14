@@ -47,7 +47,7 @@ def main():
         # If clusters already re-run after step 4 fix, markers may not be in data.uns
         # Instead, re-run marker_regions here if needed
         log.info("Computing marker regions for motif enrichment...")
-        markers = snap.tl.marker_regions(data, groupby=groupby, pvalue=CFG.marker_peaks_fdr)
+        markers = snap.tl.marker_regions(data, groupby=groupby, pvalue=CFG.atac.marker_peaks_fdr)
         # markers is Dict[str, pd.Index]
         regions_by_group = {}
         for grp in data.obs[groupby].unique():

@@ -27,7 +27,7 @@ def score_genes_mode(adata, CFG):
     """Marker gene scoring-based annotation fallback."""
     log.info("Score_genes mode — marker gene-based annotation")
 
-    marker_dict = CFG.marker_dict
+    marker_dict = CFG.marker.marker_dict
     if not marker_dict:
         log.warning("marker_dict not configured, using leiden labels as cell_type")
         adata.obs['cell_type'] = adata.obs['leiden'].astype(str)
@@ -47,7 +47,7 @@ def score_genes_mode(adata, CFG):
             adata.obs[f'score_{ct}'] = 0.0
             continue
         sc.tl.score_genes(adata, gene_list=genes_present,
-                          score_name=f'score_{ct}', random_state=CFG.random_seed)
+                          score_name=f'score_{ct}', random_state=CFG.execution.random_seed)
 
     # Assign best-scoring type per cluster
     score_cols = [f'score_{ct}' for ct in cell_types]
@@ -110,7 +110,7 @@ def ai_annotate(adata, CFG):
         sys_prompt, user_prompt = build_annotation_prompt(
             adata, tissue, species,
             precomputed_rank=True,
-            extra_context=f"Spatial transcriptomics ({CFG.spatial_platform} platform)",
+            extra_context=f"Spatial transcriptomics ({CFG.spatial.platform} platform)",
             compact=compact,
         )
 
@@ -201,10 +201,10 @@ def main():
 
     # ── Phase 1: scRNA marker-list transfer ──────────────────────────────
     # If rna_ref is configured, load scRNA-derived per-cell-type markers
-    # and merge them into CFG.marker_dict.  This enriches the score_genes
+    # and merge them into CFG.marker.marker_dict.  This enriches the score_genes
     # fallback without changing KB or AI mode behaviour.  User-configured
     # marker_dict entries take priority over auto-derived ones.
-    _saved_marker_dict = CFG.marker_dict
+    _saved_marker_dict = CFG.marker.marker_dict
     try:
         if getattr(CFG, 'rna_ref', ''):
             from core.utils import find_rna_marker_csv, load_scRNA_markers
@@ -221,13 +221,13 @@ def main():
                     )
                     # Merge: scRNA markers as base, user markers override
                     merged = dict(scrna_markers)
-                    merged.update(CFG.marker_dict)
+                    merged.update(CFG.marker.marker_dict)
                     log.info(
                         "scRNA marker transfer: loaded %d cell types, "
                         "merged with %d user-configured types -> %d total",
-                        len(scrna_markers), len(CFG.marker_dict), len(merged),
+                        len(scrna_markers), len(CFG.marker.marker_dict), len(merged),
                     )
-                    CFG.marker_dict = merged
+                    CFG.marker.marker_dict = merged
                 except Exception as e:
                     log.warning("scRNA marker transfer failed: %s - continuing", e)
             else:
@@ -259,7 +259,7 @@ def main():
             log.info("Falling back to score_genes mode")
             score_genes_mode(adata, CFG)
     finally:
-        CFG.marker_dict = _saved_marker_dict
+        CFG.marker.marker_dict = _saved_marker_dict
 
     # ── Spatial-aware UMAP visualization ──
     sc.settings.figdir = os.path.join(CFG.figure_dir, '05_annotation')
@@ -278,8 +278,8 @@ def main():
         try:
             top_genes = []
             for ct in adata.obs['cell_type'].unique():
-                if ct in CFG.marker_dict:
-                    top_genes.extend(CFG.marker_dict[ct][:2])
+                if ct in CFG.marker.marker_dict:
+                    top_genes.extend(CFG.marker.marker_dict[ct][:2])
             top_genes = list(dict.fromkeys(top_genes))[:8]
             for gene in top_genes:
                 if gene in adata.var_names:

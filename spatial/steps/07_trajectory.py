@@ -49,7 +49,7 @@ def main():
 
     if 'neighbors' not in adata.uns:
         log.warning("No neighbor graph found, building default neighbors...")
-        sc.pp.neighbors(adata, n_pcs=CFG.n_pcs_use, random_state=CFG.random_seed)
+        sc.pp.neighbors(adata, n_pcs=CFG.pca.n_pcs_use, random_state=CFG.execution.random_seed)
 
     # ── 1. PAGA graph ────────────────────────────────────────────────────
     log.info("Computing PAGA graph...")
@@ -74,16 +74,16 @@ def main():
     log.info("Computing diffusion pseudotime...")
 
     # Try root cell type selection
-    root_cell_types = CFG.root_cell_types
+    root_cell_types = CFG.trajectory.root_cell_types
     try:
         if root_cell_types:
             adata.uns['iroot'] = np.flatnonzero(
                 adata.obs[group_col].isin(root_cell_types)
             )[0]
             log.info("  Root set from root_cell_types: %s", root_cell_types)
-        elif CFG.root_markers:
+        elif CFG.trajectory.root_markers:
             # Find cells with highest expression of root markers
-            root_markers_present = [g for g in CFG.root_markers if g in adata.var_names]
+            root_markers_present = [g for g in CFG.trajectory.root_markers if g in adata.var_names]
             if root_markers_present:
                 root_score = adata[:, root_markers_present].X.mean(axis=1)
                 if scipy.sparse.issparse(root_score):
@@ -104,9 +104,9 @@ def main():
         adata.uns['iroot'] = 0
 
     try:
-        sc.tl.diffmap(adata, n_comps=CFG.n_diffmap_comps, random_state=CFG.random_seed)
-        log.info("  Diffusion map computed (%d components)", CFG.n_diffmap_comps)
-        sc.tl.dpt(adata, n_branchings=CFG.n_branchings)
+        sc.tl.diffmap(adata, n_comps=CFG.trajectory.n_diffmap_comps, random_state=CFG.execution.random_seed)
+        log.info("  Diffusion map computed (%d components)", CFG.trajectory.n_diffmap_comps)
+        sc.tl.dpt(adata, n_branchings=CFG.trajectory.n_branchings)
         log.info("  DPT computed")
     except Exception as e:
         log.warning("DPT failed: %s", e)

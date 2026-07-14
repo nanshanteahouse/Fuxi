@@ -32,10 +32,10 @@ python core/run_pipeline.py --modality atac --list
 python core/run_pipeline.py --modality spatial --list
 
 # Run full pipeline
-python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config_<GSE_ID>.py
+python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config_<GSE_ID>.yaml
 
 # Run a single step (0-indexed)
-python core/run_pipeline.py --modality atac --step 0 --config projects/atac/<GSE_ID>/config_<GSE_ID>.py
+python core/run_pipeline.py --modality atac --step 0 --config projects/atac/<GSE_ID>/config_<GSE_ID>.yaml
 
 # Run a range or selection of steps
 python core/run_pipeline.py --modality rna --steps 0-2 --config ...
@@ -49,7 +49,7 @@ python core/run_pipeline.py --modality rna --step 6 --cell-type "Müller Glia" -
 ```
 
 # Run subset pipeline (filter cells by sample/obs criteria, auto-output to *_subset/)
-python core/run_pipeline.py --modality rna --config config_pcw8.py
+python core/run_pipeline.py --modality rna --config config_pcw8.yaml
 #   config 中设置 CFG.sample_keep=["SCR205"] or CFG.obs_filter="stage=='PCW8'"
 
 ### Testing
@@ -67,7 +67,7 @@ python core/preprocess/preprocessor.py --gse <GSE_ID> --data-root $FUXI_DATA_ROO
 
 **Option B — Manual:**
 
-1. Create `projects/{modality}/{GSE_ID}/` with a `config_<GSE_ID>.py` that imports from `core.config` and mutates the `CFG` singleton
+1. Create `projects/{modality}/{GSE_ID}/` with a `config_<GSE_ID>.yaml` — use templates from `templates/config_templates/` as starting points
 2. Place raw data in `$FUXI_DATA_ROOT/{GSE_ID}/`
 3. Use config templates from `templates/config_templates/` as starting points
 
@@ -77,7 +77,7 @@ python core/preprocess/preprocessor.py --gse <GSE_ID> --data-root $FUXI_DATA_ROO
 
 ```
 core/               Shared infrastructure (no biology libs imported)
-  config.py           Unified Config + AIConfig dataclasses; CFG singleton
+  config.py           Pydantic BaseModel (Config + 20 topic sub-models); CFG singleton
   run_pipeline.py     CLI orchestrator — dispatches steps via subprocess
   ai_caller.py        LLM client (OpenAI SDK) — retry, caching, model discovery
   ai_prompts.py       RNA + ATAC annotation prompt templates + build_annotation_prompt()
@@ -124,7 +124,7 @@ tests/              Test directory (mostly empty)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 ```
 
-**Config loading.** `resolve_config()` in `core/utils.py` uses `importlib.util` to dynamically load a config `.py` file as a module, then reads its `CFG` attribute. Config files mutate the global `CFG` singleton imported from `core.config`. The `Config` dataclass contains ALL fields for ALL modalities (RNA / ATAC / Spatial) in one flat namespace; the `modality` string discriminates.
+**Config loading.** `resolve_config()` in `core/utils.py` loads a `.yaml` config file via `yaml.safe_load()`, then validates it against the Pydantic `Config` model via `Config.model_validate()`. Config files are YAML with nested topic keys (e.g. `qc: { min_genes: 500 }`). The old importlib-based `.py` loading is deprecated — `.py` configs are rejected with a migration error.
 
 **Checkpoint system.** Each step reads from a specific checkpoint file and optionally writes one. `run_pipeline.py` maintains step registries (`RNA_STEPS`, `ATAC_STEPS`, `SPATIAL_STEPS`) and checkpoint file mappings. Steps skip if their output checkpoint already exists. The `--resume` flag scans for the first missing checkpoint.
 
@@ -162,7 +162,7 @@ The RNA Step 04 pipeline uses a two-phase approach. **Granularity detection** (`
 
 - **Subtype path** → bypasses the entire enrichment loop → `_select_de_gated()` directly. Runs `sc.tl.rank_genes_groups()` per resolution, computes pairwise DE counts (padj < 0.05, log2FC > 1.0) between all cluster pairs, and selects the highest resolution where the minimum pairwise DE count exceeds `CFG.multi_metric_de_gate_threshold` (default 25). Follows Shekhar 2016's merge.clusters.DE pattern (merge when < 50 DE), inverted to prefer finer resolution as long as every cluster pair maintains sufficient transcriptional distinction.
 
-New config fields in `core/config.py`: `multi_metric_coherence_dominance` (default 1.5), `multi_metric_granularity_cv_threshold` (0.05), `multi_metric_granularity_min_clusters` (10), `multi_metric_de_gate_threshold` (25). Composite weights default to `{silhouette: 0.2, stability: 0.2, cluster_coherence: 0.3, splitting_gain: 0.2, kb_annotatable_rate: 0.1}` (configurable via `CFG.multi_metric_weights`).
+New config fields in `core/config.py` (Pydantic sub-models): `multi_metric_coherence_dominance` (default 1.5), `multi_metric_granularity_cv_threshold` (0.05), `multi_metric_granularity_min_clusters` (10), `multi_metric_de_gate_threshold` (25). Composite weights default to `{silhouette: 0.2, stability: 0.2, cluster_coherence: 0.3, splitting_gain: 0.2, kb_annotatable_rate: 0.1}` (configurable via `CFG.clustering.multi_metric_weights`).
 
 
 **snRNA-seq detection & QC adaptation.** The pipeline auto-detects single-nucleus RNA-seq (snRNA-seq) vs single-cell RNA-seq (scRNA-seq) from NCBI GEO metadata keywords:
@@ -171,7 +171,7 @@ New config fields in `core/config.py`: `multi_metric_coherence_dominance` (defau
 - Integrated into `detect_superseries()` returned dict as `'assay_type'` key.
 - `dataset.yaml` `assay_type` field on both `DatasetMeta` and `ModalityEntry`.
 - Preprocessor auto-detects assay_type when `--query-ncbi` is passed. Multiome modality defaults to `snRNAseq` (10x Multiome protocol is nucleus-based).
-- `core/utils.py.resolve_config()` auto-fills `Config.is_nuclei` from `dataset.yaml` (searches project_dir then data_dir). Respects explicit user config (scans config.py source for `is_nuclei` string).
+- `core/utils.py.resolve_config()` auto-fills `Config.is_nuclei` from `dataset.yaml` (searches project_dir then data_dir). Respects explicit user config (reads `qc.is_nuclei` from YAML config).
 
 **Config fields for snRNA-seq:**
 - `Config.is_nuclei: bool = False` — set to True for snRNA-seq (delegated to `RNAConfig` via `__getattr__`)
@@ -182,7 +182,7 @@ New config fields in `core/config.py`: `multi_metric_coherence_dominance` (defau
 - `_hard_thresholds()`: uses `max_pct_mito_nuclei` instead of `max_pct_mito` when `is_nuclei=True`
 - `compute_qc_metrics()` and `_plot_qc_diagnostics()`: log/annotate snRNA-seq mode with interpretive message (mito reads = cytoplasmic residue, not cell stress)
 
-In snRNA-seq, mitochondrial reads indicate incomplete cytoplasmic stripping during nuclei isolation — NOT cell death. Thresholds are much stricter: machine-assisted <0.5%, gradient 1-3%, column 2-4%. The pipeline defaults to 3.0% (conservative). Three-layer priority: config.py explicit > dataset.yaml auto-fill > NCBI auto-detect.
+In snRNA-seq, mitochondrial reads indicate incomplete cytoplasmic stripping during nuclei isolation — NOT cell death. Thresholds are much stricter: machine-assisted <0.5%, gradient 1-3%, column 2-4%. The pipeline defaults to 3.0% (conservative). Three-layer priority: config.yaml explicit > dataset.yaml auto-fill > NCBI auto-detect.
 
 **UMAP visualization sweep.** AFTER the best (n_neighbors, resolution) is selected, the pipeline optionally sweeps `min_dist` × `spread` to find the most spread-out UMAP layout. Unlike the cluster-parameter grid, this reuses the same KNN graph (cheap — ~3 UMAP runs × ~2 sec each). Controlled by:
 - `CFG.umap_selection_method`:

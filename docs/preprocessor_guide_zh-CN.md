@@ -26,7 +26,7 @@
 | 📦 解压归档 | 自动解压 `.tar.gz`、`.zip`、`.gz` 等 | 手动 `tar -xzf` 或右键解压 |
 | 🧬 检测模态 | 判断是 scRNA-seq、scATAC-seq、还是多模态 (multiome) | 阅读论文 Methods 部分推断 |
 | 📋 生成 `dataset.yaml` | 创建数据集元信息清单（样本列表、文件路径、格式） | 手工编辑 YAML |
-| ⚙️ 生成 `config_*.py` | 创建可直接运行的 Pipeline 配置文件（模板自动匹配格式） | 从零开始写 ~80 行 Python config |
+| ⚙️ 生成 `config_*.yaml` | 创建可直接运行的 Pipeline 配置文件（模板自动匹配格式） | 从零开始写 ~80 行 YAML config |
 | 🌐 NCBI 查询（可选） | 获取数据集标题、物种、是否为 SuperSeries | 打开浏览器查 GEO 网页 |
 
 **简单来说：下载完数据 → 运行一个命令 → 配置文件自动生成 → 下一步直接跑 Pipeline。**
@@ -84,7 +84,7 @@ python core/preprocess/preprocessor.py --gse GSE00001 --query-ncbi
 | SuperSeries 检测 | ✅ NCBI + 目录结构 + Series Matrix |
 | `dataset.yaml` | ✅ 完整生成 |
 | assay_type（scRNA-seq / snRNA-seq） | ✅ 自动检测 |
-| `config_*.py` | ✅ 完整生成 |
+| `config_*.yaml` | ✅ 完整生成 |
 
 **运行后的输出示例：**
 ```
@@ -108,7 +108,7 @@ Data root: /data/geo_datasets
   Assay type: scRNAseq
 
 [Phase 5] Generating config file...
-  Written: projects/rna/GSE00001/config_GSE00001.py
+  Written: projects/rna/GSE00001/config_GSE00001.yaml
 
 ============================================================
 [Summary] GSE00001
@@ -122,12 +122,12 @@ Data root: /data/geo_datasets
 
   Generated:
     projects/rna/GSE00001/dataset.yaml
-    projects/rna/GSE00001/config_GSE00001.py
+    projects/rna/GSE00001/config_GSE00001.yaml
 
   Next steps:
     1. Review and edit the generated files
     2. Run the pipeline:
-       python core/run_pipeline.py --modality rna --config projects/rna/GSE00001/config_GSE00001.py
+       python core/run_pipeline.py --modality rna --config projects/rna/GSE00001/config_GSE00001.yaml
 ```
 
 ---
@@ -145,7 +145,7 @@ python core/preprocess/preprocessor.py --gse GSE00001
 | 数据集标题 | ❌ 无法获取，`dataset.yaml` 中 title 为空 |
 | SuperSeries 子数据集 | ⚠️ 仅靠目录结构检测，可能不完整 |
 
-> ⚠️ **强烈建议**：离线环境下，手动确认 `tissue` 和 `species` 字段。如果预处理脚本设为 `unknown`，请编辑 `dataset.yaml` 和 `config_*.py`。
+> ⚠️ **强烈建议**：离线环境下，手动确认 `tissue` 和 `species` 字段。如果预处理脚本设为 `unknown`，请编辑 `dataset.yaml` 和 `config_*.yaml`。
 
 ---
 
@@ -184,7 +184,7 @@ python core/preprocess/preprocessor.py \
 | GSE 编号 | ❌ 没有（用 `--name` 代替） |
 | 归档解压 | 若文件已是标准格式用 `--no-extract` 跳过解压提速 |
 
-> ⚠️ **最重要的差异**：纯内网时，物种可能完全检测不到。请在生成文件后手工填写 `config_*.py` 中的 `CFG.species` 和 `CFG.tissue`。
+> ⚠️ **最重要的差异**：纯内网时，物种可能完全检测不到。请在生成文件后手工填写 `config_*.yaml` 中的 `species` 和 `tissue`。
 
 
 ## 4. 运行结果：你会得到什么？
@@ -226,38 +226,37 @@ samples:
 | `tissue` | 若为 `unknown`，手工填写（如 `retina`、`brain`） |
 | `assay_type` | 自动检测。如需修正，改为 `snRNAseq` / `scRNAseq`（留空表示不启用） |
 
-### 4.2 `config_GSE00001.py` — Pipeline 配置文件
+### 4.2 `config_GSE00001.yaml` — Pipeline 配置文件
 
-```python
-from core.config import CFG
+```yaml
+# data_format: 10X_mtx
+# mtx_prefix: 'GSE00001_Sample1_'
+# mtx_dir: ''               # 留空则自动解析
 
-CFG.data_format = '10X_mtx'
-CFG.mtx_prefix = 'GSE00001_Sample1_'
-CFG.mtx_dir = ''               # 留空则自动解析
+tissue: retina        # ← 人工确认
+species: human
 
-CFG.tissue = 'retina'        # ← 人工确认
-CFG.species = 'human'
+# sample_map:           # ← 若有多样本，需人工填写
+#   1: 'sample1'
 
-# CFG.sample_map = {        # ← 若有多样本，需人工填写
-#     1: 'sample1',
-# }
+# marker_dict:          # ← 需人工填写
+#   CellTypeA:
+#     - GENE1
+#     - GENE2
 
-# CFG.marker_dict = {        # ← 需人工填写
-#     'CellTypeA': ['GENE1', 'GENE2'],
-# }
-
-# CFG.ai.enabled = True      # ← 取消注释以启用 AI 注释
-# CFG.ai.api_base = 'https://api.deepseek.com/v1'
+ai:
+  enabled: false       # ← 设为 true 以启用 AI 注释
+  # api_base: 'https://api.deepseek.com/v1'
 ```
 
-**你必须做的修改（标有 `# TODO`）：**
+**你必须做的修改：**
 
 | 需要修改 | 重要性 | 说明 |
 |---------|--------|------|
-| `CFG.marker_dict` | 🔴 必须 | 填写你的组织已知标记基因。若组织有 KB 支持，改为设置 `CFG.tissue_kb` |
-| `CFG.sample_map` | 🟡 多样本时 | 映射 10X barcode 后缀 → 样本名 |
-| `CFG.stage_map` | 🟡 发育数据时 | 映射样本 → 发育阶段 |
-| `CFG.tissue_kb` | 🟢 推荐 | 如为 `retina`/`hypothalamus`，设为对应的 KB 名称即可跳过 `marker_dict` |
+| `marker.marker_dict` | 🔴 必须 | 填写你的组织已知标记基因。若组织有 KB 支持，改为设置 `tissue_kb` |
+| `sample_meta.sample_map` | 🟡 多样本时 | 映射 10X barcode 后缀 → 样本名 |
+| `sample_meta.stage_map` | 🟡 发育数据时 | 映射样本 → 发育阶段 |
+| `tissue_kb` | 🟢 推荐 | 如为 `retina`/`hypothalamus`，设为对应的 KB 名称即可跳过 marker_dict |
 | AI 设置 | 🟢 推荐 | 取消注释 AI 段落，填入 API Key |
 
 > 💡 **KB 模式优先**：如果你的组织在 `rna/tissue_ontologies/` 下有对应知识库，只需设置 `CFG.tissue_kb = "retina"` 即可跳过 `marker_dict`。KB 模式比简单打分准确度更高。
@@ -269,17 +268,17 @@ CFG.species = 'human'
 
 ```bash
 # Step 1: 跑完所有 12 步骤
-python core/run_pipeline.py --modality rna --config projects/rna/GSE00001/config_GSE00001.py
+python core/run_pipeline.py --modality rna --config projects/rna/GSE00001/config_GSE00001.yaml
 
 # Step 2: 对某个特定细胞类型做子聚类（可选）
 python core/run_pipeline.py --modality rna --step 7 --cell-type "Müller Glia" \
-    --config projects/rna/GSE00001/config_GSE00001.py
+    --config projects/rna/GSE00001/config_GSE00001.yaml
 ```
 
 ### 5.2 scATAC-seq 全流程
 
 ```bash
-python core/run_pipeline.py --modality atac --config projects/atac/GSE00001/config_GSE00001.py
+python core/run_pipeline.py --modality atac --config projects/atac/GSE00001/config_GSE00001.yaml
 ```
 
 ### 5.3 多模态（multiome）数据集
@@ -287,14 +286,14 @@ python core/run_pipeline.py --modality atac --config projects/atac/GSE00001/conf
 如果数据集同时包含 RNA 和 ATAC（如某个多模态数据集），预处理脚本会自动生成 **两份** config：
 
 ```
-projects/rna/GSE00001/config_GSE00001.py    ← RNA 配置
-projects/atac/GSE00001/config_GSE00001.py   ← ATAC 配置
+projects/rna/GSE00001/config_GSE00001.yaml    ← RNA 配置
+projects/atac/GSE00001/config_GSE00001.yaml   ← ATAC 配置
 ```
 
 先分别跑 RNA 和 ATAC Pipeline：
 ```bash
-python core/run_pipeline.py --modality rna  --config projects/rna/GSE00001/config_GSE00001.py
-python core/run_pipeline.py --modality atac --config projects/atac/GSE00001/config_GSE00001.py
+python core/run_pipeline.py --modality rna  --config projects/rna/GSE00001/config_GSE00001.yaml
+python core/run_pipeline.py --modality atac --config projects/atac/GSE00001/config_GSE00001.yaml
 ```
 
 然后 ATAC Step 09 会自动发现 RNA 的结果并进行整合。
@@ -302,7 +301,7 @@ python core/run_pipeline.py --modality atac --config projects/atac/GSE00001/conf
 ### 5.4 断点续跑
 
 ```bash
-python core/run_pipeline.py --modality rna --resume --config projects/rna/GSE00001/config_GSE00001.py
+python core/run_pipeline.py --modality rna --resume --config projects/rna/GSE00001/config_GSE00001.yaml
 ```
 
 ### 5.5 只跑某一步
@@ -312,7 +311,7 @@ python core/run_pipeline.py --modality rna --resume --config projects/rna/GSE000
 python core/run_pipeline.py --modality rna --list
 
 # 只跑注释步骤
-python core/run_pipeline.py --modality rna --step 6 --config projects/rna/GSE00001/config_GSE00001.py
+python core/run_pipeline.py --modality rna --step 6 --config projects/rna/GSE00001/config_GSE00001.yaml
 ```
 
 ### 5.6 完整工作流总结
@@ -323,7 +322,7 @@ python core/run_pipeline.py --modality rna --step 6 --config projects/rna/GSE000
 2. 预处理（本文档）
    python core/preprocess/preprocessor.py --gse GSE12345
        ↓
-3. 检查生成的 dataset.yaml + config_*.py
+3. 检查生成的 dataset.yaml + config_*.yaml
    编辑 marker_dict / tissue_kb / AI 设置
        ↓
 4. 运行 Pipeline
@@ -394,9 +393,9 @@ python core/preprocess/preprocessor.py --input-dir /path/to/data --name my_data
 
 这是**正常的**。预处理脚本只能自动填充它能确定的信息。标记 `# TODO` 的部分需要你根据实际数据手工填写：
 
-- **`CFG.marker_dict`**：查找文献中你目标组织的已知标记基因
-- **`CFG.sample_map`**：从 GEO Metadata 中整理 barcode → 样本的对应关系
-- **`CFG.stage_map`**：如果你的实验有时间序列/发育阶段，定义阶段映射
+- **marker_dict**：查找文献中你目标组织的已知标记基因
+- **sample_meta.sample_map**：从 GEO Metadata 中整理 barcode → 样本的对应关系
+- **sample_meta.stage_map**：如果你的实验有时间序列/发育阶段，定义阶段映射
 
 ### Q3: 预处理把我的文件识别成错误的格式怎么办？
 
@@ -408,7 +407,7 @@ python core/preprocess/preprocessor.py --gse GSE12345 --dry-run -v
 python core/preprocess/preprocessor.py --gse GSE12345 --modality atac
 ```
 
-然后检查生成的 `config_*.py`，手工修改 `CFG.data_format` 和文件路径。
+然后检查生成的 `config_*.yaml`，手工修改 `data_format` 和文件路径。
 
 ### Q4: 我的数据是 SuperSeries（包含多个子数据集），预处理能处理吗？
 
@@ -425,7 +424,7 @@ python core/preprocess/preprocessor.py --gse GSE12345 --modality atac
 
 如果仍然无法识别，你可以：
 1. 参考 `templates/config_templates/` 中的模板手工写 config
-2. 在 `projects/{modality}/{GSE_ID}/` 下创建对应的 `config_*.py`
+2. 在 `projects/{modality}/{GSE_ID}/` 下创建对应的 `config_*.yaml`
 
 ### Q6: 预处理会覆盖我已有的 config 文件吗？
 

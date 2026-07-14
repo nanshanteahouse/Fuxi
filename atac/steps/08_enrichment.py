@@ -130,8 +130,8 @@ def _enrichr_one_group(grp, genes, CFG, log):
     try:
         enr = gp.enrichr(
             gene_list=genes,
-            gene_sets=CFG.enrichment_gene_sets,
-            organism=CFG.enrichment_organism,
+            gene_sets=CFG.enrichment.gene_sets,
+            organism=CFG.enrichment.organism,
             outdir=None, no_plot=True,
         )
         enr.results['group'] = str(grp)
@@ -170,13 +170,13 @@ def main():
     for grp in (markers_df[group_col].unique() if group_col else ['all']):
         if group_col:
             sub = markers_df[markers_df[group_col] == grp]
-            genes = peak_to_gene(sub, genome=CFG.genome,
-                                 gene_bed=getattr(CFG, 'gene_annotation_bed', ''),
-                                 max_distance=CFG.peak_gene_distance)
+            genes = peak_to_gene(sub, genome=CFG.atac.genome,
+                                 gene_bed=getattr(CFG.enrichment, 'gene_annotation_bed', ''),
+                                 max_distance=CFG.enrichment.peak_gene_distance)
         else:
-            genes = peak_to_gene(markers_df, genome=CFG.genome,
-                                 gene_bed=getattr(CFG, 'gene_annotation_bed', ''),
-                                 max_distance=CFG.peak_gene_distance)
+            genes = peak_to_gene(markers_df, genome=CFG.atac.genome,
+                                 gene_bed=getattr(CFG.enrichment, 'gene_annotation_bed', ''),
+                                 max_distance=CFG.enrichment.peak_gene_distance)
 
         # Deduplicate and filter — strip empty/invalid names
         genes_clean = [g for g in genes if isinstance(g, str) and g and len(g) > 2]
@@ -193,7 +193,7 @@ def main():
 
     # ── Parallel Enrichr calls (like RNA-09) ──
     if tasks:
-        max_workers = min(5, getattr(CFG, 'n_jobs', 4))
+        max_workers = min(5, getattr(CFG.execution, 'n_jobs', 4))
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_grp = {
                 executor.submit(_enrichr_one_group, grp, genes, CFG, log): grp

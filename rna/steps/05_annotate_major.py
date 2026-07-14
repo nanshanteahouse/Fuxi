@@ -110,7 +110,7 @@ def run_subclustering(adata, CFG, subcluster_types, resolution, min_cells, logge
         sc.pp.neighbors(sub, n_pcs=50, use_rep='X_pca_harmony',
                         random_state=42)
         sc.tl.leiden(sub, resolution=resolution, key_added='subcluster',
-                     random_state=42, flavor=CFG.leiden_flavor)
+                     random_state=42, flavor=CFG.clustering.leiden_flavor)
         labels = np.array(sub.obs['cell_type'].astype(str)
                           + '_' + sub.obs['subcluster'].astype(str))
         adata.obs.loc[mask, 'cell_type_sub'] = labels.tolist()
@@ -325,9 +325,9 @@ def score_genes_mode(adata, CFG, logger):
     """Score_genes 回退模式 — 复用旧有 run_annotation + run_subclustering。"""
     logger.info("Score_genes mode — marker gene-based scoring annotation")
 
-    run_annotation(adata, CFG.marker_dict, logger)
-    run_subclustering(adata, CFG, CFG.subcluster_types,
-                      CFG.subcluster_resolution, CFG.min_cells_subcluster, logger)
+    run_annotation(adata, CFG.marker.marker_dict, logger)
+    run_subclustering(adata, CFG, CFG.marker.subcluster_types,
+                      CFG.marker.subcluster_resolution, CFG.marker.min_cells_subcluster, logger)
 
     # 统一列名: cell_type_sub → cell_subtype
     if 'cell_type_sub' in adata.obs:
@@ -412,9 +412,9 @@ def main():
             if std is not None:
                 validation_results = std.validate(
                     adata,
-                    top_n=CFG.marker_validation_n_top_genes,
-                    min_overlap=CFG.marker_validation_min_overlap,
-                    marginal_threshold=CFG.marker_validation_marginal_threshold,
+                    top_n=CFG.marker.validation_n_top_genes,
+                    min_overlap=CFG.marker.validation_min_overlap,
+                    marginal_threshold=CFG.marker.validation_marginal_threshold,
                 )
                 log.info("Marker validation: %d/%d PASS",
                          sum(1 for r in validation_results if r['status'] == 'PASS'),
@@ -433,9 +433,9 @@ def main():
             if std is not None:
                 validation_results = std.validate(
                     adata,
-                    top_n=CFG.marker_validation_n_top_genes,
-                    min_overlap=CFG.marker_validation_min_overlap,
-                    marginal_threshold=CFG.marker_validation_marginal_threshold,
+                    top_n=CFG.marker.validation_n_top_genes,
+                    min_overlap=CFG.marker.validation_min_overlap,
+                    marginal_threshold=CFG.marker.validation_marginal_threshold,
                 )
                 log.info("Marker validation: %d/%d PASS",
                          sum(1 for r in validation_results if r['status'] == 'PASS'),
@@ -453,9 +453,9 @@ def main():
     if std is not None:
         validation_results = std.validate(
             adata,
-            top_n=CFG.marker_validation_n_top_genes,
-            min_overlap=CFG.marker_validation_min_overlap,
-            marginal_threshold=CFG.marker_validation_marginal_threshold,
+            top_n=CFG.marker.validation_n_top_genes,
+            min_overlap=CFG.marker.validation_min_overlap,
+            marginal_threshold=CFG.marker.validation_marginal_threshold,
         )
         log.info("Marker validation: %d/%d PASS",
                  sum(1 for r in validation_results if r['status'] == 'PASS'),

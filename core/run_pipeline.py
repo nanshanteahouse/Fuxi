@@ -328,41 +328,18 @@ def main():
 
     # ── Load config ──────────────────────────────────────────────────
     config_path = os.path.abspath(args.config)
-    if not os.path.exists(config_path):
-        print(f"[run] Error: config file not found: {config_path}")
-        sys.exit(1)
-
-    # Ensure repo root is on sys.path (config files rely on `from core.config import CFG`)
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if repo_root not in sys.path:
-        sys.path.insert(0, repo_root)
-
-    import importlib.util
-    spec = importlib.util.spec_from_file_location("pipeline_config", config_path)
-    cfg_module = importlib.util.module_from_spec(spec)
-    sys.modules["pipeline_config"] = cfg_module
-    spec.loader.exec_module(cfg_module)
-    CFG = cfg_module.CFG
-    # Auto-detect project_dir from config file location (mirrors resolve_config)
-    if not CFG.project_dir:
-        CFG.project_dir = os.path.dirname(config_path)
-    CFG.resolve_paths()
-
-    # ── Resolve n_jobs ───────────────────────────────────────────────
-    _nc = getattr(CFG, 'n_jobs', 0)
-    if _nc == 0:
-        _nc = os.cpu_count() or 1
-        CFG.n_jobs = _nc
-    print(f"[run] Using {_nc} CPU core(s)")
+    from core.utils._config import resolve_config
+    CFG = resolve_config(config_path)
+    print(f"[run] Using {CFG.execution.n_jobs} CPU core(s)")
 
     # ── BLAS / OpenMP thread limits ──────────────────────────────────
-    if CFG.n_jobs > 0 and getattr(CFG, 'limit_blas_threads', True):
+    if CFG.execution.n_jobs > 0 and getattr(CFG.execution, 'limit_blas_threads', True):
         for var in ["OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
                      "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
                      "PYTORCH_ENABLE_MPS_FALLBACK", "TORCH_NUM_THREADS"]:
             if var not in os.environ:
-                os.environ[var] = str(CFG.n_jobs)
-        print(f"[run] Set BLAS/OpenMP threads to {CFG.n_jobs} via env vars")
+                os.environ[var] = str(CFG.execution.n_jobs)
+        print(f"[run] Set BLAS/OpenMP threads to {CFG.execution.n_jobs} via env vars")
 
     # ── Resolve paths ────────────────────────────────────────────────
     scripts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', mod["dir"], 'steps')
@@ -425,7 +402,7 @@ def main():
         pipeline_summary.pipeline_info = {
             "modality": args.modality,
             "config_path": config_path,
-            "n_jobs": CFG.n_jobs,
+            "n_jobs": CFG.execution.n_jobs,
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
         }
     else:
@@ -524,7 +501,7 @@ def main():
     print(f"{'=' * 60}")
     if pipeline_summary is not None:
         pipeline_summary.print_terminal_summary(
-            n_jobs=CFG.n_jobs,
+            n_jobs=CFG.execution.n_jobs,
             modality=args.modality.upper(),
             config_path=config_path,
         )

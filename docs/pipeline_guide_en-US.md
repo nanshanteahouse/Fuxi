@@ -71,7 +71,7 @@ Before running the pipeline, you need two files under your dataset directory:
 ```
 projects/{modality}/{dataset_id}/
 ├── dataset.yaml          # Dataset metadata manifest
-└── config_{dataset_id}.py # Pipeline configuration
+└── config_{dataset_id}.yaml # Pipeline configuration
 ```
 
 These two files are typically generated automatically by the **preprocessor script**. If you don't have them yet, please refer to the *Fuxi Preprocessor User Guide* first.
@@ -107,13 +107,13 @@ Fuxi — RNA-seq pipeline step list
 
 ```bash
 # scRNA-seq full workflow (12 steps, from scratch to GRN)
-python core/run_pipeline.py --modality rna --config projects/rna/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality rna --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 
 # scATAC-seq full workflow (10 steps)
-python core/run_pipeline.py --modality atac --config projects/atac/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality atac --config projects/atac/{dataset_id}/config_{dataset_id}.yaml
 
 # Spatial transcriptomics full workflow (10 steps)
-python core/run_pipeline.py --modality spatial --config projects/spatial/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality spatial --config projects/spatial/{dataset_id}/config_{dataset_id}.yaml
 ```
 
 The terminal shows real-time progress with timing for each step:
@@ -143,7 +143,7 @@ The terminal shows real-time progress with timing for each step:
 The pipeline uses a **checkpoint system**: each step saves intermediate results. If execution is interrupted for any reason, use `--resume` to continue from where it left off — completed steps are automatically skipped:
 
 ```bash
-python core/run_pipeline.py --modality rna --resume --config projects/rna/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality rna --resume --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 ```
 
 ### 3.4 Run individual steps
@@ -152,13 +152,13 @@ If you want to run or re-run a specific step:
 
 ```bash
 # Run only Step 06 (cell annotation)
-python core/run_pipeline.py --modality rna --step 5 --config projects/rna/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality rna --step 5 --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 
 # Run Steps 02 through 05
-python core/run_pipeline.py --modality rna --steps 2-5 --config projects/rna/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality rna --steps 2-5 --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 
 # Run specific non-consecutive steps
-python core/run_pipeline.py --modality rna --steps 0,2,4,11 --config projects/rna/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality rna --steps 0,2,4,11 --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 ```
 
 ---
@@ -304,7 +304,7 @@ Performs fine-grained subtype analysis on a specific cell type (e.g., "Müller G
 ```bash
 python core/run_pipeline.py --modality rna --step 7 \
     --cell-type "Müller Glia" \
-    --config projects/rna/{dataset_id}/config_{dataset_id}.py
+    --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 ```
 
 This step re-runs PCA → neighbor graph → UMAP → Leiden clustering on the subset of the specified cell type, and optionally uses AI for subcluster re-annotation. Results are automatically written back to the main `05_annotated.h5ad` file's `cell_subtype` column.
@@ -821,14 +821,14 @@ results/
 
 ```bash
 # List all steps with their checkpoint files
-python core/run_pipeline.py --modality rna --list --config projects/rna/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality rna --list --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 ```
 
 ### 7.2 Resume from checkpoint
 
 ```bash
 # Auto-detect the first incomplete step and continue from there
-python core/run_pipeline.py --modality rna --resume --config projects/rna/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality rna --resume --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 ```
 
 The pipeline scans checkpoint files and skips completed steps. Whether the interruption was due to network issues, memory exhaustion, or manual termination, the same command resumes correctly.
@@ -839,10 +839,10 @@ If you're not satisfied with a step's results and want to adjust parameters:
 
 ```bash
 # Re-run only the annotation step (Step 06)
-python core/run_pipeline.py --modality rna --step 5 --config projects/rna/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality rna --step 5 --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 
 # Re-run from annotation onward
-python core/run_pipeline.py --modality rna --steps 6-11 --config projects/rna/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality rna --steps 6-11 --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 ```
 
 ### 7.4 Skip time-consuming steps
@@ -851,7 +851,7 @@ If you only care about certain analyses:
 
 ```bash
 # Run only from loading through annotation (first 7 steps)
-python core/run_pipeline.py --modality rna --steps 0-6 --config projects/rna/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality rna --steps 0-6 --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 ```
 
 ### 7.5 Clean up intermediate files
@@ -859,7 +859,7 @@ python core/run_pipeline.py --modality rna --steps 0-6 --config projects/rna/{da
 The pipeline generates multiple intermediate checkpoint files (each h5ad may be hundreds of MB to several GB). If disk space is tight, auto-delete upstream files after each step:
 
 ```bash
-python core/run_pipeline.py --modality rna --cleanup --config projects/rna/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality rna --cleanup --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 ```
 
 ### 7.6 Subclustering
@@ -869,7 +869,7 @@ Fine-grained subtype analysis on an already-annotated cell type:
 ```bash
 python core/run_pipeline.py --modality rna --step 7 \
     --cell-type "Müller Glia" \
-    --config projects/rna/{dataset_id}/config_{dataset_id}.py
+    --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 ```
 
 You can run this for multiple cell types; results are automatically merged back into the main annotation file.
@@ -878,12 +878,12 @@ You can run this for multiple cell types; results are automatically merged back 
 
 ```bash
 # Step 1: Run RNA and ATAC separately
-python core/run_pipeline.py --modality rna  --config projects/rna/{dataset_id}/config_{dataset_id}.py
-python core/run_pipeline.py --modality atac --config projects/atac/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality rna  --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
+python core/run_pipeline.py --modality atac --config projects/atac/{dataset_id}/config_{dataset_id}.yaml
 
 # Step 2: ATAC Step 09 auto-integrates
 # This is the last step of the ATAC full workflow, or run it standalone:
-python core/run_pipeline.py --modality atac --step 9 --config projects/atac/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality atac --step 9 --config projects/atac/{dataset_id}/config_{dataset_id}.yaml
 ```
 
 ### 7.8 Cross-modality scRNA → spatial marker transfer
@@ -892,13 +892,13 @@ If you have scRNA-seq data from matched samples, you can transfer per-cell-type 
 
 ```bash
 # Step 1: Run RNA pipeline first (produces marker_genes_per_group_cell_type.csv)
-python core/run_pipeline.py --modality rna --config projects/rna/{rna_dataset_id}/config_{rna_dataset_id}.py
+python core/run_pipeline.py --modality rna --config projects/rna/{rna_dataset_id}/config_{rna_dataset_id}.yaml
 
 # Step 2: Configure spatial config with rna_ref pointing to the RNA dataset
 # In your spatial config:
 #   CFG.rna_ref = "{rna_dataset_id}"
 # Step 3: Run spatial pipeline — annotation automatically uses scRNA markers
-python core/run_pipeline.py --modality spatial --config projects/spatial/{spatial_dataset_id}/config_{spatial_dataset_id}.py
+python core/run_pipeline.py --modality spatial --config projects/spatial/{spatial_dataset_id}/config_{spatial_dataset_id}.yaml
 ```
 
 The `--list` command will show whether scRNA marker auto-discovery succeeded.
@@ -907,7 +907,7 @@ The `--list` command will show whether scRNA marker auto-discovery succeeded.
 
 ## 9. Configuration file deep-dive
 
-The configuration file (`config_{dataset_id}.py`) is a Python script that controls all pipeline behavior by mutating the global `CFG` object. Below are the most commonly adjusted settings:
+The configuration file (`config_{dataset_id}.yaml`) is a Python script that controls all pipeline behavior by mutating the global `CFG` object. Below are the most commonly adjusted settings:
 
 ### 8.1 Data input
 
@@ -1077,7 +1077,7 @@ The preprocessor only auto-fills what it can determine. Sections marked `# TODO`
 
 ```bash
 # Use --resume; it automatically continues from the failed step
-python core/run_pipeline.py --modality rna --resume --config projects/rna/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality rna --resume --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 ```
 
 `--resume` scans checkpoint files and finds the first incomplete step. Completed steps won't re-run, so recovery is fast.
@@ -1169,10 +1169,10 @@ The pipeline's grid search mechanism already handles most parameter choices (Lei
 
 ```bash
 # Full workflow
-python core/run_pipeline.py --modality rna --config projects/rna/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality rna --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 
 # Resume from checkpoint
-python core/run_pipeline.py --modality rna --resume --config projects/rna/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality rna --resume --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 
 # Single step
 python core/run_pipeline.py --modality rna --step 5 --config ...
@@ -1191,10 +1191,10 @@ python core/run_pipeline.py --modality rna --list --config ...
 
 ```bash
 # Full workflow
-python core/run_pipeline.py --modality atac --config projects/atac/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality atac --config projects/atac/{dataset_id}/config_{dataset_id}.yaml
 
 # Resume from checkpoint
-python core/run_pipeline.py --modality atac --resume --config projects/atac/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality atac --resume --config projects/atac/{dataset_id}/config_{dataset_id}.yaml
 
 # Single step
 python core/run_pipeline.py --modality atac --step 4 --config ...
@@ -1207,16 +1207,16 @@ python core/run_pipeline.py --modality atac --step 9 --config ...
 
 ```bash
 # Full workflow
-python core/run_pipeline.py --modality spatial --config projects/spatial/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality spatial --config projects/spatial/{dataset_id}/config_{dataset_id}.yaml
 
 # Resume from checkpoint
-python core/run_pipeline.py --modality spatial --resume --config projects/spatial/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality spatial --resume --config projects/spatial/{dataset_id}/config_{dataset_id}.yaml
 
 # Single step
 python core/run_pipeline.py --modality spatial --step 5 --config ...
 
 # With scRNA marker transfer (Phase 1)
-python core/run_pipeline.py --modality spatial --config projects/spatial/{dataset_id}/config_{dataset_id}.py
+python core/run_pipeline.py --modality spatial --config projects/spatial/{dataset_id}/config_{dataset_id}.yaml
 # Config must set: CFG.rna_ref = "{rna_dataset_id}"
 ```
 

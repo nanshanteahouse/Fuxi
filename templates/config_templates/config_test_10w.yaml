@@ -1,0 +1,93 @@
+# ── Data paths & format ──
+# data_dir and paths are resolved via FUXI_DATA_ROOT and GSE_ID
+data_format: 10x_fragments
+
+data_input:
+  fragment_file: "<fragments.tsv.gz>"
+  barcodes_file: "<barcodes.txt>"
+
+# ── ATAC-specific config ──
+atac:
+  genome: hg38
+  # chrom_sizes: ""
+  # blacklist_bed: ""
+  # tss_bed: ""
+
+  # Downsampling (test mode, only first 500 cells)
+  max_cells: 500
+
+  # QC
+  min_fragments: 1000
+  max_fragments: 50000
+  min_tsse: 7.0
+  # max_blacklist_ratio: 0.05
+  # min_peak_region_fragments: 300
+
+  # Peak calling
+  peak_qval: 0.05
+  peak_width: 500
+  # use_macs3: true
+
+  # Dimensionality reduction
+  n_features: 10000
+  n_spectral: 30
+
+  # Differential accessibility
+  marker_peaks_log2fc: 0.25
+  marker_peaks_fdr: 0.1
+
+# ── Clustering ──
+clustering:
+  n_neighbors: 15
+  param_grid_n_neighbors: [15, 20]
+  param_grid_resolutions: [0.3, 0.8, 1.5]
+  umap_selection_method: "convex_hull"
+  param_grid_min_dist: [0.1, 0.3, 0.5]
+  param_grid_spread: [1.0]
+  umap_min_dist: 0.3
+  umap_spread: 1.0
+
+# ── Trajectory ──
+trajectory:
+  root_cell_types: []
+  # terminal_cell_types: []
+
+# ── Enrichment ──
+enrichment:
+  peak_gene_distance: 50000
+  # gene_annotation_bed: ""
+  # method: both
+  # gene_sets: [GO_Biological_Process_2023, KEGG_2021_Human]
+  # organism: human
+  # n_top_genes: 2000
+  # pval_cutoff: 0.05
+  # min_size: 15
+  # max_size: 500
+  # permutations: 1000
+
+# ── CCI (placeholder for ATAC; no corresponding step yet) ──
+# cci:
+#   run: true
+
+# ── RNA integration ──
+# rna_h5ad: ""
+# rna_marker_top_n: 200
+# rna_marker_pval_threshold: 0.05
+# rna_marker_logfc_min: 0.25
+
+# ── AI ──
+ai:
+  enabled: false
+
+# ── Execution ──
+execution:
+  n_jobs: 4
+  random_seed: 42
+  # force_csr: true
+  # use_float32: true
+  # limit_blas_threads: true
+  # scanpy_verbosity: 2
+
+# h5ad_compression: gzip
+# h5ad_tempdir: /tmp/Fuxi
+# cleanup_intermediates: true

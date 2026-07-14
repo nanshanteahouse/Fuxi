@@ -1,0 +1,190 @@
+# ── Data format ──
+data_format: 10X_h5
+
+# ── Data input ──
+data_input:
+  # .h5 file matching pattern (glob syntax)
+  # Default matches Cell Ranger filtered output: "*filtered_feature_bc_matrix.h5"
+  # For raw matrix: "*raw_feature_bc_matrix.h5"
+  # Custom: "*_counts.h5" etc.
+  h5_file_pattern: "*filtered_feature_bc_matrix.h5"
+  # h5_dir: "data"
+
+# ── Sample metadata ──
+sample_meta:
+  # When multiple .h5 files exist, sample names are auto-extracted from filenames.
+  # For 10X multi-channel aggregation, barcodes use -1, -2, ... suffixes.
+  # sample_map:
+  #   1: sample1
+  #   2: sample2
+  sample_map: {}
+
+  # barcode suffix -> developmental stage / experimental group
+  # stage_map:
+  #   1: Day3
+  #   2: Day7
+  stage_map: {}
+  stage_order: []
+
+# ── Dataset metadata ──
+tissue: "unknown"
+# tissue_maturity: "unknown"   # "developing" | "adult" | "unknown"
+species: "human"
+expression_type: raw_counts
+# raw_counts | log1p_counts | TPM | CPM | FPKM
+# TPM/FPKM/CPM: total_counts & complexity filters are auto-skipped.
+# Scrublet is auto-disabled for non-raw_counts data.
+
+# ── QC ──
+qc:
+  min_genes: 500
+  max_genes: 7500
+  max_pct_mito: 20.0
+  min_cells_per_gene: 3
+  min_genes_per_umi: 0.7
+  # use_adaptive_thresholds: true
+  # mad_n_mads: 3.0
+  # qc_ncount_max_mad: 5.0
+
+  # ── Single-nucleus (snRNA-seq) ──
+  # is_nuclei: true
+  # max_pct_mito_nuclei: 5.0
+
+# ── Scrublet (doublet detection) ──
+scrublet:
+  run: true   # auto-disabled when expression_type != raw_counts
+
+# ── HVG ──
+hvg:
+  n_top_genes: 4000
+  batch_key: sample
+  flavor: seurat_v3
+  # use_regress_out: false
+
+# ── Batch correction / Harmony ──
+harmony:
+  use_harmony: true
+  batch_key: sample
+  max_iter: 20
+
+# ── PCA ──
+pca:
+  n_pcs_full: 100
+  n_pcs_use: 50
+
+# ── Clustering ──
+clustering:
+  leiden_resolutions: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
+  best_resolution: 1.0
+  best_n_neighbors: 0
+  cluster_selection_method: "multi_metric"
+  umap_selection_method: "convex_hull"
+  param_grid_min_dist: [0.1, 0.3, 0.5]
+  param_grid_spread: [1.0]
+  umap_min_dist: 0.3
+  umap_spread: 1.0
+
+# ── Cell type markers ──
+# Format: CellType: [marker1, marker2, ...]
+# Replace with actual markers for your tissue type.
+marker:
+  marker_dict: {}
+  subcluster_types: []
+  subcluster_resolution: 0.4
+  min_cells_subcluster: 50
+
+# ── Knowledge base ──
+# tissue_kb: ""   # Tissue KB name from rna/tissue_ontologies/, e.g. "retina"
+
+# ── Trajectory ──
+trajectory:
+  root_cell_types: []
+  # root_markers: [SOX2, PAX6, NES]
+  # n_diffmap_comps: 15
+  # n_branchings: 2
+
+# ── Differential expression ──
+de:
+  method: wilcoxon
+  n_genes: 50
+  pval_cutoff: 0.05
+  logfc_cutoff: 0.25
+  stage_pairwise: true
+  # auto_switch_on_low_quality: true
+
+# ── Enrichment (uncomment to enable) ──
+# enrichment:
+#   run: true
+#   method: both          # ora | prerank | both
+#   gene_sets: [GO_Biological_Process_2023, KEGG_2021_Human]
+#   organism: human
+
+# Tissue-specific gene set libraries (v4.0+):
+# Available: CellMarker_Augmented_2021, PanglaoDB_Augmented_2021,
+#            Tabula_Sapiens, Azimuth_Cell_Types, Allen_Brain_Atlas
+#   gene_sets_tissue:
+#     - CellMarker_Augmented_2021
+#     - PanglaoDB_Augmented_2021
+
+# Tissue-aware ranking/filtering (v4.0+):
+#   'off'  = pure statistical ranking (default, current behavior)
+#   'soft' = annotate tissue_relevant column + output _tissue_relevant.csv
+#   'hard' = keep only tissue-relevant pathways
+#   tissue_mode: soft
+#   use_kb_relevance: true
+#   redundancy_cluster: true
+
+# ── GRN regulatory network analysis ──
+grn:
+  run: true
+  method: decoupler
+  species: human
+  n_top_regulons: 50
+  min_regulon_size: 5
+  # confidence_levels: [A, B, C]
+
+# ── CCI cell-cell interaction analysis ──
+cci:
+  run: true
+  # method: liana
+  # lr_database: consensus
+  # permutations: 1000
+  # n_top_interactions: 50
+  # spatial_method: liana_spatial
+  # spatial_distance: 0.0
+  # lr_cache_dir: ""
+
+# ── AI settings (uncomment to enable) ──
+# ai:
+#   enabled: true
+#   api_base: https://api.deepseek.com/v1
+#   model: deepseek-v4-pro
+#   max_tokens: 32768
+#   temperature: 0.1
+#   thinking_enabled: true
+#   reasoning_effort: high
+#   annotation: true
+#   subcluster: true
+#   interpretation: true
+#   cache_responses: true
+
+# ── Execution ──
+execution:
+  n_jobs: 0
+  random_seed: 42
+  # force_csr: true
+  # use_float32: true
+  # limit_blas_threads: true
+  # scanpy_verbosity: 2
+
+# h5ad_compression: gzip
+
+# ── Downsampling (optional) ──
+# downsample:
+#   target: 5000
+#   strategy: random
+
+# ── Subset filtering (run on subset of samples/cells, suffix auto-appended) ──
+# sample_keep: [GSM9292434_SCR205, GSM9292436_SCR206]
+# obs_filter: "stage == 'PCW8'"
+# subset_suffix: "_pcw8"

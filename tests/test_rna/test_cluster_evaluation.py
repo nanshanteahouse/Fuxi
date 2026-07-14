@@ -146,11 +146,7 @@ class TestSelectBestParams:
         assert method == "manual"
 
 
-class MockCFG:
-    """Minimal CFG mock for select_best_umap_params manual mode."""
-    umap_min_dist = 0.5
-    umap_spread = 1.5
-
+from core.config import Config
 
 class TestSelectBestUmapParams:
     """Numerical assertions for select_best_umap_params."""
@@ -166,7 +162,7 @@ class TestSelectBestUmapParams:
                 min_dist_grid=None,
                 spread_grid=None,
                 method=None,
-                CFG=MockCFG(),
+                CFG=Config.model_validate({"clustering": {"umap_min_dist": 0.5, "umap_spread": 1.5}}),
                 use_rep="X_pca",
                 log=logger,
             )

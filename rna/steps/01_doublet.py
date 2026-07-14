@@ -22,8 +22,8 @@ def _resolve_doublet_rate(cfg, n_cells: int) -> float:
       y (%) = 0.000759 * x + 0.053    (x = recovered cell 数)
     钳位在 [0.004, 0.15]。
     """
-    if cfg.scrublet_expected_doublet_rate is not None:
-        return cfg.scrublet_expected_doublet_rate
+    if cfg.scrublet.expected_doublet_rate is not None:
+        return cfg.scrublet.expected_doublet_rate
     rate = 0.00000759 * n_cells + 0.00000053
     return min(max(rate, 0.004), 0.15)
 
@@ -36,13 +36,13 @@ def run_scrublet_sample(adata_sub, sample_name, cfg):
         scrub = scr.Scrublet(
             adata_sub.X if isinstance(adata_sub.X, sp.spmatrix) else sp.csr_matrix(adata_sub.X),
             expected_doublet_rate=expected_rate,
-            random_state=cfg.random_seed,
+            random_state=cfg.execution.random_seed,
         )
         scores, predicted = scrub.scrub_doublets(
-            min_counts=cfg.scrublet_min_counts,
-            min_cells=cfg.scrublet_min_cells,
-            min_gene_variability_pctl=cfg.scrublet_min_gene_var_pctl,
-            n_prin_comps=cfg.scrublet_n_prin_comps,
+            min_counts=cfg.scrublet.min_counts,
+            min_cells=cfg.scrublet.min_cells,
+            min_gene_variability_pctl=cfg.scrublet.min_gene_var_pctl,
+            n_prin_comps=cfg.scrublet.n_prin_comps,
         )
         if predicted is None:
             fallback = expected_rate
@@ -56,7 +56,7 @@ def run_scrublet_sample(adata_sub, sample_name, cfg):
 
 
 def detect_doublets_parallel(adata, cfg, log):
-    if not cfg.run_scrublet:
+    if not cfg.scrublet.run:
         log.info("Scrublet disabled, skipping doublet detection.")
         adata.obs['doublet_scores'] = 0.0
         adata.obs['predicted_doublet'] = False
@@ -75,7 +75,7 @@ def detect_doublets_parallel(adata, cfg, log):
         return
 
     log.info("Running Scrublet (per sample, parallel)...")
-    configured_key = cfg.scrublet_batch_key
+    configured_key = cfg.scrublet.batch_key
     if configured_key in adata.obs:
         groupby_col = configured_key
         log.info("  Using configured batch column: %s", groupby_col)
@@ -118,7 +118,7 @@ def detect_doublets_parallel(adata, cfg, log):
         results.append(run_scrublet_sample(sub, name, cfg))
 
     if small_subsets:
-        n_jobs = min(cfg.n_jobs or os.cpu_count() or 1, len(small_names))
+        n_jobs = min(cfg.execution.n_jobs or os.cpu_count() or 1, len(small_names))
         log.info("  Small samples — processing %d groups in parallel (n_jobs=%d)",
                  len(small_names), n_jobs)
         small_results = Parallel(n_jobs=n_jobs)(

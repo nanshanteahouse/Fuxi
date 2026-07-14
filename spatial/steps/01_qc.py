@@ -23,9 +23,9 @@ def compute_qc_metrics(adata, cfg, log):
     log.info("Computing QC metrics...")
 
     # Mitochondrial genes
-    mt_mask = adata.var_names.str.startswith(cfg.mt_gene_pattern)
-    if cfg.mt_gene_list:
-        mt_mask = mt_mask | adata.var_names.isin(cfg.mt_gene_list)
+    mt_mask = adata.var_names.str.startswith(cfg.qc.mt_gene_pattern)
+    if cfg.qc.mt_gene_list:
+        mt_mask = mt_mask | adata.var_names.isin(cfg.qc.mt_gene_list)
     adata.var['mt'] = mt_mask
     adata.var['ribo'] = adata.var_names.str.startswith(('RPS', 'RPL'))
 
@@ -43,7 +43,7 @@ def compute_qc_metrics(adata, cfg, log):
     log.info("  Median counts/spot: %.0f", adata.obs['total_counts'].median())
     log.info("  Median genes/spot:  %.0f", adata.obs['n_genes_by_counts'].median())
     log.info("  Median mito%%:       %.2f%%", adata.obs['pct_counts_mt'].median())
-    if cfg.is_nuclei:
+    if cfg.qc.is_nuclei:
         log.info("  [snRNA-seq mode] Mitochondrial reads reflect cytoplasmic residue, not cell stress.")
     log.info("  Median complexity:   %.3f", adata.obs['log_genes_per_umi'].median())
 
@@ -59,10 +59,10 @@ def filter_spots(adata, cfg, log):
                  n_tissue, n_before, 100 * n_tissue / n_before if n_before else 0)
 
     log.info("Applying QC filtering...")
-    min_g = cfg.min_genes
-    max_g = cfg.max_genes
-    max_m = cfg.max_pct_mito_nuclei if cfg.is_nuclei else cfg.max_pct_mito
-    min_cpx = cfg.min_genes_per_umi
+    min_g = cfg.qc.min_genes
+    max_g = cfg.qc.max_genes
+    max_m = cfg.qc.max_pct_mito_nuclei if cfg.qc.is_nuclei else cfg.qc.max_pct_mito
+    min_cpx = cfg.qc.min_genes_per_umi
 
     f_genes_low  = adata.obs['n_genes_by_counts'] < min_g
     f_genes_high = adata.obs['n_genes_by_counts'] > max_g
@@ -108,7 +108,7 @@ def main():
     adata = filter_spots(adata, CFG, log)
 
     # Gene filtering
-    sc.pp.filter_genes(adata, min_cells=CFG.min_cells_per_gene)
+    sc.pp.filter_genes(adata, min_cells=CFG.qc.min_cells_per_gene)
     log.info("After gene filtering: %d genes", adata.n_vars)
 
     # Save

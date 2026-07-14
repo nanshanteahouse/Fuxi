@@ -26,7 +26,7 @@ def main():
     CFG = resolve_config(args.config)
     log = setup_logger("00_load", os.path.join(CFG.log_dir, "00_load.log"))
     log.info("Step 00: Load raw spatial transcriptomics data")
-    log.info("Format: %s, Platform: %s", CFG.data_format, CFG.spatial_platform)
+    log.info("Format: %s, Platform: %s", CFG.data_format, CFG.spatial.platform)
 
     if os.path.exists(CFG.raw_h5ad):
         log.info("Skip: %s already exists. Delete it to force reload.", CFG.raw_h5ad)
@@ -37,7 +37,7 @@ def main():
         import squidpy as sq
 
         # If library_id is not set, auto-detect the first Visium directory
-        if not CFG.library_id:
+        if not CFG.spatial.library_id:
             candidates = [
                 d for d in sorted(os.listdir(CFG.data_dir))
                 if os.path.isdir(os.path.join(CFG.data_dir, d))
@@ -50,19 +50,19 @@ def main():
             if not candidates:
                 log.error(
                     "No Visium directory found in %s. "
-                    "Set CFG.library_id to the directory name containing filtered_feature_bc_matrix.h5.",
+                    "Set CFG.spatial.library_id to the directory name containing filtered_feature_bc_matrix.h5.",
                     CFG.data_dir,
                 )
                 sys.exit(1)
-            CFG.library_id = candidates[0] if candidates[0] else os.path.basename(CFG.data_dir)
-            log.info("Auto-detected library_id: '%s'", CFG.library_id)
+            CFG.spatial.library_id = candidates[0] if candidates[0] else os.path.basename(CFG.data_dir)
+            log.info("Auto-detected library_id: '%s'", CFG.spatial.library_id)
 
-        visium_dir = os.path.join(CFG.data_dir, CFG.library_id) if CFG.library_id else CFG.data_dir
+        visium_dir = os.path.join(CFG.data_dir, CFG.spatial.library_id) if CFG.spatial.library_id else CFG.data_dir
         log.info("Loading Visium data from: %s", visium_dir)
 
         adata = sq.read.visium(
             visium_dir,
-            library_id=CFG.library_id or None,
+            library_id=CFG.spatial.library_id or None,
             load_images=True,
         )
 
@@ -83,23 +83,23 @@ def main():
             log.info("  Library IDs in uns['spatial']: %s", list(adata.uns['spatial'].keys()))
 
     elif CFG.data_format == "h5ad":
-        log.info("Loading from h5ad: %s", CFG.input_h5ad)
-        backed = getattr(CFG, 'backed', None) or None
-        adata = sc.read(CFG.input_h5ad, backed=backed) if backed else sc.read(CFG.input_h5ad)
+        log.info("Loading from h5ad: %s", CFG.data_input.input_h5ad)
+        backed = getattr(CFG.data_input, 'backed', None) or None
+        adata = sc.read(CFG.data_input.input_h5ad, backed=backed) if backed else sc.read(CFG.data_input.input_h5ad)
         log.info("Loaded: %d cells/spots × %d genes", adata.n_obs, adata.n_vars)
 
         # If spatial coords are missing, try to infer from common keys
         if 'spatial' not in adata.obsm:
             # Check for common coordinate keys
             coord_keys = [k for k in adata.obsm if 'spatial' in k.lower() or 'coord' in k.lower()]
-            if coord_keys and CFG.spatial_platform != "visium":
+            if coord_keys and CFG.spatial.platform != "visium":
                 adata.obsm['spatial'] = adata.obsm[coord_keys[0]]
                 log.info("Mapped '%s' → obsm['spatial']", coord_keys[0])
             else:
                 log.warning(
                     "No spatial coordinates in obsm. "
                     "Downstream spatial analysis will be limited. "
-                    "Set CFG.spatial_platform appropriately."
+                    "Set CFG.spatial.platform appropriately."
                 )
 
     else:
@@ -107,7 +107,7 @@ def main():
         sys.exit(1)
 
     # ── Ensure CSR format ────────────────────────────────────────────────
-    if getattr(CFG, 'force_csr', True) and sp.issparse(adata.X):
+    if getattr(CFG.execution, 'force_csr', True) and sp.issparse(adata.X):
         if not sp.isspmatrix_csr(adata.X):
             adata.X = adata.X.tocsr()
             log.info("X format converted to CSR")
@@ -118,7 +118,7 @@ def main():
         adata.obs_names_make_unique()
 
     # ── Add in_tissue flag if missing ────────────────────────────────────
-    if 'in_tissue' not in adata.obs and CFG.spatial_platform == "visium":
+    if 'in_tissue' not in adata.obs and CFG.spatial.platform == "visium":
         adata.obs['in_tissue'] = 1
         log.info("Added default 'in_tissue' column (all spots marked as tissue)")
 

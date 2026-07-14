@@ -71,7 +71,7 @@ export LLM_API_KEY=sk-your-api-key-here
 ```
 projects/{模态}/{数据集ID}/
 ├── dataset.yaml          # 数据集元信息清单
-└── config_{数据集ID}.py   # 管线配置文件
+└── config_{数据集ID}.yaml   # 管线配置文件
 ```
 
 这两个文件通常由**预处理脚本**自动生成。如果你还没有配置文件，请先参考《Fuxi 预处理脚本使用指南》。
@@ -107,13 +107,13 @@ Fuxi — RNA-seq pipeline step list
 
 ```bash
 # scRNA-seq 全流程（12 步，从数据加载到 GRN 分析）
-python core/run_pipeline.py --modality rna --config projects/rna/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality rna --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 
 # scATAC-seq 全流程（10 步）
-python core/run_pipeline.py --modality atac --config projects/atac/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality atac --config projects/atac/{数据集ID}/config_{数据集ID}.yaml
 
 # 空间转录组全流程（10 步）
-python core/run_pipeline.py --modality spatial --config projects/spatial/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality spatial --config projects/spatial/{数据集ID}/config_{数据集ID}.yaml
 ```
 
 运行过程中，终端会实时显示每一步的进度和耗时：
@@ -143,7 +143,7 @@ python core/run_pipeline.py --modality spatial --config projects/spatial/{数据
 管线采用**检查点机制**：每步完成后会保存中间结果文件。如果中途因故中断，可以使用 `--resume` 从断点继续，已完成的步骤会自动跳过：
 
 ```bash
-python core/run_pipeline.py --modality rna --resume --config projects/rna/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality rna --resume --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 ```
 
 ### 3.4 运行单个步骤
@@ -152,13 +152,13 @@ python core/run_pipeline.py --modality rna --resume --config projects/rna/{数�
 
 ```bash
 # 只运行第 06 步（细胞注释）
-python core/run_pipeline.py --modality rna --step 5 --config projects/rna/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality rna --step 5 --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 
 # 运行步骤 02 到 05
-python core/run_pipeline.py --modality rna --steps 2-5 --config projects/rna/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality rna --steps 2-5 --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 
 # 运行步骤 00, 02, 04（跳着跑）
-python core/run_pipeline.py --modality rna --steps 0,2,4 --config projects/rna/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality rna --steps 0,2,4 --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 ```
 
 ---
@@ -304,7 +304,7 @@ CFG.ai.ai_annotation = True
 ```bash
 python core/run_pipeline.py --modality rna --step 7 \
     --cell-type "Müller Glia" \
-    --config projects/rna/{数据集ID}/config_{数据集ID}.py
+    --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 ```
 
 该步骤将在指定细胞类型的子集上重新运行 PCA → 邻居图 → UMAP → Leiden 聚类，并可选择性地使用 AI 对亚群进行重注释。结果自动写回主 `05_annotated.h5ad` 文件的 `cell_subtype` 列。
@@ -821,14 +821,14 @@ results/
 
 ```bash
 # 列出所有步骤及其对应的检查点文件
-python core/run_pipeline.py --modality rna --list --config projects/rna/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality rna --list --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 ```
 
 ### 7.2 从断点恢复
 
 ```bash
 # 自动检测第一个未完成的步骤，从那里继续
-python core/run_pipeline.py --modality rna --resume --config projects/rna/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality rna --resume --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 ```
 
 管线会自动扫描检查点文件，跳过已完成的步骤。无论中断原因是网络问题、内存不足还是手动终止，都可以用同一条命令恢复。
@@ -839,10 +839,10 @@ python core/run_pipeline.py --modality rna --resume --config projects/rna/{数�
 
 ```bash
 # 只重跑注释步骤（Step 05）
-python core/run_pipeline.py --modality rna --step 5 --config projects/rna/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality rna --step 5 --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 
 # 重跑后面的所有步骤
-python core/run_pipeline.py --modality rna --steps 6-11 --config projects/rna/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality rna --steps 6-11 --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 ```
 
 ### 7.4 跳过慢步骤
@@ -851,7 +851,7 @@ python core/run_pipeline.py --modality rna --steps 6-11 --config projects/rna/{�
 
 ```bash
 # 只跑加载到注释（前 7 步）
-python core/run_pipeline.py --modality rna --steps 0-6 --config projects/rna/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality rna --steps 0-6 --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 ```
 
 ### 7.5 清理中间文件
@@ -859,7 +859,7 @@ python core/run_pipeline.py --modality rna --steps 0-6 --config projects/rna/{�
 管线运行过程中会产生多个中间检查点文件（每个 h5ad 可能数百 MB 到数 GB）。如果你磁盘空间有限，可以在每步完成后自动删除上游文件：
 
 ```bash
-python core/run_pipeline.py --modality rna --cleanup --config projects/rna/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality rna --cleanup --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 ```
 
 ### 7.6 子聚类分析
@@ -869,7 +869,7 @@ python core/run_pipeline.py --modality rna --cleanup --config projects/rna/{数�
 ```bash
 python core/run_pipeline.py --modality rna --step 7 \
     --cell-type "Müller Glia" \
-    --config projects/rna/{数据集ID}/config_{数据集ID}.py
+    --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 ```
 
 你可以对多个细胞类型分别运行，结果会自动合并回主注释文件。
@@ -878,12 +878,12 @@ python core/run_pipeline.py --modality rna --step 7 \
 
 ```bash
 # 第一步：分别跑 RNA 和 ATAC
-python core/run_pipeline.py --modality rna  --config projects/rna/{数据集ID}/config_{数据集ID}.py
-python core/run_pipeline.py --modality atac --config projects/atac/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality rna  --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
+python core/run_pipeline.py --modality atac --config projects/atac/{数据集ID}/config_{数据集ID}.yaml
 
 # 第二步：ATAC Step 09 自动整合
 # 在 ATAC 全流程的最后一步自动完成，或单独运行：
-python core/run_pipeline.py --modality atac --step 9 --config projects/atac/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality atac --step 9 --config projects/atac/{数据集ID}/config_{数据集ID}.yaml
 ```
 
 ### 7.8 跨组学 scRNA → spatial 标记迁移
@@ -892,13 +892,13 @@ python core/run_pipeline.py --modality atac --step 9 --config projects/atac/{数
 
 ```bash
 # 第一步：先跑 RNA 管线（产出 marker_genes_per_group_cell_type.csv）
-python core/run_pipeline.py --modality rna --config projects/rna/{RNA数据集ID}/config_{RNA数据集ID}.py
+python core/run_pipeline.py --modality rna --config projects/rna/{RNA数据集ID}/config_{RNA数据集ID}.yaml
 
 # 第二步：在空间配置中设置 rna_ref 指向 RNA 数据
 # 在空间配置文件中：
 #   CFG.rna_ref = "{RNA数据集ID}"
 # 第三步：跑空间管线——注释步骤自动使用 scRNA 标记基因
-python core/run_pipeline.py --modality spatial --config projects/spatial/{空间数据集ID}/config_{空间数据集ID}.py
+python core/run_pipeline.py --modality spatial --config projects/spatial/{空间数据集ID}/config_{空间数据集ID}.yaml
 ```
 
 `--list` 命令会显示 scRNA 标记文件是否自动发现成功。
@@ -907,7 +907,7 @@ python core/run_pipeline.py --modality spatial --config projects/spatial/{空间
 
 ## 9. 配置文件详解
 
-配置文件（`config_{数据集ID}.py`）是一个 Python 脚本，通过修改全局 `CFG` 对象来控制管线的所有行为。以下是最常需要调整的配置项：
+配置文件（`config_{数据集ID}.yaml`）是一个 Python 脚本，通过修改全局 `CFG` 对象来控制管线的所有行为。以下是最常需要调整的配置项：
 
 ### 8.1 数据输入配置
 
@@ -1077,7 +1077,7 @@ export HDF5_USE_FILE_LOCKING=FALSE
 
 ```bash
 # 直接使用 --resume，管线会自动从失败的那一步继续
-python core/run_pipeline.py --modality rna --resume --config projects/rna/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality rna --resume --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 ```
 
 `--resume` 会扫描检查点文件，自动找到第一个未完成的步骤。已完成的步骤不会重复运行，所以恢复速度很快。
@@ -1169,10 +1169,10 @@ pip install gseapy
 
 ```bash
 # 全流程
-python core/run_pipeline.py --modality rna --config projects/rna/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality rna --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 
 # 断点续跑
-python core/run_pipeline.py --modality rna --resume --config projects/rna/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality rna --resume --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 
 # 单步
 python core/run_pipeline.py --modality rna --step 5 --config ...
@@ -1191,10 +1191,10 @@ python core/run_pipeline.py --modality rna --list --config ...
 
 ```bash
 # 全流程
-python core/run_pipeline.py --modality atac --config projects/atac/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality atac --config projects/atac/{数据集ID}/config_{数据集ID}.yaml
 
 # 断点续跑
-python core/run_pipeline.py --modality atac --resume --config projects/atac/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality atac --resume --config projects/atac/{数据集ID}/config_{数据集ID}.yaml
 
 # 单步
 python core/run_pipeline.py --modality atac --step 4 --config ...
@@ -1207,16 +1207,16 @@ python core/run_pipeline.py --modality atac --step 9 --config ...
 
 ```bash
 # 全流程
-python core/run_pipeline.py --modality spatial --config projects/spatial/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality spatial --config projects/spatial/{数据集ID}/config_{数据集ID}.yaml
 
 # 断点续跑
-python core/run_pipeline.py --modality spatial --resume --config projects/spatial/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality spatial --resume --config projects/spatial/{数据集ID}/config_{数据集ID}.yaml
 
 # 单步
 python core/run_pipeline.py --modality spatial --step 5 --config ...
 
 # 带 scRNA 标记迁移（Phase 1）
-python core/run_pipeline.py --modality spatial --config projects/spatial/{数据集ID}/config_{数据集ID}.py
+python core/run_pipeline.py --modality spatial --config projects/spatial/{数据集ID}/config_{数据集ID}.yaml
 # 配置文件需设置: CFG.rna_ref = "{RNA数据集ID}"
 ```
 

@@ -889,7 +889,7 @@ def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, C
     Selection `method` follows the same logic as cluster_selection_method:
 
         "convex_hull"  — auto-sweep, pick largest convex-hull area (default)
-        None            — manual: use CFG.umap_min_dist / CFG.umap_spread directly
+        None            — manual: use CFG.clustering.umap_min_dist / CFG.clustering.umap_spread directly
 
     Parameters
     ----------
@@ -922,12 +922,12 @@ def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, C
     import numpy as np
     import pandas as pd
 
-    use_paga = getattr(CFG, 'umap_paga_init', False)
+    use_paga = getattr(CFG.clustering, 'umap_paga_init', False)
 
     # ── Manual mode ──
     if method is None:
-        md = getattr(CFG, 'umap_min_dist', 0.3)
-        sp = getattr(CFG, 'umap_spread', 1.0)
+        md = getattr(CFG.clustering, 'umap_min_dist', 0.3)
+        sp = getattr(CFG.clustering, 'umap_spread', 1.0)
         log.info("UMAP params (manual): min_dist=%.2f, spread=%.1f", md, sp)
         return md, sp, "manual", []
 
@@ -945,8 +945,8 @@ def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, C
         do_sweep = False
 
     if not do_sweep:
-        md = getattr(CFG, 'umap_min_dist', 0.3)
-        sp = getattr(CFG, 'umap_spread', 1.0)
+        md = getattr(CFG.clustering, 'umap_min_dist', 0.3)
+        sp = getattr(CFG.clustering, 'umap_spread', 1.0)
         log.info("UMAP params (convex_hull, empty grid → fallback): min_dist=%.2f, spread=%.1f",
                  md, sp)
         return md, sp, "convex_hull", []
@@ -956,14 +956,14 @@ def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, C
     try:
         sc.pp.neighbors(
             adata, n_neighbors=best_n,
-            n_pcs=CFG.n_pcs_use, use_rep=use_rep,
-            random_state=CFG.random_seed,
+            n_pcs=CFG.pca.n_pcs_use, use_rep=use_rep,
+            random_state=CFG.execution.random_seed,
         )
     except Exception as e:
         log.error("KNN graph build failed for UMAP sweep: %s", e)
         return (
-            getattr(CFG, 'umap_min_dist', 0.3),
-            getattr(CFG, 'umap_spread', 1.0),
+            getattr(CFG.clustering, 'umap_min_dist', 0.3),
+            getattr(CFG.clustering, 'umap_spread', 1.0),
             "convex_hull",
             [],
         )
@@ -979,7 +979,7 @@ def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, C
             try:
                 sc.tl.umap(adata, min_dist=md, spread=sp,
                            init_pos='paga' if use_paga else 'spectral',
-                           random_state=CFG.random_seed)
+                           random_state=CFG.execution.random_seed)
                 coords = adata.obsm['X_umap']
                 hull = ConvexHull(coords)
                 area = float(hull.volume)  # 2D → area

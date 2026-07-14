@@ -62,7 +62,7 @@
 | 为什么 10X 的液滴捕获必然产生 doublet | Scrublet 的具体算法参数 |
 | 为什么线粒体比例能指示细胞质量 | python 代码片段 |
 | 为什么 Harmony 校正 batch effect 后数据变了（不只是"去掉了批次"） | pip install 命令 |
-| 为什么 Leiden 聚类优于 K-means | config.py 中每一行的作用 |
+| 为什么 Leiden 聚类优于 K-means | config.yaml 中每一行的作用 |
 | 什么是"伪时间（pseudotime）"的直觉 | 如何安装轨迹分析依赖 |
 | 什么是 TF 活性 vs TF 表达量 | 如何配置 GRN 参数 |
 

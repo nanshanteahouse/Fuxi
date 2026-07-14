@@ -208,8 +208,7 @@ fuxi/
 
 ## 3. Config system
 
-The ``Config`` dataclass (``core/config.py``) uses **nested modality
-configs** for clean separation:
+The ``Config`` Pydantic BaseModel (``core/config.py``) uses **20 topic sub-models** for clean separation:
 
 ```python
 cfg = Config()
@@ -242,5 +241,5 @@ The preprocessing pipeline (``core/preprocess/``) phases:
 | 2 | ``superseries_detector.py`` | Detect SuperSeries structure |
 | 3 | ``format_detector.py`` | Classify files by format + infer modality |
 | 4 | ``metadata_parser.py`` | Generate ``dataset.yaml`` |
-| 5 | ``matrix_loader.py`` | Generate ``config_GSE_ID.py`` |
+| 5 | ``matrix_loader.py`` | Generate ``config_GSE_ID.yaml`` |
 | 6 | ``preprocessor.py`` | Summary report |

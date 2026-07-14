@@ -60,17 +60,17 @@ def main():
     adata = sc.read(CFG.qc_h5ad)
     log.info("Loaded: %d cells × %d genes", adata.n_obs, adata.n_vars)
 
-    # ── HVG（自动降级：CFG.hvg_flavor → seurat_v3 → cell_ranger → seurat）──
-    batch_key = CFG.hvg_batch_key if CFG.hvg_batch_key in adata.obs else None
-    flavors_to_try = list(dict.fromkeys([CFG.hvg_flavor, 'seurat_v3', 'cell_ranger', 'seurat', 'scry']))
+    # ── HVG（自动降级：CFG.hvg.flavor → seurat_v3 → cell_ranger → seurat）──
+    batch_key = CFG.hvg.batch_key if CFG.hvg.batch_key in adata.obs else None
+    flavors_to_try = list(dict.fromkeys([CFG.hvg.flavor, 'seurat_v3', 'cell_ranger', 'seurat', 'scry']))
     hvg_found = False
     for flavor in flavors_to_try:
         for bk in [batch_key, None]:
             try:
                 log.info("Selecting top %d HVGs (flavor=%s, batch_key=%s)...",
-                         CFG.n_top_genes, flavor, bk)
+                         CFG.hvg.n_top_genes, flavor, bk)
                 sc.pp.highly_variable_genes(
-                    adata, n_top_genes=CFG.n_top_genes, flavor=flavor, batch_key=bk, inplace=True,
+                    adata, n_top_genes=CFG.hvg.n_top_genes, flavor=flavor, batch_key=bk, inplace=True,
                 )
                 log.info("HVG flavor=%s, batch_key=%s succeeded", flavor, bk)
                 hvg_found = True
@@ -87,9 +87,9 @@ def main():
         X_sq = (adata.X.multiply(adata.X)).mean(axis=0).A1
         gene_var = X_sq - X_mean**2
         adata.var['highly_variable'] = np.zeros(adata.n_vars, dtype=bool)
-        top_idx = np.argsort(gene_var)[-CFG.n_top_genes:]
+        top_idx = np.argsort(gene_var)[-CFG.hvg.n_top_genes:]
         adata.var.iloc[top_idx, adata.var.columns.get_loc('highly_variable')] = True
-        log.info("Manual variance HVG: selected top %d genes", CFG.n_top_genes)
+        log.info("Manual variance HVG: selected top %d genes", CFG.hvg.n_top_genes)
 
     n_hvg = adata.var['highly_variable'].sum()
     log.info("HVG count: %d", n_hvg)
@@ -107,8 +107,8 @@ def main():
     if skip_norm:
         log.info("expression_type='log1p_counts' — data already normalized, skipping normalize_total+log1p")
     else:
-        log.info("Normalizing (target_sum=%.0f) + log1p...", CFG.normalize_target_sum)
-        sc.pp.normalize_total(adata, target_sum=CFG.normalize_target_sum)
+        log.info("Normalizing (target_sum=%.0f) + log1p...", CFG.normalization.normalize_target_sum)
+        sc.pp.normalize_total(adata, target_sum=CFG.normalization.normalize_target_sum)
         sc.pp.log1p(adata)
 
     # ── 数据完整性检查：归一化后 ──
@@ -118,11 +118,11 @@ def main():
     if skip_norm:
         log.info("  expression_type='log1p_counts' — full-gene copy also pre-normalized")
     else:
-        sc.pp.normalize_total(adata_full, target_sum=CFG.normalize_target_sum)
+        sc.pp.normalize_total(adata_full, target_sum=CFG.normalization.normalize_target_sum)
         sc.pp.log1p(adata_full)
 
     # ── 可选: 细胞周期打分 ──
-    if CFG.score_cell_cycle:
+    if CFG.normalization.score_cell_cycle:
         log.info("Scoring cell cycle (S / G2M) on full gene reference...")
         try:
             sc.tl.score_genes_cell_cycle(adata_full, s_genes=_S_GENES, g2m_genes=_G2M_GENES)
@@ -134,14 +134,14 @@ def main():
             log.warning("Cell cycle scoring failed (skipped): %s", e)
 
     # ── 回归技术变异 / 细胞周期分数 (HVG 子集, normalize+log1p 后) ──
-    if CFG.score_cell_cycle:
+    if CFG.normalization.score_cell_cycle:
         try:
             log.info("Regressing cell cycle scores: S_score, G2M_score ...")
             sc.pp.regress_out(adata, ['S_score', 'G2M_score'])
             log.info("  regress_out complete")
         except Exception as e:
             log.warning("regress_out (cell cycle) failed (skipped): %s", e)
-    elif CFG.use_regress_out:
+    elif CFG.normalization.use_regress_out:
         try:
             log.info("Regressing technical covariates: pct_counts_mt ...")
             sc.pp.regress_out(adata, ['pct_counts_mt'])
@@ -152,17 +152,17 @@ def main():
         log.info("Cell cycle scoring disabled, use_regress_out=False — skipping regress_out")
 
     # ── 可选: 回归自定义基因 ──
-    if CFG.regress_out_genes:
-        valid_genes = [g for g in CFG.regress_out_genes if g in adata.var_names]
+    if CFG.normalization.regress_out_genes:
+        valid_genes = [g for g in CFG.normalization.regress_out_genes if g in adata.var_names]
         if valid_genes:
             log.info("Regressing custom genes: %s ...", valid_genes)
             sc.pp.regress_out(adata, valid_genes)
             log.info("  regress_out (custom genes) complete")
         else:
-            log.warning("regress_out_genes specified but none found in data: %s", CFG.regress_out_genes)
+            log.warning("regress_out_genes specified but none found in data: %s", CFG.normalization.regress_out_genes)
 
     # ── regress_out 后降回 float32（regress_out 会产生 float64 中间体）──
-    if getattr(CFG, 'use_float32', False):
+    if getattr(CFG.execution, 'use_float32', False):
         if sp.issparse(adata.X):
             adata.X = adata.X.astype('float32', copy=False)
         else:
@@ -170,7 +170,7 @@ def main():
         log.info("  X precision restored to float32")
 
     # ── 数据完整性检查：regress_out 后 ──
-    if CFG.score_cell_cycle or CFG.use_regress_out:
+    if CFG.normalization.score_cell_cycle or CFG.normalization.use_regress_out:
         validate_adata(adata, stage_name="regress_out", logger=log)
 
     # ── 保存全基因副本到 .raw ──
@@ -178,7 +178,7 @@ def main():
     log.info(".raw saved (full genes: %d vars)", adata_full.n_vars)
 
     # ── 可选: 自动性别检测 ──
-    if getattr(CFG, 'detect_sex', False):
+    if getattr(CFG.normalization, 'detect_sex', False):
         from rna.utils.sex_detection import detect_sex
         detect_sex(adata, CFG, log)
 
@@ -189,9 +189,9 @@ def main():
         sys.exit(1)
 
     # ── PCA ──
-    log.info("PCA (%d components)...", CFG.n_pcs_full)
-    sc.pp.pca(adata, n_comps=CFG.n_pcs_full,
-              svd_solver='randomized', random_state=CFG.random_seed)
+    log.info("PCA (%d components)...", CFG.pca.n_pcs_full)
+    sc.pp.pca(adata, n_comps=CFG.pca.n_pcs_full,
+              svd_solver='randomized', random_state=CFG.execution.random_seed)
     var_ratio = adata.uns['pca']['variance_ratio']
     log.info("  top-5 variance ratio: %.4f", var_ratio[:5].sum())
     log.info("  Cumulative variance ratio first 50 PCs: %.4f", var_ratio[:50].sum())
@@ -200,9 +200,9 @@ def main():
     fig_dir = os.path.join(CFG.figure_dir, '03_integrate')
     os.makedirs(fig_dir, exist_ok=True)
     fig, ax = plt.subplots(figsize=(8, 4))
-    ax.plot(range(1, CFG.n_pcs_full + 1), var_ratio, 'o-', ms=3)
-    ax.axvline(CFG.n_pcs_use, color='red', linestyle='--', alpha=0.5,
-               label=f'n_pcs_use={CFG.n_pcs_use}')
+    ax.plot(range(1, CFG.pca.n_pcs_full + 1), var_ratio, 'o-', ms=3)
+    ax.axvline(CFG.pca.n_pcs_use, color='red', linestyle='--', alpha=0.5,
+               label=f'n_pcs_use={CFG.pca.n_pcs_use}')
     ax.set_xlabel('PC'); ax.set_ylabel('Variance ratio')
     ax.legend()
     fig.tight_layout()
@@ -211,9 +211,9 @@ def main():
     log.info("  PCA elbow plot saved")
 
     # ── Harmony ──
-    if CFG.use_harmony:
+    if CFG.harmony.use_harmony:
         from harmony import harmonize
-        batch_key = CFG.harmony_batch_key
+        batch_key = CFG.harmony.batch_key
         if batch_key not in adata.obs:
             log.warning("Harmony batch_key '%s' not in obs, skipping correction", batch_key)
         else:
@@ -225,11 +225,11 @@ def main():
             log.info("Harmony correction (batch_key=%s)...", batch_key)
             try:
                 Z = harmonize(
-                    adata.obsm['X_pca'][:, :CFG.n_pcs_use],
+                    adata.obsm['X_pca'][:, :CFG.pca.n_pcs_use],
                     adata.obs,
                     batch_key=batch_key,
-                    random_state=CFG.random_seed,
-                    max_iter_harmony=CFG.harmony_max_iter,
+                    random_state=CFG.execution.random_seed,
+                    max_iter_harmony=CFG.harmony.max_iter,
                 )
                 adata.obsm['X_pca_harmony'] = Z
                 log.info("  Harmony complete, output shape: %s", Z.shape)

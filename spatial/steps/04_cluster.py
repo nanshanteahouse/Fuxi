@@ -53,11 +53,11 @@ def main():
         log.error("No PCA found in obsm. Run Step 03 first.")
         sys.exit(1)
 
-    log.info("Using PCA representation: %s (%d PCs)", use_rep, CFG.n_pcs_use)
+    log.info("Using PCA representation: %s (%d PCs)", use_rep, CFG.pca.n_pcs_use)
 
     # ── Parameter grid ──────────────────────────────────────────────────
-    n_neighbors_grid = getattr(CFG, 'param_grid_n_neighbors', [15, 20, 30])
-    resolutions_grid = getattr(CFG, 'param_grid_resolutions', [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
+    n_neighbors_grid = getattr(CFG.clustering, 'param_grid_n_neighbors', [15, 20, 30])
+    resolutions_grid = getattr(CFG.clustering, 'param_grid_resolutions', [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
     log.info("Grid: n_neighbors=%s, resolutions=%s", n_neighbors_grid, resolutions_grid)
 
     fig_dir = os.path.join(CFG.figure_dir, '04_cluster')
@@ -67,21 +67,21 @@ def main():
     def _neighbors_fn(adata, n_neighbors=15, **kwargs):
         sc.pp.neighbors(
             adata, n_neighbors=n_neighbors,
-            n_pcs=CFG.n_pcs_use, use_rep=use_rep,
-            random_state=CFG.random_seed,
+            n_pcs=CFG.pca.n_pcs_use, use_rep=use_rep,
+            random_state=CFG.execution.random_seed,
         )
 
     def _umap_fn(adata, **kwargs):
         sc.tl.umap(adata, min_dist=0.3, spread=1.0,
-                   random_state=CFG.random_seed)
+                   random_state=CFG.execution.random_seed)
 
     def _clusterer_fn(adata, resolution=1.0, n_neighbors=15, **kwargs):
         leiden_key = f'leiden_{n_neighbors}_{resolution}'
         umap_key = f'umap_{n_neighbors}_{resolution}'
         sc.tl.leiden(
             adata, resolution=resolution, key_added=leiden_key,
-            random_state=CFG.random_seed,
-            flavor=getattr(CFG, 'leiden_flavor', 'igraph'),
+            random_state=CFG.execution.random_seed,
+            flavor=getattr(CFG.clustering, 'leiden_flavor', 'igraph'),
         )
         adata.obsm[umap_key] = adata.obsm['X_umap'].copy()
         return leiden_key
@@ -89,15 +89,15 @@ def main():
     def _evaluation_fn(adata, cluster_key, **kwargs):
         labels = adata.obs[cluster_key].values
         if adata.n_obs > SILHOUETTE_SAMPLE_THRESHOLD:
-            rng = np.random.RandomState(CFG.random_seed)
+            rng = np.random.RandomState(CFG.execution.random_seed)
             idx = rng.choice(adata.n_obs, SILHOUETTE_SAMPLE_THRESHOLD, replace=False)
             return float(silhouette_score(
-                adata.obsm[use_rep][idx, :CFG.n_pcs_use],
+                adata.obsm[use_rep][idx, :CFG.pca.n_pcs_use],
                 labels[idx],
             ))
         else:
             return float(silhouette_score(
-                adata.obsm[use_rep][:, :CFG.n_pcs_use],
+                adata.obsm[use_rep][:, :CFG.pca.n_pcs_use],
                 labels,
             ))
 
@@ -112,7 +112,7 @@ def main():
         umap_fn=_umap_fn,
         evaluation_fn=_evaluation_fn,
         group_key='n_neighbors',
-        random_seed=CFG.random_seed,
+        random_seed=CFG.execution.random_seed,
     )
 
     # Rename score → silhouette_score for select_best_params compatibility
@@ -157,20 +157,20 @@ def main():
     df_summary = pd.DataFrame(results_summary)
 
 
-    method = getattr(CFG, 'cluster_selection_method', 'pareto_elbow')
+    method = getattr(CFG.clustering, 'cluster_selection_method', 'pareto_elbow')
 
-    if method is not None and (getattr(CFG, 'best_resolution', 1.0) != 1.0 or getattr(CFG, 'best_n_neighbors', 0) != 0):
+    if method is not None and (getattr(CFG.clustering, 'best_resolution', 1.0) != 1.0 or getattr(CFG.clustering, 'best_n_neighbors', 0) != 0):
         log.warning(
             "best_resolution=%.1f / best_n_neighbors=%d are set but cluster_selection_method=%r will ignore them. "
             "Set cluster_selection_method=None to use manual mode.",
-            CFG.best_resolution, getattr(CFG, 'best_n_neighbors', 0), method,
+            CFG.clustering.best_resolution, getattr(CFG.clustering, 'best_n_neighbors', 0), method,
         )
 
     best_n, best_r, method_name, reason = select_best_params(
         results_summary,
         method=method,
-        best_resolution=CFG.best_resolution if method is None else None,
-        best_n_neighbors=getattr(CFG, 'best_n_neighbors', 0) if method is None else 0,
+        best_resolution=CFG.clustering.best_resolution if method is None else None,
+        best_n_neighbors=getattr(CFG.clustering, 'best_n_neighbors', 0) if method is None else 0,
     )
 
     log.info("Selected best params via %s: n_neighbors=%d, resolution=%.1f (%s)",
@@ -187,9 +187,9 @@ def main():
         log.warning("Best param combination not found in results, skipping auto-lock")
 
     # ── UMAP 参数扫描 (min_dist × spread) ──────────────────────────────────
-    min_dist_grid = getattr(CFG, 'param_grid_min_dist', [0.3])
-    spread_grid = getattr(CFG, 'param_grid_spread', [1.0])
-    umap_method = getattr(CFG, 'umap_selection_method', 'convex_hull')
+    min_dist_grid = getattr(CFG.clustering, 'param_grid_min_dist', [0.3])
+    spread_grid = getattr(CFG.clustering, 'param_grid_spread', [1.0])
+    umap_method = getattr(CFG.clustering, 'umap_selection_method', 'convex_hull')
     best_md, best_sp, umap_method_label, sweep_results = select_best_umap_params(
         adata, best_n, min_dist_grid, spread_grid, umap_method, CFG, use_rep, log)
 
@@ -198,7 +198,7 @@ def main():
              best_md, best_sp, umap_method_label)
     try:
         sc.tl.umap(adata, min_dist=best_md, spread=best_sp,
-                   random_state=CFG.random_seed)
+                   random_state=CFG.execution.random_seed)
         safe_write(adata, output_path, cfg=CFG)
         log.info("Checkpoint saved with final UMAP: %s", output_path)
     except Exception as e:
@@ -229,7 +229,7 @@ def main():
                 sp = r['spread']
                 try:
                     sc.tl.umap(adata, min_dist=md, spread=sp,
-                               random_state=CFG.random_seed)
+                               random_state=CFG.execution.random_seed)
                     sc.pl.umap(adata, color='leiden', ax=ax, show=False,
                                legend_fontsize=8,
                                title=f'min_dist={md}, spread={sp}')

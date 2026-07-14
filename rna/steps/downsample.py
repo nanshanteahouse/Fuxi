@@ -106,7 +106,6 @@ def main():
     CFG = None
     if args.config:
         CFG = resolve_config(args.config)
-        CFG.resolve_paths()
 
     # ── 确定输入/输出路径 ──
     if args.input_h5ad:
@@ -130,13 +129,13 @@ def main():
     # ── 从 config 读取降采样参数（仅当未通过 CLI 指定时） ──
     if CFG is not None:
         if args.target_total is None and args.target_fraction is None and args.max_per_sample is None:
-            if CFG.downsample_target is not None:
-                args.target_total = CFG.downsample_target
-                if CFG.downsample_strategy:
-                    strategy = CFG.downsample_strategy
-                if strategy == "max_per_sample" and CFG.downsample_max_per_sample is not None:
-                    args.max_per_sample = CFG.downsample_max_per_sample
-                args.random_seed = CFG.downsample_random_seed
+            if CFG.downsample.target is not None:
+                args.target_total = CFG.downsample.target
+                if CFG.downsample.strategy:
+                    strategy = CFG.downsample.strategy
+                if strategy == "max_per_sample" and CFG.downsample.max_per_sample is not None:
+                    args.max_per_sample = CFG.downsample.max_per_sample
+                args.random_seed = CFG.downsample.random_seed
             else:
                 print("[downsample] Skipped: downsample_target not configured")
                 return
@@ -236,7 +235,7 @@ def main():
             adata = downsample_max_per_sample(adata, args.max_per_sample, sample_col, rng, log)
 
     # 可选 float32 节省内存
-    if CFG and getattr(CFG, 'use_float32', False):
+    if CFG and getattr(CFG.execution, 'use_float32', False):
         if sp.issparse(adata.X):
             adata.X = adata.X.astype('float32', copy=False)
         else:

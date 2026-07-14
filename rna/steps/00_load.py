@@ -42,14 +42,14 @@ def _parse_barcodes(adata, CFG, log):
     """Parse barcode names using configurable regex patterns.
 
     Supports single string or list of patterns (first match wins).
-    Extracted groups are added as obs columns per CFG.barcode_parse_groups.
+    Extracted groups are added as obs columns per CFG.sample_meta.barcode_parse_groups.
     """
-    if not CFG.barcode_parse_regex:
+    if not CFG.sample_meta.barcode_parse_regex:
         return
 
-    log.info("Using barcode regex parsing: %s", CFG.barcode_parse_regex)
+    log.info("Using barcode regex parsing: %s", CFG.sample_meta.barcode_parse_regex)
 
-    regex_patterns = CFG.barcode_parse_regex
+    regex_patterns = CFG.sample_meta.barcode_parse_regex
     if isinstance(regex_patterns, str):
         regex_patterns = [regex_patterns]
 
@@ -64,7 +64,7 @@ def _parse_barcodes(adata, CFG, log):
     if parsed is None:
         log.warning("  No barcode regex pattern matched; skipping barcode_parse_groups")
     else:
-        for obs_col, group_key in CFG.barcode_parse_groups.items():
+        for obs_col, group_key in CFG.sample_meta.barcode_parse_groups.items():
             if group_key in parsed.columns or (isinstance(group_key, int) and group_key < len(parsed.columns)):
                 adata.obs[obs_col] = parsed[group_key].values
                 log.info("  Extracted %s from barcode", obs_col)
@@ -88,8 +88,8 @@ def main():
     # ── 3 种加载方式 ──────────────────────────────────────────────
     if CFG.data_format == "10X_mtx":
         # Legacy 2-column genes.tsv.gz → 3-column features.tsv.gz
-        genes_path = os.path.join(CFG.mtx_dir, CFG.mtx_prefix + 'genes.tsv.gz')
-        features_path = os.path.join(CFG.mtx_dir, CFG.mtx_prefix + 'features.tsv.gz')
+        genes_path = os.path.join(CFG.data_input.mtx_dir, CFG.data_input.mtx_prefix + 'genes.tsv.gz')
+        features_path = os.path.join(CFG.data_input.mtx_dir, CFG.data_input.mtx_prefix + 'features.tsv.gz')
         if not os.path.exists(features_path) and os.path.exists(genes_path):
             log.info("Detected legacy 2-column genes.tsv.gz — converting to features.tsv.gz...")
             with gzip.open(genes_path, 'rt') as f_in:
@@ -98,11 +98,11 @@ def main():
                         f_out.write(line.rstrip('\n') + '\tGene Expression\n')
             log.info("  features.tsv.gz created")
 
-        log.info("Loading from MTX (prefix='%s') ...", CFG.mtx_prefix)
+        log.info("Loading from MTX (prefix='%s') ...", CFG.data_input.mtx_prefix)
         adata = sc.read_10x_mtx(
-            CFG.mtx_dir,
+            CFG.data_input.mtx_dir,
             var_names='gene_symbols',
-            prefix=CFG.mtx_prefix,
+            prefix=CFG.data_input.mtx_prefix,
             cache=True,
             gex_only=False,
         )
@@ -116,13 +116,13 @@ def main():
                 .astype(int)
             )
             if CFG.has_sample_mapping():
-                adata.obs['sample'] = bc_suffix.map(CFG.sample_map).values
+                adata.obs['sample'] = bc_suffix.map(CFG.sample_meta.sample_map).values
             if CFG.has_stage_mapping():
-                adata.obs['stage'] = bc_suffix.map(CFG.stage_map).values
-                if CFG.stage_order:
+                adata.obs['stage'] = bc_suffix.map(CFG.sample_meta.stage_map).values
+                if CFG.sample_meta.stage_order:
                     adata.obs['stage'] = pd.Categorical(
                         adata.obs['stage'],
-                        categories=CFG.stage_order,
+                        categories=CFG.sample_meta.stage_order,
                         ordered=True,
                     )
             log.info("Sample mapping applied. Sample distribution:")
@@ -138,37 +138,37 @@ def main():
             adata.var.drop(columns=['gene_ids'], inplace=True)
 
     elif CFG.data_format == "csv_matrix":
-        base = CFG.matrix_file[:-3] if CFG.matrix_file.endswith('.gz') else CFG.matrix_file
+        base = CFG.data_input.matrix_file[:-3] if CFG.data_input.matrix_file.endswith('.gz') else CFG.data_input.matrix_file
         matrix_ext = os.path.splitext(base)[1].lower()
         if matrix_ext in ('.csv',):
             # True CSV format: gene × cell, first column = gene names
-            log.info("Loading from CSV: %s", CFG.matrix_file)
-            sep = getattr(CFG, 'csv_sep', ',')
-            decimal = getattr(CFG, 'csv_decimal', '.')
-            df = pd.read_csv(CFG.matrix_file, index_col=0, sep=sep)
+            log.info("Loading from CSV: %s", CFG.data_input.matrix_file)
+            sep = getattr(CFG.data_input, 'csv_sep', ',')
+            decimal = getattr(CFG.data_input, 'csv_decimal', '.')
+            df = pd.read_csv(CFG.data_input.matrix_file, index_col=0, sep=sep)
             if decimal != '.':
-                df = pd.read_csv(CFG.matrix_file, index_col=0, sep=sep, decimal=decimal)
+                df = pd.read_csv(CFG.data_input.matrix_file, index_col=0, sep=sep, decimal=decimal)
             log.info("CSV shape: %s", df.shape)
             # Transpose to AnnData convention: cells × genes
             adata = sc.AnnData(X=df.values.T.astype(np.float32))
             adata.var_names = df.index.astype(str)
             adata.obs_names = df.columns.astype(str)
             # Load metadata if barcodes/features files provided
-            if CFG.barcodes_file and os.path.exists(CFG.barcodes_file):
-                metadata = pd.read_csv(CFG.barcodes_file, index_col=0, sep=sep)
+            if CFG.data_input.barcodes_file and os.path.exists(CFG.data_input.barcodes_file):
+                metadata = pd.read_csv(CFG.data_input.barcodes_file, index_col=0, sep=sep)
                 # Apply meta_columns renaming (same as MTX branch below)
-                if CFG.meta_columns:
+                if CFG.sample_meta.meta_columns:
                     rename_map = {}
-                    for target_col, source_col in CFG.meta_columns.items():
+                    for target_col, source_col in CFG.sample_meta.meta_columns.items():
                         if source_col in metadata.columns:
                             rename_map[source_col] = target_col
                     if rename_map:
                         metadata.rename(columns=rename_map, inplace=True)
                 adata.obs = adata.obs.join(metadata, how='left')
-            if CFG.features_file and os.path.exists(CFG.features_file):
-                genes = _read_features_with_header_detection(CFG.features_file, sep=sep)
+            if CFG.data_input.features_file and os.path.exists(CFG.data_input.features_file):
+                genes = _read_features_with_header_detection(CFG.data_input.features_file, sep=sep)
                 if len(genes) == adata.n_vars:
-                    gene_symbol_col = getattr(CFG, 'gene_symbol_column', '')
+                    gene_symbol_col = getattr(CFG.data_input, 'gene_symbol_column', '')
                     if gene_symbol_col and gene_symbol_col in genes.columns:
                         adata.var_names = genes[gene_symbol_col].values.astype(str)
                         genes = genes.drop(columns=[gene_symbol_col])
@@ -184,7 +184,7 @@ def main():
                     adata.var = genes
         else:
             # Original MTX path (mmread)
-            matrix_path = CFG.matrix_file
+            matrix_path = CFG.data_input.matrix_file
             # Auto-decompress .gz files (scipy mmread cannot read .gz directly)
             if matrix_path.endswith('.gz'):
                 decompressed_path = matrix_path.rstrip('.gz')
@@ -202,8 +202,8 @@ def main():
             mtx.data = mtx.data.astype(np.float32)
             mtx = mtx.T.tocsr()
 
-            genes = _read_features_with_header_detection(CFG.features_file)
-            gene_symbol_col = getattr(CFG, 'gene_symbol_column', '')
+            genes = _read_features_with_header_detection(CFG.data_input.features_file)
+            gene_symbol_col = getattr(CFG.data_input, 'gene_symbol_column', '')
             if gene_symbol_col and gene_symbol_col in genes.columns:
                 gene_names = genes[gene_symbol_col].values.astype(str)
             elif 'gene_short_name' in genes.columns:
@@ -224,10 +224,10 @@ def main():
                 )
                 gene_names = gene_names_series.values
 
-            metadata = pd.read_csv(CFG.barcodes_file, index_col=0)
-            if CFG.meta_columns:
+            metadata = pd.read_csv(CFG.data_input.barcodes_file, index_col=0)
+            if CFG.sample_meta.meta_columns:
                 rename_map = {}
-                for target_col, source_col in CFG.meta_columns.items():
+                for target_col, source_col in CFG.sample_meta.meta_columns.items():
                     if source_col in metadata.columns:
                         rename_map[source_col] = target_col
                 if rename_map:
@@ -239,23 +239,23 @@ def main():
         log.info("Loading complete: %d cells × %d genes", adata.n_obs, adata.n_vars)
 
     elif CFG.data_format == "h5ad":
-        log.info("Loading from h5ad: %s", CFG.input_h5ad)
-        backed = getattr(CFG, 'backed', None) or None
-        adata = sc.read(CFG.input_h5ad, backed=backed) if backed else sc.read(CFG.input_h5ad)
+        log.info("Loading from h5ad: %s", CFG.data_input.input_h5ad)
+        backed = getattr(CFG.data_input, 'backed', None) or None
+        adata = sc.read(CFG.data_input.input_h5ad, backed=backed) if backed else sc.read(CFG.data_input.input_h5ad)
         log.info("Loading complete: %d cells × %d genes", adata.n_obs, adata.n_vars)
         _parse_barcodes(adata, CFG, log)
 
     elif CFG.data_format == "10X_h5":
         import glob as glob_mod
-        h5_dir = getattr(CFG, 'h5_dir', '') or CFG.data_dir
-        pattern = os.path.join(h5_dir, CFG.h5_file_pattern)
+        h5_dir = getattr(CFG.data_input, 'h5_dir', '') or CFG.data_dir
+        pattern = os.path.join(h5_dir, CFG.data_input.h5_file_pattern)
         h5_files = sorted(glob_mod.glob(pattern))
 
         if not h5_files:
-            log.error("No .h5 files matching %s found (directory: %s)", CFG.h5_file_pattern, h5_dir)
+            log.error("No .h5 files matching %s found (directory: %s)", CFG.data_input.h5_file_pattern, h5_dir)
             sys.exit(1)
 
-        suffix = CFG.h5_file_pattern.lstrip('*')
+        suffix = CFG.data_input.h5_file_pattern.lstrip('*')
 
         if len(h5_files) == 1:
             log.info("Loading from 10X HDF5 (single file): %s", h5_files[0])
@@ -307,7 +307,7 @@ def main():
     if adata.isbacked:
         log.info("Backed mode detected — loading fully into memory for processing")
         adata = adata.to_memory()
-    force_csr = getattr(CFG, 'force_csr', True)
+    force_csr = getattr(CFG.execution, 'force_csr', True)
     if force_csr:
         if sp.issparse(adata.X):
             if not sp.isspmatrix_csr(adata.X):
@@ -319,7 +319,7 @@ def main():
             log.info("  CSR conversion complete")
 
     # ── 可选 float32 精度 ──
-    if getattr(CFG, 'use_float32', False):
+    if getattr(CFG.execution, 'use_float32', False):
         adata.X = adata.X.astype('float32', copy=False) if sp.issparse(adata.X) else adata.X
         log.info("X precision converted to float32")
 

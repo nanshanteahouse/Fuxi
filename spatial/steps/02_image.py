@@ -39,7 +39,7 @@ def main():
     log.info("Loaded: %s — %d spots × %d genes", input_path, adata.n_obs, adata.n_vars)
 
     # ── Check for image ──────────────────────────────────────────────────
-    library_id = CFG.library_id if CFG.library_id else sorted(adata.uns.get('spatial', {}).keys())[0] if 'spatial' in adata.uns and adata.uns['spatial'] else None
+    library_id = CFG.spatial.library_id if CFG.spatial.library_id else sorted(adata.uns.get('spatial', {}).keys())[0] if 'spatial' in adata.uns and adata.uns['spatial'] else None
 
     if library_id is None:
         log.warning("No spatial library_id found — image processing skipped")
@@ -68,12 +68,12 @@ def main():
 
     try:
         # Crop image to tissue bounding box
-        if CFG.crop_image:
+        if CFG.spatial.crop_image:
             log.info("  Cropping image to tissue region...")
             sq.im.process(
                 adata,
                 library_id=library_id,
-                crop=CFG.crop_image,
+                crop=CFG.spatial.crop_image,
                 mask_circle=True,
             )
         else:

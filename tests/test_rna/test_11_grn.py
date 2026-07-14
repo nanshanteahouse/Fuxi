@@ -7,7 +7,7 @@ from __future__ import annotations
 import importlib.util
 import logging
 import os
-from dataclasses import dataclass
+from unittest.mock import patch
 from unittest.mock import patch
 
 import numpy as np
@@ -32,18 +32,7 @@ top_variable_tfs = grn.top_variable_tfs
 export_results = grn.export_results
 
 
-# ── Mock CFG ───────────────────────────────────────────────────────────
-@dataclass
-class MockCFG:
-    """Minimal mock CFG with fields used by export_results."""
-
-    table_dir: str = "/tmp"
-    grn_h5ad: str = "/tmp/11_grn.h5ad"
-
-    @staticmethod
-    def resolve_paths() -> None:
-        pass
-
+from core.config import Config
 
 # ======================================================================
 #  top_variable_tfs tests
@@ -82,9 +71,9 @@ def test_top_variable_tfs_unchanged() -> None:
 
 def test_export_results_output_format(tmp_path) -> None:
     """Exports CSV files with expected columns under table_dir/11_grn/."""
-    cfg = MockCFG(
+    cfg = Config(
         table_dir=str(tmp_path),
-        grn_h5ad=str(tmp_path / "11_grn.h5ad"),
+        h5ad_dir=str(tmp_path),
     )
 
     # ── Mock data ─────────────────────────────────────────────────

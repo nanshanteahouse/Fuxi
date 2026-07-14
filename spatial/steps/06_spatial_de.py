@@ -26,8 +26,8 @@ def run_de_per_cluster(adata, CFG, log):
 
     sc.tl.rank_genes_groups(
         adata, groupby=group_col,
-        method=CFG.de_method,
-        n_genes=CFG.de_n_genes,
+        method=CFG.de.method,
+        n_genes=CFG.de.n_genes,
     )
 
     # Collect results
@@ -58,14 +58,14 @@ def run_spatial_autocorr(adata, CFG, log):
     # Ensure spatial connectivity graph exists
     if 'spatial_connectivities' not in adata.obsp:
         log.warning("spatial_connectivities missing — rebuilding spatial graph")
-        if CFG.spatial_neighbors_radius > 0:
+        if CFG.spatial.neighbors_radius > 0:
             sq.gr.spatial_neighbors(
-                adata, radius=CFG.spatial_neighbors_radius,
+                adata, radius=CFG.spatial.neighbors_radius,
                 coord_type='generic',
             )
         else:
             sq.gr.spatial_neighbors(
-                adata, n_neighs=CFG.spatial_neighbors_n,
+                adata, n_neighs=CFG.spatial.neighbors_n,
                 coord_type='generic',
             )
 
@@ -78,7 +78,7 @@ def run_spatial_autocorr(adata, CFG, log):
             adata,
             mode='moran',
             n_perms=100,
-            n_jobs=CFG.n_jobs,
+            n_jobs=CFG.execution.n_jobs,
         )
     except Exception as e:
         log.warning("Spatial autocorrelation failed: %s", e)
@@ -166,13 +166,13 @@ def main():
     marker_df = run_de_per_cluster(adata, CFG, log)
 
     # ── 2. Spatially variable genes ──
-    if CFG.run_spatial_autocorr:
+    if CFG.spatial.run_autocorr:
         moran_df = run_spatial_autocorr(adata, CFG, log)
         if moran_df is not None:
             plot_top_svg(adata, moran_df, CFG, log)
 
             # Subset to top SVGs for downstream analysis
-            n_top = min(CFG.svg_n_top, len(moran_df))
+            n_top = min(CFG.spatial.svg_n_top, len(moran_df))
             top_svg_genes = moran_df.head(n_top).index.tolist()
             valid_svg = [g for g in top_svg_genes if g in adata.var_names]
             if valid_svg:
@@ -218,7 +218,7 @@ def main():
             log.warning("Top marker plot failed: %s", e)
 
     # ── Save h5ad (only if we modified it with SVG info) ──
-    if CFG.run_spatial_autocorr:
+    if CFG.spatial.run_autocorr:
         # Don't overwrite the annotated h5ad; save SVG stuff separately
         svg_h5ad = os.path.join(CFG.h5ad_dir, "06_svg.h5ad")
         safe_write(adata, svg_h5ad, cfg=CFG)

@@ -65,12 +65,12 @@ def main():
         return
 
     if CFG.data_format == "10x_fragments":
-        frag_path = os.path.abspath(CFG.fragment_file)
+        frag_path = os.path.abspath(CFG.data_input.fragment_file)
         if not os.path.exists(frag_path):
             log.error("Fragment file not found: %s", frag_path)
             sys.exit(1)
 
-        chrom_sizes = CFG.chrom_sizes
+        chrom_sizes = CFG.atac.chrom_sizes
         if isinstance(chrom_sizes, str):
             chrom_sizes = None if not os.path.isfile(chrom_sizes) else \
                 {k: int(v) for k, v in (line.strip().split() for line in open(chrom_sizes))}
@@ -80,13 +80,13 @@ def main():
             log.info("  Found %d chromosomes", len(chrom_sizes))
 
         whitelist = None
-        if CFG.barcodes_file and os.path.exists(CFG.barcodes_file):
-            with open(CFG.barcodes_file) as f:
+        if CFG.data_input.barcodes_file and os.path.exists(CFG.data_input.barcodes_file):
+            with open(CFG.data_input.barcodes_file) as f:
                 whitelist = [l.strip() for l in f if l.strip()]
             log.info("Loaded %d whitelist barcodes", len(whitelist))
 
         # Determine sorted_by_barcode from config (default True = faster)
-        sorted_by_bc = getattr(CFG, 'sorted_by_barcode', True)
+        sorted_by_bc = getattr(CFG.data_input, 'sorted_by_barcode', True)
 
         log.info("Importing fragments (sorted_by_barcode=%s)...", sorted_by_bc)
         data = snap.pp.import_fragments(
@@ -95,7 +95,7 @@ def main():
             whitelist=whitelist,
             sorted_by_barcode=sorted_by_bc,
             min_num_fragments=0,
-            n_jobs=CFG.n_jobs,
+            n_jobs=CFG.execution.n_jobs,
             file=CFG.raw_h5ad,
         )
         log.info("Imported: %d cells → %s", data.n_obs, CFG.raw_h5ad)
@@ -103,11 +103,11 @@ def main():
         return
 
     elif CFG.data_format == "h5ad":
-        h5ad_path = os.path.abspath(CFG.input_h5ad)
+        h5ad_path = os.path.abspath(CFG.data_input.input_h5ad)
         if not os.path.exists(h5ad_path):
             log.error("h5ad not found: %s", h5ad_path)
             sys.exit(1)
-        backed = getattr(CFG, 'backed', '') or None
+        backed = getattr(CFG.data_input, 'backed', '') or None
         if backed:
             data = snap.read(h5ad_path, backed=backed)
         else:
@@ -116,7 +116,7 @@ def main():
         log.info("Loaded h5ad: %d cells", data.n_obs)
 
     elif CFG.data_format == "10x_peak_h5":
-        h5_path = os.path.abspath(CFG.input_h5ad)
+        h5_path = os.path.abspath(CFG.data_input.input_h5ad)
         if not os.path.exists(h5_path):
             log.error("10x peak h5 not found: %s", h5_path)
             sys.exit(1)
@@ -142,12 +142,12 @@ def main():
         log.error("Unknown data_format: %s", CFG.data_format)
         sys.exit(1)
 
-    data.uns["config"] = {"genome": CFG.genome, "data_format": CFG.data_format}
+    data.uns["config"] = {"genome": CFG.atac.genome, "data_format": CFG.data_format}
 
     # ── Downsampling (view-based, no .copy()) ──
-    max_cells = getattr(CFG, 'max_cells', None)
+    max_cells = getattr(CFG.atac, 'max_cells', None)
     if max_cells and data.n_obs > max_cells:
-        rng = np.random.RandomState(CFG.random_seed)
+        rng = np.random.RandomState(CFG.execution.random_seed)
         idx = rng.choice(data.n_obs, size=max_cells, replace=False)
         idx.sort()
         data = data[idx]  # view-based indexing — no full memory copy
@@ -155,13 +155,13 @@ def main():
 
     # ── Unified sparse format & precision (skip if X is None, as in raw fragments) ──
     if data.X is not None:
-        if getattr(CFG, 'force_csr', True):
+        if getattr(CFG.execution, 'force_csr', True):
             import scipy.sparse as sp
             if hasattr(data, 'X') and sp.issparse(data.X):
                 if not sp.isspmatrix_csr(data.X):
                     data.X = data.X.tocsr()
                     log.info("X format converted to CSR")
-        if getattr(CFG, 'use_float32', False):
+        if getattr(CFG.execution, 'use_float32', False):
             import scipy.sparse as sp
             if sp.issparse(data.X):
                 data.X = data.X.astype('float32', copy=False)
