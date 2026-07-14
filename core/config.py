@@ -125,7 +125,8 @@ class RNAConfig:
     use_regress_out: bool = True
     score_cell_cycle: bool = False   # 可选: 在 normalize+log1p 后回归 S/G2M 分数
     regress_out_genes: List[str] = field(default_factory=list)
-
+    detect_sex: bool = False
+    sex_detection_threshold: float = 0.0
 
     # ── RNA PCA ──
     n_pcs_full: int = 100

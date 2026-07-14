@@ -177,6 +177,11 @@ def main():
     adata.raw = adata_full
     log.info(".raw saved (full genes: %d vars)", adata_full.n_vars)
 
+    # ── 可选: 自动性别检测 ──
+    if getattr(CFG, 'detect_sex', False):
+        from rna.utils.sex_detection import detect_sex
+        detect_sex(adata, CFG, log)
+
     # ── 数据完整性检查：PCA 前 ──
     has_issues = validate_adata(adata, stage_name="before_PCA", logger=log)
     if has_issues:
