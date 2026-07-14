@@ -19,6 +19,9 @@ import re
 from collections import defaultdict
 from typing import Optional
 import statistics
+import pandas as pd
+import logging
+log = logging.getLogger(__name__)
 
 # ── Archive format patterns ─────────────────────────────────────────
 # Ordered so that compound extensions match before their components
@@ -213,6 +216,86 @@ def detect_fragment_file(dir_files: list[str]) -> bool:
     return False
 
 
+def _sniff_preprocessed_columns(filepath: str, n_rows: int = 100) -> Optional[int]:
+    """Read sample rows from a TSV/CSV file and detect embedded metadata columns.
+
+    Returns the number of leading metadata columns, or None if the file doesn't
+    look like a preprocessed matrix with embedded metadata.
+
+    Detection strategy (two-metric):
+      1. Numeric convertibility — non-numeric columns are metadata
+      2. Cardinality check — numeric columns with low unique-count ratio
+         are metadata (e.g. integer-encoded cluster labels), while high-
+         cardinality numeric columns are expression data.
+    """
+    text = _scan_file_head(filepath, n_lines=n_rows)
+    if not text:
+        return None
+    import io
+    try:
+        df = None
+        for sep_char in ('\t', ','):
+            df = pd.read_csv(io.StringIO(text), sep=sep_char)
+            if df.shape[1] > 1:
+                break
+        if df is None or df.shape[1] < 2:
+            return None
+    except Exception:
+        return None
+
+    n_sample = len(df)
+    if n_sample < 2:
+        return None
+    # Classify each column: metadata (M) or expression (E)
+    classifications = []
+    for col in df.columns:
+        numeric = pd.to_numeric(df[col], errors='coerce')
+        numeric_ratio = numeric.notna().sum() / n_sample
+
+        if numeric_ratio < 0.5:
+            # Mostly non-numeric → metadata
+            classifications.append('M')
+        else:
+            # Numeric column: check if it might be integer-encoded metadata
+            non_na = numeric.dropna()
+            is_small_int = False
+            if len(non_na) > 0:
+                # All values are effectively integers with small range?
+                if all(v == int(v) for v in non_na):
+                    rng = non_na.max() - non_na.min()
+                    if rng < 50:
+                        is_small_int = True
+
+            if is_small_int:
+                # Integer-coded categorical metadata (e.g. cluster labels)
+                classifications.append('M')
+            else:
+                unique_ratio = numeric.nunique() / n_sample
+                if unique_ratio < 0.5:
+                    # Low cardinality numeric → categorical metadata
+                    classifications.append('M')
+                else:
+                    # High cardinality numeric → expression
+                    classifications.append('E')
+    # Find boundary: first column classified as expression
+    first_E = None
+    for i, c in enumerate(classifications):
+        if c == 'E':
+            first_E = i
+            break
+
+    if first_E is None or first_E == 0:
+        # No metadata or first col already expression
+        return None
+
+    # Need at least 2 expression columns
+    if len(classifications) - first_E < 2:
+        return None
+
+    return first_E
+
+
+
 def is_geo_series_matrix(filepath: str) -> bool:
     """Return True if the file looks like a GEO Series Matrix file."""
     return bool(GEO_SERIES_MATRIX_RE.search(os.path.basename(filepath)))
@@ -236,6 +319,7 @@ def classify_files_by_format(file_list: list[str]) -> dict:
             'fragment_dirs':      {dirpath: [files], ...},
             'h5ad_files':         [path, ...],
             'csv_files':          [path, ...],
+            'preprocessed_dirs':  {dirpath: [files], ...},
             'series_matrix_files': [path, ...],
             'metadata_files':     [path, ...],
             'unmatched':          [path, ...],
@@ -250,6 +334,7 @@ def classify_files_by_format(file_list: list[str]) -> dict:
         'fragment_dirs': defaultdict(list),
         'h5ad_files': [],
         'csv_files': [],
+        'preprocessed_dirs': defaultdict(list),
         'series_matrix_files': [],
         'metadata_files': [],
         'unmatched': [],
@@ -311,13 +396,20 @@ def classify_files_by_format(file_list: list[str]) -> dict:
         if len(candidates) >= 3:
             result['csv_files'].extend(candidates)
             continue
+        # If not enough for csv_matrix, try preprocessed detection
+        # (embedded metadata columns sniffed from file content)
+        if len(candidates) >= 1:
+            sniffed = _sniff_preprocessed_columns(candidates[0])
+            if sniffed is not None and sniffed >= 1:
+                log.debug("Detected preprocessed format in %s (%d meta cols)",
+                           dirpath, sniffed)
+                result['preprocessed_dirs'][dirpath] = candidates
+                continue
 
         # Classify remaining files individually
-        for f in files:
-            _classify_single_file(f, result, dirpath)
 
     # Convert defaultdicts to plain dicts
-    for key in ('tenx_mtx_dirs', 'tenx_h5_dirs', 'tenx_peak_dirs', 'fragment_dirs'):
+    for key in ('tenx_mtx_dirs', 'tenx_h5_dirs', 'tenx_peak_dirs', 'fragment_dirs', 'preprocessed_dirs'):
         result[key] = dict(result[key])
 
     return result
