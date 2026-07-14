@@ -205,10 +205,16 @@ def generate_figures(adata, markers_df, CFG, log, primary_col=None):
     sc.settings.autoshow = False
     group_col = primary_col if primary_col else ('cell_type' if 'cell_type' in adata.obs else 'leiden')
 
-    # Heatmap: each type top5 markers by specificity score
+    # Safety: skip figure generation if no marker data
+    if markers_df is None or len(markers_df) == 0:
+        log.warning("  No marker genes found - skipping figure generation")
+        return
+    if 'group' not in markers_df.columns:
+        log.warning("  No 'group' column in markers_df - skipping figure generation")
+        return
+
     top5_per_group = (
-        markers_df
-        .groupby('group', observed=True)
+        markers_df.groupby('group', observed=True)
         .apply(lambda x: x.nlargest(5, 'scores'))
         .reset_index(drop=True)
     )
