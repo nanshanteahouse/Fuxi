@@ -2,11 +2,12 @@
 """
 Step 00: 加载原始 scRNA-seq 数据
 ===================================
-支持四种输入格式:
+支持五种输入格式:
   1. 10X MTX (CellRanger 输出): sc.read_10x_mtx()
   2. CSV 矩阵 + 元数据文件:     mmread() + pandas
   3. 已有 h5ad:                sc.read()
   4. 10X HDF5 (.h5):           sc.read_10x_h5()
+  5. Preprocessed TSV:         pd.read_csv() + auto split metadata/expression
 
 输出: 00_raw.h5ad
 """
@@ -296,6 +297,165 @@ def main():
 
         if 'gene_ids' in adata.var:
             adata.var.drop(columns=['gene_ids'], inplace=True)
+        _parse_barcodes(adata, CFG, log)
+
+    elif CFG.data_format == "preprocessed":
+        import glob as glob_mod
+        sep = CFG.data_input.separator if CFG.data_input.separator else ""
+        pattern = getattr(CFG.data_input, 'file_pattern', '') or "*.tsv.gz"
+
+        file_list = sorted(glob_mod.glob(os.path.join(CFG.data_dir, pattern)))
+        if not file_list:
+            log.error("No files matching '%s' found in %s", pattern, CFG.data_dir)
+            sys.exit(1)
+
+        log.info("Found %d files matching '%s'", len(file_list), pattern)
+
+        # ── Auto-detect separator if not configured ──
+        if not sep:
+            log.info("Auto-detecting separator from %s ...", os.path.basename(file_list[0]))
+            try:
+                if file_list[0].endswith('.gz'):
+                    import gzip as _gzip
+                    with _gzip.open(file_list[0], 'rt', encoding='utf-8', errors='replace') as fh:
+                        peek = fh.readline()
+                else:
+                    with open(file_list[0], 'r', encoding='utf-8', errors='replace') as fh:
+                        peek = fh.readline()
+                if ',' in peek and '\t' not in peek:
+                    sep = ","
+                else:
+                    sep = "\t"
+                log.info("  Separator: %s", repr(sep))
+            except Exception:
+                log.info("  Using default tab separator")
+                sep = "\t"
+
+        # ── Auto-detect metadata/expression boundary ──
+        log.info("Auto-detecting meta/expr boundary from %s ...", os.path.basename(file_list[0]))
+        try:
+            sample = pd.read_csv(file_list[0], sep=sep, nrows=100)
+        except Exception as e:
+            log.error("Failed to read sample from %s: %s", file_list[0], e)
+            sys.exit(1)
+
+        n_sampled = len(sample)
+        if n_sampled < 2:
+            log.error("Sample has %d rows — too few to detect boundary", n_sampled)
+            sys.exit(1)
+
+        # Two-metric classification: numeric ratio + cardinality
+        classifications = []
+        for col in sample.columns:
+            numeric = pd.to_numeric(sample[col], errors='coerce')
+            numeric_ratio = numeric.notna().sum() / n_sampled
+            if numeric_ratio < 0.5:
+                classifications.append('M')   # mostly non-numeric → metadata
+            else:
+                non_na = numeric.dropna()
+                is_small_int = False
+                if len(non_na) > 0:
+                    if all(v == int(v) for v in non_na):
+                        rng = non_na.max() - non_na.min()
+                        if rng < 50:
+                            is_small_int = True
+                if is_small_int:
+                    classifications.append('M')  # integer-coded meta
+                else:
+                    unique_ratio = numeric.nunique() / n_sampled
+                    if unique_ratio < 0.5:
+                        classifications.append('M')  # low-cardinality meta
+                    else:
+                        classifications.append('E')  # expression
+        meta_cols = 0
+        for i, c in enumerate(classifications):
+            if c == 'E':
+                meta_cols = i
+                break
+
+        log.info("Column classification: %d meta + %d expression",
+                 meta_cols, len(classifications) - meta_cols)
+
+        if meta_cols < 1:
+            # Check if truly no metadata or all metadata
+            if all(c == 'E' for c in classifications):
+                log.error(
+                    "All columns classified as expression — this looks like a pure count matrix. "
+                    "Use data_format='csv_matrix' instead."
+                )
+            else:
+                log.error(
+                    "Auto-detection: first column is expression data. "
+                    "Use data_format='csv_matrix' for count matrices."
+                )
+            sys.exit(1)
+
+        if meta_cols >= sample.shape[1] - 2:
+            log.error(
+                "%d metadata columns leaves only %d expression columns — doesn't look ",
+                "like a gene expression matrix.",
+                meta_cols, sample.shape[1] - meta_cols
+            )
+            sys.exit(1)
+
+        log.info(
+            "Detected: %d metadata cols, %d expression cols (~%d genes)",
+            meta_cols, sample.shape[1] - meta_cols, sample.shape[1] - meta_cols
+        )
+
+        # ── Load and concat all files ──
+        all_dfs = []
+        for fpath in file_list:
+            log.info("Loading %s ...", os.path.basename(fpath))
+            all_dfs.append(pd.read_csv(fpath, sep=sep))
+
+        combined = pd.concat(all_dfs, axis=0, ignore_index=True)
+        log.info("Combined shape: %s", combined.shape)
+        del all_dfs
+
+        # ── Separate metadata and expression ──
+        meta = combined.iloc[:, :meta_cols].copy()
+        expr = combined.iloc[:, meta_cols:]
+
+        # Make gene names unique
+        if expr.columns.duplicated().any():
+            dup_count = expr.columns.duplicated().sum()
+            log.warning("Duplicate gene names: %d — keeping first occurrence", dup_count)
+            expr = expr.loc[:, ~expr.columns.duplicated(keep='first')]
+
+        # Build AnnData
+        barcodes = meta.iloc[:, 0].values.astype(str)
+        if not pd.Index(barcodes).is_unique:
+            log.warning("Barcodes not unique — appending row index")
+            barcodes = [f"{bc}_{i}" for i, bc in enumerate(barcodes)]
+
+        X = expr.values.astype(np.float32)
+        adata = sc.AnnData(X=sp.csr_matrix(X))
+        adata.obs_names = barcodes
+        adata.var_names = expr.columns.astype(str)
+
+        # Remaining metadata columns → obs
+        for col_idx in range(1, meta_cols):
+            col_name = str(meta.columns[col_idx]).strip()
+            adata.obs[col_name] = meta.iloc[:, col_idx].values
+
+        # Apply meta_columns renaming if configured
+        if CFG.sample_meta.meta_columns:
+            rename_map = {}
+            for target_col, source_col in CFG.sample_meta.meta_columns.items():
+                if source_col in adata.obs.columns:
+                    rename_map[source_col] = target_col
+            if rename_map:
+                log.info("Obs column renaming via meta_columns: %s", rename_map)
+                adata.obs.rename(columns=rename_map, inplace=True)
+
+        # Auto-categorize string columns
+        for col in adata.obs.columns:
+            if adata.obs[col].dtype == object:
+                adata.obs[col] = adata.obs[col].astype("category")
+
+        log.info("Loading complete: %d cells × %d genes, %d obs columns",
+                 adata.n_obs, adata.n_vars, len(adata.obs.columns))
         _parse_barcodes(adata, CFG, log)
 
     else:

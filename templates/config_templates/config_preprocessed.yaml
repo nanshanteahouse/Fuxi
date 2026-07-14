@@ -1,0 +1,94 @@
+# ── Data format ──
+data_format: preprocessed
+expression_type: "{{EXPRESSION_TYPE}}"  # log1p_counts / raw_counts / TPM / CPM / FPKM
+
+# ── Data input (optional overrides) ──
+# All auto-detectable by default; only override if needed.
+# data_input:
+#   file_pattern: "*.tsv.gz"   # glob pattern (default: *.tsv.gz)
+#   separator: "\t"            # delimiter (default: auto-detect tab vs comma)
+
+# ── Dataset metadata ──
+tissue: "{{TISSUE}}"
+species: "{{SPECIES}}"
+
+# ── QC ──
+qc:
+  min_genes: 200
+  max_genes: 7500
+  max_pct_mito: 20.0
+  min_cells_per_gene: 3
+
+# ── Scrublet (doublet detection) ──
+scrublet:
+  run: true   # auto-disabled when expression_type != raw_counts
+
+# ── HVG ──
+hvg:
+  n_top_genes: 4000
+  batch_key: sample
+  flavor: seurat_v3
+
+# ── Batch correction / Harmony ──
+harmony:
+  use_harmony: true
+  batch_key: sample
+  max_iter: 20
+
+# ── PCA ──
+pca:
+  n_pcs_full: 100
+  n_pcs_use: 50
+
+# ── Clustering ──
+clustering:
+  leiden_resolutions: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
+  best_resolution: 1.0
+  best_n_neighbors: 0
+  cluster_selection_method: "multi_metric"
+  umap_selection_method: "convex_hull"
+  param_grid_min_dist: [0.1, 0.3, 0.5]
+  param_grid_spread: [1.0]
+  umap_min_dist: 0.3
+  umap_spread: 1.0
+
+# ── Cell type markers ──
+marker:
+  marker_dict: {}
+  subcluster_types: []
+  subcluster_resolution: 0.4
+  min_cells_subcluster: 50
+
+# ── Trajectory ──
+trajectory:
+  root_cell_types: []
+
+# ── Differential expression ──
+de:
+  method: wilcoxon
+  n_genes: 50
+  pval_cutoff: 0.05
+  logfc_cutoff: 0.25
+  stage_pairwise: true
+
+# ── GRN regulatory network ──
+grn:
+  run: true
+  method: decoupler
+  species: human
+  n_top_regulons: 50
+  min_regulon_size: 5
+
+# ── CCI cell-cell interaction ──
+cci:
+  run: true
+
+# ── Execution ──
+execution:
+  n_jobs: 0
+  random_seed: 42
+
+# ── Downsampling (optional) ──
+# downsample:
+#   target: 5000
+#   strategy: random
