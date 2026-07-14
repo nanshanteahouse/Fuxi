@@ -20,14 +20,11 @@ Subject: imperative, lowercase, ≤72 chars. Body explains *why*, not *what*.
 
 ### Running modes
 
-Pipeline supports two modes, chosen by the Agent based on user preference:
+Both modes use `--step N` to run one step at a time. The difference is whether the Agent pauses for user input:
 
-**Auto mode** — Run full step range with all default settings. Suitable for familiar datasets or batch reproduction:
-```bash
-python core/run_pipeline.py --modality rna --resume --config <config>.yaml
-```
+**Auto mode** — Execute steps sequentially with default settings. After each step, report progress and continue. User can interrupt at any point (Ctrl+C). Suitable for familiar datasets or batch reproduction.
 
-**Interactive mode** — Agent runs `--step N` one at a time. After each step, present results to the user, ask questions, offer options, and wait for confirmation before proceeding. Suitable for exploratory analysis or new datasets.
+**Interactive mode** — Execute `--step N` one at a time. After each step, present results, ask questions, offer options, and wait for confirmation before proceeding. Suitable for exploratory analysis or new datasets.
 
 
 ```bash
@@ -60,11 +57,19 @@ python core/run_reproduce.py <paper_dir>           # reproduce a single paper
 | Project configs | `projects/{modality}/{GSE_ID}/config_*.yaml` |
 | Config templates | `templates/config_templates/*.yaml` |
 
-### Paper workflow
+### Dataset lookup
 
-1. **Check registry** — `python core/paper_registry.py --verify` or grep `projects/papers/registry.yaml`
-2. **Read insights** — `projects/papers/<paper_dir>/insights.yaml`
-3. **Cross-validate** — `python core/paper_insights.py --pmid <PMID>`
+When user requests to analyze or reproduce a dataset:
+
+1. **Check local registry first** — `python core/paper_registry.py --verify` or grep
+   `projects/papers/registry.yaml` for matching GSE ID, species, or tissue.
+2. **If found** — Read `projects/papers/<paper_dir>/insights.yaml` for metadata.
+   Optionally cross-validate with NCBI: `python core/paper_insights.py --pmid <PMID>`.
+3. **If not found** — Ask user whether to download and register:
+   ```bash
+   python core/paper_insights.py --pmid <PMID>
+   python core/paper_registry.py --build
+   ```
 
 
 ### Critical conventions
