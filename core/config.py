@@ -1,309 +1,451 @@
 #!/usr/bin/env python3
 """
-config.py — Fuxi (伏羲) 统一配置
-==================================
+config.py — Fuxi (伏羲) 统一配置 (Pydantic v2)
 
-合并 scRNAseq_pipeline 和 ATACseq_pipeline 的配置系统。
-一个 Config dataclass 包含所有组学类型的字段。
+21 Pydantic BaseModel classes:
+  20 topic sub-models + 1 top-level Config
 
 设计原则:
-  - 所有参数集中在一个 dataclass 中
+  - 所有参数集中在一个 Config(BaseModel) 中
   - modality 字段区分组学类型: 'rna' | 'atac' | 'spatial'
   - 向后兼容现有项目配置文件
-  - 路径自动解析: 默认所有路径相对于 config.py 所在目录
+  - 路径自动解析在 Todo 1.2 (model_post_init) 中
 
 使用方法:
-    from core.config import Config, AIConfig, CFG
-    CFG.resolve_paths()
+    from core.config import Config
+    CFG = Config(project_dir=...)
 """
 
 import os
-from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+
+from pydantic import BaseModel, Field, ConfigDict
 
 # ── Auto-load .env from repo root ────────────────────────────────────
 # This runs before any data_root() call, so FUXI_DATA_ROOT in .env
 # is available to the pipeline without manual sourcing.
 from dotenv import load_dotenv
+
 _env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
 if os.path.isfile(_env_path):
     load_dotenv(_env_path)
+
 
 # ── Named constants ───────────────────────────────────────────────────
 SILHOUETTE_SAMPLE_THRESHOLD: int = 10000
 
 
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 1 — DataInputConfig
+# ═══════════════════════════════════════════════════════════════════════
+class DataInputConfig(BaseModel):
+    """RNA / ATAC data input paths and format settings."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
-@dataclass
-class AIConfig:
-    """AI configuration — all AI features controlled here"""
-    # Global switch
-    enabled: bool = False
-
-    # Inference endpoint
-    api_base: str = ""
-    model: str = "deepseek-v4-flash"
-    api_key: str = ""              # 留空则从环境变量 LLM_API_KEY 读取
-    max_tokens: int = 4096
-    temperature: float = 0.1
-    thinking_enabled: bool = True
-    reasoning_effort: str = "high"
-    timeout: Optional[int] = None
-
-    # RNA task-level switches
-    ai_qc_review: bool = False
-    ai_param_suggest: bool = False
-    ai_annotation: bool = True
-    ai_subcluster: bool = True
-    ai_deg_design: bool = False
-    ai_interpretation: bool = True
-    ai_cache_responses: bool = True
-
-    # Unconstrained annotation mode (v3.1.0+).
-    # When True, AI is NOT constrained to KB candidates and can freely
-    # suggest cell types.  Useful for audit mode (KB blind-spot detection)
-    # or novel tissue types.  Default False (backward compatible).
-    unconstrained_annotation: bool = False
-
-
-@dataclass
-class RNAConfig:
-    """RNA-specific configuration fields."""
-
-    # ── RNA input formats ──
     mtx_prefix: str = ""
     mtx_dir: str = ""
     matrix_file: str = ""
     barcodes_file: str = ""
     features_file: str = ""
-    csv_sep: str = ','
+    csv_sep: Optional[str] = None
     csv_decimal: str = '.'
     gene_symbol_column: str = ''
     input_h5ad: str = ""
     backed: str = ""
     h5_file_pattern: str = "*filtered_feature_bc_matrix.h5"
     h5_dir: str = ""
+    fragment_file: str = ""
 
-    # ── RNA sample metadata ──
-    sample_map: Dict[int, str] = field(default_factory=dict)
-    stage_map: Dict[int, str] = field(default_factory=dict)
-    stage_order: List[str] = field(default_factory=list)
-    meta_columns: Dict[str, str] = field(default_factory=dict)
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 2 — SampleMetaConfig
+# ═══════════════════════════════════════════════════════════════════════
+class SampleMetaConfig(BaseModel):
+    """Sample / stage metadata mapping."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    sample_map: Dict[int, str] = Field(default_factory=dict)
+    stage_map: Dict[int, str] = Field(default_factory=dict)
+    stage_order: List[str] = Field(default_factory=list)
+    meta_columns: Dict[str, str] = Field(default_factory=dict)
     barcode_parse_regex: str = ""
-    barcode_parse_groups: Dict[str, str] = field(default_factory=dict)
+    barcode_parse_groups: Dict[str, str] = Field(default_factory=dict)
 
-    # ── RNA QC thresholds ──
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 3 — QCSettings
+# ═══════════════════════════════════════════════════════════════════════
+class QCSettings(BaseModel):
+    """Quality control thresholds."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
     min_genes: int = 500
     max_genes: int = 7500
     max_pct_mito: float = 20.0
     mt_gene_pattern: str = "MT-"
-    mt_gene_list: List[str] = field(default_factory=list)
+    mt_gene_list: List[str] = Field(default_factory=list)
     min_genes_per_umi: float = 0.7
     min_cells_per_gene: int = 3
     use_adaptive_thresholds: bool = False
     mad_n_mads: float = 3.0
-    qc_ncount_max_mad: float = 5.0
-
-
-    # ── RNA snRNA-seq ──
+    ncount_max_mad: float = 5.0
+    min_mad_upper_genes: int = 4000
+    min_mad_upper_genes_nuclei: int = 3000
     is_nuclei: bool = False
     max_pct_mito_nuclei: float = 5.0
-    # ── RNA Scrublet ──
-    run_scrublet: bool = True
-    scrublet_expected_doublet_rate: float | None = None
-    scrublet_batch_key: str = "sample"
-    scrublet_min_counts: int = 2
-    scrublet_min_cells: int = 3
-    scrublet_min_gene_var_pctl: int = 85
-    scrublet_n_prin_comps: int = 30
 
-    # ── RNA normalization & HVG ──
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 4 — ScrubletSettings
+# ═══════════════════════════════════════════════════════════════════════
+class ScrubletSettings(BaseModel):
+    """Doublet detection (Scrublet) settings."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    run: bool = True
+    expected_doublet_rate: Optional[float] = None
+    batch_key: str = "sample"
+    min_counts: int = 2
+    min_cells: int = 3
+    min_gene_var_pctl: int = 85
+    n_prin_comps: int = 30
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 5 — NormalizationSettings
+# ═══════════════════════════════════════════════════════════════════════
+class NormalizationSettings(BaseModel):
+    """Normalization, cell-cycle regression, sex detection."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
     normalize_target_sum: float = 1e4
-    n_top_genes: int = 4000
-    hvg_flavor: str = "seurat_v3"
-    hvg_batch_key: str = "sample"
     use_regress_out: bool = True
-    score_cell_cycle: bool = False   # 可选: 在 normalize+log1p 后回归 S/G2M 分数
-    regress_out_genes: List[str] = field(default_factory=list)
+    score_cell_cycle: bool = False
+    regress_out_genes: List[str] = Field(default_factory=list)
     detect_sex: bool = True
 
-    # ── RNA PCA ──
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 6 — HVGSettings
+# ═══════════════════════════════════════════════════════════════════════
+class HVGSettings(BaseModel):
+    """Highly variable gene selection."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    n_top_genes: int = 4000
+    flavor: str = "seurat_v3"
+    batch_key: str = "sample"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 7 — PCASettings
+# ═══════════════════════════════════════════════════════════════════════
+class PCASettings(BaseModel):
+    """Principal component analysis settings."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
     n_pcs_full: int = 100
     n_pcs_use: int = 50
 
-    # ── RNA Harmony ──
-    use_harmony: bool = True
-    harmony_batch_key: str = "sample"
-    harmony_max_iter: int = 20
 
-    # ── RNA clustering & UMAP ──
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 8 — HarmonySettings
+# ═══════════════════════════════════════════════════════════════════════
+class HarmonySettings(BaseModel):
+    """Harmony batch correction settings."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    use_harmony: bool = True
+    batch_key: str = "sample"
+    max_iter: int = 20
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 9 — ClusteringSettings
+# ═══════════════════════════════════════════════════════════════════════
+class ClusteringSettings(BaseModel):
+    """Clustering, UMAP, and parameter grid search settings."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
     n_neighbors: int = 30
-    leiden_resolutions: List[float] = field(
+    leiden_resolutions: List[float] = Field(
         default_factory=lambda: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
     )
-    param_grid_n_neighbors: list = field(default_factory=lambda: [15, 20, 30])
-    param_grid_resolutions: list = field(default_factory=lambda: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
+    param_grid_n_neighbors: list = Field(default_factory=lambda: [15, 20, 30])
+    param_grid_resolutions: list = Field(default_factory=lambda: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
     leiden_flavor: str = "igraph"
     best_resolution: float = 1.0
     best_n_neighbors: int = 0
-    cluster_selection_method: str | None = "pareto_elbow"
-    umap_selection_method: str | None = "convex_hull"
-    param_grid_min_dist: list | None = field(default_factory=lambda: [0.1, 0.3, 0.5])
-    param_grid_spread: list | None = field(default_factory=lambda: [1.0])
+    cluster_selection_method: Optional[str] = "multi_metric"
+    multi_metric_weights: dict = Field(default_factory=lambda: {
+        "silhouette": 0.2,
+        "stability": 0.2,
+        "cluster_coherence": 0.3,
+        "splitting_gain": 0.2,
+        "kb_annotatable_rate": 0.1
+    })
+    multi_metric_n_stability_seeds: int = 5
+    multi_metric_adaptive_resolution: bool = True
+    multi_metric_coverage_ratio_threshold: float = 1.5
+    multi_metric_coherence_dominance: float = 1.5
+    multi_metric_granularity_cv_threshold: float = 0.05
+    multi_metric_granularity_min_clusters: int = 10
+    multi_metric_de_gate_threshold: int = 25
+    umap_selection_method: Optional[str] = "convex_hull"
+    param_grid_min_dist: Optional[list] = Field(default_factory=lambda: [0.1, 0.3, 0.5])
+    param_grid_spread: Optional[list] = Field(default_factory=lambda: [1.0])
     umap_min_dist: float = 0.3
     umap_spread: float = 1.0
 
-    # ── RNA cell type annotation ──
-    marker_dict: Dict[str, List[str]] = field(default_factory=dict)
-    subcluster_types: List[str] = field(default_factory=list)
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 10 — MarkerSettings
+# ═══════════════════════════════════════════════════════════════════════
+class MarkerSettings(BaseModel):
+    """Cell-type marker / annotation settings."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    marker_dict: Dict[str, List[str]] = Field(default_factory=dict)
+    subcluster_types: List[str] = Field(default_factory=list)
     subcluster_resolution: float = 0.4
     min_cells_subcluster: int = 50
-    tissue_kb: str = ""
-    tissue_ontology: str = ""
-    target_class: str = ""
-    target_order: str = ""
     expert_rule_strictness: str = "default"
     expert_rule_top_n: int = 0
     expert_rule_pval_cutoff: float = 0.0
-    marker_validation_n_top_genes: int = 15
-    marker_validation_min_overlap: float = 0.5
-    marker_validation_marginal_threshold: float = 0.25
-    marker_validation_pass_rate_min: float = 0.1
-    step10_groupby: List[str] = field(default_factory=list)
+    validation_n_top_genes: int = 15
+    validation_min_overlap: float = 0.5
+    validation_marginal_threshold: float = 0.25
+    validation_pass_rate_min: float = 0.1
+    step10_groupby: List[str] = Field(default_factory=list)
 
-    # ── RNA DE analysis ──
-    de_method: str = "wilcoxon"
-    de_n_genes: int = 50
-    de_pval_cutoff: float = 0.05
-    de_logfc_cutoff: float = 0.25
-    de_stage_pairwise: bool = True
-    de_auto_switch_on_low_quality: bool = False
 
-    # ── RNA trajectory ──
-    root_cell_types: List[str] = field(default_factory=list)
-    root_markers: List[str] = field(default_factory=list)
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 11 — DESettings
+# ═══════════════════════════════════════════════════════════════════════
+class DESettings(BaseModel):
+    """Differential expression analysis settings."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    method: str = "wilcoxon"
+    n_genes: int = 50
+    pval_cutoff: float = 0.05
+    logfc_cutoff: float = 0.25
+    stage_pairwise: bool = True
+    auto_switch_on_low_quality: bool = False
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 12 — TrajectorySettings
+# ═══════════════════════════════════════════════════════════════════════
+class TrajectorySettings(BaseModel):
+    """Pseudotime / trajectory analysis settings."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    root_cell_types: List[str] = Field(default_factory=list)
+    root_markers: List[str] = Field(default_factory=list)
     n_diffmap_comps: int = 15
     n_branchings: int = 2
-
-    # ── Pseudotime gene selection ──
-    pseudotime_genes: List[str] = field(default_factory=list)
+    pseudotime_genes: List[str] = Field(default_factory=list)
     pseudotime_n_branch_de: int = 10
     pseudotime_n_correlated: int = 10
     pseudotime_cor_pval: float = 0.05
 
-    # ── RNA downsampling ──
-    downsample_target: Optional[int] = None
-    downsample_strategy: str = "stratified"
-    downsample_max_per_sample: Optional[int] = None
-    downsample_random_seed: int = 42
-    # ── RNA sample/cell subset filtering ──
-    sample_keep: List[str] = field(default_factory=list)
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 13 — EnrichmentSettings
+# ═══════════════════════════════════════════════════════════════════════
+class EnrichmentSettings(BaseModel):
+    """Gene-set enrichment analysis settings."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    run: bool = True
+    method: str = "both"
+    gene_sets: list = Field(default_factory=lambda: [
+        'GO_Biological_Process_2023',
+        'KEGG_2021_Human',
+    ])
+    organism: str = "human"
+    n_top_genes: int = 200
+    pval_cutoff: float = 0.05
+    min_size: int = 10
+    max_size: int = 500
+    permutations: int = 1000
+    tissue_mode: str = "off"
+    tissue_pathways_whitelist: list = Field(default_factory=list)
+    tissue_pathways_blacklist: list = Field(default_factory=list)
+    redundancy_cluster: bool = False
+    redundancy_threshold: float = 0.6
+    use_kb_relevance: bool = False
+    gene_sets_tissue: list = Field(default_factory=list)
+    background_restrict: bool = False
+    peak_gene_distance: int = 100000
+    gene_annotation_bed: str = ""
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 14 — GRNSettings
+# ═══════════════════════════════════════════════════════════════════════
+class GRNSettings(BaseModel):
+    """Gene regulatory network analysis settings."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    run: bool = True
+    method: str = "decoupler"
+    species: str = "human"
+    n_top_regulons: int = 50
+    min_regulon_size: int = 5
+    confidence_levels: list = Field(default_factory=lambda: ["A", "B", "C"])
+    tissue_mode: str = "off"
+    use_kb_relevance: bool = False
+    export_filtered: bool = False
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 15 — CCISettings
+# ═══════════════════════════════════════════════════════════════════════
+class CCISettings(BaseModel):
+    """Cell-cell interaction analysis settings."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    run: bool = True
+    method: str = "liana"
+    lr_database: str = "consensus"
+    permutations: int = 100
+    n_top_interactions: int = 50
+    spatial_method: str = "liana_spatial"
+    spatial_distance: float = 0.0
+    lr_cache_dir: str = ""
+    adjacency: str = "off"
+    tissue: str = ""
+    adjacency_file: str = ""
+    adjacency_types: list = Field(default_factory=list)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 16 — DownsampleSettings
+# ═══════════════════════════════════════════════════════════════════════
+class DownsampleSettings(BaseModel):
+    """Downsampling and subset filtering settings."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    target: Optional[int] = None
+    strategy: str = "stratified"
+    max_per_sample: Optional[int] = None
+    random_seed: int = 42
+    sample_keep: List[str] = Field(default_factory=list)
     obs_filter: str = ""
     subset_suffix: str = ""
 
-    # ── RNA GRN ──
-    run_grn: bool = True
-    grn_method: str = "decoupler"
-    grn_species: str = "human"
-    grn_n_top_regulons: int = 50
-    grn_min_regulon_size: int = 5
-    grn_confidence_levels: list = field(
-        default_factory=lambda: ["A", "B", "C"]
-    )
 
-    # ── GRN tissue awareness ──
-    grn_tissue_mode: str = "off"
-    grn_use_kb_relevance: bool = False
-    grn_export_filtered: bool = False
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 17 — SpatialConfig
+# ═══════════════════════════════════════════════════════════════════════
+class SpatialConfig(BaseModel):
+    """Spatial transcriptomics platform and processing settings."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
-    # ── RNA CCI ──
-    run_cci: bool = True
-    cci_method: str = "liana"
-    cci_lr_database: str = "consensus"
-    cci_permutations: int = 1000
-    cci_n_top_interactions: int = 50
-    cci_spatial_method: str = "liana_spatial"
-    cci_spatial_distance: float = 0.0
-    cci_lr_cache_dir: str = ""
+    platform: str = "visium"
+    library_id: str = ""
+    img_path: str = ""
+    spot_diameter: float = 0.0
+    crop_image: bool = True
+    img_rescale: float = 1.0
+    neighbors_n: int = 6
+    neighbors_radius: float = 0.0
+    run_autocorr: bool = True
+    moran_percentile: int = 90
+    svg_n_top: int = 2000
 
 
-@dataclass
-class ATACConfig:
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 18 — ATACConfig
+# ═══════════════════════════════════════════════════════════════════════
+class ATACConfig(BaseModel):
     """ATAC-specific configuration fields."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
-    # ── ATAC input ──
-    fragment_file: str = ""
-    barcodes_file: str = ""
     genome: str = "hg38"
     chrom_sizes: str = ""
     blacklist_bed: str = ""
     tss_bed: str = ""
-
-    # ── ATAC QC ──
     min_fragments: int = 1000
     max_fragments: int = 50000
     min_tsse: float = 7.0
     max_blacklist_ratio: float = 0.05
     min_peak_region_fragments: int = 300
-
-    # ── ATAC peak calling ──
     peak_qval: float = 0.05
     peak_width: int = 500
     use_macs3: bool = True
-
-    # ── ATAC dimensionality reduction ──
     n_features: int = 50000
     n_spectral: int = 30
-
-    # ── ATAC differential analysis ──
     marker_peaks_log2fc: float = 0.5
     marker_peaks_fdr: float = 0.05
-
-    # ── ATAC motif ──
     motif_db: str = "JASPAR2024"
-
-    # ── ATAC trajectory ──
-    terminal_cell_types: List[str] = field(default_factory=list)
-
-    # ── ATAC misc ──
+    terminal_cell_types: List[str] = Field(default_factory=list)
     max_cells: Optional[int] = None
 
 
-@dataclass
-class SpatialConfig:
-    """Spatial-specific configuration fields."""
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 19 — ExecutionConfig
+# ═══════════════════════════════════════════════════════════════════════
+class ExecutionConfig(BaseModel):
+    """Execution environment settings."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
-    # ── Spatial platform & input ──
-    spatial_platform: str = "visium"
-    library_id: str = ""
-    img_path: str = ""
-    spot_diameter: float = 0.0
-
-    # ── Spatial image processing ──
-    crop_image: bool = True
-    img_rescale: float = 1.0
-
-    # ── Spatial graph ──
-    spatial_neighbors_n: int = 6
-    spatial_neighbors_radius: float = 0.0
-
-    # ── Spatial SVG ──
-    run_spatial_autocorr: bool = True
-    moran_percentile: int = 90
-    svg_n_top: int = 2000
+    n_jobs: int = 0
+    limit_blas_threads: bool = True
+    random_seed: int = 42
+    scanpy_verbosity: int = 2
+    force_csr: bool = True
+    use_float32: bool = True
 
 
-@dataclass
-class Config:
-    """Fuxi unified config — 包含 RNA + ATAC + Spatial 所有字段"""
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 20 — AIConfig
+# ═══════════════════════════════════════════════════════════════════════
+class AIConfig(BaseModel):
+    """AI / LLM configuration — all AI features controlled here."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    enabled: bool = False
+    api_base: str = ""
+    model: str = "deepseek-v4-flash"
+    api_key: str = ""
+    max_tokens: int = 4096
+    temperature: float = 0.1
+    thinking_enabled: bool = True
+    reasoning_effort: str = "high"
+    timeout: Optional[int] = None
+    qc_review: bool = False
+    param_suggest: bool = False
+    annotation: bool = True
+    subcluster: bool = True
+    deg_design: bool = False
+    interpretation: bool = True
+    cache_responses: bool = True
+    unconstrained_annotation: bool = False
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Top-level Config
+# ═══════════════════════════════════════════════════════════════════════
+class Config(BaseModel):
+    """Fuxi unified config — contains all RNA + ATAC + Spatial fields."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     # ═══════════════════════════════════════════════════════════════════
-    #  组学类型
+    # 组学类型 & 元信息
     # ═══════════════════════════════════════════════════════════════════
-    modality: str = "rna"                # 'rna' | 'atac' | 'spatial'
+    modality: str = "rna"
+    tissue: str = "unknown"
+    species: str = "human"
+    tissue_maturity: str = "unknown"
+    expression_type: str = "raw_counts"
+    data_format: str = "10X_mtx"
 
     # ═══════════════════════════════════════════════════════════════════
-    #  路径设置（通用）
+    # 路径设置
     # ═══════════════════════════════════════════════════════════════════
     data_dir: str = ""
     results_dir: str = "results"
@@ -314,454 +456,114 @@ class Config:
     project_dir: str = ""
 
     # ═══════════════════════════════════════════════════════════════════
-    #  数据输入格式（通用）
+    # 执行环境相关（留在根级，与 ExecutionConfig 配合使用）
     # ═══════════════════════════════════════════════════════════════════
-    # RNA: '10X_mtx' | 'csv_matrix' | 'h5ad' | '10X_h5'
-    # ATAC: '10x_fragments' | 'h5ad' | '10x_peak_h5'
-    data_format: str = "10X_mtx"
-
-    # ── RNA: 10X MTX 格式 ──
-    mtx_prefix: str = ""
-    mtx_dir: str = ""
-
-    # ── RNA: CSV 矩阵格式 ──
-    matrix_file: str = ""
-    barcodes_file: str = ""
-    features_file: str = ""
-    csv_sep: Optional[str] = None
-    csv_decimal: str = '.'
-    gene_symbol_column: str = ''
-
-    # ── 通用: h5ad 格式 ──
-    input_h5ad: str = ""
-    backed: str = ""                     # ''=全量, 'r'=只读backed
-
-    # ── RNA: 10X HDF5 格式 ──
-    h5_file_pattern: str = "*filtered_feature_bc_matrix.h5"
-    h5_dir: str = ""
-
-    # ── ATAC: 10X fragment 模式 ──
-    fragment_file: str = ""
-    # barcodes_file already declared above
+    h5ad_compression: str = "gzip"
+    h5ad_tempdir: str = "/tmp/Fuxi"
+    cleanup_intermediates: bool = False
+    perf_monitoring: bool = True
 
     # ═══════════════════════════════════════════════════════════════════
-    #  RNA: 样本元数据映射
-    # ═══════════════════════════════════════════════════════════════════
-    sample_map: Dict[int, str] = field(default_factory=dict)
-    stage_map: Dict[int, str] = field(default_factory=dict)
-    stage_order: List[str] = field(default_factory=list)
-    meta_columns: Dict[str, str] = field(default_factory=dict)
-    barcode_parse_regex: str = ""
-    barcode_parse_groups: Dict[str, str] = field(default_factory=dict)
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  数据集元信息（通用）
-    # ═══════════════════════════════════════════════════════════════════
-    tissue: str = "unknown"
-    tissue_maturity: str = "unknown"     # "developing" | "adult" | "unknown"
-    species: str = "human"
-    expression_type: str = "raw_counts"  # raw_counts | log1p_counts | TPM | CPM | FPKM
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  RNA: QC 阈值
-    # ═══════════════════════════════════════════════════════════════════
-    min_genes: int = 500
-    max_genes: int = 7500
-    max_pct_mito: float = 20.0
-    mt_gene_pattern: str = "MT-"
-    mt_gene_list: List[str] = field(default_factory=list)
-    min_genes_per_umi: float = 0.7
-    min_cells_per_gene: int = 3
-    use_adaptive_thresholds: bool = False
-    mad_n_mads: float = 3.0
-    qc_ncount_max_mad: float = 5.0
-    min_mad_upper_genes: int = 4000         # n_genes MAD 上限安全地板（全细胞）
-    min_mad_upper_genes_nuclei: int = 3000  # n_genes MAD 上限安全地板（核）
-    # ── RNA snRNA-seq delegated via __getattr__ to RNAConfig ──
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  ATAC: 参考基因组
-    # ═══════════════════════════════════════════════════════════════════
-    genome: str = "hg38"
-    chrom_sizes: str = ""
-    blacklist_bed: str = ""
-    tss_bed: str = ""
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  ATAC: QC 阈值
-    # ═══════════════════════════════════════════════════════════════════
-    min_fragments: int = 1000
-    max_fragments: int = 50000
-    min_tsse: float = 7.0
-    max_blacklist_ratio: float = 0.05
-    min_peak_region_fragments: int = 300
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  ATAC: Peak calling
-    # ═══════════════════════════════════════════════════════════════════
-    peak_qval: float = 0.05
-    peak_width: int = 500
-    use_macs3: bool = True
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  RNA: Scrublet 双细胞检测
-    # ═══════════════════════════════════════════════════════════════════
-    run_scrublet: bool = True
-    scrublet_expected_doublet_rate: float | None = None  # None = 根据细胞数自动拟合
-    scrublet_batch_key: str = "sample"
-    scrublet_min_counts: int = 2
-    scrublet_min_cells: int = 3
-    scrublet_min_gene_var_pctl: int = 85
-    scrublet_n_prin_comps: int = 30
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  RNA: 归一化与 HVG
-    # ═══════════════════════════════════════════════════════════════════
-    normalize_target_sum: float = 1e4
-    n_top_genes: int = 4000
-    hvg_flavor: str = "seurat_v3"
-    hvg_batch_key: str = "sample"
-    use_regress_out: bool = True
-    score_cell_cycle: bool = False   # 可选: 在 normalize+log1p 后回归 S/G2M 分数
-
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  RNA: PCA
-    # ═══════════════════════════════════════════════════════════════════
-    n_pcs_full: int = 100
-    n_pcs_use: int = 50
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  RNA: Harmony 批次校正
-    # ═══════════════════════════════════════════════════════════════════
-    use_harmony: bool = True
-    harmony_batch_key: str = "sample"
-    harmony_max_iter: int = 20
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  RNA: 聚类与 UMAP
-    # ═══════════════════════════════════════════════════════════════════
-    n_neighbors: int = 30
-    leiden_resolutions: List[float] = field(
-        default_factory=lambda: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
-    )
-    param_grid_n_neighbors: list = field(default_factory=lambda: [15, 20, 30])
-    param_grid_resolutions: list = field(default_factory=lambda: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
-    leiden_flavor: str = "igraph"
-    best_resolution: float = 1.0   # Only used when cluster_selection_method is None
-    best_n_neighbors: int = 0       # Only used when cluster_selection_method is None; 0 = auto-pick best silhouette at the given resolution
-
-    # ── Cluster parameter selection (from grid search) ──
-    # "multi_metric":  Weighted ensemble of silhouette, stability, marker coverage (default)
-    # "pareto_elbow":  Pareto frontier + normalized elbow
-    # "silhouette":    Max silhouette score (old auto-select behavior)
-    # None:              Manual — specify both best_resolution + best_n_neighbors
-    #                    (0 = auto-pick best silhouette at given resolution)
-    cluster_selection_method: str | None = "multi_metric"
-
-    # ── Multi-metric clustering (weighted ensemble) ──
-    # Weights for the multi-metric consensus approach that combines
-    # silhouette, stability, cluster_coherence, splitting_gain, and
-    # kb_annotatable_rate into a single quality score. Higher weight = more
-    # influence on final cluster selection.
-    multi_metric_weights: dict = field(default_factory=lambda: {
-        "silhouette": 0.2,
-        "stability": 0.2,
-        "cluster_coherence": 0.3,
-        "splitting_gain": 0.2,
-        "kb_annotatable_rate": 0.1
-    })
-    # Number of subsampling seeds used to assess cluster stability.
-    # Higher values give more robust stability estimates at the cost of compute.
-    multi_metric_n_stability_seeds: int = 5
-    # If True, automatically adjust resolution range based on dataset size and
-    # complexity before the grid search sweep.
-    multi_metric_adaptive_resolution: bool = True
-    # Ratio threshold for detecting excessive marker coverage imbalance.
-    # Values > 1.5 trigger a warning that clustering may be too coarse.
-    multi_metric_coverage_ratio_threshold: float = 1.5
-    # 当 cluster_coherence 权重主导时，coherence 分数需超过该倍数的次优解
-    # 才会被选中；否则降级为多指标均衡投票。
-    multi_metric_coherence_dominance: float = 1.5
-    # 候选分辨率簇数的变异系数（CV）阈值；CV ≤ 此值认为粒度稳定。
-    multi_metric_granularity_cv_threshold: float = 0.05
-    # 粒度稳定的最低簇数要求；低于此值视为粒度不足。
-    multi_metric_granularity_min_clusters: int = 10
-    # DE 基因数量门控阈值；当 DE 基因数 < 此值时拒绝对该分辨率的正选。
-    multi_metric_de_gate_threshold: int = 25
-
-    # ── UMAP visualization parameter sweep ──
-    # After best (n_neighbors, resolution) is selected, optionally sweep
-    # min_dist × spread (same KNN graph — cheap).  Selection method:
-    #   "convex_hull"  — pick combination with largest convex-hull area (default)
-    #   None           — manual: use umap_min_dist / umap_spread directly
-    umap_selection_method: str | None = "convex_hull"
-    param_grid_min_dist: list | None = field(default_factory=lambda: [0.1, 0.3, 0.5])
-    param_grid_spread: list | None = field(default_factory=lambda: [1.0])
-    umap_min_dist: float = 0.3    # manual fallback
-    umap_spread: float = 1.0
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  ATAC: 降维
-    # ═══════════════════════════════════════════════════════════════════
-    n_features: int = 50000
-    n_spectral: int = 30
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  RNA: 细胞类型注释
-    # ═══════════════════════════════════════════════════════════════════
-    marker_dict: Dict[str, List[str]] = field(default_factory=dict)
-    subcluster_types: List[str] = field(default_factory=list)
-    subcluster_resolution: float = 0.4
-    min_cells_subcluster: int = 50
-    tissue_kb: str = ""
-    tissue_ontology: str = ""
-
-    # Phylogenetic filtering (v3.0.0+ KB feature).
-    # When non-empty, marker_scoring applies taxonomic weighting.
-    #   target_class  (str): Desired class (纲), e.g. "Mammalia".
-    #   target_order  (str): Desired order (目), e.g. "Primates".
-    # Both default to "" (no filtering — all KB sources used at full weight).
-    target_class: str = ""
-    target_order: str = ""
-
-    # Expert-rule constraint parameters (v3.0.0+ self-audit).
-    #
-    # Layer 1 — Precise overrides (0 / 0.0 = use template default):
-    #   expert_rule_top_n (int):
-    #       Only examine the top-N DE genes for rule-matching.
-    #       0 = use the value from the strictness template.
-    #   expert_rule_pval_cutoff (float):
-    #       Only consider genes with pvals_adj < this value.
-    #       0.0 = use the value from the strictness template.
-    #
-    # Layer 2 — Convenience template:
-    #   expert_rule_strictness (str):
-    #       "strict"   → top_n=50,   pval=0.01  (mature tissue, high-confidence)
-    #       "default"  → top_n=50,   pval=0.05  (general purpose, built-in default)
-    #       "deep"     → top_n=200,  pval=0.05  (KB markers rank deep but significant)
-    #       "wide"     → top_n=1000, pval=0.05  (developmental data, first triggers appear)
-    #       "relaxed"  → top_n=5000, pval=0.05  (developmental/organoid sweet spot)
-    #       "manual"   → requires both top_n (>0) AND pval_cutoff (>0.0)
-    #
-    #   pval_cutoff stays ≤ 0.05 in ALL presets — this is the last line of
-    #   defence against noise-triggered rules.  To relax pval beyond 0.05,
-    #   you MUST use "manual" + explicit expert_rule_pval_cutoff.
-    expert_rule_strictness: str = "default"
-    expert_rule_top_n: int = 0
-    expert_rule_pval_cutoff: float = 0.0
-
-    # Marker validation thresholds (v3.1.0+).
-    # Controls how StandardOntology.validate() cross-checks assigned cell types
-    # against KB markers using top DE genes.
-    #   marker_validation_n_top_genes (int):
-    #       Number of top DE genes per cluster to compare.  Default 15.
-    #   marker_validation_min_overlap (float):
-    #       Minimum overlap ratio (found/KB_total) for PASS status.
-    #       Default 0.5 (backward compatible).
-    #   marker_validation_marginal_threshold (float):
-    #       Threshold for MARGINAL tier (PASS > MARGINAL > LOW > FAIL).
-    #       Default 0.25.  Set to 0 to disable MARGINAL tier.
-    #   marker_validation_pass_rate_min (float):
-    #       Minimum PASS cell-rate for trajectory quality gate (Step 08).
-    #       Also used by Steps 07/09 for quality warnings.  Default 0.1.
-    marker_validation_n_top_genes: int = 15
-    marker_validation_min_overlap: float = 0.5
-    marker_validation_marginal_threshold: float = 0.25
-    marker_validation_pass_rate_min: float = 0.1
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  RNA: 差异表达分析
-    # ═══════════════════════════════════════════════════════════════════
-    de_method: str = "wilcoxon"
-    de_n_genes: int = 50
-    de_pval_cutoff: float = 0.05
-    de_logfc_cutoff: float = 0.25
-    de_stage_pairwise: bool = True
-    # When True and marker_validation pass_rate < threshold, Step 07
-    # automatically uses leiden-based grouping instead of cell_type labels.
-    # Default False: only warns, user decides.  (v3.1.0+)
-    de_auto_switch_on_low_quality: bool = False
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  ATAC: 差异分析
-    # ═══════════════════════════════════════════════════════════════════
-    marker_peaks_log2fc: float = 0.5
-    marker_peaks_fdr: float = 0.05
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  ATAC: Motif
-    # ═══════════════════════════════════════════════════════════════════
-    motif_db: str = "JASPAR2024"
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  RNA: 轨迹分析
-    # ═══════════════════════════════════════════════════════════════════
-    root_cell_types: List[str] = field(default_factory=list)
-    root_markers: List[str] = field(default_factory=list)
-    n_diffmap_comps: int = 15
-    n_branchings: int = 2
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  ATAC: 轨迹
-    # ═══════════════════════════════════════════════════════════════════
-    terminal_cell_types: List[str] = field(default_factory=list)
-
-    # --- Spatial: platform & input ---
-    spatial_platform: str = "visium"     # 'visium' | 'slideseq' | 'merfish' | 'seqfish'
-    library_id: str = ""                 # Visium library ID (e.g. 'V1_Adult_Mouse_Brain')
-    img_path: str = ""                   # Tissue image path (H&E or IF)
-    spot_diameter: float = 0.0           # Spot diameter in um; 0 = auto-detect from scalefactors
-
-    # --- Spatial: image processing ---
-    crop_image: bool = True              # Crop image to tissue region
-    img_rescale: float = 1.0             # Image rescale factor (1.0 = original)
-
-    # --- Spatial: spatial graph ---
-    spatial_neighbors_n: int = 6         # Number of spatial neighbors
-    spatial_neighbors_radius: float = 0.0  # Spatial radius; 0 = use n_neighbors
-
-    # --- Spatial: spatially variable genes (SVG) ---
-    run_spatial_autocorr: bool = True    # Run Moran's I spatial autocorrelation
-    moran_percentile: int = 90           # SVG percentile cutoff (0-100)
-    svg_n_top: int = 2000               # Max SVGs to retain (for downstream)
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  富集分析（通用）
-    # ═══════════════════════════════════════════════════════════════════
-    run_enrichment: bool = True
-    enrichment_method: str = "both"      # 'ora' | 'prerank' | 'both'
-    enrichment_gene_sets: list = field(
-        default_factory=lambda: [
-            'GO_Biological_Process_2023',
-            'KEGG_2021_Human',
-        ]
-    )
-    enrichment_organism: str = "human"
-    enrichment_n_top_genes: int = 200
-    enrichment_pval_cutoff: float = 0.05
-    enrichment_min_size: int = 10
-    enrichment_max_size: int = 500
-    enrichment_permutations: int = 1000
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  富集分析：组织/发育生物学感知（v4.0+）
-    # ═══════════════════════════════════════════════════════════════════
-    enrichment_tissue_mode: str = "off"
-        # 'off' | 'soft' | 'hard'
-        # off: 纯统计排序（当前行为）
-        # soft: 标注 tissue_relevant 列，不过滤任何行
-        # hard: 只保留 tissue_relevant=True 的通路
-    enrichment_tissue_pathways_whitelist: list = field(default_factory=lambda: [])
-        # 显式通路白名单（优先级最高），如 ["Phototransduction"]
-    enrichment_tissue_pathways_blacklist: list = field(default_factory=lambda: [])
-        # 显式通路黑名单（优先级第二），如 ["Ribosome", "Oxidative Phosphorylation"]
-    enrichment_redundancy_cluster: bool = False
-        # 是否对冗余通路做聚类合并（默认为 False，不改动现有行为）
-    enrichment_redundancy_threshold: float = 0.6
-        # 通路 Jaccard 相似度阈值（0-1），> 此值视为冗余
-    enrichment_use_kb_relevance: bool = False
-        # 是否使用 KB 标记基因计算通路组织相关度
-    enrichment_gene_sets_tissue: list = field(default_factory=lambda: [])
-        # 组织特异性基因集库名称列表，如 ['CellMarker_Augmented_2021', 'PanglaoDB_Augmented_2021']
-    enrichment_background_restrict: bool = False
-        # 是否限制背景为数据中检测到的基因（Phase 2 预留，暂未实现）
-    peak_gene_distance: int = 100000    # ATAC: peak-to-gene 映射距离
-    gene_annotation_bed: str = ""       # ATAC: gene TSS BED (chr,start,end,gene_name,strand)
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  RNA: 降采样 (Step 01)
-    # ═══════════════════════════════════════════════════════════════════
-    downsample_target: Optional[int] = None
-    downsample_strategy: str = "stratified"
-    downsample_max_per_sample: Optional[int] = None
-    downsample_random_seed: int = 42
-    # ── RNA 样本/细胞子集过滤（子集 pipeline）──
-    sample_keep: List[str] = field(default_factory=list)
-    obs_filter: str = ""
-    subset_suffix: str = ""
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  ATAC: 降采样
-    # ═══════════════════════════════════════════════════════════════════
-    max_cells: Optional[int] = None
-
-    # ============================================================
-    #  RNA: GRN gene regulatory network analysis (Step 11)
-    # ============================================================
-    run_grn: bool = True
-    grn_method: str = "decoupler"          # 'decoupler' only for now
-    grn_species: str = "human"             # 'human' | 'mouse'
-    grn_n_top_regulons: int = 50
-    grn_min_regulon_size: int = 5
-    grn_confidence_levels: list = field(
-        default_factory=lambda: ["A", "B", "C"]
-    )
-
-    # ── GRN tissue awareness ──
-    grn_tissue_mode: str = "off"
-    grn_use_kb_relevance: bool = False
-    grn_export_filtered: bool = False
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  CCI: Cell-cell interaction analysis (RNA Step 12 / Spatial Step 10 / adjacency filter v4.0+)
-    # ═══════════════════════════════════════════════════════════════════
-    run_cci: bool = True
-    cci_method: str = "liana"              # 'liana' (LIANA+ rank_aggregate)
-    cci_lr_database: str = "consensus"     # 'consensus' | 'cellphonedb' | 'cellchat' | 'celltalkdb' | 'ramilowski' | 'talklr'
-    cci_permutations: int = 100            # permutation test iterations (default 100)
-    cci_n_top_interactions: int = 50       # top N interactions for heatmap / dotplot
-    cci_spatial_method: str = "liana_spatial"  # (spatial) 'liana_spatial' — reserves 'commot' for future
-    cci_spatial_distance: float = 0.0      # (spatial) 0 = use existing spatial_connectivities
-    cci_lr_cache_dir: str = ""             # LIANA cache dir; empty = auto (~/.cache/liana)
-    # ── CCI 解剖学约束（v4.0+） ──
-    cci_adjacency: str = "off"          # 'off' | 'soft' | 'hard'
-    cci_tissue: str = ""                # 组织名（为空自动使用 CFG.tissue）
-    cci_adjacency_file: str = ""        # 自定义 CSV 路径（非空时覆盖 KB）
-    cci_adjacency_types: list = field(default_factory=lambda: [])
-    # cci_multi_condition: bool = False    # future: multi-condition differential CCI
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  执行环境（通用）
-    # ═══════════════════════════════════════════════════════════════════
-    n_jobs: int = 0                     # 0 = os.cpu_count()；项目 config 可覆写
-    limit_blas_threads: bool = True     # 控制 OMP/MKL 线程数，锁定为 n_jobs 值
-    random_seed: int = 42
-    scanpy_verbosity: int = 2
-    force_csr: bool = True
-    use_float32: bool = True
-    h5ad_compression: str = "gzip"       # 'gzip' | 'lzf' | 'zstd'
-    h5ad_tempdir: str = "/tmp/Fuxi"      # safe_write 临时目录
-    cleanup_intermediates: bool = False  # ATAC: 自动删除上游中间 checkpoint
-    perf_monitoring: bool = True  # 是否启用性能监控（CPU/内存/形状追踪）
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  AI 配置（通用）
-    # ═══════════════════════════════════════════════════════════════════
-    ai: AIConfig = field(default_factory=AIConfig)
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  Modality-specific nested configs
-    # ═══════════════════════════════════════════════════════════════════
-    rna: RNAConfig = field(default_factory=RNAConfig)
-    atac: ATACConfig = field(default_factory=ATACConfig)
-    spatial: SpatialConfig = field(default_factory=SpatialConfig)
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  ATAC: RNA 整合 (Step 09)
+    # ATAC → RNA 整合 / Spatial RNA 参考
     # ═══════════════════════════════════════════════════════════════════
     rna_h5ad: str = ""
-
-    # ═══════════════════════════════════════════════════════════════════
-    #  Spatial: scRNA reference for marker-list transfer (Step 05)
-    # ═══════════════════════════════════════════════════════════════════
     rna_ref: str = ""
     rna_marker_top_n: int = 10
     rna_marker_pval_threshold: float = 0.05
     rna_marker_logfc_min: float = 0.0
 
     # ═══════════════════════════════════════════════════════════════════
-    #  RNA: checkpoint 路径（属性）
+    # 组织知识库 (tissue_kb / tissue_ontology 保留在根级，由下游模块使用)
+    # ═══════════════════════════════════════════════════════════════════
+    tissue_kb: str = ""
+    tissue_ontology: str = ""
+
+    # ═══════════════════════════════════════════════════════════════════
+    # 系统发育过滤 (phylogenetic filtering for KB)
+    # ═══════════════════════════════════════════════════════════════════
+    target_class: str = ""
+    target_order: str = ""
+
+    # ═══════════════════════════════════════════════════════════════════
+    # 20 个主题子模型
+    # ═══════════════════════════════════════════════════════════════════
+    data_input: DataInputConfig = Field(default_factory=DataInputConfig)
+    sample_meta: SampleMetaConfig = Field(default_factory=SampleMetaConfig)
+    qc: QCSettings = Field(default_factory=QCSettings)
+    scrublet: ScrubletSettings = Field(default_factory=ScrubletSettings)
+    normalization: NormalizationSettings = Field(default_factory=NormalizationSettings)
+    hvg: HVGSettings = Field(default_factory=HVGSettings)
+    pca: PCASettings = Field(default_factory=PCASettings)
+    harmony: HarmonySettings = Field(default_factory=HarmonySettings)
+    clustering: ClusteringSettings = Field(default_factory=ClusteringSettings)
+    marker: MarkerSettings = Field(default_factory=MarkerSettings)
+    de: DESettings = Field(default_factory=DESettings)
+    trajectory: TrajectorySettings = Field(default_factory=TrajectorySettings)
+    enrichment: EnrichmentSettings = Field(default_factory=EnrichmentSettings)
+    grn: GRNSettings = Field(default_factory=GRNSettings)
+    cci: CCISettings = Field(default_factory=CCISettings)
+    downsample: DownsampleSettings = Field(default_factory=DownsampleSettings)
+    spatial: SpatialConfig = Field(default_factory=SpatialConfig)
+    atac: ATACConfig = Field(default_factory=ATACConfig)
+    execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
+    ai: AIConfig = Field(default_factory=AIConfig)
+
+
+    def model_post_init(self, __context):
+        """Resolve relative paths after construction.
+
+        Replaces the old resolve_paths() with Pydantic-native
+        post-init hook.
+        """
+        base = self.project_dir if self.project_dir else os.path.dirname(os.path.abspath(__file__))
+
+        # Treat '.' as "not set" for mtx_dir
+        if self.data_input.mtx_dir == '.':
+            self.data_input.mtx_dir = ""
+
+        # Resolve top-level relative paths to absolute
+        for attr in (
+            "data_dir", "results_dir", "h5ad_dir",
+            "figure_dir", "table_dir", "log_dir",
+        ):
+            val = getattr(self, attr)
+            if val and not os.path.isabs(val):
+                setattr(self, attr, os.path.join(base, val))
+
+        # Resolve sub-model relative paths to absolute
+        sub = self.data_input
+        if sub.mtx_dir and not os.path.isabs(sub.mtx_dir):
+            sub.mtx_dir = os.path.join(base, sub.mtx_dir)
+        if sub.h5_dir and not os.path.isabs(sub.h5_dir):
+            sub.h5_dir = os.path.join(base, sub.h5_dir)
+
+        # Auto-resolve data_dir from FUXI_DATA_ROOT when empty
+        if not self.data_dir:
+            _data_root = os.environ.get('FUXI_DATA_ROOT') or os.environ.get('SCRNA_DATA_ROOT')
+            if _data_root:
+                dataset_id = os.path.basename(self.project_dir or base)
+                self.data_dir = os.path.join(_data_root, dataset_id)
+            else:
+                self.data_dir = base
+
+        # Auto-fill mtx_dir and h5_dir from data_dir
+        if not self.data_input.mtx_dir:
+            self.data_input.mtx_dir = self.data_dir
+        if not self.data_input.h5_dir:
+            self.data_input.h5_dir = self.data_dir
+
+        # Subset filter: auto-append suffix to output dirs
+        ds = self.downsample
+        if ds.sample_keep or (ds.obs_filter and ds.obs_filter.strip()):
+            suffix = ds.subset_suffix if ds.subset_suffix else "_subset"
+            self.h5ad_dir = self.h5ad_dir.rstrip('/\\') + suffix
+            self.figure_dir = self.figure_dir.rstrip('/\\') + suffix
+            self.table_dir = self.table_dir.rstrip('/\\') + suffix
+            self.log_dir = self.log_dir.rstrip('/\\') + suffix
+            print(f"[Config] Subset active → output dir suffix: '{suffix}'")
+
+    # ═══════════════════════════════════════════════════════════════════
+    # RNA checkpoint 路径（属性）
     # ═══════════════════════════════════════════════════════════════════
     @property
     def raw_h5ad(self) -> str:
@@ -820,7 +622,7 @@ class Config:
     def trajectory_h5ad(self) -> str:
         return os.path.join(self.h5ad_dir, "07_trajectory.h5ad")
 
-    # -- Spatial: checkpoint paths --
+    # ── Spatial: checkpoint paths ──
     @property
     def sq_image_h5ad(self) -> str:
         return os.path.join(self.h5ad_dir, "02_image.h5ad")
@@ -829,95 +631,18 @@ class Config:
     def sq_processed_h5ad(self) -> str:
         return os.path.join(self.h5ad_dir, "03_processed.h5ad")
 
-    # ──────────────────────────────────────────────────────────────────
+    # ═══════════════════════════════════════════════════════════════════
     #  方法
-    # ──────────────────────────────────────────────────────────────────
-    def resolve_paths(self):
-        """解析所有路径。非绝对路径视为相对于 project_dir 或 config.py 所在目录。"""
-        base = self.project_dir if self.project_dir else os.path.dirname(os.path.abspath(__file__))
-
-        # Treat '.' as "not set" — will fall back to data_dir below.
-        # Per-dataset configs should no longer hard-code '.' here.
-        if self.mtx_dir == '.':
-            self.mtx_dir = ""
-
-        for attr in [
-            "data_dir", "results_dir", "h5ad_dir",
-            "figure_dir", "table_dir", "log_dir",
-            "mtx_dir", "h5_dir",
-        ]:
-            val = getattr(self, attr)
-            if val and not os.path.isabs(val):
-                setattr(self, attr, os.path.join(base, val))
-
-        # Auto-resolve data_dir from FUXI_DATA_ROOT + dataset_id.
-        # This eliminates the need to hard-code data paths in per-dataset configs.
-        if not self.data_dir:
-            _data_root = os.environ.get('FUXI_DATA_ROOT') or os.environ.get('SCRNA_DATA_ROOT')
-            if _data_root:
-                dataset_id = os.path.basename(self.project_dir or base)
-                self.data_dir = os.path.join(_data_root, dataset_id)
-            else:
-                self.data_dir = base
-
-        if not self.mtx_dir:
-            self.mtx_dir = self.data_dir
-        if not self.h5_dir:
-            self.h5_dir = self.data_dir
-
-        # ── Subset filter: auto-append suffix to output dirs ──
-        if self.sample_keep or (self.obs_filter and self.obs_filter.strip()):
-            suffix = self.subset_suffix if self.subset_suffix else "_subset"
-            self.h5ad_dir = self.h5ad_dir.rstrip('/\\') + suffix
-            self.figure_dir = self.figure_dir.rstrip('/\\') + suffix
-            self.table_dir = self.table_dir.rstrip('/\\') + suffix
-            self.log_dir = self.log_dir.rstrip('/\\') + suffix
-            print(f"[Config] Subset active → output dir suffix: '{suffix}'")
-
-
-        for d in [self.results_dir, self.h5ad_dir,
-                  self.figure_dir, self.table_dir, self.log_dir]:
-            os.makedirs(d, exist_ok=True)
-
+    # ═══════════════════════════════════════════════════════════════════
     def has_sample_mapping(self) -> bool:
-        return len(self.sample_map) > 0
+        return len(self.sample_meta.sample_map) > 0
 
     def has_stage_mapping(self) -> bool:
-        return len(self.stage_map) > 0
+        return len(self.sample_meta.stage_map) > 0
 
     def has_markers(self) -> bool:
-        return len(self.marker_dict) > 0
+        return len(self.marker.marker_dict) > 0
 
     def has_rna_data(self) -> bool:
         """ATAC: check if RNA data is available for integration"""
         return bool(self.rna_h5ad) and os.path.exists(self.rna_h5ad)
-
-    def __getattr__(self, name: str):
-        """Fallback: delegate attribute access to the active modality's config.
-
-        This enables backward-compatible access to modality-specific fields
-        that may be moved to nested configs over time.  For example,
-        ``CFG.n_top_genes`` will resolve to ``CFG.rna.n_top_genes`` when
-        the active modality is ``"rna"``.
-        """
-        modality_map = {
-            "rna": "rna",
-            "atac": "atac",
-            "spatial": "spatial",
-        }
-        cfg_name = modality_map.get(self.modality)
-        if cfg_name is not None:
-            modality_cfg = object.__getattribute__(self, cfg_name)
-            try:
-                return object.__getattribute__(modality_cfg, name)
-            except AttributeError:
-                pass
-        raise AttributeError(
-            f"'{type(self).__name__}' object has no attribute '{name}'"
-        )
-
-
-# ═══════════════════════════════════════════════════════════════════════
-#  全局实例
-# ═══════════════════════════════════════════════════════════════════════
-CFG = Config()
