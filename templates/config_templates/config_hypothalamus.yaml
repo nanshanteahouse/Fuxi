@@ -81,6 +81,13 @@ harmony:
   batch_key: sample
   max_iter: 20
 
+  # -- v4.x+: batch diagnosis (auto-classify batch vs biology columns) --
+  diagnose: true
+  diagnose_report: true
+  # thresholds backed by scIB benchmarking
+  gini_batch_threshold: 0.3
+  gini_biology_threshold: 0.6
+
 # ── PCA ──
 pca:
   n_pcs_full: 100

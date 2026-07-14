@@ -162,6 +162,14 @@ class HarmonySettings(BaseModel):
     batch_key: str = "sample"
     max_iter: int = 20
 
+    diagnose: bool = True
+    diagnose_report: bool = True
+    diagnose_exclude_patterns: list[str] = Field(
+        default_factory=lambda: ['*leiden*', '*cell_type*', '*annotation*', '*annotated*']
+    )
+    gini_batch_threshold: float = 0.3
+    gini_biology_threshold: float = 0.6
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Sub-model 9 — ClusteringSettings
