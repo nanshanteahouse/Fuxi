@@ -55,6 +55,9 @@ class DataInputConfig(BaseModel):
     h5_file_pattern: str = "*filtered_feature_bc_matrix.h5"
     h5_dir: str = ""
     fragment_file: str = ""
+    # ── Preprocessed (embedded metadata columns) format ──
+    file_pattern: str = "*.tsv.gz"
+    separator: str = ""          # empty = auto-detect (tab vs comma)
 
 
 # ═══════════════════════════════════════════════════════════════════════

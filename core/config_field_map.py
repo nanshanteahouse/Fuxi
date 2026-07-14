@@ -126,6 +126,8 @@ FIELD_MAP: Dict[str, str] = {
     "h5_file_pattern": "data_input.h5_file_pattern",
     "h5_dir": "data_input.h5_dir",
     "fragment_file": "data_input.fragment_file",
+    "file_pattern": "data_input.file_pattern",
+    "separator": "data_input.separator",
 
     # ═══════════════════════════════════════════════════════════════════
     # sample_meta — SampleMetaConfig
