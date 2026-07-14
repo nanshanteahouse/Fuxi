@@ -21,37 +21,35 @@ dataset_schema.py — dataset.yaml Python 数据模型
 import os
 import yaml
 import logging
-import os
-import yaml
-from dataclasses import dataclass, field
-from typing import Optional
 from typing import Optional
 
+from pydantic import BaseModel, Field, ConfigDict
 
-@dataclass
-class FileEntry:
+
+class FileEntry(BaseModel):
     """单个数据文件描述"""
+    model_config = ConfigDict(extra="forbid")
     file: str
     format: str
 
 
-@dataclass
-class SampleEntry:
+class SampleEntry(BaseModel):
     """样本描述 — 包含 RNA/ATAC/Spatial 文件列表"""
+    model_config = ConfigDict(extra="forbid")
     id: str
     label: str
     group: Optional[str] = None
-    rna: list = field(default_factory=list)      # list[FileEntry]
-    atac: list = field(default_factory=list)     # list[FileEntry]
-    spatial: list = field(default_factory=list)  # list[FileEntry]
-    spots: list = field(default_factory=list)    # spatial-specific
-    species: Optional[str] = None                # cross-species datasets
+    rna: list[FileEntry] = Field(default_factory=list)
+    atac: list[FileEntry] = Field(default_factory=list)
+    spatial: list[FileEntry] = Field(default_factory=list)
+    spots: list[FileEntry] = Field(default_factory=list)
+    species: Optional[str] = None
     note: Optional[str] = None
 
 
-@dataclass
-class ModalityEntry:
+class ModalityEntry(BaseModel):
     """组学类型声明"""
+    model_config = ConfigDict(extra="forbid")
     name: str            # scRNA-seq, scATAC-seq, spatial_transcriptomics, sc_multiome
     status: str          # downloaded, partial, not_downloaded
     format: str
@@ -62,42 +60,42 @@ class ModalityEntry:
     note: Optional[str] = None
 
 
-@dataclass
-class Comparison:
+class Comparison(BaseModel):
     """实验比较设计"""
+    model_config = ConfigDict(extra="forbid")
     name: str
     type: str            # condition, time_series, perturbation
-    groups: list = field(default_factory=list)
+    groups: list[str] = Field(default_factory=list)
 
 
-@dataclass
-class Resources:
+class Resources(BaseModel):
     """外部资源引用"""
+    model_config = ConfigDict(extra="forbid")
     genome: Optional[str] = None
     ortholog_map: Optional[str] = None
     technology: Optional[str] = None
 
 
-@dataclass
-class PipelineStatus:
+class PipelineStatus(BaseModel):
     """管线运行状态"""
+    model_config = ConfigDict(extra="forbid")
     scRNAseq: Optional[str] = None   # pending, running, completed, failed
     ATACseq: Optional[str] = None
     spatial: Optional[str] = None
 
 
-@dataclass
-class Meta:
+class Meta(BaseModel):
     """元数据的元数据"""
+    model_config = ConfigDict(extra="forbid")
     created: Optional[str] = None
     updated: Optional[str] = None
     generated_by: Optional[str] = None
-    pipeline_status: PipelineStatus = field(default_factory=PipelineStatus)
+    pipeline_status: PipelineStatus = Field(default_factory=PipelineStatus)
 
 
-@dataclass
-class DatasetMeta:
+class DatasetMeta(BaseModel):
     """完整的 dataset.yaml 数据模型"""
+    model_config = ConfigDict(extra="forbid")
     id: str
     type: str           # SingleAccession, SuperSeries
     title: str
@@ -110,198 +108,32 @@ class DatasetMeta:
     parent_superseries: Optional[str] = None
     assay_type: Optional[str] = None
 
-    modalities: list = field(default_factory=list)      # list[ModalityEntry]
-    samples: list = field(default_factory=list)          # list[SampleEntry]
-    subseries: list = field(default_factory=list)        # SuperSeries only
-    comparisons: list = field(default_factory=list)      # list[Comparison]
+    modalities: list[ModalityEntry] = Field(default_factory=list)
+    samples: list[SampleEntry] = Field(default_factory=list)
+    subseries: list[dict[str, str]] = Field(default_factory=list)
+    comparisons: list[Comparison] = Field(default_factory=list)
     resources: Optional[Resources] = None
-    meta: Meta = field(default_factory=Meta)
+    meta: Meta = Field(default_factory=Meta)
 
 
 def load_dataset(yaml_path: str) -> DatasetMeta:
     """从 YAML 文件加载数据集元数据"""
     with open(yaml_path, 'r', encoding='utf-8') as f:
-        data = yaml.safe_load(f)
-
-    # Parse modalities
-    modalities = []
-    for m in data.get('modalities', []):
-        modalities.append(ModalityEntry(
-            name=m.get('name', ''),
-            status=m.get('status', ''),
-            format=m.get('format', ''),
-            file_count=m.get('file_count', 0),
-            total_size_gb=m.get('total_size_gb', 0.0),
-            assay_type=m.get('assay_type'),
-            subseries=m.get('subseries'),
-            note=m.get('note'),
-        ))
-
-    # Parse samples
-    samples = []
-    for s in data.get('samples', []):
-        samples.append(SampleEntry(
-            id=s.get('id', ''),
-            label=s.get('label', ''),
-            group=s.get('group'),
-            rna=s.get('rna', []),
-            atac=s.get('atac', []),
-            spatial=s.get('spatial', []),
-            spots=s.get('spots'),
-            species=s.get('species'),
-            note=s.get('note'),
-        ))
-
-    # Parse comparisons
-    comparisons = []
-    for c in data.get('comparisons', []):
-        comparisons.append(Comparison(
-            name=c.get('name', ''),
-            type=c.get('type', ''),
-            groups=c.get('groups', []),
-        ))
-
-    # Parse resources
-    res = data.get('resources')
-    resources = Resources(
-        genome=res.get('genome') if res else None,
-        ortholog_map=res.get('ortholog_map') if res else None,
-        technology=res.get('technology') if res else None,
-    ) if res else None
-
-    # Parse meta
-    m = data.get('meta', {})
-    ps = m.get('pipeline_status', {})
-    meta = Meta(
-        created=m.get('created'),
-        updated=m.get('updated'),
-        generated_by=m.get('generated_by'),
-        pipeline_status=PipelineStatus(
-            scRNAseq=ps.get('scRNAseq'),
-            ATACseq=ps.get('ATACseq'),
-            spatial=ps.get('spatial'),
-        ),
-    )
-
-    return DatasetMeta(
-        id=data.get('id', ''),
-        type=data.get('type', 'SingleAccession'),
-        title=data.get('title', ''),
-        species=data.get('species'),
-        species_key=data.get('species_key'),
-        tissue=data.get('tissue'),
-        note=data.get('note'),
-        description=data.get('description'),
-        pubmed_id=data.get('pubmed_id'),
-        parent_superseries=data.get('parent_superseries'),
-        assay_type=data.get('assay_type'),
-        modalities=modalities,
-        samples=samples,
-        subseries=data.get('subseries', []),
-        comparisons=comparisons,
-        resources=resources,
-        meta=meta,
-    )
-
-
-def _sample_to_dict(s):
-    """Serialize a SampleEntry to a plain dict for YAML emission."""
-    d = {"id": s.id, "label": s.label}
-    if s.group is not None:
-        d["group"] = s.group
-    if s.species is not None:
-        d["species"] = s.species
-    if s.note is not None:
-        d["note"] = s.note
-    if s.rna:
-        d["rna"] = [{"file": f.file, "format": f.format} if isinstance(f, FileEntry) else f
-                     for f in s.rna]
-    if s.atac:
-        d["atac"] = [{"file": f.file, "format": f.format} if isinstance(f, FileEntry) else f
-                      for f in s.atac]
-    if s.spatial:
-        d["spatial"] = [{"file": f.file, "format": f.format} if isinstance(f, FileEntry) else f
-                         for f in s.spatial]
-    if s.spots:
-        d["spots"] = [{"file": f.file, "format": f.format} if isinstance(f, FileEntry) else f
-                       for f in s.spots]
-    return d
+        return DatasetMeta.model_validate(yaml.safe_load(f))
 
 
 def save_dataset(ds: DatasetMeta, yaml_path: str) -> None:
     """将 DatasetMeta 保存为 YAML 文件"""
-    import yaml
-    from datetime import datetime
-
-    data = {
-        "id": ds.id,
-        "type": ds.type,
-        "title": ds.title,
-    }
-    if ds.species is not None:
-        data["species"] = ds.species
-    if ds.species_key is not None:
-        data["species_key"] = ds.species_key
-    if ds.tissue is not None:
-        data["tissue"] = ds.tissue
-    if ds.note is not None:
-        data["note"] = ds.note
-    if ds.description is not None:
-        data["description"] = ds.description
-    if ds.pubmed_id is not None:
-        data["pubmed_id"] = ds.pubmed_id
-    if ds.parent_superseries is not None:
-        data["parent_superseries"] = ds.parent_superseries
-    if ds.assay_type is not None:
-        data["assay_type"] = ds.assay_type
-
-    data["modalities"] = [
-        {
-            "name": m.name,
-            "status": m.status,
-            "format": m.format,
-            "file_count": m.file_count,
-            "total_size_gb": m.total_size_gb,
-            "assay_type": m.assay_type,
-        }
-        for m in ds.modalities
-    ]
-
-    data["samples"] = [_sample_to_dict(s) for s in ds.samples]
-
-    if ds.subseries:
-        data["subseries"] = ds.subseries
-
-    data["comparisons"] = [
-        {"name": c.name, "type": c.type, "groups": c.groups}
-        for c in ds.comparisons
-    ]
-
-    res = ds.resources
-    if res is not None:
-        data["resources"] = {}
-        if res.genome:
-            data["resources"]["genome"] = res.genome
-        if res.ortholog_map:
-            data["resources"]["ortholog_map"] = res.ortholog_map
-        if res.technology:
-            data["resources"]["technology"] = res.technology
-
-    ps = ds.meta.pipeline_status
-    data["meta"] = {
-        "created": ds.meta.created or datetime.now().isoformat(),
-        "updated": ds.meta.updated or datetime.now().isoformat(),
-        "generated_by": ds.meta.generated_by or "fuxi_preprocess",
-        "pipeline_status": {
-            "scRNAseq": ps.scRNAseq,
-            "ATACseq": ps.ATACseq,
-            "spatial": ps.spatial,
-        },
-    }
-
     os.makedirs(os.path.dirname(yaml_path) or ".", exist_ok=True)
     with open(yaml_path, 'w', encoding='utf-8') as f:
-        yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+        yaml.dump(
+            ds.model_dump(exclude_none=True, exclude_defaults=True, by_alias=True),
+            f,
+            default_flow_style=False,
+            sort_keys=False,
+            allow_unicode=True,
+            indent=2,
+        )
 
 
 # Modality key mapping for pipeline status updates
@@ -331,5 +163,8 @@ def update_pipeline_status(yaml_path: Optional[str], modality_key: str, status: 
 
     ds = load_dataset(yaml_path)
     status_key = _MODALITY_TO_STATUS_KEY[modality_key]
-    setattr(ds.meta.pipeline_status, status_key, status)
+    # Immutable-style update via model_copy instead of setattr
+    new_pipeline_status = ds.meta.pipeline_status.model_copy(update={status_key: status})
+    new_meta = ds.meta.model_copy(update={"pipeline_status": new_pipeline_status})
+    ds = ds.model_copy(update={"meta": new_meta})
     save_dataset(ds, yaml_path)
