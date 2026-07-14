@@ -125,8 +125,7 @@ class RNAConfig:
     use_regress_out: bool = True
     score_cell_cycle: bool = False   # 可选: 在 normalize+log1p 后回归 S/G2M 分数
     regress_out_genes: List[str] = field(default_factory=list)
-    detect_sex: bool = False
-    sex_detection_threshold: float = 0.0
+    detect_sex: bool = True
 
     # ── RNA PCA ──
     n_pcs_full: int = 100
@@ -170,6 +169,7 @@ class RNAConfig:
     marker_validation_min_overlap: float = 0.5
     marker_validation_marginal_threshold: float = 0.25
     marker_validation_pass_rate_min: float = 0.1
+    step10_groupby: List[str] = field(default_factory=list)
 
     # ── RNA DE analysis ──
     de_method: str = "wilcoxon"

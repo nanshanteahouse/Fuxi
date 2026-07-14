@@ -124,7 +124,56 @@ def main():
         sizes.to_csv(os.path.join(CFG.table_dir, f'{group_col}_sizes.csv'),
                      header=['n_cells'])
 
-    log.info("Step 06 complete, took %.1fs", time.time() - t0)
+    # 6. 额外元数据分组可视化
+    # 来源 A: 用户显式配置的 meta_columns
+    extra_cols = set()
+    for obs_col in getattr(CFG, 'meta_columns', {}).values():
+        if obs_col and obs_col in adata.obs:
+            extra_cols.add(obs_col)
+    # 来源 B: 用户手动指定的 step10_groupby 覆盖
+    for obs_col in getattr(CFG, 'step10_groupby', []):
+        if obs_col in adata.obs:
+            extra_cols.add(obs_col)
+    # 来源 C: 自动发现非 pipeline 分类列 (meta_columns 覆盖不到的)
+    pipeline_prefixes = (
+        'n_genes', 'log1p_', 'total_counts', 'pct_counts',
+        'leiden_', 'doublet_', 'predicted_', 'annot_',
+        'marker_', 'scater_', 'X_', 'umap_',
+    )
+    auto_skip = {'Barcode', 'sample', 'stage', 'batch', 'leiden',
+                  'cell_type', 'cell_type_sub', 'cell_state', 'log_genes_per_umi'}
+    for col in adata.obs.columns:
+        if col in extra_cols or col in auto_skip:
+            continue
+        if col.startswith(pipeline_prefixes):
+            continue
+        n_unique = adata.obs[col].nunique()
+        if 2 <= n_unique <= 50:
+            extra_cols.add(col)
+    # 系统自动生成的列
+    if 'predicted_sex' in adata.obs:
+        extra_cols.add('predicted_sex')
+
+    for col in sorted(extra_cols):
+        if col not in adata.obs:
+            continue
+        n_unique = adata.obs[col].nunique()
+        if n_unique > 50:
+            continue
+
+        # Distribution CSV
+        sizes = adata.obs[col].value_counts().sort_index()
+        log.info("  %s distribution:", col)
+        for label, cnt in sizes.items():
+            log.info("    %s: %d cells (%.1f%%)", label, cnt, 100 * cnt / adata.n_obs)
+        sizes.to_csv(os.path.join(CFG.table_dir, f'{col}_sizes.csv'), header=['n_cells'])
+
+        # UMAP
+        safe_plot(sc.pl.umap, adata, color=col, show=False,
+                  legend_loc='on data' if len(sizes) < 30 else 'right margin',
+                  save=f'_10_umap_{col}.pdf')
+
+    log.info("Step 10 complete, took %.1fs", time.time() - t0)
 
 if __name__ == '__main__':
     main()
