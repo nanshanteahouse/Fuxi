@@ -22,20 +22,22 @@ from joblib import Parallel, delayed
 import gc
 
 def layer1_markers(adata, CFG, log, group_col):
-    """全细胞类型标记基因 (Wilcoxon, each vs rest) for a given annotation column
+    """Full cell-type marker genes (configurable method) for a given annotation column
     Returns (filtered_df, unfiltered_df).
     """
     log.info("[Layer 1] Marker gene detection: groupby=%s", group_col)
     sc.tl.rank_genes_groups(
-        adata, groupby=group_col, method='wilcoxon',
+        adata, groupby=group_col, method=CFG.de.method,
         n_genes=CFG.de.n_genes * 2, use_raw=True, pts=True,
         random_state=CFG.execution.random_seed,
     )
 
     # Step A: export unfiltered (full markers for downstream Steps 09/10)
     result_all = sc.get.rank_genes_groups_df(adata, group=None)
-    if CFG.de.pval_cutoff is not None:
+    if CFG.de.pval_cutoff is not None and 'pvals_adj' in result_all.columns:
         result_all = result_all[result_all['pvals_adj'] < CFG.de.pval_cutoff]
+    elif CFG.de.pval_cutoff is not None and 'pvals_adj' not in result_all.columns:
+        log.info("  pvals_adj not available (method=%s) — skipping p-value filter", CFG.de.method)
     out_path = os.path.join(CFG.table_dir, f'marker_genes_per_group_{group_col}.csv')
     result_all.to_csv(out_path, index=False)
     log.info("  Exported (unfiltered): %s (%d rows)", out_path, len(result_all))
@@ -83,7 +85,7 @@ def _layer2_one_pair(ct, s1, s2, adata, ct_col, CFG, log):
             use_raw=True, random_state=CFG.execution.random_seed,
         )
         de_df = sc.get.rank_genes_groups_df(sub, group=s2)
-        if CFG.de.pval_cutoff is not None:
+        if CFG.de.pval_cutoff is not None and 'pvals_adj' in de_df.columns:
             de_df = de_df[de_df['pvals_adj'] < CFG.de.pval_cutoff].copy()
         de_df['cell_type'] = ct
         de_df['comparison'] = f'{s2}_vs_{s1}'

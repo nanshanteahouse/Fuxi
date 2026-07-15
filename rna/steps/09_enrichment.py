@@ -173,13 +173,17 @@ def _ora_one_group(
     CFG,
     log,
 ):
-    """Run ORA for a single group via Enrichr API (used by ThreadPoolExecutor)."""
-    grp_up_df = (
-        grp_df[grp_df['logfoldchanges'] > 0]
-        .nsmallest(CFG.enrichment.n_top_genes, 'pvals_adj')
-        [['names']]
-        .copy()
-    )
+    # Filter up-regulated genes: use logfoldchanges if available, else scores
+    if 'logfoldchanges' in grp_df.columns:
+        grp_up_df = grp_df[grp_df['logfoldchanges'] > 0].copy()
+    else:
+        grp_up_df = grp_df[grp_df['scores'] > 0].copy()
+    # Select top N: use pvals_adj if available, else scores
+    if 'pvals_adj' in grp_up_df.columns:
+        grp_up_df = grp_up_df.nsmallest(CFG.enrichment.n_top_genes, 'pvals_adj')
+    else:
+        grp_up_df = grp_up_df.nlargest(CFG.enrichment.n_top_genes, 'scores')
+    grp_up_df = grp_up_df[['names']].copy()
     grp_up_df['gene'] = grp_up_df['names'].apply(_extract_gene_symbol)
     grp_up_df = _normalize_gene_symbols(
         grp_up_df, 'gene', log=log, context=f"{grp} ORA"
