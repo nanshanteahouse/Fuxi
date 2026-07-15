@@ -29,8 +29,8 @@ def run_unified_annotation(adata, CFG, logger):
     """
     # ── a. Compute marker genes ───────────────────────────────────────────
     logger.info("Computing marker genes (Wilcoxon rank-sum)...")
-    sc.tl.rank_genes_groups(adata, groupby='leiden', method='wilcoxon')
-
+    sc.tl.rank_genes_groups(adata, groupby='leiden', method='wilcoxon',
+                            use_raw=True if adata.raw is not None else None)
     n_clusters = adata.obs['leiden'].nunique()
 
     # ── b. Build per-cluster marker DataFrames ────────────────────────────

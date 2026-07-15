@@ -1,0 +1,168 @@
+"""Tests for rna/steps/05_annotate_major.py — use_raw fix in ai_annotate.
+
+T1 (P0-CRITICAL) from cross-batch-critical-fixes plan:
+  ``ai_annotate()`` must call ``rank_genes_groups`` with ``use_raw=True``
+  when ``adata.raw`` exists.
+"""
+
+import importlib.util
+import json
+import os
+import sys
+from unittest.mock import MagicMock, patch
+
+import numpy as np
+import pytest
+from anndata import AnnData
+
+# ── Ensure repo root is on sys.path (conftest.py also does this) ──────
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+# ── Load the 05_annotate_major module via file path ───────────────────
+_STEP_PATH = os.path.join(
+    _REPO_ROOT, "rna", "steps", "05_annotate_major.py"
+)
+_spec = importlib.util.spec_from_file_location(
+    "rna.steps._05_annotate_major_test", _STEP_PATH
+)
+assert _spec is not None and _spec.loader is not None, (
+    f"Could not load {_STEP_PATH}"
+)
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+ai_annotate = _mod.ai_annotate
+
+
+# ── Shared helpers ────────────────────────────────────────────────────
+
+
+def _make_test_adata(with_raw: bool = True) -> AnnData:
+    """Create a synthetic AnnData with leiden clusters and optional .raw."""
+    rng = np.random.RandomState(42)
+    n_cells = 30
+    n_genes = 100
+
+    X = rng.poisson(lam=1.0, size=(n_cells, n_genes)).astype(np.float32)
+    adata = AnnData(X)
+    adata.var_names = [f"GENE_{i}" for i in range(n_genes)]
+    adata.obs["leiden"] = rng.choice(["0", "1", "2"], n_cells)
+    adata.obsm["X_umap"] = rng.randn(n_cells, 2)
+
+    if with_raw:
+        n_raw = 200
+        raw_X = rng.poisson(lam=1.0, size=(n_cells, n_raw)).astype(np.float32)
+        raw = AnnData(raw_X)
+        raw.var_names = [f"RAW_{i}" for i in range(n_raw)]
+        adata.raw = raw
+
+    return adata
+
+
+def _make_config() -> MagicMock:
+    """Create a minimal Config mock sufficient for ai_annotate."""
+    cfg = MagicMock()
+    cfg.ai = MagicMock()
+    cfg.ai.max_tokens = 4096
+    cfg.ai.model = "test-model"
+    cfg.tissue = "test_tissue"
+    cfg.species = "test_species"
+    cfg.table_dir = "/tmp"
+    cfg.figure_dir = "/tmp"
+    return cfg
+
+
+def _setup_rgg_result(adata: AnnData) -> None:
+    """Populate adata.uns['rank_genes_groups'] in scanpy's recarray format.
+
+    Scanpy stores each metric as ``np.recarray`` with named object fields,
+    one per group.  Shape is (n_top_genes,).
+    """
+    groups = sorted(adata.obs["leiden"].unique(), key=lambda x: int(x))
+    n_groups = len(groups)
+    n_top = 5
+
+    # dtype: one object field per group name
+    dtype = [(str(g), "O") for g in groups]
+
+    # Build recarray rows: each row is a tuple with one value per group
+    names_rows = []
+    scores_rows = []
+    pvals_rows = []
+    pvals_adj_rows = []
+    lfc_rows = []
+
+    rng = np.random.RandomState(99)
+    for i in range(n_top):
+        names_rows.append(tuple(f"MARKER_{g}_{i}" for g in groups))
+        scores_rows.append(tuple(float(rng.uniform(0.5, 5.0)) for _ in groups))
+        pvals_rows.append(tuple(float(rng.uniform(1e-10, 0.05)) for _ in groups))
+        pvals_adj_rows.append(tuple(float(rng.uniform(1e-8, 0.1)) for _ in groups))
+        lfc_rows.append(tuple(float(rng.randn()) for _ in groups))
+
+    adata.uns["rank_genes_groups"] = {
+        "names": np.rec.array(names_rows, dtype=dtype),
+        "scores": np.rec.array(scores_rows, dtype=dtype),
+        "pvals": np.rec.array(pvals_rows, dtype=dtype),
+        "pvals_adj": np.rec.array(pvals_adj_rows, dtype=dtype),
+        "logfoldchanges": np.rec.array(lfc_rows, dtype=dtype),
+        "params": {
+            "groupby": "leiden",
+            "method": "wilcoxon",
+            "use_raw": True,
+        },
+    }
+
+
+# ── Tests ─────────────────────────────────────────────────────────────
+
+
+def test_T1_ai_annotate_use_raw() -> None:
+    """Happy path: ai_annotate calls rank_genes_groups with use_raw=True.
+
+    Given: synthetic adata with .leiden clusters and .raw (200 genes).
+    When:  ai_annotate() runs.
+    Then:  sc.tl.rank_genes_groups is called with use_raw=True.
+    """
+    adata = _make_test_adata(with_raw=True)
+    cfg = _make_config()
+    logger = MagicMock()
+
+    # Track rank_genes_groups call kwargs and set up uns for downstream
+    call_kwargs: dict = {}
+
+    def _tracking_rgg(adata_, groupby="leiden", method="wilcoxon", **kwargs):
+        call_kwargs.update(kwargs)
+        _setup_rgg_result(adata_)
+
+    ai_return = json.dumps({
+        "0": {
+            "cell_type": "T cell", "state": "active",
+            "subtype": "CD8+", "confidence": "high",
+            "reasoning": "markers match",
+        },
+        "1": {
+            "cell_type": "B cell", "state": "resting",
+            "subtype": "naive", "confidence": "high",
+            "reasoning": "markers match",
+        },
+        "2": {
+            "cell_type": "NK cell", "state": "active",
+            "subtype": "CD56+", "confidence": "high",
+            "reasoning": "markers match",
+        },
+    })
+
+    with (
+        patch.object(_mod.sc.tl, "rank_genes_groups", side_effect=_tracking_rgg),
+        patch("core.ai_caller.ai_query", return_value=ai_return),
+        patch.object(_mod, "safe_plot"),
+    ):
+        result = ai_annotate(adata, cfg, logger)
+
+    assert result is not None, "ai_annotate should return a dict on success"
+    assert call_kwargs.get("use_raw") is True, (
+        f"rank_genes_groups should be called with use_raw=True, "
+        f"got use_raw={call_kwargs.get('use_raw')!r}"
+    )

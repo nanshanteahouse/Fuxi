@@ -140,7 +140,8 @@ def ai_annotate(adata, CFG, logger, std=None):
     """
     # ── a. 计算 marker 基因 ───────────────────────────────────────────
     logger.info("Computing marker genes (Wilcoxon rank-sum)...")
-    sc.tl.rank_genes_groups(adata, groupby='leiden', method='wilcoxon')
+    sc.tl.rank_genes_groups(adata, groupby='leiden', method='wilcoxon',
+                            use_raw=True if adata.raw is not None else None)
 
     n_clusters = adata.obs['leiden'].nunique()
     # ── 自适应 max_tokens ───────────────────────────────────────────
