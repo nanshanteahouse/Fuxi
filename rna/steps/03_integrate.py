@@ -161,24 +161,21 @@ def main():
         except Exception as e:
             log.warning("regress_out (cell cycle) failed (skipped): %s", e)
     elif CFG.normalization.use_regress_out:
+        covariate_list = ['pct_counts_mt']
+        if CFG.normalization.regress_out_genes:
+            covariate_list = CFG.normalization.regress_out_genes
         try:
-            log.info("Regressing technical covariates: pct_counts_mt ...")
-            sc.pp.regress_out(adata, ['pct_counts_mt'])
+            log.info("Regressing technical covariates: %s ...", covariate_list)
+            sc.pp.regress_out(adata, covariate_list)
             log.info("  regress_out complete")
         except Exception as e:
-            log.warning("regress_out (pct_counts_mt) failed (skipped): %s", e)
+            log.warning("regress_out (%s) failed (skipped): %s", covariate_list, e)
     else:
         log.info("Cell cycle scoring disabled, use_regress_out=False — skipping regress_out")
 
-    # ── 可选: 回归自定义基因 ──
-    if CFG.normalization.regress_out_genes:
-        valid_genes = [g for g in CFG.normalization.regress_out_genes if g in adata.var_names]
-        if valid_genes:
-            log.info("Regressing custom genes: %s ...", valid_genes)
-            sc.pp.regress_out(adata, valid_genes)
-            log.info("  regress_out (custom genes) complete")
-        else:
-            log.warning("regress_out_genes specified but none found in data: %s", CFG.normalization.regress_out_genes)
+    # ── 可选: 回归自定义基因（额外）──
+    # (主回归 covariate_list 已同时处理 obs 与 gene 列)
+    # 如果 regress_out_genes 已在 covariate_list 中，跳过重复
 
     # ── regress_out 后降回 float32（regress_out 会产生 float64 中间体）──
     if getattr(CFG.execution, 'use_float32', False):
