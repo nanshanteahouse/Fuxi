@@ -6,14 +6,13 @@ Bibliography of all source papers whose data forms the retina knowledge base.
 
 | Metric | Value |
 |--------|-------|
-| Total sources | 9 |
-| Total markers | 1334 |
-| Cell types | 30 |
-| Species | Homo sapiens (8), Macaca fascicularis (1), plus hahn2023's 13 vertebrate classes |
-| Journals | Nature Communications (3), PLoS Biology (1), Nature (1), Cell (1), Nature Genetics (1), Cell Genomics (1), preprint (1) |
-| Sources with supplement verification | **9/9** |
+| Total sources | 11 |
+| Unique markers | 1406 |
+| Cell types | 39 |
+| Species | Homo sapiens (9), Macaca fascicularis (1), Mus musculus (1), Gallus gallus (1), plus hahn2023's 13 vertebrate classes |
+| Journals | Nature Communications (4), Neuron (1), eLife (1), PLoS Biology (1), Nature (1), Cell (1), Nature Genetics (1), Cell Genomics (1), preprint (1) |
+| Sources with supplement verification | **11/11** |
 | Sources with empirical validation | 2 (hu2019, menon2019) |
-
 ---
 
 ## Sources
@@ -73,6 +72,26 @@ Bibliography of all source papers whose data forms the retina knowledge base.
 
 ---
 
+### Tran et al. (2019)
+- **PMID**: 31784286
+- **Journal**: Neuron
+- **Title**: Single-cell profiles of retinal ganglion cells differing in resilience to injury reveal neuroprotective genes
+- **Species**: Mus musculus (whole retina)
+- **Contribution**: Definitive mouse RGC subtype atlas with 35,699 cells across 46 RGC types in 7 subclasses. Defines pan-RGC markers (RBPMS, SLC17A6) and subtype-specific markers for αRGCs (Spp1), ipRGCs (Opn4, Eomes), ooDSGCs (Cartpt, Mmp17), F-RGCs (Foxp2), T-RGCs (Tbr1), W3-RGCs (Tusc5), and N-RGCs (Neurod2). POU4F2 demoted to add-tier (only ~70% RGC coverage, misses ipRGCs).
+- **Data source**: Table S2 — cluster-specific and subclass markers for 46 RGC types
+- **KB entries**: RGC (pan-RGC) + 7 RGC subtypes (RGC_Alpha, RGC_ipRGC, RGC_ooDSGC, RGC_Foxp2, RGC_Tbr1, RGC_W3, RGC_Neurod2)
+
+### Yamagata et al. (2021)
+- **PMID**: 33393903
+- **Journal**: eLife
+- **Title**: A cell atlas of the chick retina based on single-cell transcriptomics
+- **Species**: Gallus gallus (E12, E16, E18 developmental stages)
+- **Contribution**: First chicken retina single-cell atlas with 33,000 cells across 136 cell types in 7 major classes. Defines chicken-specific markers including double cone markers (CALB1+OPN1LW — unique to non-mammalian vertebrates). Validated by in situ hybridization (51 PCR probes) and CRISPR/eCHIKIN knockin (14 genes). Discovers 41 chick RGC types with no mammalian midget/parasol equivalents — only ipRGCs are clearly conserved.
+- **Data source**: supp1 (ISH probe genes) + supp2 (CRISPR target genes) + supp3 (cluster QC)
+- **KB entries**: 9 cell types including Chicken_Double_Cone (novel non-mammalian type) and Oligodendrocyte (new retina KB type)
+
+---
+
 
 ### Hoang et al. (2023)
 - **PMID**: Not assigned (placeholder: 00000000)
@@ -114,6 +133,10 @@ Bibliography of all source papers whose data forms the retina knowledge base.
 
 **Hahn et al. (2023)** spans 13 vertebrate species from lamprey (Petromyzon marinus) to human. Per earlier audit, it contributes 0 common orthologs in human-only analyses but provides essential evolutionary depth for phylogenetic weighting.
 
+**Tran et al. (2019)** provides the first species-specific mouse (Mus musculus) RGC subtype entries, covering 7 molecular subclasses.
+
+**Yamagata et al. (2021)** provides the first avian (Gallus gallus) retina entries, including the Chicken_Double_Cone — a non-mammalian photoreceptor type with no mammalian homolog.
+
 ### Empirically validated sources
 
 **Hu et al. (2019)** and **Menon et al. (2019)** have both supplement-derived markers and independent empirical validation (GSE107618, GSE118614), providing the highest-confidence marker backbone for the human retina knowledge base.
@@ -123,4 +146,4 @@ Bibliography of all source papers whose data forms the retina knowledge base.
 Each source was audited against its original publication supplements. Markers were cross-validated against source data files. Discrepancies between AI-generated marker lists and supplement-verified data were corrected. Add-tier markers absent from the highly variable gene (HVG) set were removed.
 ---
 
-*Generated from source_meta in 9 YAML source files. Last updated: 2026-07-10.*
+*Generated from source_meta in 11 YAML source files. Last updated: 2026-07-15.*

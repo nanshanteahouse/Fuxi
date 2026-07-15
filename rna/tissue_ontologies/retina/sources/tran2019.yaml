@@ -1,0 +1,257 @@
+source_meta:
+  id: tran2019
+  short_name: Tran 2019 Neuron
+  pmid: '31784286'
+  journal: Neuron
+  year: 2019
+  species:
+  - Mus musculus
+  tissue: retina
+  regions:
+  - whole retina
+  n_cells: 35699
+  n_subtypes: 46
+  n_groups: 7
+  class: Mammalia
+  order: Rodentia
+markers:
+  RGC:
+    confirm:
+    - RBPMS
+    add:
+    - SLC17A6
+    - POU4F1
+    - POU4F2
+    - POU4F3
+    - THY1
+    - NEFL
+    - NEFM
+    - GAP43
+    - DCX
+    refine:
+      RBPMS:
+        note: Gold-standard pan-RGC marker. Labels 100% of RGCs including non-image-forming
+          ipRGCs. Superior to POU4F2 which only labels ~70%.
+    negative_markers:
+    - RLBP1
+    - GLUL
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - RBPMS:CONFIRMED
+      - SLC17A6:CONFIRMED
+      - POU4F1:CONFIRMED
+      - POU4F2:CONFIRMED
+      cross_species_validated: false
+      last_audited: '2026-07-15'
+      flagged: true
+      notes: "POU4F2 is a pan-RGC TF (~70% coverage, misses ipRGCs) — demoted from\
+        \ confirm to add tier. RBPMS is the true pan-RGC marker covering all subtypes."
+  RGC_Alpha:
+    confirm:
+    - SPP1
+    add:
+    - NEFH
+    - KCNG4
+    - NGEF
+    - FES
+    - TPBG
+    - KIT
+    - IL1RAPL2
+    refine:
+      SPP1:
+        note: Osteopontin; pan-αRGC marker but also labels M2 ipRGCs. Combine with
+          NEFH/SMI-32 for specificity.
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  RGC_ipRGC:
+    confirm:
+    - OPN4
+    add:
+    - EOMES
+    - ADCYAP1
+    - NMB
+    - SERPINE2
+    - CDHR1
+    - TBX20
+    - TAGLN2
+    - PRKCQ
+    - TAC1
+    refine:
+      OPN4:
+        note: Melanopsin; definitive ipRGC marker. EOMES (Tbr2) is nuclear marker
+          for M4 identification.
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  RGC_ooDSGC:
+    confirm:
+    - CARTPT
+    add:
+    - NEUROD2
+    - MMP17
+    - COL25A1
+    - GPR88
+    - FAM19A4
+    - VIT
+    refine:
+      CARTPT:
+        note: CART peptide; labels all and only ooDSGCs. Combine with MMP17 (N-preferring)
+          or COL25A1 (D/V-preferring) for direction specificity.
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  RGC_Foxp2:
+    confirm:
+    - FOXP2
+    add:
+    - TUSC5
+    - IRX4
+    - PDE1A
+    - CDK15
+    - ANXA3
+    - RHOX5
+    refine:
+      FOXP2:
+        note: Transcription factor; labels >20% of RGCs across 5 subtypes. Combine
+          with Foxp1 for mini subtype identification.
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  RGC_Tbr1:
+    confirm:
+    - TBR1
+    add:
+    - PCDH20
+    - IRX4
+    - CALCA
+    - SLC7A11
+    - PLPP4
+    refine:
+      TBR1:
+        note: T-box TF; labels 5 T-RGC subtypes. J-RGC (Jam2+) is a Tbr1+ subtype.
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  RGC_W3:
+    confirm:
+    - TUSC5
+    add:
+    - SERPINE2
+    - AMIGO2
+    - LYPD1
+    - NTRK1
+    - ZIC1
+    - PROKR1
+    - POSTN
+    - SDK2
+    refine:
+      TUSC5:
+        note: Trarg1; labels ~40% of all RGCs across 9 W3/subtypes. Combine with
+          Sdk2 (W3B) or Zic1 for subtype specificity.
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  RGC_Neurod2:
+    confirm:
+    - NEUROD2
+    add:
+    - PENK
+    - PRDM8
+    - SLC24A2
+    - GAL
+    - SLC17A1
+    - IGFBP
+    - STXBP6
+    - PRLR
+    - IGFBP4
+    - CHRM2
+    - S100B
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+novel_types: []
+expert_rules:
+- priority: 1
+  condition:
+    markers_present:
+      RBPMS: 1.0
+      SLC17A6: 0.5
+  action: RGC
+  source: tran2019
+  notes: RBPMS is the gold-standard pan-RGC marker (100% of RGCs, including ipRGCs)
+- priority: 2
+  condition:
+    markers_present:
+      OPN4: 1.0
+  action: RGC_ipRGC
+  source: tran2019
+  notes: OPN4 (melanopsin) definitively identifies ipRGCs
+- priority: 3
+  condition:
+    markers_present:
+      CARTPT: 1.0
+  action: RGC_ooDSGC
+  source: tran2019
+  notes: CART (CARTPT) labels all ON-OFF direction-selective RGCs
+- priority: 4
+  condition:
+    markers_present:
+      SPP1: 1.0
+  action: RGC_Alpha
+  source: tran2019
+  notes: SPP1 (osteopontin) labels αRGCs (also M2 ipRGCs)
+conflicts: []

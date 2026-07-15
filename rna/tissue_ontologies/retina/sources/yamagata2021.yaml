@@ -1,0 +1,381 @@
+source_meta:
+  id: yamagata2021
+  short_name: Yamagata 2021 eLife
+  pmid: '33393903'
+  journal: eLife
+  year: 2021
+  species:
+  - Gallus gallus
+  tissue: retina
+  regions:
+  - whole retina
+  - anterior-posterior axis
+  - dorsal-ventral axis
+  - central-peripheral axis
+  n_cells: 33000
+  n_subtypes: 136
+  n_groups: 7
+  class: Aves
+  order: Galliformes
+
+markers:
+  Rod_Photoreceptor:
+    confirm:
+    - RHO
+    add:
+    - MAFA
+    - PDE6B
+    - PDE6G
+    - GRIK3
+    - CNGB1
+    - GNAT1
+    - SAG
+    refine:
+      RHO:
+        note: Rhodopsin; canonical rod marker across all vertebrates
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: '2026-07-15'
+      flagged: false
+      notes: ''
+
+  Cone_Photoreceptor:
+    confirm:
+    - ARR3
+    - GNAT2
+    add:
+    - OPN1LW
+    - OPN1MSW
+    - OPN2SW
+    - OPN1SW
+    - STRA6
+    - CALB1
+    - ARHGAP18
+    - SLC27A6
+    - SLIT1
+    - PDE6C
+    - PDE6H
+    - CRX
+    - THRB
+    refine:
+      OPN1LW:
+        note: Red opsin; labels red single cones AND double cones (principal+accessory).
+          CALB1 labels double cones specifically. STRA6 labels red single cones.
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: '2026-07-15'
+      flagged: false
+      notes: ''
+
+  Chicken_Double_Cone:
+    confirm:
+    - CALB1
+    add:
+    - OPN1LW
+    - ARHGAP18
+    - STRA6
+    refine:
+      CALB1:
+        note: Calbindin; labels double cones in chick retina. Double cones (~50%
+          of chick PRs) are unique to non-mammalian vertebrates — no mammalian homolog.
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: '2026-07-15'
+      flagged: false
+      notes: ''
+
+  Horizontal_Cell:
+    confirm:
+    - ONECUT1
+    - ONECUT3
+    add:
+    - LHX1
+    - ISL1
+    - OXT
+    - IPCEF1
+    - NTRK1
+    - EGFR
+    - LTK
+    - ONECUT2
+    - PROX1
+    - CALB1
+    refine:
+      ONECUT1:
+        note: Master TF for horizontal cell specification. OXT/IPCEF1 distinguish
+          HC subtypes; NTRK1/EGFR/LTK label distinct HC mosaics.
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: '2026-07-15'
+      flagged: false
+      notes: ''
+
+  Bipolar_Cell:
+    confirm:
+    - VSX2
+    - OTX2
+    add:
+    - ISL1
+    - GRM6
+    - TRPM1
+    - GRIK1
+    - FEZF1
+    - PRKCA
+    - SOX5
+    - IRX3
+    - TPBGL
+    - RRAD
+    - SLC6A4
+    - ANGPT2
+    - VSX1
+    - TPBG
+    - SCGN
+    - CHRNB2
+    refine:
+      VSX2:
+        note: Pan-BC transcription factor (Chx10). TRPM1+GRIK1 distinguish ON vs
+          OFF bipolar cells. 22 ON/OFF BC types identified.
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: '2026-07-15'
+      flagged: false
+      notes: ''
+
+  Amacrine_Cell:
+    confirm:
+    - TFAP2A
+    add:
+    - GAD1
+    - GAD2
+    - SLC6A9
+    - SLC32A1
+    - PAX6
+    - CALB2
+    - CARTPT
+    - GRTP1
+    - CHODL
+    - CHRDL1
+    - DACT2
+    - MMEL1
+    - WIF1
+    refine:
+      TFAP2A:
+        note: Pan-AC marker in chick. 59 AC types identified. GAD1/GAD2 mark
+          GABAergic; SLC6A9 marks glycinergic.
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: '2026-07-15'
+      flagged: false
+      notes: ''
+
+  RGC:
+    confirm:
+    - RBPMS
+    - THY1
+    add:
+    - SLC17A6
+    - RBPMS2
+    - POU4F1
+    - POU4F2
+    - POU4F3
+    - NEFL
+    - NEFM
+    - ETV1
+    - MC5R
+    - TFAP2D
+    - RUNX2
+    - OPRM1
+    - NPY
+    - TAC1
+    - PENK
+    - CHRNB2
+    - OPN4
+    - EOMES
+    - FOXG1
+    - FOXI2
+    - ZIC1
+    - PRDM8
+    refine:
+      RBPMS:
+        note: Gold-standard pan-RGC marker across vertebrates. 41 RGC types
+          identified in chick.
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: '2026-07-15'
+      flagged: true
+      notes: '41 RGC types including ipRGC (OPN4.1+EOMES+). No chick equivalents of mammalian midget/parasol RGCs. Only ipRGCs are clearly conserved across species.'
+
+  Muller_Glia:
+    confirm:
+    - RLBP1
+    - GLUL
+    add:
+    - VIM
+    - AQP4
+    - SLC1A3
+    - PDGFRA
+    - PLP1
+    - FGF8
+    - PSCA
+    - S100B
+    - APOE
+    - WIF1
+    refine:
+      RLBP1:
+        note: CRALBP; canonical Müller glia marker. Chick MG show regionally
+          distinct transcription along retinal axes.
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: '2026-07-15'
+      flagged: false
+      notes: ''
+
+  Oligodendrocyte:
+    confirm:
+    - PLP1
+    add:
+    - BCAS1
+    - MOXD1
+    - MBP
+    - SOX10
+    refine:
+      PLP1:
+        note: Proteolipid protein; oligodendrocyte marker. 5 oligodendrocyte
+          types found in chick retina at E18.
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: '2026-07-15'
+      flagged: false
+      notes: ''
+
+novel_types:
+- name: Chicken_Double_Cone
+  parent: Cone_Photoreceptor
+  markers:
+  - CALB1
+  - OPN1LW
+  - ARHGAP18
+  - STRA6
+  species:
+  - Gallus gallus
+  source: yamagata2021
+
+expert_rules:
+- priority: 1
+  condition:
+    markers_present:
+      RHO: 1.0
+      PDE6B: 0.5
+  action: Rod_Photoreceptor
+  source: yamagata2021
+  notes: RHO+PDE6B canonical rod signature; conserved across chick and mammals
+
+- priority: 2
+  condition:
+    markers_present:
+      ARR3: 1.0
+      GNAT2: 0.5
+      OPN1LW: 0.5
+  action: Cone_Photoreceptor
+  source: yamagata2021
+  notes: Chick has 4 single cone types (red/green/blue/violet opsins) + double cones
+
+- priority: 3
+  condition:
+    markers_present:
+      RLBP1: 1.0
+      GLUL: 1.0
+  action: Muller_Glia
+  source: yamagata2021
+  notes: Canonical Müller glia signature conserved across vertebrates
+
+- priority: 4
+  condition:
+    markers_present:
+      ONECUT1: 1.0
+      LHX1: 0.5
+  action: Horizontal_Cell
+  source: yamagata2021
+  notes: ONECUT1+LHX1 canonical HC signature
+
+- priority: 5
+  condition:
+    markers_present:
+      VSX2: 1.0
+      OTX2: 0.5
+  action: Bipolar_Cell
+  source: yamagata2021
+  notes: VSX2/Chx10 + OTX2 mark bipolar cells; 22 types
+
+- priority: 6
+  condition:
+    markers_present:
+      TFAP2A: 1.0
+  action: Amacrine_Cell
+  source: yamagata2021
+  notes: TFAP2A is pan-AC marker in chick retina; 59 types
+
+- priority: 7
+  condition:
+    markers_present:
+      RBPMS: 1.0
+      THY1: 0.5
+  action: RGC
+  source: yamagata2021
+  notes: RBPMS+THY1 pan-RGC signature conserved across chick and mammals
+
+- priority: 10
+  condition:
+    markers_present:
+      CALB1: 1.0
+      OPN1LW: 1.0
+      RHO: 0.0
+  action: Chicken_Double_Cone
+  source: yamagata2021
+  notes: CALB1+OPN1LW marks double cones; uniquely non-mammalian. RHO must be negative.
+
+conflicts: []
