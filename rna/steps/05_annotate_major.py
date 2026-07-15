@@ -22,15 +22,21 @@ import logging
 log: logging.Logger
 
 
-def _warn_if_low_coverage(adata, log):
-    """Emit WARNING if >50% of cells are annotated as Unknown."""
+def _warn_if_low_coverage(adata, CFG, log):
+    """Emit WARNING if >50% of cells are annotated as Unknown; HARD ABORT if pass_rate < threshold."""
     if 'cell_type' not in adata.obs:
         return
+    pass_rate = (adata.obs['cell_type'] != 'Unknown').mean()
     ct_counts = adata.obs['cell_type'].value_counts()
     n_unknown = ct_counts.get('Unknown', 0)
     if n_unknown > 0 and n_unknown / adata.n_obs > 0.5:
         log.warning("⚠️  %.0f%% of cells (%d/%d) annotated as 'Unknown' — KB may not cover this dataset",
                     n_unknown / adata.n_obs * 100, n_unknown, adata.n_obs)
+    if pass_rate < CFG.marker.quality_gate_min_pass_rate:
+        log.error("QUALITY GATE FAILED: pass_rate=%.4f < threshold=%.4f — %d/%d cells are 'Unknown'. Aborting.",
+                  pass_rate, CFG.marker.quality_gate_min_pass_rate, n_unknown, adata.n_obs)
+        safe_write(adata, CFG.annotated_h5ad, cfg=CFG)
+        sys.exit(1)
 
 
 
@@ -422,7 +428,7 @@ def main():
                          len(validation_results))
                 validation_map = {r['cluster']: r['status'] for r in validation_results}
                 adata.obs['marker_validation'] = adata.obs['leiden'].astype(str).map(lambda c: validation_map.get(c, "NO_ONTOLOGY"))
-            _warn_if_low_coverage(adata, log)
+            _warn_if_low_coverage(adata, CFG, log)
             safe_write(adata, CFG.annotated_h5ad, cfg=CFG)
             log.info("Step 05 (Unified mode) complete, took %.1fs", time.time() - t0)
             return
@@ -443,7 +449,7 @@ def main():
                          len(validation_results))
                 validation_map = {r['cluster']: r['status'] for r in validation_results}
                 adata.obs['marker_validation'] = adata.obs['leiden'].astype(str).map(lambda c: validation_map.get(c, "NO_ONTOLOGY"))
-            _warn_if_low_coverage(adata, log)
+            _warn_if_low_coverage(adata, CFG, log)
             safe_write(adata, CFG.annotated_h5ad, cfg=CFG)
             log.info("Step 05 (AI mode) complete, took %.1fs", time.time() - t0)
             return
@@ -463,7 +469,7 @@ def main():
                  len(validation_results))
         validation_map = {r['cluster']: r['status'] for r in validation_results}
         adata.obs['marker_validation'] = adata.obs['leiden'].astype(str).map(lambda c: validation_map.get(c, "NO_ONTOLOGY"))
-        _warn_if_low_coverage(adata, log)
+    _warn_if_low_coverage(adata, CFG, log)
     safe_write(adata, CFG.annotated_h5ad, cfg=CFG)
     log.info("Step 05 (score_genes mode) complete, took %.1fs", time.time() - t0)
 

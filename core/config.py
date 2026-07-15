@@ -227,6 +227,7 @@ class MarkerSettings(BaseModel):
     validation_min_overlap: float = 0.5
     validation_marginal_threshold: float = 0.25
     validation_pass_rate_min: float = 0.1
+    quality_gate_min_pass_rate: float = 0.10
     step10_groupby: List[str] = Field(default_factory=list)
 
 

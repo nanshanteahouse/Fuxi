@@ -33,6 +33,7 @@ assert _spec is not None and _spec.loader is not None, (
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 ai_annotate = _mod.ai_annotate
+_warn_if_low_coverage = _mod._warn_if_low_coverage
 
 
 # ── Shared helpers ────────────────────────────────────────────────────
@@ -166,3 +167,70 @@ def test_T1_ai_annotate_use_raw() -> None:
         f"rank_genes_groups should be called with use_raw=True, "
         f"got use_raw={call_kwargs.get('use_raw')!r}"
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# T2: Annotation quality gate (P0-CRITICAL)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def test_T2_pass_rate_gate_passes_when_threshold_met() -> None:
+    """Gate does not abort when pass_rate >= threshold.
+
+    Given: 80 cells, 64 with cell_type='T cell', 16 with 'Unknown' (80% pass).
+    When:  _warn_if_low_coverage is called.
+    Then:  No SystemExit is raised.
+    """
+    n = 80
+    adata = AnnData(np.zeros((n, 10)))
+    adata.obs['cell_type'] = ['T cell'] * 64 + ['Unknown'] * 16
+
+    cfg = MagicMock()
+    cfg.marker = MagicMock()
+    cfg.marker.quality_gate_min_pass_rate = 0.10
+    log = MagicMock()
+
+    # Should not raise — pass_rate=0.8 >= 0.10
+    _warn_if_low_coverage(adata, cfg, log)
+
+
+def test_T2_pass_rate_gate_fires_at_zero_pass_rate() -> None:
+    """Gate aborts when 100% of cells are Unknown.
+
+    Given: 30 cells, all with cell_type='Unknown' (0% pass).
+    When:  _warn_if_low_coverage is called.
+    Then:  SystemExit is raised and safe_write is called before exit.
+    """
+    n = 30
+    adata = AnnData(np.zeros((n, 10)))
+    adata.obs['cell_type'] = ['Unknown'] * n
+
+    cfg = MagicMock()
+    cfg.marker = MagicMock()
+    cfg.marker.quality_gate_min_pass_rate = 0.10
+    cfg.annotated_h5ad = "/tmp/test.h5ad"
+    log = MagicMock()
+
+    with patch.object(_mod, "safe_write") as mock_write, pytest.raises(SystemExit):
+        _warn_if_low_coverage(adata, cfg, log)
+    mock_write.assert_called_once_with(adata, "/tmp/test.h5ad", cfg=cfg)
+
+
+def test_T2_score_genes_path_gate_coverage_when_std_none() -> None:
+    """Gate fires in the score_genes path even when std is None.
+
+    Given: score_genes path (std=None), all cells annotated as Unknown.
+    When:  _warn_if_low_coverage is called.
+    Then:  SystemExit is raised regardless of standardizer availability.
+    """
+    adata = AnnData(np.zeros((30, 10)))
+    adata.obs['cell_type'] = ['Unknown'] * 30
+
+    cfg = MagicMock()
+    cfg.marker = MagicMock()
+    cfg.marker.quality_gate_min_pass_rate = 0.10
+    cfg.annotated_h5ad = "/tmp/test.h5ad"
+    log = MagicMock()
+
+    with patch.object(_mod, "safe_write"), pytest.raises(SystemExit):
+        _warn_if_low_coverage(adata, cfg, log)

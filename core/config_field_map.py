@@ -237,6 +237,7 @@ FIELD_MAP: Dict[str, str] = {
     "marker_validation_marginal_threshold": "marker.validation_marginal_threshold",
     "marker_validation_pass_rate_min": "marker.validation_pass_rate_min",
     "step10_groupby": "marker.step10_groupby",
+    "quality_gate_min_pass_rate": "marker.quality_gate_min_pass_rate",
 
     # ═══════════════════════════════════════════════════════════════════
     # de — DESettings

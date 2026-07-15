@@ -133,6 +133,7 @@ class TestConfigDefaults:
         assert cfg.marker.validation_n_top_genes == 15
         assert cfg.marker.validation_min_overlap == 0.5
         assert cfg.marker.validation_pass_rate_min == 0.1
+        assert cfg.marker.quality_gate_min_pass_rate == 0.10
 
     def test_de_defaults(self) -> None:
         """DE settings defaults."""
