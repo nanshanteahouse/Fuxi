@@ -39,6 +39,30 @@ def _warn_if_low_coverage(adata, CFG, log):
         sys.exit(1)
 
 
+def _update_quality_report_pass_rate(adata, CFG):
+    """Update 05_annotation_quality.json pass_rate from marker_validation column."""
+    quality_path = os.path.join(CFG.table_dir, '05_annotation_quality.json')
+    if not os.path.exists(quality_path):
+        return
+    try:
+        with open(quality_path, 'r') as f:
+            quality = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return
+    if 'marker_validation' in adata.obs:
+        pass_cells = (adata.obs['marker_validation'] == 'PASS').sum()
+        pass_rate = pass_cells / max(adata.n_obs, 1)
+        quality['pass_rate'] = round(pass_rate, 4)
+        quality['kb_blind_spot'] = bool(pass_rate < 0.1)
+        quality['recommended_strictness'] = (
+            "relaxed" if pass_rate < 0.1 else
+            "deep" if pass_rate < 0.3 else
+            "default"
+        )
+    with open(quality_path, 'w') as f:
+        json.dump(quality, f, indent=2)
+
+
 
 # ═══════════════════════════════════════════════════════════════════════
 #  旧有注释函数 (Score_genes 模式)
@@ -409,7 +433,7 @@ def main():
 
     # ── 判断 AI 模式/Unified KB 模式是否可用 ────────────────────────────
     ai_enabled = getattr(CFG.ai, 'enabled', False)
-    ai_annot_on = getattr(CFG.ai, 'ai_annotation', False)
+    ai_annot_on = getattr(CFG.ai, 'annotation', False)
 
     # ── Unified KB mode (if tissue_kb is set) ────────────────────────────
     if CFG.tissue_kb:
@@ -428,6 +452,7 @@ def main():
                          len(validation_results))
                 validation_map = {r['cluster']: r['status'] for r in validation_results}
                 adata.obs['marker_validation'] = adata.obs['leiden'].astype(str).map(lambda c: validation_map.get(c, "NO_ONTOLOGY"))
+            _update_quality_report_pass_rate(adata, CFG)
             _warn_if_low_coverage(adata, CFG, log)
             safe_write(adata, CFG.annotated_h5ad, cfg=CFG)
             log.info("Step 05 (Unified mode) complete, took %.1fs", time.time() - t0)
@@ -449,6 +474,7 @@ def main():
                          len(validation_results))
                 validation_map = {r['cluster']: r['status'] for r in validation_results}
                 adata.obs['marker_validation'] = adata.obs['leiden'].astype(str).map(lambda c: validation_map.get(c, "NO_ONTOLOGY"))
+            _update_quality_report_pass_rate(adata, CFG)
             _warn_if_low_coverage(adata, CFG, log)
             safe_write(adata, CFG.annotated_h5ad, cfg=CFG)
             log.info("Step 05 (AI mode) complete, took %.1fs", time.time() - t0)
@@ -469,6 +495,7 @@ def main():
                  len(validation_results))
         validation_map = {r['cluster']: r['status'] for r in validation_results}
         adata.obs['marker_validation'] = adata.obs['leiden'].astype(str).map(lambda c: validation_map.get(c, "NO_ONTOLOGY"))
+    _update_quality_report_pass_rate(adata, CFG)
     _warn_if_low_coverage(adata, CFG, log)
     safe_write(adata, CFG.annotated_h5ad, cfg=CFG)
     log.info("Step 05 (score_genes mode) complete, took %.1fs", time.time() - t0)
