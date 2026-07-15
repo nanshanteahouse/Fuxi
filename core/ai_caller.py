@@ -100,9 +100,10 @@ def ai_query(system_prompt: str, user_prompt: str, cfg,
     if api_key is None:
         raise ValueError("LLM_API_KEY not set")
 
+    api_base = cfg.api_base or os.getenv("LLM_API_BASE") or None
     client = OpenAI(
         api_key=api_key,
-        base_url=cfg.api_base,
+        base_url=api_base,
     )
 
     messages = [
