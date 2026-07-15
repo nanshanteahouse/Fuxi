@@ -460,8 +460,8 @@ def main():
             ).astype('category')
     else:
         log.info("AI subcluster annotation disabled "
-                 "(CFG.ai.enabled=%s, CFG.ai.ai_subcluster=%s)",
-                 CFG.ai.enabled, CFG.ai.ai_subcluster)
+                 "(CFG.ai.enabled=%s, CFG.ai.subcluster=%s)",
+                 CFG.ai.enabled, CFG.ai.subcluster)
 
     # Restore categorical dtype for consistency
     sub.obs['leiden'] = sub.obs['leiden'].astype('category')
