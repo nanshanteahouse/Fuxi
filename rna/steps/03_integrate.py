@@ -94,6 +94,25 @@ def main():
     n_hvg = adata.var['highly_variable'].sum()
     log.info("HVG count: %d", n_hvg)
 
+    # ── Force-keep critical marker genes in HVG selection ──
+    forced_set: set[str] = set()
+    if CFG.hvg.forced_genes:
+        forced_set.update(CFG.hvg.forced_genes)
+    if CFG.marker.marker_dict:
+        for markers in CFG.marker.marker_dict.values():
+            forced_set.update(markers)
+    forced_in_adata = [g for g in forced_set if g in adata.var_names]
+    newly_forced = 0
+    for g in forced_in_adata:
+        if not adata.var.at[g, 'highly_variable']:
+            adata.var.at[g, 'highly_variable'] = True
+            newly_forced += 1
+    if newly_forced:
+        log.info("HVG force-keep: %d marker genes retained (HVGs: %d → %d)",
+                 newly_forced,
+                 int(adata.var['highly_variable'].sum()) - newly_forced,
+                 int(adata.var['highly_variable'].sum()))
+
     # ── 保存全基因表达引用用于 .raw（零拷贝：adata 重新绑定时原对象保留）──
     adata_full = adata
     log.info("Retained full-gene expression reference for .raw")

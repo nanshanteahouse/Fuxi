@@ -138,6 +138,7 @@ class HVGSettings(BaseModel):
     n_top_genes: int = 4000
     flavor: str = "seurat_v3"
     batch_key: str = "sample"
+    forced_genes: list[str] = Field(default_factory=list)
 
 
 # ═══════════════════════════════════════════════════════════════════════

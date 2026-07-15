@@ -316,3 +316,210 @@ def test_T3_collinearity_report_none_skips_guard() -> None:
     assert "X_pca_harmony" in result.obsm, (
         "X_pca_harmony should be created when guard no-ops"
     )
+
+
+# ═══════════════════════════════════════════════════════════════════
+# T6 — Forced genes in HVG selection
+# ═══════════════════════════════════════════════════════════════════
+
+
+def _make_adata_t6(
+    n_cells: int = 100,
+    n_genes: int = 1000,
+    seed: int = 42,
+) -> AnnData:
+    """Create a minimal AnnData for forced_genes tests.
+
+    Only the first 100 genes are highly_variable by default.
+    P2RY12 is placed at index 900 (NOT highly_variable).
+    """
+    rng = np.random.RandomState(seed)
+    X = rng.poisson(lam=1.0, size=(n_cells, n_genes)).astype(np.float32)
+    adata = AnnData(X)
+    gene_names = [f"GENE_{i}" for i in range(n_genes)]
+    gene_names[10] = "AIF1"
+    gene_names[20] = "CSF1R"
+    gene_names[900] = "P2RY12"
+    adata.var_names = gene_names
+    adata.obs["sample"] = rng.choice(["S1", "S2"], n_cells)
+    adata.obsm["X_pca"] = rng.randn(n_cells, 50)
+    # Only first 100 genes are highly_variable → P2RY12 (index 900) is NOT HV
+    hv = np.zeros(n_genes, dtype=bool)
+    hv[:100] = True
+    adata.var["highly_variable"] = hv
+    adata.uns["pca"] = {"variance_ratio": np.zeros(100)}
+    return adata
+
+
+def _make_cfg_t6(
+    forced_genes: list[str] | None = None,
+    marker_dict: dict[str, list[str]] | None = None,
+) -> MagicMock:
+    """Create a Config mock for T6 forced_genes tests.
+
+    Extends the base _make_cfg() with forced_genes and marker_dict fields.
+    """
+    cfg = _make_cfg()
+    cfg.hvg.forced_genes = forced_genes or []
+    cfg.marker.marker_dict = marker_dict or {}
+    return cfg
+
+
+def test_T6_forced_genes_retains_low_expression_marker() -> None:
+    """Forced gene not initially HV → marked as HV after forced_genes block.
+
+    Given:  forced_genes=["P2RY12"], P2RY12 is NOT in the HVG set.
+    When:   main() runs through the forced_genes block.
+    Then:   P2RY12 is marked highly_variable in saved adata.
+    """
+    adata = _make_adata_t6()
+    cfg = _make_cfg_t6(forced_genes=["P2RY12"])
+
+    captured: list[AnnData] = []
+
+    with (
+        patch.object(
+            _mod.argparse.ArgumentParser, "parse_args",
+            return_value=argparse.Namespace(config="/tmp/test.yaml"),
+        ),
+        patch.object(_mod, "resolve_config", return_value=cfg),
+        patch.object(_mod, "setup_logger", return_value=MagicMock()),
+        patch.object(_mod.sc, "read", return_value=adata),
+        patch.object(_mod.sc.pp, "highly_variable_genes"),
+        patch.object(_mod.sc.pp, "normalize_total"),
+        patch.object(_mod.sc.pp, "log1p"),
+        patch.object(_mod.sc.pp, "pca"),
+        patch("core.utils.validate_adata", return_value=False),
+        patch.object(_mod.sc.pl, "embedding", return_value=None),
+        patch.object(_mod, "safe_write", side_effect=_capture_adata_on_save(captured)),
+    ):
+        _mod.main()
+
+    assert len(captured) == 1, "safe_write should have been called once"
+    result = captured[0]
+
+    # P2RY12 must be highly_variable now
+    assert result.var.at["P2RY12", "highly_variable"], (
+        "P2RY12 should be retained as highly_variable"
+    )
+
+
+def test_T6_marker_dict_genes_force_kept() -> None:
+    """Marker dict specified genes → forced into HV set.
+
+    Given:  empty forced_genes, marker_dict has Microglia=[AIF1,P2RY12,CSF1R].
+    When:   main() runs through the forced_genes block.
+    Then:   P2RY12 is marked highly_variable (via marker_dict).
+    """
+    adata = _make_adata_t6()
+    cfg = _make_cfg_t6(marker_dict={
+        "Microglia": ["AIF1", "P2RY12", "CSF1R"],
+    })
+
+    captured: list[AnnData] = []
+
+    with (
+        patch.object(
+            _mod.argparse.ArgumentParser, "parse_args",
+            return_value=argparse.Namespace(config="/tmp/test.yaml"),
+        ),
+        patch.object(_mod, "resolve_config", return_value=cfg),
+        patch.object(_mod, "setup_logger", return_value=MagicMock()),
+        patch.object(_mod.sc, "read", return_value=adata),
+        patch.object(_mod.sc.pp, "highly_variable_genes"),
+        patch.object(_mod.sc.pp, "normalize_total"),
+        patch.object(_mod.sc.pp, "log1p"),
+        patch.object(_mod.sc.pp, "pca"),
+        patch("core.utils.validate_adata", return_value=False),
+        patch.object(_mod.sc.pl, "embedding", return_value=None),
+        patch.object(_mod, "safe_write", side_effect=_capture_adata_on_save(captured)),
+    ):
+        _mod.main()
+
+    assert len(captured) == 1, "safe_write should have been called once"
+    result = captured[0]
+
+    # P2RY12 must be highly_variable now (forced by marker_dict)
+    assert result.var.at["P2RY12", "highly_variable"], (
+        "P2RY12 should be retained as highly_variable via marker_dict"
+    )
+
+
+def test_T6_forced_genes_typo_silently_skipped() -> None:
+    """Nonexistent gene in forced_genes → silently skipped, no crash.
+
+    Given:  forced_genes=["NOPE_TYPO"] which doesn't exist in data.
+    When:   main() runs.
+    Then:   No crash; HVG count unchanged.
+    """
+    adata = _make_adata_t6()
+    assert "NOPE_TYPO" not in adata.var_names, "precondition: typo gene absent"
+    cfg = _make_cfg_t6(forced_genes=["NOPE_TYPO"])
+
+    captured: list[AnnData] = []
+
+    with (
+        patch.object(
+            _mod.argparse.ArgumentParser, "parse_args",
+            return_value=argparse.Namespace(config="/tmp/test.yaml"),
+        ),
+        patch.object(_mod, "resolve_config", return_value=cfg),
+        patch.object(_mod, "setup_logger", return_value=MagicMock()),
+        patch.object(_mod.sc, "read", return_value=adata),
+        patch.object(_mod.sc.pp, "highly_variable_genes"),
+        patch.object(_mod.sc.pp, "normalize_total"),
+        patch.object(_mod.sc.pp, "log1p"),
+        patch.object(_mod.sc.pp, "pca"),
+        patch("core.utils.validate_adata", return_value=False),
+        patch.object(_mod.sc.pl, "embedding", return_value=None),
+        patch.object(_mod, "safe_write", side_effect=_capture_adata_on_save(captured)),
+    ):
+        _mod.main()
+
+    assert len(captured) == 1, "safe_write should have been called once"
+    result = captured[0]
+
+    # No genes should be forced since NOPE_TYPO doesn't exist
+    n_hv = result.var["highly_variable"].sum()
+    assert n_hv == 100, (
+        f"HVG count should remain 100 when forced gene doesn't exist, got {n_hv}"
+    )
+
+
+def test_T6_forced_genes_empty_no_effect() -> None:
+    """Both forced_genes and marker_dict empty → no forced_keep changes.
+
+    Given:  forced_genes=[], marker_dict={}.
+    When:   main() runs.
+    Then:   HVG count unchanged; all forced_set logic no-ops.
+    """
+    adata = _make_adata_t6()
+    cfg = _make_cfg_t6()
+
+    captured: list[AnnData] = []
+
+    with (
+        patch.object(
+            _mod.argparse.ArgumentParser, "parse_args",
+            return_value=argparse.Namespace(config="/tmp/test.yaml"),
+        ),
+        patch.object(_mod, "resolve_config", return_value=cfg),
+        patch.object(_mod, "setup_logger", return_value=MagicMock()),
+        patch.object(_mod.sc, "read", return_value=adata),
+        patch.object(_mod.sc.pp, "highly_variable_genes"),
+        patch.object(_mod.sc.pp, "normalize_total"),
+        patch.object(_mod.sc.pp, "log1p"),
+        patch.object(_mod.sc.pp, "pca"),
+        patch("core.utils.validate_adata", return_value=False),
+        patch.object(_mod.sc.pl, "embedding", return_value=None),
+        patch.object(_mod, "safe_write", side_effect=_capture_adata_on_save(captured)),
+    ):
+        _mod.main()
+
+    assert len(captured) == 1, "safe_write should have been called once"
+    result = captured[0]
+
+    n_hv = result.var["highly_variable"].sum()
+    assert n_hv == 100, (
+        f"HVG count should remain 100 when no forced genes, got {n_hv}"
+    )

@@ -183,6 +183,7 @@ FIELD_MAP: Dict[str, str] = {
     "n_top_genes": "hvg.n_top_genes",
     "hvg_flavor": "hvg.flavor",
     "hvg_batch_key": "hvg.batch_key",
+    "hvg_forced_genes": "hvg.forced_genes",
 
     # ═══════════════════════════════════════════════════════════════════
     # pca — PCASettings
