@@ -371,7 +371,7 @@ def main():
     log.info("Intermediate results saved (pre-AI): %s", output_path)
 
     # ── (j) AI-based subcluster annotation ────────────────────────────
-    if CFG.ai.enabled and CFG.ai.ai_subcluster:
+    if CFG.ai.enabled and CFG.ai.subcluster:
         try:
             from core.ai_prompts import build_annotation_prompt
             from core.ai_caller import ai_query

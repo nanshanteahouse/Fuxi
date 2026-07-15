@@ -697,7 +697,7 @@ def main():
                      total_relevant / total_all * 100)
 
     # ── AI Biological Interpretation (optional) ──
-    if CFG.ai.enabled and CFG.ai.ai_interpretation:
+    if CFG.ai.enabled and CFG.ai.interpretation:
         log.info("AI: Generating biological interpretation...")
         try:
             summary_data = []

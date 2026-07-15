@@ -216,7 +216,10 @@ def generate_figures(adata, markers_df, CFG, log, primary_col=None):
     top5_per_group = (
         markers_df.groupby('group', observed=True)
         .apply(lambda x: x.nlargest(5, 'scores'))
-        .reset_index(drop=True)
+        .reset_index()
+
+        # Fix: don't drop 'group' — needed for sort_values below
+
     )
 
     # Dedup: cross-group genes keep only highest-score occurrence
