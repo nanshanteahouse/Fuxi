@@ -994,3 +994,137 @@ class TestSelectDeGated:
         assert isinstance(result[1], float)
         assert isinstance(result[2], str)
         assert isinstance(result[3], str)
+
+
+class TestSelectMultiMetricT5:
+    """3-tier resolution recommendation logging for _select_multi_metric (T5)."""
+
+    def test_T5_three_tier_log_emitted(self, caplog) -> None:
+        """5 entries with varying scores → 3-tier log with coarse<balanced<fine resolution."""
+        valid = [
+            {
+                "n_neighbors": 15, "resolution": 0.1, "n_clusters": 3,
+                "silhouette_score": 0.05, "stability_score": 0.70,
+            },
+            {
+                "n_neighbors": 15, "resolution": 0.3, "n_clusters": 5,
+                "silhouette_score": 0.30, "stability_score": 0.80,
+            },
+            {
+                "n_neighbors": 15, "resolution": 0.5, "n_clusters": 8,
+                "silhouette_score": 0.70, "stability_score": 0.85,
+            },
+            {
+                "n_neighbors": 15, "resolution": 0.8, "n_clusters": 10,
+                "silhouette_score": 0.60, "stability_score": 0.90,
+            },
+            {
+                "n_neighbors": 15, "resolution": 1.0, "n_clusters": 12,
+                "silhouette_score": 0.20, "stability_score": 0.88,
+            },
+        ]
+
+        with caplog.at_level(logging.INFO):
+            _select_multi_metric(valid)
+
+        # Find the 3-tier log line
+        tier_msgs = [
+            rec.message for rec in caplog.records
+            if "[multi_metric 3-tier]" in rec.message
+        ]
+        assert len(tier_msgs) >= 1, "3-tier log not emitted"
+
+        msg = tier_msgs[0]
+        # Coarse: first resolution where composite > 0.7 * max (r=0.5)
+        assert "coarse: r=0.50" in msg, f"Expected coarse r=0.50, got: {msg}"
+        # Balanced: argmax composite (r=0.8)
+        assert "balanced: r=0.80" in msg, f"Expected balanced r=0.80, got: {msg}"
+        # Fine: highest resolution where stability > 0.85 * max (r=1.0)
+        assert "fine: r=1.00" in msg, f"Expected fine r=1.00, got: {msg}"
+
+    def test_T5_return_signature_unchanged(self) -> None:
+        """Verify return tuple (int, float, str, str) unchanged by 3-tier addition."""
+        valid = [
+            {
+                "n_neighbors": 15, "resolution": 0.1, "n_clusters": 3,
+                "silhouette_score": 0.05, "stability_score": 0.70,
+            },
+            {
+                "n_neighbors": 15, "resolution": 0.3, "n_clusters": 5,
+                "silhouette_score": 0.30, "stability_score": 0.80,
+            },
+            {
+                "n_neighbors": 15, "resolution": 0.5, "n_clusters": 8,
+                "silhouette_score": 0.70, "stability_score": 0.85,
+            },
+            {
+                "n_neighbors": 15, "resolution": 0.8, "n_clusters": 10,
+                "silhouette_score": 0.60, "stability_score": 0.90,
+            },
+            {
+                "n_neighbors": 15, "resolution": 1.0, "n_clusters": 12,
+                "silhouette_score": 0.20, "stability_score": 0.88,
+            },
+        ]
+        result = _select_multi_metric(valid)
+        assert isinstance(result, tuple)
+        assert len(result) == 4
+        assert isinstance(result[0], int)
+        assert isinstance(result[1], float)
+        assert isinstance(result[2], str)
+        assert isinstance(result[3], str)
+
+    def test_T5_two_entries_graceful(self, caplog) -> None:
+        """Two entries only → no exception, 3-tier log still emitted."""
+        valid = [
+            {
+                "n_neighbors": 15, "resolution": 0.3, "n_clusters": 5,
+                "silhouette_score": 0.40, "stability_score": 0.80,
+            },
+            {
+                "n_neighbors": 15, "resolution": 0.8, "n_clusters": 10,
+                "silhouette_score": 0.70, "stability_score": 0.90,
+            },
+        ]
+
+        with caplog.at_level(logging.INFO):
+            result = _select_multi_metric(valid)
+
+        # No exception → 3-tier log present
+        tier_msgs = [
+            rec.message for rec in caplog.records
+            if "[multi_metric 3-tier]" in rec.message
+        ]
+        assert len(tier_msgs) >= 1, "3-tier log not emitted for 2 entries"
+        # Return value still valid
+        assert isinstance(result, tuple) and len(result) == 4
+
+    def test_T5_zero_stability_graceful(self, caplog) -> None:
+        """All stability_scores = 0 → stab removed from weights, fine_entry=None."""
+        valid = [
+            {
+                "n_neighbors": 15, "resolution": 0.5, "n_clusters": 8,
+                "silhouette_score": 0.70, "stability_score": 0.0,
+            },
+            {
+                "n_neighbors": 15, "resolution": 0.8, "n_clusters": 10,
+                "silhouette_score": 0.60, "stability_score": 0.0,
+            },
+            {
+                "n_neighbors": 15, "resolution": 1.0, "n_clusters": 12,
+                "silhouette_score": 0.50, "stability_score": 0.0,
+            },
+        ]
+
+        with caplog.at_level(logging.INFO):
+            result = _select_multi_metric(valid)
+
+        # No crash → fine_entry=None in log
+        tier_msgs = [
+            rec.message for rec in caplog.records
+            if "[multi_metric 3-tier]" in rec.message
+        ]
+        assert len(tier_msgs) >= 1, "3-tier log not emitted"
+        assert "fine: r=nan" in tier_msgs[0], f"Expected fine nan, got: {tier_msgs[0]}"
+        # Return signature unchanged
+        assert isinstance(result, tuple) and len(result) == 4

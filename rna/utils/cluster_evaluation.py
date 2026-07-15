@@ -586,6 +586,46 @@ def _select_multi_metric(valid, weights=None):
     for metric_name, w in active_weights.items():
         composite += w * norm[metric_name]
 
+    # ── 3-tier resolution recommendation logging ──
+    try:
+        entries_by_resolution = sorted(
+            [(valid[i], composite[i]) for i in range(n)],
+            key=lambda x: x[0]['resolution']
+        )
+        comp_max = max(composite)
+        stab_max = max(stab_scores) if 'stability' in active_weights else None
+
+        # Coarse: lowest resolution whose composite > 0.7 of max composite
+        coarse_entry = None
+        for entry, comp in entries_by_resolution:
+            if comp > 0.7 * comp_max:
+                coarse_entry = entry
+                break
+
+        # Balanced: the best (current behavior)
+        balanced_entry = valid[int(np.argmax(composite))]
+
+        # Fine: highest resolution whose stability > 0.85 of max stability
+        fine_entry = None
+        if stab_max is not None and stab_max > 0:
+            for entry, _ in reversed(entries_by_resolution):
+                stab = entry.get('stability_score', 0.0)
+                if stab > 0.85 * stab_max:
+                    fine_entry = entry
+                    break
+
+        logger.info(
+            "[multi_metric 3-tier] coarse: r=%.2f (k=%d) / balanced: r=%.2f (k=%d) / fine: r=%.2f (k=%d)",
+            coarse_entry['resolution'] if coarse_entry else float('nan'),
+            coarse_entry['n_clusters'] if coarse_entry else 0,
+            balanced_entry['resolution'],
+            balanced_entry['n_clusters'],
+            fine_entry['resolution'] if fine_entry else float('nan'),
+            fine_entry['n_clusters'] if fine_entry else 0,
+        )
+    except Exception as exc:
+        logger.debug("3-tier computation skipped: %s", exc)
+
     best_idx = int(np.argmax(composite))
     best = valid[best_idx]
 
