@@ -15,6 +15,114 @@ import pandas as pd
 from core.utils import safe_plot
 
 
+
+
+def _check_zero_scores_and_retry(
+    kb, all_scores, marker_df, clusters, species,
+    target_class, target_order, tissue_kb, logger,
+):
+    """Check for zero KB marker scores and attempt case-insensitive retry.
+
+    When all clusters have zero KB marker hits (and there are >= 5 clusters),
+    attempts a case-insensitive scoring pass by upper-casing both DE gene
+    names and KB marker keys on a deep copy of the KB (the original KB is
+    never mutated).  Fires a diagnostic ERROR warning if zero hits persist.
+
+    Parameters
+    ----------
+    kb : dict
+        Original KB (never mutated).
+    all_scores : dict
+        ``{cluster_str: {type_key: Score}}`` from the initial scoring pass.
+    marker_df : pd.DataFrame
+        Concatenated marker DataFrames with ``names``, ``logfoldchanges``,
+        and ``cluster`` columns.
+    clusters : list
+        Sorted cluster identifiers.
+    species : str
+        Species filter for KB scoring.
+    target_class : str
+        Taxonomic class for phylogenetic weighting.
+    target_order : str
+        Taxonomic order for phylogenetic weighting.
+    tissue_kb : str
+        KB identifier for diagnostic messages.
+    logger : logging.Logger
+
+    Returns
+    -------
+    tuple[dict, int, int]
+        ``(all_scores, total_hits, n_clusters_total)`` — ``all_scores`` may
+        be updated if the retry improved hits.
+    """
+    total_hits = sum(
+        score.n_markers_found
+        for cluster_scores in all_scores.values()
+        for score in cluster_scores.values()
+    )
+    n_clusters_total = len(all_scores)
+
+    if total_hits == 0 and n_clusters_total >= 5:
+        logger.warning(
+            "Zero KB marker hits across all %d clusters — "
+            "attempting case-insensitive normalization retry",
+            n_clusters_total,
+        )
+        import copy
+        kb_copy = copy.deepcopy(kb)
+
+        # Upper-case all marker gene keys in confirm/add of kb_copy
+        for type_key in kb_copy:
+            if type_key == "expert_rules" or type_key.startswith("_"):
+                continue
+            markers = kb_copy[type_key].get("markers", {})
+            for tier in ("confirm", "add"):
+                old_genes = markers.get(tier, {})
+                if old_genes:
+                    markers[tier] = {g.upper(): v for g, v in old_genes.items()}
+
+        # Re-score all clusters with normalized KB and uppercased DE names
+        from rna.utils.marker_scoring import score_cluster_against_kb
+
+        retry_scores = {}
+        for cl in clusters:
+            cl_str = str(cl)
+            cl_mask = marker_df['cluster'] == cl
+            cl_data = marker_df[cl_mask].copy()
+            lfc_idx = cl_data['logfoldchanges'].argsort()[::-1]
+            cl_data = cl_data.iloc[lfc_idx]
+            cl_data['names'] = cl_data['names'].str.upper()
+            retry_scores[cl_str] = score_cluster_against_kb(
+                kb_copy, cl_data, species=species,
+                target_class=target_class, target_order=target_order,
+                adaptive_top_n=True,
+            )
+
+        retry_total_hits = sum(
+            score.n_markers_found
+            for cluster_scores in retry_scores.values()
+            for score in cluster_scores.values()
+        )
+        if retry_total_hits > total_hits:
+            logger.info(
+                "Case-insensitive retry improved hits from %d to %d — "
+                "using normalized results",
+                total_hits, retry_total_hits,
+            )
+            all_scores = retry_scores
+            total_hits = retry_total_hits
+
+    # Zero-score diagnostic warning (fires regardless of retry outcome)
+    if total_hits == 0 and n_clusters_total >= 5:
+        logger.error(
+            "Zero KB marker hits across all %d clusters for KB '%s' "
+            "(species=%s) — likely species mismatch or missing cell types. "
+            "Consider expanding KB coverage or using AI fallback.",
+            n_clusters_total, tissue_kb, species,
+        )
+
+    return all_scores, total_hits, n_clusters_total
+
 def run_unified_annotation(adata, CFG, logger):
     """
     KB-based unified annotation mode.
@@ -128,6 +236,12 @@ def run_unified_annotation(adata, CFG, logger):
         all_rules[cl_str] = apply_expert_rules(kb, cl_data,
                                                 top_n=rule_top_n,
                                                 pval_cutoff=rule_pval)
+
+    # ── e. Zero-score detection and case-insensitive retry ──────────────
+    all_scores, total_hits, n_clusters_total = _check_zero_scores_and_retry(
+        kb, all_scores, marker_df, clusters, species,
+        target_class, target_order, CFG.tissue_kb, logger,
+    )
 
     decisions, fusion_quality = fuse_all_clusters(
         all_scores, all_rules, kb=kb, all_marker_dfs=marker_df,
