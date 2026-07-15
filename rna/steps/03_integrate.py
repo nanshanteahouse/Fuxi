@@ -211,6 +211,7 @@ def main():
     log.info("  PCA elbow plot saved")
 
     # ── Batch diagnosis (v4.x+) ──
+    report = None
     if CFG.harmony.diagnose:
         from rna.utils.batch_diagnostics import diagnose_batch_candidates, plot_diagnosis_report
         adata_orig = adata.copy()
@@ -247,7 +248,20 @@ def main():
 
     # ── Harmony ──
     bk_list = [b for b in batch_keys if b in adata.obs]
-    if CFG.harmony.use_harmony and bk_list:
+    collinear_warnings = []
+    if CFG.harmony.collinearity_guard and report is not None and report.warnings:
+        collinear_warnings = [w for w in report.warnings if "perfectly collinear" in w.lower()]
+
+    if collinear_warnings:
+        log.error("[collinearity-guard] Harmony ABORTED — batch_key perfectly collinear with biology:")
+        for w in collinear_warnings[:3]:
+            log.error("  %s", w)
+        log.error("  To override: set harmony.collinearity_guard: false in config.yaml")
+        adata.uns['harmony_skipped'] = {
+            'reason': 'collinearity',
+            'warnings': collinear_warnings,
+        }
+    elif CFG.harmony.use_harmony and bk_list:
         from harmony import harmonize
         # Unified NaN detection across all batch keys
         nan_mask = adata.obs[bk_list].isna().any(axis=1)
@@ -284,7 +298,7 @@ def main():
         plt.close(fig)
         log.info("  Harmony comparison plot saved")
         # ── Post-Harmony preservation check ──
-        if CFG.harmony.diagnose and 'report' in dir() and report.biology_cols:
+        if CFG.harmony.diagnose and report is not None and report.biology_cols:
             try:
                 from rna.utils.batch_diagnostics import validate_harmony_preservation
                 preservation = validate_harmony_preservation(

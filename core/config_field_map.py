@@ -196,6 +196,7 @@ FIELD_MAP: Dict[str, str] = {
     "use_harmony": "harmony.use_harmony",
     "harmony_batch_key": "harmony.batch_key",
     "harmony_max_iter": "harmony.max_iter",
+    "harmony_collinearity_guard": "harmony.collinearity_guard",
 
     # ═══════════════════════════════════════════════════════════════════
     # clustering — ClusteringSettings

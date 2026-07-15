@@ -169,6 +169,7 @@ class HarmonySettings(BaseModel):
     )
     gini_batch_threshold: float = 0.3
     gini_biology_threshold: float = 0.6
+    collinearity_guard: bool = True
 
 
 # ═══════════════════════════════════════════════════════════════════════
