@@ -457,7 +457,8 @@ class StandardOntology:
         # Ensure rank_genes_groups is available
         if "rank_genes_groups" not in adata.uns:
             sc.tl.rank_genes_groups(
-                adata, groupby="leiden", method="wilcoxon"
+                adata, groupby="leiden", method="wilcoxon",
+                use_raw=True if adata.raw is not None else None,
             )
 
         # Determine which obs column holds the standardised cell type
@@ -520,7 +521,7 @@ class StandardOntology:
             top_set = {g.upper() for g in top_genes}
             kb_set = {g.upper() for g in kb_markers if g}
             overlap = top_set & kb_set
-            score = len(overlap) / len(kb_set) if kb_set else 0.0
+            score = len(overlap) / min(_top_n, len(kb_set)) if kb_set else 0.0
 
             if score >= _min_overlap:
                 status = "PASS"
