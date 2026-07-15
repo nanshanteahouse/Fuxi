@@ -193,7 +193,9 @@ class StandardOntology:
             markers_raw = kb_entry.get("markers", {})
             marker_genes: list[str] = []
             for sub_key in ("confirm", "add", "refine"):
-                marker_genes.extend(markers_raw.get(sub_key, {}).keys())
+                marker_genes.extend(
+                    g.upper() for g in markers_raw.get(sub_key, {}).keys()
+                )
 
             canonical[key] = {
                 "display_name": display_name,
@@ -395,6 +397,7 @@ class StandardOntology:
         self, adata: Any, top_n: int | None = None,
         min_overlap: float | None = None,
         marginal_threshold: float | None = None,
+        species: str | None = None,
     ) -> list[dict[str, Any]]:
         """Marker cross-validation per cluster using KB markers.
 
@@ -454,6 +457,27 @@ class StandardOntology:
             _top_n = top_n if top_n is not None else 15
             _min_overlap = min_overlap if min_overlap is not None else 0.5
             _marginal = marginal_threshold if marginal_threshold is not None else 0.25
+
+        # Relax thresholds for species without dedicated KB (e.g. zebrafish
+        # shares hahn2023 human-style markers that have low overlap)
+        if species:
+            try:
+                from rna.utils.marker_scoring import _species_matches
+                _is_cross = not (
+                    _species_matches(species, ["Homo sapiens"])
+                    or _species_matches(species, ["Mus musculus"])
+                    or _species_matches(species, ["Macaca fascicularis"])
+                )
+                if _is_cross:
+                    _min_overlap = max(_min_overlap * 0.4, 0.15)
+                    _marginal = max(_marginal * 0.4, 0.08)
+                    log.info(
+                        "Cross-species mode: lowered validation thresholds "
+                        "(min_overlap=%.2f, marginal=%.2f)",
+                        _min_overlap, _marginal,
+                    )
+            except ImportError:
+                pass
         # Ensure rank_genes_groups is available
         if "rank_genes_groups" not in adata.uns:
             sc.tl.rank_genes_groups(

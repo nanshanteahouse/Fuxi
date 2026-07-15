@@ -446,6 +446,7 @@ def main():
                     top_n=CFG.marker.validation_n_top_genes,
                     min_overlap=CFG.marker.validation_min_overlap,
                     marginal_threshold=CFG.marker.validation_marginal_threshold,
+                    species=CFG.species,
                 )
                 log.info("Marker validation: %d/%d PASS",
                          sum(1 for r in validation_results if r['status'] == 'PASS'),
@@ -468,6 +469,7 @@ def main():
                     top_n=CFG.marker.validation_n_top_genes,
                     min_overlap=CFG.marker.validation_min_overlap,
                     marginal_threshold=CFG.marker.validation_marginal_threshold,
+                    species=CFG.species,
                 )
                 log.info("Marker validation: %d/%d PASS",
                          sum(1 for r in validation_results if r['status'] == 'PASS'),
@@ -489,6 +491,7 @@ def main():
             top_n=CFG.marker.validation_n_top_genes,
             min_overlap=CFG.marker.validation_min_overlap,
             marginal_threshold=CFG.marker.validation_marginal_threshold,
+            species=CFG.species,
         )
         log.info("Marker validation: %d/%d PASS",
                  sum(1 for r in validation_results if r['status'] == 'PASS'),
