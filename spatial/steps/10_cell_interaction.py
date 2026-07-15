@@ -240,9 +240,15 @@ def main():
     # ── Ensure gene symbols (LIANA uses HGNC symbols) ───────────────────
     adata = ensure_gene_symbols(adata, species=CFG.species, log=log)
 
+    # Auto-select mouse-compatible LR database
+    lr_db = CFG.cci.lr_database
+    if lr_db == "consensus" and CFG.species.lower() in ("mouse", "mus musculus"):
+        lr_db = "omnipath"
+        log.info("Switched CCI LR database for mouse: consensus → omnipath")
+
     lr_res = run_cci_spatial(
         adata,
-        resource_name=CFG.cci.lr_database,
+        resource_name=lr_db,
         connectivity_key="spatial_connectivities",
         local_name="cosine",
         global_name="morans",

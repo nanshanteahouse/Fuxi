@@ -23,10 +23,19 @@ def _check_zero_scores_and_retry(
 ):
     """Check for zero KB marker scores and attempt case-insensitive retry.
 
-    When all clusters have zero KB marker hits (and there are >= 5 clusters),
-    attempts a case-insensitive scoring pass by upper-casing both DE gene
-    names and KB marker keys on a deep copy of the KB (the original KB is
-    never mutated).  Fires a diagnostic ERROR warning if zero hits persist.
+    Builds an uppercased deepcopy of the KB once and reuses it across two
+    retry passes (the original KB is never mutated):
+
+    1. Global retry — fires when *all* clusters have zero hits and there
+       are >= 5 clusters.  Re-scores every cluster; replaces ``all_scores``
+       if any cluster improves.
+
+    2. Per-cluster retry — fires when any clusters remain zero-hit and
+       there are >= 3 clusters.  Re-scores individual zero-hit clusters
+       and updates them in place when their hit count improves.
+
+    A diagnostic ERROR fires if zero hits persist across all clusters
+    after retry.
 
     Parameters
     ----------
@@ -62,16 +71,21 @@ def _check_zero_scores_and_retry(
     )
     n_clusters_total = len(all_scores)
 
-    if total_hits == 0 and n_clusters_total >= 5:
-        logger.warning(
-            "Zero KB marker hits across all %d clusters — "
-            "attempting case-insensitive normalization retry",
-            n_clusters_total,
-        )
-        import copy
-        kb_copy = copy.deepcopy(kb)
+    # Detect retry eligibility up front so we can build the uppercased KB
+    # copy at most once and reuse it across both retry paths.
+    zero_hit_clusters = [
+        cl_str for cl_str, cs in all_scores.items()
+        if sum(s.n_markers_found for s in cs.values()) == 0
+    ]
+    needs_global_retry = total_hits == 0 and n_clusters_total >= 5
+    needs_per_cluster_retry = bool(zero_hit_clusters) and n_clusters_total >= 3
 
-        # Upper-case all marker gene keys in confirm/add of kb_copy
+    if needs_global_retry or needs_per_cluster_retry:
+        import copy
+        from rna.utils.marker_scoring import score_cluster_against_kb
+
+        # Build uppercased KB deepcopy once; reused by both retry passes.
+        kb_copy = copy.deepcopy(kb)
         for type_key in kb_copy:
             if type_key == "expert_rules" or type_key.startswith("_"):
                 continue
@@ -81,37 +95,71 @@ def _check_zero_scores_and_retry(
                 if old_genes:
                     markers[tier] = {g.upper(): v for g, v in old_genes.items()}
 
-        # Re-score all clusters with normalized KB and uppercased DE names
-        from rna.utils.marker_scoring import score_cluster_against_kb
-
-        retry_scores = {}
-        for cl in clusters:
-            cl_str = str(cl)
+        def _retry_cluster_score(cl_str):
+            """Re-score a single cluster against the uppercased KB copy."""
+            cl = int(cl_str) if cl_str.lstrip('-').isdigit() else cl_str
             cl_mask = marker_df['cluster'] == cl
             cl_data = marker_df[cl_mask].copy()
             lfc_idx = cl_data['logfoldchanges'].argsort()[::-1]
             cl_data = cl_data.iloc[lfc_idx]
             cl_data['names'] = cl_data['names'].str.upper()
-            retry_scores[cl_str] = score_cluster_against_kb(
+            return score_cluster_against_kb(
                 kb_copy, cl_data, species=species,
                 target_class=target_class, target_order=target_order,
                 adaptive_top_n=True,
             )
 
-        retry_total_hits = sum(
-            score.n_markers_found
-            for cluster_scores in retry_scores.values()
-            for score in cluster_scores.values()
-        )
-        if retry_total_hits > total_hits:
-            logger.info(
-                "Case-insensitive retry improved hits from %d to %d — "
-                "using normalized results",
-                total_hits, retry_total_hits,
+        # Global retry: all clusters zero-hit (n_clusters_total >= 5).
+        # Re-score every cluster; replace all_scores if any improvement.
+        if needs_global_retry:
+            logger.warning(
+                "Zero KB marker hits across all %d clusters — "
+                "attempting case-insensitive normalization retry",
+                n_clusters_total,
             )
-            all_scores = retry_scores
-            total_hits = retry_total_hits
+            retry_scores = {str(cl): _retry_cluster_score(str(cl)) for cl in clusters}
+            retry_total_hits = sum(
+                s.n_markers_found
+                for cluster_scores in retry_scores.values()
+                for s in cluster_scores.values()
+            )
+            if retry_total_hits > total_hits:
+                logger.info(
+                    "Case-insensitive retry improved hits from %d to %d — "
+                    "using normalized results",
+                    total_hits, retry_total_hits,
+                )
+                all_scores = retry_scores
+                total_hits = retry_total_hits
+                # Recompute zero-hit list for the per-cluster pass below.
+                zero_hit_clusters = [
+                    cl_str for cl_str, cs in all_scores.items()
+                    if sum(s.n_markers_found for s in cs.values()) == 0
+                ]
 
+        # Per-cluster retry: any remaining zero-hit clusters (n_clusters_total >= 3).
+        # Updates individual clusters only when retry improves their hit count.
+        if zero_hit_clusters and n_clusters_total >= 3:
+            logger.warning(
+                "%d/%d clusters have zero KB hits — retrying per-cluster "
+                "with case-insensitive normalization",
+                len(zero_hit_clusters), n_clusters_total,
+            )
+            per_cluster_fixed = 0
+            for cl_str in zero_hit_clusters:
+                retry_result = _retry_cluster_score(cl_str)
+                retry_hits = sum(
+                    s.n_markers_found for s in retry_result.values()
+                )
+                if retry_hits > 0:
+                    all_scores[cl_str] = retry_result
+                    per_cluster_fixed += 1
+                    total_hits += retry_hits
+            if per_cluster_fixed:
+                logger.info(
+                    "Per-cluster retry recovered %d/%d zero-hit clusters",
+                    per_cluster_fixed, len(zero_hit_clusters),
+                )
     # Zero-score diagnostic warning (fires regardless of retry outcome)
     if total_hits == 0 and n_clusters_total >= 5:
         logger.error(
