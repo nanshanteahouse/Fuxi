@@ -152,12 +152,9 @@ def _get_canonical_markers(kb: Dict[str, Any], type_key: str,
     """Return the union of all *confirm* + *add* markers for *type_key*.
 
     If *species* is provided and the type's ``species`` list does not contain
-    it, an empty list is returned (the type is considered irrelevant).
-
-    However, if *gene_names* is provided and the majority of genes appear to
-    already be human orthologs (i.e. ortholog conversion was applied), the
-    species filter is **relaxed** — markers are returned so KB scoring can
-    work on cross-species data that has been mapped to human gene symbols.
+    it, markers may still be returned if they share a taxonomic class
+    (e.g. mouse ← human via Mammalia), or if *gene_names* appear ortholog-mapped.
+    Otherwise an empty list is returned.
     """
     type_data = kb.get(type_key, {})
     if not type_data:
@@ -176,7 +173,9 @@ def _get_canonical_markers(kb: Dict[str, Any], type_key: str,
             if _species_matches(species, type_species):
                 # Species matches after normalisation — keep markers.
                 return list(result)
-            # Species does not match at all.
+            # Cross-species: shared taxonomic class permits marker sharing
+            if _same_class_as_any(species, type_species):
+                return list(result)
             # Relax filter if genes are mapped to human orthologs.
             if gene_names and _looks_mapped_to_target(gene_names):
                 logger.debug(
@@ -254,6 +253,34 @@ def _species_matches(user_species: str, kb_species_list: list[str]) -> bool:
             ks.strip().lower(), ks.strip()
         )
         if normalised_user.lower() == normalised_ks.lower():
+            return True
+    return False
+
+
+def _same_class_as_any(user_species: str, kb_species_list: list[str]) -> bool:
+    """Return True if *user_species* shares a taxonomic class with any KB species.
+
+    Genetic markers are largely conserved within the same class (e.g. Mammalia),
+    so species mismatch at the species level should not block KB marker access
+    when both organisms belong to the same taxonomic class.
+    """
+    from rna.ortholog import SPECIES_TO_CLASS
+
+    def _get_class(name: str) -> str:
+        norm = name.strip().lower()
+        if norm in SPECIES_TO_CLASS:
+            return SPECIES_TO_CLASS[norm]
+        for common, scient in _SPECIES_SYNONYMS.items():
+            if scient.lower() == norm and common in SPECIES_TO_CLASS:
+                return SPECIES_TO_CLASS[common]
+        return ""
+
+    user_class = _get_class(user_species)
+    if not user_class:
+        return False
+    for ks in kb_species_list:
+        ks_class = _get_class(ks)
+        if ks_class and ks_class == user_class:
             return True
     return False
 
@@ -708,7 +735,7 @@ def score_cluster_against_kb(kb: Dict[str, Any],
             if len(top_in_bg) / max(background_size, 1) >= 0.05:
                 break
             _cand = _filtered.head(_candidate_n)
-            _cand_set = set(_cand["names"].tolist())
+            _cand_set = set(_normalize_gene_name(g) for g in _cand["names"].tolist())
             _cand_in_bg = _cand_set & all_type_markers
             if len(_cand_in_bg) > len(top_in_bg):
                 top_n = _candidate_n
