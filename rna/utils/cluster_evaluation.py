@@ -31,7 +31,7 @@ DEFAULT_MULTI_METRIC_WEIGHTS = {
 }
 
 
-def select_best_params(results_summary, method="pareto_elbow", best_resolution=None, best_n_neighbors=0, multi_metric_weights=None):
+def select_best_params(results_summary, method="pareto_elbow", best_resolution=None, best_n_neighbors=0, multi_metric_weights=None, log=None):
     """Select the best (n_neighbors, resolution) from a grid search summary.
 
     Parameters
@@ -88,7 +88,7 @@ def select_best_params(results_summary, method="pareto_elbow", best_resolution=N
     elif method == "silhouette":
         return _select_max_silhouette(valid)
     elif method == "multi_metric":
-        return _select_multi_metric(valid, weights=multi_metric_weights)
+        return _select_multi_metric(valid, weights=multi_metric_weights, log=log)
     else:
         raise ValueError(
             f"Unknown cluster_selection_method: {method!r}. "
@@ -448,7 +448,7 @@ def _compute_splitting_gain(valid_by_resolution: list[dict]) -> dict[float, floa
 
     return gains
 
-def _select_multi_metric(valid, weights=None):
+def _select_multi_metric(valid, weights=None, log=None):
     """Select best clustering via composite multi-metric scoring.
 
     Reads precomputed ``silhouette_score``, ``stability_score``,
@@ -614,7 +614,7 @@ def _select_multi_metric(valid, weights=None):
                     fine_entry = entry
                     break
 
-        logger.info(
+        (log or logger).info(
             "[multi_metric 3-tier] coarse: r=%.2f (k=%d) / balanced: r=%.2f (k=%d) / fine: r=%.2f (k=%d)",
             coarse_entry['resolution'] if coarse_entry else float('nan'),
             coarse_entry['n_clusters'] if coarse_entry else 0,

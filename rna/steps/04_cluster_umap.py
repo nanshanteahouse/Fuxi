@@ -303,6 +303,7 @@ def main():
             best_resolution=CFG.clustering.best_resolution if method is None else None,
             best_n_neighbors=getattr(CFG.clustering, 'best_n_neighbors', 0) if method is None else 0,
             multi_metric_weights=getattr(CFG.clustering, 'multi_metric_weights', None),
+            log=log,
         )
 
     log.info("Selected best params via %s: n_neighbors=%d, resolution=%.1f (%s)",
