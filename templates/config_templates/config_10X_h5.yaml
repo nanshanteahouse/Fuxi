@@ -28,6 +28,7 @@ sample_meta:
 
 # ── Dataset metadata ──
 tissue: "unknown"
+# tissue_kb: ""          # auto-inferred from 'tissue' when matching KB exists
 # tissue_maturity: "unknown"   # "developing" | "adult" | "unknown"
 species: "human"
 expression_type: raw_counts

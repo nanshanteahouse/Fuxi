@@ -8,6 +8,7 @@ data_input:
 
 # ── Dataset metadata ──
 tissue: "{{TISSUE}}"
+# tissue_kb: ""          # auto-inferred from "tissue" when matching KB exists
 # tissue_maturity: "unknown"   # "developing" | "adult" | "unknown"
 species: "{{SPECIES}}"
 expression_type: "{{EXPRESSION_TYPE}}"

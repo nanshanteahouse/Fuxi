@@ -576,6 +576,14 @@ class Config(BaseModel):
             self.log_dir = self.log_dir.rstrip('/\\') + suffix
             print(f"[Config] Subset active → output dir suffix: '{suffix}'")
 
+        # tissue_kb auto-inference from tissue
+        if not self.tissue_kb and self.tissue not in ("unknown", ""):
+            _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            _kb_dir = os.path.join(_repo_root, "rna", "tissue_ontologies", self.tissue)
+            if os.path.isdir(_kb_dir):
+                self.tissue_kb = self.tissue
+                self.tissue_ontology = self.tissue_ontology or self.tissue
+
     # ═══════════════════════════════════════════════════════════════════
     # RNA checkpoint 路径（属性）
     # ═══════════════════════════════════════════════════════════════════

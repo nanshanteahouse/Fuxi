@@ -383,6 +383,15 @@ def _plot_nfeature_kde(adata, fig_dir, mode_label, cfg, log):
 
 def compute_qc_metrics(adata, cfg, log):
     log.info("Computing QC metrics...")
+    
+    # Auto-detect mt_gene_pattern for non-human species
+    mt_pattern = cfg.qc.mt_gene_pattern
+    if not any(adata.var_names.str.startswith(mt_pattern)):
+        alt = "mt-" if mt_pattern == "MT-" else "MT-"
+        if any(adata.var_names.str.startswith(alt)):
+            log.info("Auto-switched mt_gene_pattern: '%s' -> '%s' (no '%s' genes found)", mt_pattern, alt, mt_pattern)
+            cfg.qc.mt_gene_pattern = alt
+
     mt_mask = adata.var_names.str.startswith(cfg.qc.mt_gene_pattern)
     if cfg.qc.mt_gene_list:
         mt_mask = mt_mask | adata.var_names.isin(cfg.qc.mt_gene_list)
