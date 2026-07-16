@@ -563,80 +563,138 @@ def _build_slug_local(first_author: str, year: str, journal: str, pmid: Optional
     j = re.sub(r"\s+", " ", j)
     ab = _JOURNAL_ABBREVS.get(j, "unknown")
     return f"{author}{yr}_{ab}"
+
+def _register_from_insights(
+    registry: MasterRegistry,
+    insights: dict[str, Any],
+    subdir: str,
+    dry_run: bool = False,
+) -> MasterRegistry:
+    """共享登记逻辑：从 insights.yaml 读 meta -> 写入 registry"""
+    meta = insights.get("paper_meta", {}) or {}
+    pmid = str(meta.get("pmid", "") or "")
+    if not pmid:
+        # no PMID --- 用 author-year-journal 构造 paper_id
+        first_auth = str(meta.get("first_author", "") or "")
+        year = str(meta.get("year", "") or "")
+        journal = str(meta.get("journal", "") or "")
+        pmid = f"no-pmid-{_build_slug_local(first_auth, year, journal, None)}"
+
+    slug = _build_slug_local(
+        str(meta.get("first_author", "")),
+        str(meta.get("year", "")),
+        str(meta.get("journal", "")),
+        pmid if not pmid.startswith("no-pmid-") else None,
+    )
+
+    if registry.get_paper(pmid):
+        print(f"\u26a0\ufe0f Paper {pmid} exists, skip")
+        return registry
+
+    paper_entry = PaperEntry(
+        paper_id=pmid, slug=slug, pmid=pmid if not pmid.startswith("no-pmid-") else None,
+        title=str(meta.get("title", "") or ""),
+        journal=str(meta.get("journal", "") or ""),
+        year=str(meta.get("year", "") or ""),
+        first_author=str(meta.get("first_author", "") or ""),
+        doi=str(meta.get("doi", "") or ""),
+        paper_dir=subdir,
+        insights=InsightEntry(status="generated", insights_path="insights.yaml"),
+    )
+    geo_ids = (insights.get("data_access", {}) or {}).get("geo_ids", []) or []
+    new_links: list[PaperDatasetLink] = []
+    for gse_id in geo_ids:
+        if gse_id not in registry.datasets:
+            registry.datasets[gse_id] = DatasetEntry(
+                repository=RepositoryType.GEO,
+                status="data_not_downloaded",
+                data_root=f"{{FUXI_DATA_ROOT}}/{gse_id}",
+            )
+        new_links.append(PaperDatasetLink(
+            paper_id=pmid, dataset_id=gse_id, role=LinkRole.PRIMARY,
+        ))
+    registry.papers.append(paper_entry)
+    registry.links.extend(new_links)
+    print(f"\u2705 Added: {slug}")
+    print(f"   {str(meta.get('title', ''))[:100]}")
+    print(f"   {meta.get('journal', '')} ({meta.get('year', '')})")
+    print(f"   GSEs: {', '.join(geo_ids) or 'none'}")
+    if dry_run:
+        print("\n\U0001f4a1 --dry-run, not saved")
+    return registry
+
+
 def _cmd_add_paper(
     registry: MasterRegistry,
-    pmid: str,
+    pmid: str = "",
+    xml: str = "",
+    pdf: str = "",
+    paper_dir: str = "",
     dry_run: bool = False,
 ) -> MasterRegistry:
     import subprocess
     import sys
-    papers_dir = "projects/papers"
-    print(f"\U0001f50d PMID={pmid}: calling paper_insights ...")
-    result = subprocess.run(
-        [sys.executable, "core/paper_insights.py", "--pmid", pmid],
-        capture_output=True, text=True, timeout=120,
-    )
-    if result.returncode != 0:
-        print(f"\u274c paper_insights failed (exit={result.returncode})")
-        if result.stderr:
-            print(result.stderr[-500:])
-        return registry
-    for subdir in sorted(os.listdir(papers_dir)):
-        ipath = os.path.join(papers_dir, subdir, "insights.yaml")
+
+    papers_root = "projects/papers"
+    insights = None
+    subdir = ""
+
+    # ── PMID / XML / PDF 模式：调 paper_insights ──
+    if pmid or xml or pdf:
+        cmd = [sys.executable, "core/paper_insights.py"]
+        if xml:
+            cmd.extend(["--xml", xml])
+            print(f"\U0001f50d xml={xml}: calling paper_insights ...")
+        elif pdf:
+            cmd.extend(["--pdf", pdf])
+            print(f"\U0001f50d pdf={pdf}: calling paper_insights ...")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        if result.returncode != 0:
+            print(f"\u274c paper_insights failed (exit={result.returncode})")
+            if result.stderr:
+                print(result.stderr[-500:])
+            return registry
+        # 扫描新生成的 insights.yaml
+        for d in sorted(os.listdir(papers_root)):
+            ipath = os.path.join(papers_root, d, "insights.yaml")
+            if not os.path.isfile(ipath):
+                continue
+            try:
+                with open(ipath) as f:
+                    data = yaml.safe_load(f)
+                m = data.get("paper_meta", {}) or {}
+                # PMID 模式：按 PMID 匹配；XML 模式：匹配第一个
+                if pmid and str(m.get("pmid", "")) == pmid:
+                    insights, subdir = data, d
+                    break
+                if xml and insights is None:
+                    insights, subdir = data, d
+                    break
+            except Exception:
+                continue
+        if insights is None:
+            print(f"\u274c No insights.yaml found for PMID={pmid or xml}")
+            return registry
+
+    # ── paper-dir 模式：直接从已有目录读取 ──
+    elif paper_dir:
+        ipath = os.path.join(paper_dir, "insights.yaml")
         if not os.path.isfile(ipath):
-            continue
+            print(f"\u274c {ipath} not found")
+            return registry
         try:
             with open(ipath) as f:
                 insights = yaml.safe_load(f)
-            meta = insights.get("paper_meta", {})
-            if str(meta.get("pmid")) != pmid:
-                continue
-        except Exception:
-            continue
-        slug = _build_slug_local(
-            str(meta.get("first_author","")), str(meta.get("year","")),
-            str(meta.get("journal","")), pmid)
-        paper_id = pmid
-        if registry.get_paper(paper_id):
-            print(f"\u26a0\ufe0f Paper {paper_id} exists, skip")
+        except Exception as e:
+            print(f"\u274c Failed to read {ipath}: {e}")
             return registry
+        subdir = os.path.basename(paper_dir.rstrip("/"))
 
-        paper_entry = PaperEntry(
-            paper_id=paper_id, slug=slug, pmid=pmid,
-            title=str(meta.get("title","") or ""),
-            journal=str(meta.get("journal","") or ""),
-            year=str(meta.get("year","") or ""),
-            first_author=str(meta.get("first_author","") or ""),
-            doi=str(meta.get("doi","") or ""),
-            paper_dir=subdir,
-            insights=InsightEntry(
-                status="generated", insights_path="insights.yaml"),
-        )
-        geo_ids = (insights.get("data_access",{}) or {}).get("geo_ids",[]) or []
-        new_links = []
-        for gse_id in geo_ids:
-            if gse_id not in registry.datasets:
-                registry.datasets[gse_id] = DatasetEntry(
-                    repository=RepositoryType.GEO,
-                    status="data_not_downloaded",
-                    data_root=f"{{FUXI_DATA_ROOT}}/{gse_id}",
-                )
-            new_links.append(PaperDatasetLink(
-                paper_id=paper_id, dataset_id=gse_id,
-                role=LinkRole.PRIMARY,
-            ))
-        registry.papers.append(paper_entry)
-        registry.links.extend(new_links)
-        print(f"\u2705 Added: {slug}")
-        print(f"   {str(meta.get('title',''))[:100]}")
-        print(f"   {meta.get('journal','')} ({meta.get('year','')})")
-        print(f"   GSEs: {', '.join(geo_ids) or 'none'}")
-        if dry_run:
-            print("\n\U0001f4a1 --dry-run, not saved")
+    else:
+        print("\u274c Must specify --pmid, --xml, or --paper-dir")
         return registry
-    print(f"\u274c No insights.yaml found for PMID={pmid}")
-    return registry
 
+    return _register_from_insights(registry, insights, subdir, dry_run)
 def main() -> None:
     import argparse
 
@@ -661,7 +719,10 @@ def main() -> None:
     sub.add_parser("find-orphans", help="查找孤儿数据集")
 
     p_add = sub.add_parser("add-paper", help="新增论文（调 paper_insights → 直接写 registry）")
-    p_add.add_argument("--pmid", required=True, help="PubMed ID")
+    p_add.add_argument("--pmid", default=None, help="PubMed ID (NCBI 自动下载)")
+    p_add.add_argument("--paper-dir", default=None, help="已有 paper 目录 (含 insights.yaml)")
+    p_add.add_argument("--xml", dest="xml_path", default=None, help="本地 PMC XML 文件路径")
+    p_add.add_argument("--pdf", default=None, help="PDF 文件路径 (pymupdf4llm → md → LLM)")
     p_add.add_argument("--dry-run", action="store_true", help="预览不写入")
 
     args = parser.parse_args()
@@ -699,7 +760,7 @@ def main() -> None:
                 print(f"  - {ds_id}  ({mod_str}, status={ds.status})")
         supp_orphans = registry.find_orphan_supplements()
     elif args.command == "add-paper":
-        registry = _cmd_add_paper(registry, args.pmid, dry_run=args.dry_run)
+        registry = _cmd_add_paper(registry, pmid=args.pmid or "", xml=args.xml_path or "", pdf=args.pdf or "", paper_dir=args.paper_dir or "", dry_run=args.dry_run)
         if not args.dry_run:
             save_master_registry(registry, reg_path)
 
