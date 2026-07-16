@@ -69,7 +69,7 @@ markers:
     synonyms: []
     audit:
       expression_validated: []
-      supplement_verified: []
+      supplement_verified: [Table_S2_RGC_subtype_markers]
       cross_species_validated: false
       last_audited: '2026-07-16'
       flagged: false
@@ -96,7 +96,7 @@ markers:
     synonyms: []
     audit:
       expression_validated: []
-      supplement_verified: []
+      supplement_verified: [Table_S2_RGC_subtype_markers]
       cross_species_validated: false
       last_audited: '2026-07-16'
       flagged: false
@@ -120,7 +120,7 @@ markers:
     synonyms: []
     audit:
       expression_validated: []
-      supplement_verified: []
+      supplement_verified: [Table_S2_RGC_subtype_markers]
       cross_species_validated: false
       last_audited: '2026-07-16'
       flagged: false
@@ -144,7 +144,7 @@ markers:
     synonyms: []
     audit:
       expression_validated: []
-      supplement_verified: []
+      supplement_verified: [Table_S2_RGC_subtype_markers]
       cross_species_validated: false
       last_audited: '2026-07-16'
       flagged: false
@@ -166,7 +166,7 @@ markers:
     synonyms: []
     audit:
       expression_validated: []
-      supplement_verified: []
+      supplement_verified: [Table_S2_RGC_subtype_markers]
       cross_species_validated: false
       last_audited: '2026-07-16'
       flagged: false
@@ -192,7 +192,7 @@ markers:
     synonyms: []
     audit:
       expression_validated: []
-      supplement_verified: []
+      supplement_verified: [Table_S2_RGC_subtype_markers]
       cross_species_validated: false
       last_audited: '2026-07-16'
       flagged: false
@@ -218,7 +218,7 @@ markers:
     synonyms: []
     audit:
       expression_validated: []
-      supplement_verified: []
+      supplement_verified: [Table_S2_RGC_subtype_markers]
       cross_species_validated: false
       last_audited: '2026-07-16'
       flagged: false

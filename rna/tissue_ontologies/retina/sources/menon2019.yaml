@@ -48,7 +48,7 @@ markers:
     synonyms: []
     audit:
       expression_validated: []
-      supplement_verified: []
+      supplement_verified: [MOESM5_filtered_gene_scores]
       cross_species_validated: false
       last_audited: null
       flagged: false
@@ -79,7 +79,7 @@ markers:
     synonyms: []
     audit:
       expression_validated: []
-      supplement_verified: []
+      supplement_verified: [MOESM5_filtered_gene_scores]
       cross_species_validated: false
       last_audited: null
       flagged: false
@@ -107,7 +107,7 @@ markers:
     audit:
       expression_validated:
       - GSE118614
-      supplement_verified: []
+      supplement_verified: [MOESM5_filtered_gene_scores]
       cross_species_validated:
         NEFM: true
         POU4F1: true
@@ -198,7 +198,7 @@ markers:
     audit:
       expression_validated:
       - GSE118614
-      supplement_verified: []
+      supplement_verified: [MOESM5_filtered_gene_scores]
       cross_species_validated:
         PRKCA: false
         TRPM1: true
@@ -264,7 +264,7 @@ markers:
     audit:
       expression_validated:
       - GSE118614
-      supplement_verified: []
+      supplement_verified: [MOESM5_filtered_gene_scores]
       cross_species_validated:
         GAD1: false
         GAD2: true
@@ -333,7 +333,7 @@ markers:
     audit:
       expression_validated:
       - GSE118614
-      supplement_verified: []
+      supplement_verified: [MOESM5_filtered_gene_scores]
       cross_species_validated:
         ONECUT1: false
         ONECUT2: true
@@ -392,7 +392,7 @@ markers:
     audit:
       expression_validated:
       - GSE118614
-      supplement_verified: []
+      supplement_verified: [MOESM5_filtered_gene_scores]
       cross_species_validated:
         GFAP: false
         GLUL: false
@@ -465,7 +465,7 @@ markers:
     synonyms: []
     audit:
       expression_validated: []
-      supplement_verified: []
+      supplement_verified: [MOESM5_filtered_gene_scores]
       cross_species_validated: false
       last_audited: null
       flagged: false
@@ -485,7 +485,7 @@ markers:
     synonyms: []
     audit:
       expression_validated: []
-      supplement_verified: []
+      supplement_verified: [MOESM5_filtered_gene_scores]
       cross_species_validated: false
       last_audited: null
       flagged: false
@@ -512,7 +512,7 @@ markers:
     synonyms: []
     audit:
       expression_validated: []
-      supplement_verified: []
+      supplement_verified: [MOESM5_filtered_gene_scores]
       cross_species_validated: false
       last_audited: null
       flagged: false

@@ -33,6 +33,13 @@ markers:
     negative_markers: []
     species: []
     synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
   NRPC:
     confirm:
     - ATOH7
@@ -50,6 +57,13 @@ markers:
     negative_markers: []
     species: []
     synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
   NRPC_Cone_BC_fate:
     confirm:
     - PDLIM4
@@ -68,6 +82,13 @@ markers:
     negative_markers: []
     species: []
     synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
   Photoreceptor_Precursor:
     confirm:
     - FABP7
@@ -86,6 +107,13 @@ markers:
     negative_markers: []
     species: []
     synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
   RGC:
     confirm:
     - SNCG
@@ -103,6 +131,13 @@ markers:
     negative_markers: []
     species: []
     synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
   Amacrine_Cell:
     confirm:
     - ONECUT2
@@ -120,6 +155,13 @@ markers:
     negative_markers: []
     species: []
     synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
   Cone_Photoreceptor:
     confirm:
     - AIPL1
@@ -138,6 +180,13 @@ markers:
     negative_markers: []
     species: []
     synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
   Rod_Photoreceptor:
     confirm:
     - RCVRN
@@ -156,6 +205,13 @@ markers:
     negative_markers: []
     species: []
     synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
   Bipolar_Cell:
     confirm:
     - PCBP4
@@ -174,6 +230,13 @@ markers:
     negative_markers: []
     species: []
     synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
   Horizontal_Cell:
     confirm:
     - SOX4
@@ -192,6 +255,13 @@ markers:
     negative_markers: []
     species: []
     synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
   Microglia:
     confirm:
     - PTN
@@ -210,3 +280,11 @@ markers:
     negative_markers: []
     species: []
     synonyms: []
+
+    audit:
+      expression_validated: []
+      supplement_verified: []
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''

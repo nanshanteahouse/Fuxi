@@ -35,7 +35,7 @@ markers:
       expression_validated:
       - GSE107618
       - GSE118614
-      supplement_verified: []
+      supplement_verified: [pbio.3000365.s012_markers_of_each_cluster]
       cross_species_validated:
         BEST1: false
         LRAT: false
@@ -74,7 +74,7 @@ markers:
     audit:
       expression_validated:
       - GSE107618
-      supplement_verified: []
+      supplement_verified: [pbio.3000365.s012_markers_of_each_cluster]
       cross_species_validated:
         COL1A1: true
         DCN: true
@@ -114,7 +114,7 @@ markers:
       expression_validated:
       - GSE107618
       - GSE118614
-      supplement_verified: []
+      supplement_verified: [pbio.3000365.s012_markers_of_each_cluster]
       cross_species_validated:
         PAX6: true
         SOX2: true
@@ -145,7 +145,7 @@ markers:
     audit:
       expression_validated:
       - GSE118614
-      supplement_verified: []
+      supplement_verified: [pbio.3000365.s012_markers_of_each_cluster]
       cross_species_validated:
         GFAP: false
         GLUL: false
@@ -207,7 +207,7 @@ markers:
       expression_validated:
       - GSE107618
       - GSE118614
-      supplement_verified: []
+      supplement_verified: [pbio.3000365.s012_markers_of_each_cluster]
       cross_species_validated:
         NEFM: true
         POU4F1: true
@@ -280,7 +280,7 @@ markers:
     audit:
       expression_validated:
       - GSE118614
-      supplement_verified: []
+      supplement_verified: [pbio.3000365.s012_markers_of_each_cluster]
       cross_species_validated:
         CRX: true
         OTX2: true
@@ -307,7 +307,7 @@ markers:
     synonyms: []
     audit:
       expression_validated: []
-      supplement_verified: []
+      supplement_verified: [pbio.3000365.s012_markers_of_each_cluster]
       cross_species_validated: false
       last_audited: null
       flagged: false
@@ -325,7 +325,7 @@ markers:
     synonyms: []
     audit:
       expression_validated: []
-      supplement_verified: []
+      supplement_verified: [pbio.3000365.s012_markers_of_each_cluster]
       cross_species_validated: false
       last_audited: null
       flagged: false
@@ -343,7 +343,7 @@ markers:
     audit:
       expression_validated:
       - GSE118614
-      supplement_verified: []
+      supplement_verified: [pbio.3000365.s012_markers_of_each_cluster]
       cross_species_validated:
         ONECUT1: false
         ONECUT2: true
@@ -384,7 +384,7 @@ markers:
     synonyms: []
     audit:
       expression_validated: []
-      supplement_verified: []
+      supplement_verified: [pbio.3000365.s012_markers_of_each_cluster]
       cross_species_validated: false
       last_audited: null
       flagged: false
@@ -403,7 +403,7 @@ markers:
     audit:
       expression_validated:
       - GSE107618
-      supplement_verified: []
+      supplement_verified: [pbio.3000365.s012_markers_of_each_cluster]
       cross_species_validated:
         AIF1: true
         CSF1R: true

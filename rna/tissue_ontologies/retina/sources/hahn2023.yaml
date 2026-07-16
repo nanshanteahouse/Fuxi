@@ -171,7 +171,7 @@ markers:
       last_audited: '2026-07-10'
       flagged: false
       notes: ''
-  Retinal_Ganglion_Cell:
+  RGC:
     confirm:
     - NEFL
     - POU4F1
@@ -294,7 +294,7 @@ expert_rules:
       RBPMS: 1.0
       POU4F1: 1.0
       SLC17A6: 1.0
-  action: Retinal_Ganglion_Cell
+  action: RGC
   source: hahn2023
   notes: RBPMS+POU4F1 co-expression universally specifies RGC identity in jawed vertebrates
 - priority: 9
