@@ -540,6 +540,103 @@ def _cmd_reset_gse(
     return registry
 
 
+_JOURNAL_ABBREVS = {
+    "cell": "cell", "neuron": "neuron", "nature": "nature",
+    "nature communications": "natcomms", "nature genetics": "natgenet",
+    "cell genomics": "cellgenom", "cell reports": "cellrep",
+    "scientific reports": "scirep", "scientific data": "scidata",
+    "plos biology": "plosbiol", "plos genetics": "plosgenet",
+    "genome biology": "genomebiol", "developmental cell": "devcell",
+    "elife": "elife", "iscience": "iscience",
+    "frontiers in immunology": "frontimmunol",
+    "frontiers in genetics": "frontgenet",
+    "proceedings of the national academy of sciences": "pnas",
+    "protein & cell": "proteincell", "biorxiv": "biorxiv",
+    "research square": "researchsq", "stem cell reports": "stemcellrep",
+}
+
+
+def _build_slug_local(first_author: str, year: str, journal: str, pmid: Optional[str]) -> str:
+    author = re.sub(r"[^a-z]", "", (first_author or "unknown").lower())[:20] or "unknown"
+    yr = (year or "0000")[:4]
+    j = (journal or "").strip().lower()
+    j = re.sub(r"\s+", " ", j)
+    ab = _JOURNAL_ABBREVS.get(j, "unknown")
+    return f"{author}{yr}_{ab}"
+def _cmd_add_paper(
+    registry: MasterRegistry,
+    pmid: str,
+    dry_run: bool = False,
+) -> MasterRegistry:
+    import subprocess
+    import sys
+    papers_dir = "projects/papers"
+    print(f"\U0001f50d PMID={pmid}: calling paper_insights ...")
+    result = subprocess.run(
+        [sys.executable, "core/paper_insights.py", "--pmid", pmid],
+        capture_output=True, text=True, timeout=120,
+    )
+    if result.returncode != 0:
+        print(f"\u274c paper_insights failed (exit={result.returncode})")
+        if result.stderr:
+            print(result.stderr[-500:])
+        return registry
+    for subdir in sorted(os.listdir(papers_dir)):
+        ipath = os.path.join(papers_dir, subdir, "insights.yaml")
+        if not os.path.isfile(ipath):
+            continue
+        try:
+            with open(ipath) as f:
+                insights = yaml.safe_load(f)
+            meta = insights.get("paper_meta", {})
+            if str(meta.get("pmid")) != pmid:
+                continue
+        except Exception:
+            continue
+        slug = _build_slug_local(
+            str(meta.get("first_author","")), str(meta.get("year","")),
+            str(meta.get("journal","")), pmid)
+        paper_id = pmid
+        if registry.get_paper(paper_id):
+            print(f"\u26a0\ufe0f Paper {paper_id} exists, skip")
+            return registry
+
+        paper_entry = PaperEntry(
+            paper_id=paper_id, slug=slug, pmid=pmid,
+            title=str(meta.get("title","") or ""),
+            journal=str(meta.get("journal","") or ""),
+            year=str(meta.get("year","") or ""),
+            first_author=str(meta.get("first_author","") or ""),
+            doi=str(meta.get("doi","") or ""),
+            paper_dir=subdir,
+            insights=InsightEntry(
+                status="generated", insights_path="insights.yaml"),
+        )
+        geo_ids = (insights.get("data_access",{}) or {}).get("geo_ids",[]) or []
+        new_links = []
+        for gse_id in geo_ids:
+            if gse_id not in registry.datasets:
+                registry.datasets[gse_id] = DatasetEntry(
+                    repository=RepositoryType.GEO,
+                    status="data_not_downloaded",
+                    data_root=f"{{FUXI_DATA_ROOT}}/{gse_id}",
+                )
+            new_links.append(PaperDatasetLink(
+                paper_id=paper_id, dataset_id=gse_id,
+                role=LinkRole.PRIMARY,
+            ))
+        registry.papers.append(paper_entry)
+        registry.links.extend(new_links)
+        print(f"\u2705 Added: {slug}")
+        print(f"   {str(meta.get('title',''))[:100]}")
+        print(f"   {meta.get('journal','')} ({meta.get('year','')})")
+        print(f"   GSEs: {', '.join(geo_ids) or 'none'}")
+        if dry_run:
+            print("\n\U0001f4a1 --dry-run, not saved")
+        return registry
+    print(f"\u274c No insights.yaml found for PMID={pmid}")
+    return registry
+
 def main() -> None:
     import argparse
 
@@ -563,10 +660,14 @@ def main() -> None:
 
     sub.add_parser("find-orphans", help="查找孤儿数据集")
 
+    p_add = sub.add_parser("add-paper", help="新增论文（调 paper_insights → 直接写 registry）")
+    p_add.add_argument("--pmid", required=True, help="PubMed ID")
+    p_add.add_argument("--dry-run", action="store_true", help="预览不写入")
+
     args = parser.parse_args()
     reg_path = args.registry if hasattr(args, "registry") else None
 
-    if args.command in ("report", "verify", "reset-gse", "find-orphans"):
+    if args.command in ("report", "verify", "reset-gse", "find-orphans", "add-paper"):
         registry = load_master_registry(reg_path)
 
     if args.command == "report":
@@ -597,10 +698,10 @@ def main() -> None:
                 mod_str = ", ".join(ds.modalities.keys()) if ds.modalities else "?"
                 print(f"  - {ds_id}  ({mod_str}, status={ds.status})")
         supp_orphans = registry.find_orphan_supplements()
-        if supp_orphans:
-            print(f"\n\u26a0\ufe0f  发现 {len(supp_orphans)} 个孤儿附表目录:")
-            for pmid_dir in supp_orphans:
-                print(f"  - notes/supplements/{pmid_dir}/")
+    elif args.command == "add-paper":
+        registry = _cmd_add_paper(registry, args.pmid, dry_run=args.dry_run)
+        if not args.dry_run:
+            save_master_registry(registry, reg_path)
 
 
 if __name__ == "__main__":

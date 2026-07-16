@@ -78,7 +78,9 @@ When user requests to analyze or reproduce a dataset, check the **master registr
    ```
 5. **If paper found** — Read `projects/papers/<paper_dir>/insights.yaml` for metadata.
    Cross-validate with NCBI: `python core/paper_insights.py --pmid <PMID>`.
-6. **If not found** — Ask user whether to download and register:
+6. **Add new paper** — `python -m core.registry add-paper --pmid <PMID>`
+   (calls paper_insights, then directly writes projects/registry/).
+7. **If not found** — Ask user whether to download and register:
    ```bash
    python core/paper_insights.py --pmid <PMID>
    python core/paper_registry.py --build
