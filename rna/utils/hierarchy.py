@@ -351,6 +351,7 @@ def build_hierarchy(kb: dict[str, Any], config: dict[str, Any]) -> dict[str, Any
 
     # ── 3. Attach _hierarchy ────────────────────────────────────────────
     incompatible = config.get("incompatible_transitions", [])
+    _validate_pair_names(incompatible, kb, path="hierarchy.yaml")
     kb["_hierarchy"] = {
         "categories": hierarchy_categories,
         "incompatible_transitions": incompatible,
@@ -389,3 +390,31 @@ def get_incompatible_pairs(kb: dict[str, Any]) -> list[list[str]]:
     if not hierarchy:
         return []
     return hierarchy.get("incompatible_transitions", [])
+
+
+def _validate_pair_names(pairs: list[list[str]], kb: dict[str, Any],
+                     path: str = "hierarchy.yaml") -> None:
+    """Validate that all names in incompatible pairs exist in the KB.
+
+    Raises ValueError with a clear diagnostic listing every name that
+    is missing from the KB (with a hint to use canonical names, not
+    display names or synonyms).
+
+    Called inside :func:`build_hierarchy` so the mismatch is caught at
+    KB build time, not silently ignored at pipeline runtime.
+    """
+    if not pairs:
+        return
+    missing: list[str] = []
+    for pair in pairs:
+        for name in pair:
+            if name not in kb:
+                missing.append(name)
+    if missing:
+        unique = sorted(set(missing))
+        raise ValueError(
+            f"Incompatible-transition names not found in KB ({path}): "
+            f"{', '.join(unique)}.  "
+            f"Use canonical KB keys (e.g. 'RGC', 'Bipolar_Cell'), "
+            f"not display names or synonyms."
+        )
