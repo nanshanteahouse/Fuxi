@@ -57,18 +57,32 @@ python core/run_reproduce.py <paper_dir>           # reproduce a single paper
 | Project configs | `projects/{modality}/{GSE_ID}/config_*.yaml` |
 | Config templates | `templates/config_templates/*.yaml` |
 
-### Dataset lookup
+### Dataset lookup & unified registry
 
-When user requests to analyze or reproduce a dataset:
+When user requests to analyze or reproduce a dataset, check the **master registry** first:
 
-1. **Check local registry first** — `python core/paper_registry.py --verify` or grep
-   `projects/papers/registry.yaml` for matching GSE ID, species, or tissue.
-2. **If found** — Read `projects/papers/<paper_dir>/insights.yaml` for metadata.
-   Optionally cross-validate with NCBI: `python core/paper_insights.py --pmid <PMID>`.
-3. **If not found** — Ask user whether to download and register:
+1. **Quick summary** — `python core/registry_v2.py report`
+   (counts papers, datasets, links, orphans).
+2. **Consistency check** — `python core/registry_v2.py verify`
+   (detects stale config paths, missing dirs, orphan datasets).
+3. **Find orphans** — `python core/registry_v2.py find-orphans`
+   (datasets or supplement dirs with no linked paper).
+4. **Programmatic query** — python import:
+   ```python
+   from core.registry_v2 import load_master_registry
+   reg = load_master_registry()
+   reg.get_dataset_links("41578023")   # paper → datasets
+   reg.get_paper_links("GSE118614")    # dataset → papers
+   reg.get_paper(paper_id="41578023")  # by PMID/slug
+   reg.find_orphans()
+   ```
+5. **If paper found** — Read `projects/papers/<paper_dir>/insights.yaml` for metadata.
+   Cross-validate with NCBI: `python core/paper_insights.py --pmid <PMID>`.
+6. **If not found** — Ask user whether to download and register:
    ```bash
    python core/paper_insights.py --pmid <PMID>
    python core/paper_registry.py --build
+   python core/registry_migrate.py           # rebuild registry/papers.yaml
    ```
 
 
