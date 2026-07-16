@@ -92,3 +92,8 @@ cross_paper/*.yaml
 
 # ── User scripts ─────────────────────────────────────────────
 scripts/
+
+# ── JS testing artifacts (project is Python, not Node) ──
+node_modules/
+package.json
+package-lock.json

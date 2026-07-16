@@ -61,15 +61,15 @@ python core/run_reproduce.py <paper_dir>           # reproduce a single paper
 
 When user requests to analyze or reproduce a dataset, check the **master registry** first:
 
-1. **Quick summary** — `python core/registry_v2.py report`
+1. **Quick summary** — `python -m core.registry report`
    (counts papers, datasets, links, orphans).
-2. **Consistency check** — `python core/registry_v2.py verify`
+2. **Consistency check** — `python -m core.registry verify`
    (detects stale config paths, missing dirs, orphan datasets).
-3. **Find orphans** — `python core/registry_v2.py find-orphans`
+3. **Find orphans** — `python -m core.registry find-orphans`
    (datasets or supplement dirs with no linked paper).
 4. **Programmatic query** — python import:
    ```python
-   from core.registry_v2 import load_master_registry
+   from core.registry import load_master_registry
    reg = load_master_registry()
    reg.get_dataset_links("41578023")   # paper → datasets
    reg.get_paper_links("GSE118614")    # dataset → papers
@@ -82,7 +82,6 @@ When user requests to analyze or reproduce a dataset, check the **master registr
    ```bash
    python core/paper_insights.py --pmid <PMID>
    python core/paper_registry.py --build
-   python core/registry_migrate.py           # rebuild registry/papers.yaml
    ```
 
 

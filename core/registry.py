@@ -63,6 +63,16 @@ class DatasetStatus(str, Enum):
     UNKNOWN = "unknown"
 
 
+class ModalityStatus(str, Enum):
+    """Per-modality 运行状态."""
+    DATA_DOWNLOADED = "data_downloaded"       # 数据已下载但未配 config
+    NOT_CONFIGURED = "not_configured"         # config 缺失
+    CONFIG_EXISTS = "config_exists"           # config 文件已存在
+    PIPELINE_COMPLETE = "pipeline_complete"     # pipeline 已跑通
+    N_A = "n_a"                               # 非管线模态 (bulk/STARR/SuperSeries 容器)
+    UNKNOWN = "unknown"
+
+
 class LinkRole(str, Enum):
     """论文↔数据集关联角色."""
     PRIMARY = "primary"
@@ -138,11 +148,14 @@ class DatasetConfig(BaseModel):
 
 
 class ModalityInfo(BaseModel):
-    """单个模态的信息."""
+    """单个模态的信息.
+
+    status 取值见 ModalityStatus enum (data_downloaded / not_configured /
+    config_exists / pipeline_complete / n_a / unknown).
+    """
     model_config = ConfigDict(extra="forbid")
     status: str = "unknown"
     configs: list[DatasetConfig] = []
-
 
 class DatasetRelationship(BaseModel):
     """数据集间关系（SuperSeries / part_of）。"""
@@ -156,12 +169,15 @@ class DatasetEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
     repository: RepositoryType = RepositoryType.UNKNOWN
     modalities: dict[str, ModalityInfo] = Field(default_factory=dict)
-    status: str = "unknown"
+    status: str = "unknown"          # ∈ {data_downloaded, not_downloaded, orphan, unknown}
+    type: str = "SingleAccession"     # "SingleAccession" | "SuperSeries"
+    non_pipeline: bool = False       # bulk / STARR / SuperSeries containers — pipeline never runs on these
     data_root: str = ""
     dataset_yaml: Optional[str] = None
     relationships: list[DatasetRelationship] = []
+    subseries: list[dict[str, str]] = []   # for SuperSeries: [{id: GSE..., note: ""}, ...]
     notes: str = ""
-    # ── 来自 dataset_audit.md 的补充字段 ──
+    # ── 数据集补充字段（手工维护在 datasets.yaml 中）──
     species: str = ""
     tissue: str = ""
     data_format: str = ""
@@ -403,7 +419,7 @@ def _load_yaml_file(path: str) -> Any:
         return None
 
 
-_REGISTRY_DIR = "projects/papers/registry"
+_REGISTRY_DIR = "projects/registry"
 
 
 def _resolve_registry_path(path: str | None) -> str:
