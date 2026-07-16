@@ -304,6 +304,9 @@ def run_unified_annotation(adata, CFG, logger):
     _tissue_maturity = getattr(CFG, 'tissue_maturity', '')
     is_developing = _tissue_maturity == 'developing' or _dev_mode
 
+    # Extract incompatible transition pairs from tissue hierarchy
+    _incompatible_transitions = kb.get("_hierarchy", {}).get("incompatible_transitions", [])
+
     rule_top_n, rule_pval = resolve_expert_rule_params(
         strictness=_strictness,
         top_n=_top_n,
@@ -363,6 +366,7 @@ def run_unified_annotation(adata, CFG, logger):
         low_quality_clusters=low_quality_clusters,
         unconstrained=getattr(CFG.ai, 'unconstrained_annotation', False),
         is_developing=is_developing,
+        incompatible_transitions=_incompatible_transitions,
     )
     logger.info("Evidence fusion: %d clusters processed", len(decisions))
 
@@ -454,6 +458,7 @@ def run_unified_annotation(adata, CFG, logger):
                     low_quality_clusters=low_quality_clusters,
                     unconstrained=getattr(CFG.ai, 'unconstrained_annotation', False),
                     is_developing=is_developing,
+                    incompatible_transitions=_incompatible_transitions,
                 )
                 decision_map = dict(zip(decision_clusters, decisions))
         except Exception as exc:

@@ -15,6 +15,10 @@ import os
 from typing import Any, Dict, List, Optional, Set
 
 import yaml
+from rna.utils.hierarchy import (
+    load_hierarchy_yaml, build_hierarchy, compute_private_markers,
+    CATEGORY_PREFIX,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -608,73 +612,9 @@ def build_final_kb(
         "classes": sorted(all_classes),
         "orders": sorted(all_orders),
     }
-    # Backfill parent field from _CATEGORY_DEFS
-    for type_key in list(kb.keys()):
-        if type_key in ("expert_rules", "_meta") or type_key.startswith("Broad_"):
-            continue
-        for cat_name, cat_def in _CATEGORY_DEFS.items():
-            if type_key in cat_def["members"]:
-                kb[type_key]["parent"] = f"Broad_{cat_name}"
-                break
     return kb
 
 
-# ═══════════════════════════════════════════════════════════════════════
-#  Broad category definitions for cell-type hierarchy
-# ═══════════════════════════════════════════════════════════════════════
-
-_CATEGORY_DEFS: Dict[str, Dict[str, Any]] = {
-    "Progenitor": {
-        "label": "Progenitor",
-        "members": [
-            "RPC", "Proliferating_RPC", "Neonatal_RPCs", "NRPC",
-            "NRPC_RGC_fate", "NRPC_AC_HC_fate", "NRPC_Cone_BC_fate", "NRPC_Rod_fate",
-            "Photoreceptor_Precursor", "Amacrine_Precursor", "Bipolar_Precursor",
-            "Developing_AC_HC_Precursors", "Developing_BC_Photo_Precursors",
-            "ASCL1_Reprogrammed_MG", "Proliferating_MG", "Fetal_RPE",
-        ],
-    },
-    "Neuron": {
-        "label": "Neuron",
-        "members": [
-            "RGC", "Cone_Photoreceptor", "Rod_Photoreceptor",
-            "Horizontal_Cell", "Bipolar_Cell", "Amacrine_Cell",
-            "Foveal_Cones", "Foveal_ML_Cones", "Foveal_S_Cones",
-            "Macula_Specific_Cone", "Marmoset_Foveal_Cones",
-            "Peripheral_Amacrine", "Peripheral_Rods",
-            "Lamprey_RGC", "Macaca_RGC", "Macaca_Cone", "Macaca_Rod",
-            "Chicken_Double_Cone",
-            "BC1A", "BC1B", "BC2", "BC3A", "BC3B", "BC4",
-            "BC5A", "BC5B", "BC5C", "BC5D", "BC6", "BC7", "BC8_BC9",
-            "RGC_Alpha", "RGC_Foxp2", "RGC_Neurod2", "RGC_Tbr1",
-            "RGC_W3", "RGC_ipRGC", "RGC_ooDSGC",
-            "T1", "T2", "T3",
-        ],
-    },
-    "Glia": {
-        "label": "Glia",
-        "members": [
-            "Muller_Glia", "Astrocyte", "Microglia", "Oligodendrocyte",
-            "Schwann_Cell",
-        ],
-    },
-    "Non-neural": {
-        "label": "Non-neural",
-        "members": [
-            "RPE", "Vascular_Endothelial", "Pericyte", "Fibroblast",
-            "Blood_Erythrocyte", "B_Cell", "T_Cell", "Macrophage",
-            "Melanocyte",
-        ],
-    },
-}
-
-# Fallback curated markers when consensus derivation yields fewer than 3 genes
-_FALLBACK_MARKERS: Dict[str, List[str]] = {
-    "Progenitor": ["VSX2", "SOX2", "HES1"],
-    "Neuron": ["TUBB3", "ELAVL4", "SLC17A6"],
-    "Glia": ["RLBP1", "GLUL", "GFAP"],
-    "Non-neural": ["RPE65", "PECAM1", "COL1A1"],
-}
 
 # ═══════════════════════════════════════════════════════════════════════
 #  Module-level convenience: build the KB once at import time
@@ -689,94 +629,13 @@ retina_expert_kb: Dict[str, Any] = build_final_kb(
     _merged_types, _merged_rules, _sources
 )
 
+# ── Build cell-type hierarchy from YAML config ────────────────────────────
+_HIERARCHY_PATH = os.path.join(os.path.dirname(__file__), "hierarchy.yaml")
+if os.path.isfile(_HIERARCHY_PATH):
+    _hierarchy_cfg = load_hierarchy_yaml(_HIERARCHY_PATH)
+    build_hierarchy(retina_expert_kb, _hierarchy_cfg)
+    compute_private_markers(retina_expert_kb, _hierarchy_cfg)
 
-
-
-
-def _derive_category_markers(cat_key: str, members: List[str]) -> List[str]:
-    """Derive top-3 consensus confirm markers from child cell-type entries.
-
-    Strategy:
-    1. Count how many member types list each gene as a confirm marker.
-    2. ``>=50 %`` member coverage -> take top-3.
-    3. If fewer than 3, relax to ``>=30 %`` -> take top-5, keep top-3.
-    4. Still insufficient -> use ``_FALLBACK_MARKERS``.
-    """
-    gene_type_count: Dict[str, int] = {}
-    n_members = len(members)
-
-    for type_key in members:
-        entry = retina_expert_kb.get(type_key)
-        if entry is None:
-            continue
-        confirm: Dict[str, Any] = entry.get("markers", {}).get("confirm", {})
-        for gene in confirm:
-            gene_type_count[gene] = gene_type_count.get(gene, 0) + 1
-
-    if not gene_type_count:
-        return _FALLBACK_MARKERS[cat_key]
-
-    # Tier 1: >= 50% coverage
-    half = n_members / 2.0
-    candidates = sorted(
-        [(cnt, gene) for gene, cnt in gene_type_count.items() if cnt >= half],
-        reverse=True,
-    )
-    markers = [gene for _, gene in candidates[:3]]
-
-    if len(markers) < 3:
-        # Tier 2: relax to >= 30% coverage, take top-5, keep top-3
-        third = n_members * 0.3
-        candidates = sorted(
-            [(cnt, gene) for gene, cnt in gene_type_count.items() if cnt >= third],
-            reverse=True,
-        )
-        markers = [gene for _, gene in candidates[:5]][:3]
-
-    # Tier 3: fallback
-    if len(markers) < 3:
-        markers = _FALLBACK_MARKERS[cat_key]
-
-    return markers
-
-
-# Build category entries with derived markers
-_hierarchy_categories: Dict[str, Dict[str, Any]] = {}
-for cat_key, cat_def in _CATEGORY_DEFS.items():
-    markers = _derive_category_markers(cat_key, cat_def["members"])
-    _hierarchy_categories[cat_key] = {
-        "label": cat_def["label"],
-        "markers": {
-            "confirm": {gene: ["_hierarchy"] for gene in markers},
-        },
-        "members": cat_def["members"],
-    }
-
-# Insert synthetic Broad_* entries into the KB
-for cat_key, cat_def in _CATEGORY_DEFS.items():
-    broad_key = f"Broad_{cat_key}"
-    markers = _derive_category_markers(cat_key, cat_def["members"])
-    retina_expert_kb[broad_key] = {
-        "markers": {
-            "confirm": {gene: ["_hierarchy"] for gene in markers},
-            "add": {},
-            "refine": {},
-        },
-        "negative_markers": [],
-        "species": ["Vertebrata"],
-        "synonyms": [cat_def["label"]],
-        "parent": "",
-        "consensus_levels": {},
-        "class": "",
-        "order": "",
-        "classes": [],
-        "orders": [],
-    }
-
-# Attach _hierarchy to the KB
-retina_expert_kb["_hierarchy"] = {
-    "categories": _hierarchy_categories,
-}
 
 # Log a summary of the built KB
 logger.info(

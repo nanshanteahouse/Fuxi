@@ -1,0 +1,114 @@
+# Retina cell-type hierarchy — general framework config
+# For other tissues: copy this file and edit categories/members/markers/pairs.
+version: 1
+
+categories:
+  Progenitor:
+    label: "Progenitor"
+    members:
+      - RPC
+      - Proliferating_RPC
+      - Neonatal_RPCs
+      - NRPC
+      - NRPC_RGC_fate
+      - NRPC_AC_HC_fate
+      - NRPC_Cone_BC_fate
+      - NRPC_Rod_fate
+      - Photoreceptor_Precursor
+      - Amacrine_Precursor
+      - Bipolar_Precursor
+      - Developing_AC_HC_Precursors
+      - Developing_BC_Photo_Precursors
+      - ASCL1_Reprogrammed_MG
+      - Proliferating_MG
+      - Fetal_RPE
+    fallback_markers:
+      - VSX2
+      - SOX2
+      - HES1
+
+  Neuron:
+    label: "Neuron"
+    members:
+      - RGC
+      - Cone_Photoreceptor
+      - Rod_Photoreceptor
+      - Horizontal_Cell
+      - Bipolar_Cell
+      - Amacrine_Cell
+      - Foveal_Cones
+      - Foveal_ML_Cones
+      - Foveal_S_Cones
+      - Macula_Specific_Cone
+      - Marmoset_Foveal_Cones
+      - Peripheral_Amacrine
+      - Peripheral_Rods
+      - Lamprey_RGC
+      - Macaca_RGC
+      - Macaca_Cone
+      - Macaca_Rod
+      - Chicken_Double_Cone
+      - BC1A
+      - BC1B
+      - BC2
+      - BC3A
+      - BC3B
+      - BC4
+      - BC5A
+      - BC5B
+      - BC5C
+      - BC5D
+      - BC6
+      - BC7
+      - BC8_BC9
+      - RGC_Alpha
+      - RGC_Foxp2
+      - RGC_Neurod2
+      - RGC_Tbr1
+      - RGC_W3
+      - RGC_ipRGC
+      - RGC_ooDSGC
+      - T1
+      - T2
+      - T3
+    fallback_markers:
+      - TUBB3
+      - ELAVL4
+      - SLC17A6
+
+  Glia:
+    label: "Glia"
+    members:
+      - Muller_Glia
+      - Astrocyte
+      - Microglia
+      - Oligodendrocyte
+      - Schwann_Cell
+    fallback_markers:
+      - RLBP1
+      - GLUL
+      - GFAP
+
+  Non-neural:
+    label: "Non-neural"
+    members:
+      - RPE
+      - Vascular_Endothelial
+      - Pericyte
+      - Fibroblast
+      - Blood_Erythrocyte
+      - B_Cell
+      - T_Cell
+      - Macrophage
+      - Melanocyte
+    fallback_markers:
+      - RPE65
+      - PECAM1
+      - COL1A1
+
+# Transitions between these type pairs are biologically impossible.
+# RPC/NRPC progenitor inter-conversions and Progenitor→Neuron/Glia paths are allowed.
+incompatible_transitions:
+  - [Muller_Glia, Astrocyte]           # Different embryonic origins (retina vs optic nerve)
+  - [Rod_Photoreceptor, Bipolar_Cell]  # NRL vs VSX2 progenitor pools
+  - [RGC, Bipolar_Cell]                # Atoh7 vs VSX2 progenitor pools

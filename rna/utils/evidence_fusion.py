@@ -78,16 +78,55 @@ class FusionDecision(NamedTuple):
 
 
 
-def _is_transition_state(marker_scores: dict, kb: dict, delta_threshold: float = 0.15):
+def _is_transition_state(
+    marker_scores: dict,
+    kb: dict,
+    delta_threshold: float = 0.15,
+    min_score: float = 0.25,
+    incompatible_transitions: Optional[list] = None,
+) -> Optional[tuple]:
     """Detect transition between two types of same lineage.
 
     When Top-2 Fisher scores differ by < delta_threshold AND share
     the same parent (broad category), return (top1_type, top2_type).
     Otherwise return None.
 
+    Parameters
+    ----------
+    marker_scores : dict
+        {type_key: Score or float} with Broad_* keys already stripped.
+    kb : dict
+        Full KB dict with parent and marker information.
+    delta_threshold : float
+        Maximum score difference for transition consideration (default 0.15).
+    min_score : float
+        Minimum absolute score floor for the top candidate (default 0.25).
+    incompatible_transitions : list or None
+        List of [type_a, type_b] pairs that are explicitly forbidden as
+        transitions despite meeting all other criteria.
+
+    Returns
+    -------
+    tuple or None
+        (top1_type, top2_type) if a valid transition is detected, else None.
+
+    Notes
+    -----
     CRITICAL: This function receives marker_scores that has ALREADY had
     Broad_* keys stripped (by the caller upstream). It must NOT operate on
     raw scores containing Broad_* entries.
+
+    Two additional gates are applied after passing the basic checks:
+
+    **Incompatible pairs gate:** If *incompatible_transitions* is provided,
+    each forbidden pair is checked order-insensitively against the
+    candidate (top1, top2). Any match returns None.
+
+    **Private marker overlap gate:** When both types share the same
+    Broad_* parent, the parent\'s markers are subtracted from each type\'s
+    marker set. If the remaining (type-specific) markers share no overlap,
+    the Fisher proximity is attributed to shared Broad_* markers alone
+    and the transition is rejected.
     """
     if len(marker_scores) < 2:
         return None
@@ -100,14 +139,38 @@ def _is_transition_state(marker_scores: dict, kb: dict, delta_threshold: float =
     score2, _ = _resolve_score(marker_scores, top2_key)
     if score1 - score2 >= delta_threshold:
         return None
-    # Absolute score floor: top score must be >= 0.25 (same cutoff that
+    # Absolute score floor: top score must be >= min_score (same cutoff that
     # separates marker_scoring_low from unknown in DECISION_TIERS).
-    if score1 < 0.25:
+    if score1 < min_score:
         return None
     parent1 = kb.get(top1_key, {}).get("parent", "")
     parent2 = kb.get(top2_key, {}).get("parent", "")
     if not parent1 or not parent2 or parent1 != parent2:
         return None
+
+    # Gate: incompatible transition pairs
+    if incompatible_transitions:
+        for pair in incompatible_transitions:
+            if {top1_key, top2_key} == set(pair):
+                return None
+
+    # Gate: type-specific markers must overlap (not just Broad_* shared markers)
+    if parent1 and parent2 and parent1 == parent2:
+        parent_markers = set(kb.get(parent1, {}).get("markers", {}).get("confirm", {}).keys())
+        t1_confirm = set(kb.get(top1_key, {}).get("markers", {}).get("confirm", {}).keys())
+        t2_confirm = set(kb.get(top2_key, {}).get("markers", {}).get("confirm", {}).keys())
+        t1_add = set(kb.get(top1_key, {}).get("markers", {}).get("add", {}).keys())
+        t2_add = set(kb.get(top2_key, {}).get("markers", {}).get("add", {}).keys())
+        t1_specific = (t1_confirm | t1_add) - parent_markers
+        t2_specific = (t2_confirm | t2_add) - parent_markers
+        # Only reject if at least one type has type-specific markers defined
+        # AND they don't overlap. If neither has type-specific markers, we
+        # lack the information to apply this gate.
+        if t1_specific or t2_specific:
+            specific_overlap = t1_specific & t2_specific
+            if not specific_overlap:
+                return None
+
     return (top1_key, top2_key)
 
 # Decision priority tiers — evaluated in order.
@@ -347,6 +410,7 @@ def fuse_evidence(
     low_quality_reason: str = "",
     unconstrained: bool = False,
     is_developing: bool = False,
+    incompatible_transitions: Optional[list] = None,
 ) -> 'FusionDecision':
     """Combine marker scores, expert rules, and AI into one decision.
 
@@ -372,6 +436,10 @@ def fuse_evidence(
     is_developing : bool
         When ``True``, enables developmental-specific logic such as
         transition-state detection.  Should be ``False`` for adult tissue.
+    incompatible_transitions : list or None
+        List of [type_a, type_b] pairs explicitly forbidden as
+        developmental transitions.  Passed through to
+        :func:`_is_transition_state`.
 
     Returns
     -------
@@ -470,7 +538,10 @@ def fuse_evidence(
     # caller (run_unified_annotation), so _find_best_type() and
     # _is_transition_state() only see fine-grained types.
     if kb is not None and is_developing:
-        transition = _is_transition_state(marker_scores, kb)
+        transition = _is_transition_state(
+            marker_scores, kb,
+            incompatible_transitions=incompatible_transitions,
+        )
         if transition is not None:
             t1, t2 = transition
             delta = abs(
@@ -574,6 +645,7 @@ def fuse_all_clusters(
     low_quality_clusters: Optional[dict] = None,
     unconstrained: bool = False,
     is_developing: bool = False,
+    incompatible_transitions: Optional[list] = None,
 ) -> list | tuple[list, dict]:
     """Process all clusters and return a list of :class:`FusionDecision`.
 
@@ -598,6 +670,10 @@ def fuse_all_clusters(
     is_developing : bool
         When ``True``, enables developmental-specific logic such as
         transition-state detection.  Passed through to each
+        :func:`fuse_evidence` call.
+    incompatible_transitions : list or None
+        List of [type_a, type_b] pairs explicitly forbidden as
+        developmental transitions.  Passed through to each
         :func:`fuse_evidence` call.
 
     Returns
@@ -639,6 +715,7 @@ def fuse_all_clusters(
             low_quality_reason=low_quality_clusters.get(str(cl), ""),
             unconstrained=unconstrained,
             is_developing=is_developing,
+            incompatible_transitions=incompatible_transitions,
         )
         decisions.append(decision)
 
