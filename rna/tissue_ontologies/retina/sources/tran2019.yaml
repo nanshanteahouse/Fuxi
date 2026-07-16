@@ -40,10 +40,10 @@ markers:
     audit:
       expression_validated: []
       supplement_verified:
-      - RBPMS:CONFIRMED
-      - SLC17A6:CONFIRMED
-      - POU4F1:CONFIRMED
-      - POU4F2:CONFIRMED
+      - RBPMS:domain_knowledge
+      - SLC17A6:domain_knowledge
+      - POU4F1:domain_knowledge
+      - POU4F2:domain_knowledge
       cross_species_validated: false
       last_audited: '2026-07-15'
       flagged: true
@@ -71,9 +71,9 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
-      notes: ''
+      notes: "The Table S2 (单独提取的Table S2.xlsx) contains 56 rows of RGC subtype markers. Cross-reference against: Cluster Specific Markers, Subclass Markers, Additional Known Markers columns."
   RGC_ipRGC:
     confirm:
     - OPN4
@@ -98,9 +98,9 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
-      notes: ''
+      notes: "The Table S2 (单独提取的Table S2.xlsx) contains 56 rows of RGC subtype markers. Cross-reference against: Cluster Specific Markers, Subclass Markers, Additional Known Markers columns."
   RGC_ooDSGC:
     confirm:
     - CARTPT
@@ -122,9 +122,9 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
-      notes: ''
+      notes: "The Table S2 (单独提取的Table S2.xlsx) contains 56 rows of RGC subtype markers. Cross-reference against: Cluster Specific Markers, Subclass Markers, Additional Known Markers columns."
   RGC_Foxp2:
     confirm:
     - FOXP2
@@ -146,9 +146,9 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
-      notes: ''
+      notes: "The Table S2 (单独提取的Table S2.xlsx) contains 56 rows of RGC subtype markers. Cross-reference against: Cluster Specific Markers, Subclass Markers, Additional Known Markers columns."
   RGC_Tbr1:
     confirm:
     - TBR1
@@ -168,9 +168,9 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
-      notes: ''
+      notes: "The Table S2 (单独提取的Table S2.xlsx) contains 56 rows of RGC subtype markers. Cross-reference against: Cluster Specific Markers, Subclass Markers, Additional Known Markers columns."
   RGC_W3:
     confirm:
     - TUSC5
@@ -194,9 +194,9 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
-      notes: ''
+      notes: "The Table S2 (单独提取的Table S2.xlsx) contains 56 rows of RGC subtype markers. Cross-reference against: Cluster Specific Markers, Subclass Markers, Additional Known Markers columns."
   RGC_Neurod2:
     confirm:
     - NEUROD2
@@ -220,9 +220,9 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
-      notes: ''
+      notes: "The Table S2 (单独提取的Table S2.xlsx) contains 56 rows of RGC subtype markers. Cross-reference against: Cluster Specific Markers, Subclass Markers, Additional Known Markers columns."
 novel_types: []
 expert_rules:
 - priority: 1

@@ -264,6 +264,14 @@ markers:
     - ZNF385B
     - ZNF385D
     - ZNF804A
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - Supplementary_Tables.xlsx (Table S8/S9 - marker DE)
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: ''
   Amacrine_Cell:
     confirm:
     - ABCA4
@@ -888,6 +896,14 @@ markers:
     - ZNF385D-AS2
     - ZNF804A
     - ZNF804B
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - Supplementary_Tables.xlsx (Table S8/S9 - marker DE)
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: ''
   RGC:
     confirm:
     - ABCA4
@@ -1136,6 +1152,14 @@ markers:
     - ZNF385B
     - ZNF385D
     - ZNF536
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - Supplementary_Tables.xlsx (Table S8/S9 - marker DE)
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: ''
   Rod_Photoreceptor:
     confirm:
     - NR2E3
@@ -1149,6 +1173,14 @@ markers:
     - ROM1
     - RP1
     - SAG
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - build_li2026.py add_canonical_markers()
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: "Markers for this cell type are canonical markers from add_canonical_markers() in build_li2026.py, not derived from the Li 2026 supplement data. Tier assignment (confirm vs add) is based on hardcoded list position (first 3 = confirm, rest = add), not on statistical evidence."
   Cone_Photoreceptor:
     confirm:
     - ARR3
@@ -1161,6 +1193,14 @@ markers:
     - PDE1C
     - PDE6H
     - THRB
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - build_li2026.py add_canonical_markers()
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: "Markers for this cell type are canonical markers from add_canonical_markers() in build_li2026.py, not derived from the Li 2026 supplement data. Tier assignment (confirm vs add) is based on hardcoded list position (first 3 = confirm, rest = add), not on statistical evidence."
   Horizontal_Cell:
     confirm:
     - CALB1
@@ -1172,6 +1212,14 @@ markers:
     - ONECUT3
     - PROX1
     - STMN2
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - build_li2026.py add_canonical_markers()
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: "Markers for this cell type are canonical markers from add_canonical_markers() in build_li2026.py, not derived from the Li 2026 supplement data. Tier assignment (confirm vs add) is based on hardcoded list position (first 3 = confirm, rest = add), not on statistical evidence."
   Muller_Glia:
     confirm:
     - GLUL
@@ -1185,6 +1233,14 @@ markers:
     - NFIA
     - SOX2
     - VIM
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - build_li2026.py add_canonical_markers()
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: "Markers for this cell type are canonical markers from add_canonical_markers() in build_li2026.py, not derived from the Li 2026 supplement data. Tier assignment (confirm vs add) is based on hardcoded list position (first 3 = confirm, rest = add), not on statistical evidence."
   Microglia:
     confirm:
     - AIF1
@@ -1196,6 +1252,14 @@ markers:
     - CX3CR1
     - TREM2
     - TYROBP
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - build_li2026.py add_canonical_markers()
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: "Markers for this cell type are canonical markers from add_canonical_markers() in build_li2026.py, not derived from the Li 2026 supplement data. Tier assignment (confirm vs add) is based on hardcoded list position (first 3 = confirm, rest = add), not on statistical evidence."
   Astrocyte:
     confirm:
     - ALDH1L1
@@ -1205,6 +1269,14 @@ markers:
     - AQP4
     - GJA1
     - SLC1A2
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - build_li2026.py add_canonical_markers()
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: "Markers for this cell type are canonical markers from add_canonical_markers() in build_li2026.py, not derived from the Li 2026 supplement data. Tier assignment (confirm vs add) is based on hardcoded list position (first 3 = confirm, rest = add), not on statistical evidence."
 conflicts:
 - type_a:
     cell_type: Muller_Glia

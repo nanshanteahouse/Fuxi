@@ -27,7 +27,7 @@ markers:
     - SLC1A3
     refine:
       ASCL1:
-        note: ectopic ASCL1 expression drives MG reprogramming toward neuronal fate
+        note: ectopic ASCL1 expression drives MG reprogramming toward neuronal fate ASCL1 exogenously overexpressed by retrovirus in culture — NOT an endogenous retinal marker. This is an experimental artifact, not a natural MG marker.
         threshold: log2FC > 2.0 (overexpression)
         pmid: GSE246169
       RLBP1:
@@ -73,7 +73,7 @@ markers:
         SORCS1: false
         SPON1: false
         ASCL1: false
-      last_audited: '2026-07-10'
+      last_audited: '2026-07-16'
       flagged: true
       notes: ''
       pct_expressed:
@@ -116,7 +116,7 @@ markers:
         HES1: true
         NOTCH1: false
         MKI67: false
-      last_audited: '2026-07-10'
+      last_audited: '2026-07-16'
       flagged: true
       notes: ''
       pct_expressed:
@@ -146,9 +146,9 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
-      notes: ''
+      notes: "Proliferation markers (MKI67, PCNA, TOP2A) overlap with Proliferating_RPC. Differentiation: ASCL1 (MG origin) vs HES1 (RPC origin)."
   Rod_Photoreceptor:
     confirm:
     - GNAT1
@@ -165,7 +165,7 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
       notes: ''
   Cone_Photoreceptor:
@@ -184,7 +184,7 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
       notes: ''
   RGC:
@@ -236,7 +236,7 @@ markers:
         KLHL1: false
         POU6F2: true
         RBFOX3: false
-      last_audited: '2026-07-10'
+      last_audited: '2026-07-16'
       flagged: true
       notes: ''
       pct_expressed:
@@ -302,7 +302,7 @@ markers:
         IGSF21: false
         PTPRR: false
         SLC4A10: false
-      last_audited: '2026-07-10'
+      last_audited: '2026-07-16'
       flagged: true
       notes: ''
       pct_expressed:
@@ -363,7 +363,7 @@ markers:
         NRP1: false
         PDE4D: false
         TENM2: false
-      last_audited: '2026-07-10'
+      last_audited: '2026-07-16'
       flagged: true
       notes: ''
       pct_expressed:
@@ -409,7 +409,7 @@ markers:
         STMN2: true
         SYN3: false
         TFAP2B: true
-      last_audited: '2026-07-10'
+      last_audited: '2026-07-16'
       flagged: true
       notes: ''
       pct_expressed:
@@ -433,7 +433,7 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
       notes: ''
   RPE:
@@ -461,7 +461,7 @@ markers:
         DCT: false
         PMEL: false
         TYRP1: false
-      last_audited: '2026-07-10'
+      last_audited: '2026-07-16'
       flagged: true
       notes: ''
       flagged_reason: pct_expression_below_threshold
@@ -480,7 +480,7 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
       notes: ''
   Pericyte:
@@ -498,7 +498,7 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
       notes: ''
   Astrocyte:
@@ -516,7 +516,7 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
       notes: ''
   Oligodendrocyte:
@@ -534,9 +534,9 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
-      notes: ''
+      notes: "Not present in healthy retina; probable culture contaminant from optic nerve or culture media."
   Fibroblast:
     confirm:
     - COL1A1
@@ -552,7 +552,7 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
       notes: ''
 novel_types:

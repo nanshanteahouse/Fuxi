@@ -1,7 +1,7 @@
 """
 tissue_ontologies/retina/merge.py — Retina KB merge engine.
 
-Loads 7 source files from ``sources/``, merges their markers with consensus
+Loads all source YAML files from ``sources/``, merges their markers with consensus
 scoring, detects conflicts, and emits a unified KB dict consumable by
 ``marker_scoring.py``.
 
@@ -206,18 +206,18 @@ def merge_markers(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
                 entry["synonyms"].add(raw_key)
 
             # Confirm
-            for gene in marker_data.get("confirm", {}):
+            for gene in marker_data.get("confirm") or {}:
                 _register_marker(entry["confirm"], gene, src_id)
 
             # Add
-            for gene in marker_data.get("add", {}):
+            for gene in marker_data.get("add") or {}:
                 _register_marker(entry["add"], gene, src_id)
 
             # Refine
-            for gene, refine_data in marker_data.get("refine", {}).items():
-                entry["refine"].setdefault(gene, []).append(refine_data)
+            for gene, refine_data in (marker_data.get('refine') or {}).items():
+                entry['refine'].setdefault(gene, []).append(refine_data)
             # Negative markers (union across sources)
-            neg = marker_data.get("negative_markers", [])
+            neg = marker_data.get('negative_markers') or []
             if isinstance(neg, list):
                 entry["negative_markers"].update(neg)
 
@@ -225,8 +225,11 @@ def merge_markers(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
             entry["species"].update(src["meta"].get("species", []))
 
         # ── Novel types ───────────────────────────────────────────
-        for nt in src.get("novel_types", []):
-            nt_name = nt.get("name", "")
+        for nt in src.get('novel_types', []):
+            if isinstance(nt, str):
+                nt_name = nt
+            else:
+                nt_name = nt.get('name', '') if isinstance(nt, dict) else ''
             if not nt_name:
                 continue
 
@@ -252,15 +255,14 @@ def merge_markers(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
                 entry["classes"].add(src_class)
             if src_order:
                 entry["orders"].add(src_order)
-            if nt.get("parent"):
-                entry["parent"] = nt["parent"]
-
-            # Novel-type markers go into "add" (they are novel per definition)
-            for gene in nt.get("markers", []):
-                _register_marker(entry["add"], gene, src_id)
-
-            for sp in nt.get("species", []):
-                entry["species"].add(sp)
+            if isinstance(nt, dict):
+                if nt.get('parent'):
+                    entry['parent'] = nt['parent']
+                # Novel-type markers go into 'add' (they are novel per definition)
+                for gene in nt.get('markers', []):
+                    _register_marker(entry['add'], gene, src_id)
+                for sp in nt.get('species', []):
+                    entry['species'].add(sp)
 
     return merged
 
@@ -321,7 +323,7 @@ def detect_conflicts(sources: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, 
         for raw_key, marker_data in src.get("markers", {}).items():
             canonical = _normalize_type_key(raw_key)
             for tier in ("confirm", "add"):
-                for gene in marker_data.get(tier, {}):
+                for gene in marker_data.get(tier) or {}:
                     gene_type_map.setdefault(gene, {}).setdefault(canonical, set()).add(
                         src_id
                     )

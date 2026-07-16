@@ -1,0 +1,389 @@
+source_meta:
+  id: liu2022
+  short_name: Liu 2022 PLoS Genetics
+  pmid: '35245286'
+  journal: PLoS Genetics
+  year: 2022
+  species:
+  - Danio rerio
+  tissue: retina
+  class: Actinopterygii
+  regions:
+  - whole retina
+  notes: 'nrl knockout model. Marker genes from S4 Dataset.'
+
+markers:
+  Rod_Photoreceptor:
+    confirm:
+    - rho
+    - mt-co2
+    - mt-co3
+    - mt-atp6
+    - pde6gb
+    - mt-co1
+    - ppdpfa
+    - mt-nd1
+    add:
+    - si:ch211-113d22.2
+    - mt-nd4
+    - gnat1
+    - gngt1
+    - pde6ga
+    - zgc:162144
+    - rom1b
+    - mt-nd2
+    - cnga1a
+    - rplp2l
+    - saga
+    - mt-nd3
+    - cnga1b
+    - mt-nd5
+    - fabp7a
+    - sagb
+    - ckmt2a
+    - slc25a3a
+    - guca1b
+    - hmgn2
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - pgen.1009841.s016.xlsx S4 Dataset (Marker genes for each cluster)
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: "Marker genes from S4 Dataset. 3 sub-clusters pooled into Rod_Photoreceptor. Cluster→cell type mapping inferred from cluster labels and top markers."
+  Cone_Photoreceptor:
+    confirm:
+    - gngt2b
+    - opn1sw2
+    - arr3a
+    - arr3b
+    - opn1sw1
+    - opn1mw2
+    - opn1mw3
+    - ly6pge
+    add:
+    - opn1mw1
+    - prph2a
+    - kera
+    - opn1mw4
+    - si:dkey-126g1.9
+    - cngb3.1
+    - rp1l1b
+    - grk7a
+    - zgc:193593
+    - six7
+    - gucy2d
+    - foxq2
+    - cngb3.2
+    - guca1d
+    - nr2f6b
+    - grk1b
+    - nin
+    - tmx3a
+    - sema6d
+    - gpx1b
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - pgen.1009841.s016.xlsx S4 Dataset (Marker genes for each cluster)
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: "Marker genes from S4 Dataset. 2 sub-clusters pooled into Cone_Photoreceptor. Cluster→cell type mapping inferred from cluster labels and top markers."
+  Bipolar_Cell:
+    confirm:
+    - cabp5a
+    - s100a10b
+    - rs1a
+    - nrgna
+    - marcksl1b
+    - fam107b
+    - efna1b
+    - ppdpfb
+    add:
+    - syt5b
+    - nme2a
+    - calm2b
+    - cabp2a
+    - egr4
+    - pvalb9
+    - gnao1b
+    - SMIM36
+    - six3b
+    - tob1a
+    - neurod1
+    - pcp4a
+    - mcl1b
+    - clu
+    - atp1a1b
+    - rdh10a
+    - id2a
+    - ca10a
+    - pcp4l1
+    - fezf2
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - pgen.1009841.s016.xlsx S4 Dataset (Marker genes for each cluster)
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: "Marker genes from S4 Dataset. 12 sub-clusters pooled into Bipolar_Cell. Cluster→cell type mapping inferred from cluster labels and top markers."
+  Amacrine_Cell:
+    confirm:
+    - si:dkey-238o13.4
+    - si:ch211-195b11.3
+    - islr2
+    - kidins220a
+    - kcnip1b
+    - tubb5
+    - klf6a
+    - chga
+    add:
+    - xpr1a
+    - lhx9
+    - si:ch211-214c7.4
+    - lhx2b
+    - tspan18b
+    - ccdc24
+    - si:dkey-38p12.3
+    - slc7a2
+    - scube1
+    - itpka
+    - b4galnt4b
+    - kif5c
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - pgen.1009841.s016.xlsx S4 Dataset (Marker genes for each cluster)
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: "Marker genes from S4 Dataset. 1 sub-clusters pooled into Amacrine_Cell. Cluster→cell type mapping inferred from cluster labels and top markers."
+  RGC:
+    confirm:
+    - slc6a1b
+    - grin1a
+    - elavl3
+    - maptb
+    - cplx2l
+    - stxbp1a
+    - pax6a
+    - slc32a1
+    add:
+    - syt2a
+    - slc6a1a
+    - elavl4
+    - slc35g2b
+    - cabp1b
+    - si:dkey-7j14.5
+    - rbfox1
+    - tuba2
+    - zgc:101840
+    - si:dkey-46i9.1
+    - si:ch73-290k24.5
+    - vsnl1b
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - pgen.1009841.s016.xlsx S4 Dataset (Marker genes for each cluster)
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: "Marker genes from S4 Dataset. 1 sub-clusters pooled into RGC. Cluster→cell type mapping inferred from cluster labels and top markers."
+  Horizontal_Cell:
+    confirm:
+    - rprmb
+    - CABZ01114053.1
+    - ompa
+    - CR361564.1
+    - ptn
+    - vtnb
+    - prkar2ab
+    - zgc:174935
+    add:
+    - aqp8a.1
+    - si:ch211-48m9.1
+    - nme2b.2
+    - si:ch211-56a11.2
+    - olfm3a
+    - si:ch211-276i12.4
+    - tnr
+    - cx52.7
+    - rem1
+    - neflb
+    - cx52.9
+    - btbd17b
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - pgen.1009841.s016.xlsx S4 Dataset (Marker genes for each cluster)
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: "Marker genes from S4 Dataset. 1 sub-clusters pooled into Horizontal_Cell. Cluster→cell type mapping inferred from cluster labels and top markers."
+  Muller_Glia:
+    confirm:
+    - si:ch211-152c2.3
+    - ptgdsb.2
+    - selenop
+    - stc2a
+    - zgc:153704
+    - mfap5
+    - atp1b4
+    - her6
+    add:
+    - aqp1a.1
+    - lfng
+    - cebpd
+    - ptgs2b
+    - inhbaa
+    - slc38a4
+    - col15a1b
+    - CABZ01085139.1
+    - hyal6
+    - mlc1
+    - hey1
+    - slc16a1b
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - pgen.1009841.s016.xlsx S4 Dataset (Marker genes for each cluster)
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: "Marker genes from S4 Dataset. 1 sub-clusters pooled into Muller_Glia. Cluster→cell type mapping inferred from cluster labels and top markers."
+  Microglia:
+    confirm:
+    - apoc1
+    - ccl34b.1
+    - g0s2
+    - ccl35.1
+    - lgals9l3
+    - lcp1
+    - alox5ap
+    - wasb
+    add:
+    - lgals9l1
+    - spi1b
+    - zgc:64051
+    - ctss2.1
+    - ctss2.2
+    - zgc:103700
+    - si:ch211-102c2.4
+    - c1qb
+    - BX649485.1
+    - havcr1
+    - ncf1
+    - c1qc
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - pgen.1009841.s016.xlsx S4 Dataset (Marker genes for each cluster)
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: "Marker genes from S4 Dataset. 1 sub-clusters pooled into Microglia. Cluster→cell type mapping inferred from cluster labels and top markers."
+  Astrocyte:
+    confirm:
+    - cldnk
+    - cd59
+    - plp1b
+    - cd9b
+    - tuba8l3
+    - tuft1a
+    - kcnj11l
+    - tlcd1
+    add:
+    - ninj2
+    - si:ch73-335m24.2
+    - olig2
+    - timd4
+    - si:dkey-200l5.4
+    - crp1
+    - htra1a
+    - fabp2
+    - cldn19
+    - mag
+    - mybphb
+    - cx27.5
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - pgen.1009841.s016.xlsx S4 Dataset (Marker genes for each cluster)
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: "Marker genes from S4 Dataset. 1 sub-clusters pooled into Astrocyte. Cluster→cell type mapping inferred from cluster labels and top markers."
+  RPE:
+    confirm:
+    - rgrb
+    - mb
+    - tyrp1b
+    - ambp
+    - pttg1ipb
+    - stra6
+    - pmela
+    - dct
+    add:
+    - zgc:163030
+    - fabp11b
+    - pmelb
+    - pitpnaa
+    - tm4sf18
+    - tm6sf2
+    - pnp4a
+    - itih1
+    - ccn2a
+    - lratb.2
+    - rbp1.1
+    - slc45a2
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - pgen.1009841.s016.xlsx S4 Dataset (Marker genes for each cluster)
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: "Marker genes from S4 Dataset. 1 sub-clusters pooled into RPE. Cluster→cell type mapping inferred from cluster labels and top markers."

@@ -40,9 +40,9 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: '2026-07-15'
+      last_audited: '2026-07-16'
       flagged: false
-      notes: ''
+      notes: "No marker gene tables in supplements (only PCR primers, CRISPR guides, and QC data). Markers derived from paper main text and figures."
 
   Cone_Photoreceptor:
     confirm:
@@ -73,9 +73,9 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: '2026-07-15'
+      last_audited: '2026-07-16'
       flagged: false
-      notes: ''
+      notes: "No marker gene tables in supplements (only PCR primers, CRISPR guides, and QC data). Markers derived from paper main text and figures."
 
   Chicken_Double_Cone:
     confirm:
@@ -95,9 +95,9 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: '2026-07-15'
+      last_audited: '2026-07-16'
       flagged: false
-      notes: ''
+      notes: "No marker gene tables in supplements (only PCR primers, CRISPR guides, and QC data). Markers derived from paper main text and figures."
 
   Horizontal_Cell:
     confirm:
@@ -125,9 +125,9 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: '2026-07-15'
+      last_audited: '2026-07-16'
       flagged: false
-      notes: ''
+      notes: "No marker gene tables in supplements (only PCR primers, CRISPR guides, and QC data). Markers derived from paper main text and figures."
 
   Bipolar_Cell:
     confirm:
@@ -161,9 +161,9 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: '2026-07-15'
+      last_audited: '2026-07-16'
       flagged: false
-      notes: ''
+      notes: "No marker gene tables in supplements (only PCR primers, CRISPR guides, and QC data). Markers derived from paper main text and figures."
 
   Amacrine_Cell:
     confirm:
@@ -193,9 +193,9 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: '2026-07-15'
+      last_audited: '2026-07-16'
       flagged: false
-      notes: ''
+      notes: "No marker gene tables in supplements (only PCR primers, CRISPR guides, and QC data). Markers derived from paper main text and figures."
 
   RGC:
     confirm:
@@ -235,7 +235,7 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: '2026-07-15'
+      last_audited: '2026-07-16'
       flagged: true
       notes: '41 RGC types including ipRGC (OPN4.1+EOMES+). No chick equivalents of mammalian midget/parasol RGCs. Only ipRGCs are clearly conserved across species.'
 
@@ -265,9 +265,9 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: '2026-07-15'
+      last_audited: '2026-07-16'
       flagged: false
-      notes: ''
+      notes: "No marker gene tables in supplements (only PCR primers, CRISPR guides, and QC data). Markers derived from paper main text and figures."
 
   Oligodendrocyte:
     confirm:
@@ -288,9 +288,9 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: '2026-07-15'
+      last_audited: '2026-07-16'
       flagged: false
-      notes: ''
+      notes: "No marker gene tables in supplements (only PCR primers, CRISPR guides, and QC data). Markers derived from paper main text and figures."
 
 novel_types:
 - name: Chicken_Double_Cone

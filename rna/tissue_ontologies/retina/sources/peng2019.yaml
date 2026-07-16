@@ -41,7 +41,7 @@ markers:
       supplement_verified:
       - supp-9
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
       notes: ''
   Cone_Photoreceptor:
@@ -74,7 +74,7 @@ markers:
       supplement_verified:
       - supp-9
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
       notes: ''
   RGC:
@@ -422,7 +422,7 @@ markers:
       supplement_verified:
       - supp-9
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
       notes: ''
   RPE:
@@ -440,7 +440,8 @@ markers:
     audit:
       expression_validated:
       - GSE118614
-      supplement_verified: []
+      supplement_verified:
+      - NIHMS1519806-supplement-9.xlsx MarkerGenes
       cross_species_validated:
         BEST1: false
         LRAT: false
@@ -474,7 +475,7 @@ markers:
       supplement_verified:
       - supp-9
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
       notes: ''
   Pericyte:
@@ -499,7 +500,7 @@ markers:
       supplement_verified:
       - supp-9
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
       notes: ''
   RPC:
@@ -517,7 +518,8 @@ markers:
     audit:
       expression_validated:
       - GSE118614
-      supplement_verified: []
+      supplement_verified:
+      - NIHMS1519806-supplement-9.xlsx MarkerGenes
       cross_species_validated:
         PAX6: true
         SOX2: true
@@ -548,9 +550,10 @@ markers:
     synonyms: []
     audit:
       expression_validated: []
-      supplement_verified: []
+      supplement_verified:
+      - NIHMS1519806-supplement-9.xlsx MarkerGenes
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
       notes: ''
   Oligodendrocyte:
@@ -567,9 +570,10 @@ markers:
     synonyms: []
     audit:
       expression_validated: []
-      supplement_verified: []
+      supplement_verified:
+      - NIHMS1519806-supplement-9.xlsx MarkerGenes
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
       notes: ''
   Fibroblast:
@@ -586,9 +590,10 @@ markers:
     synonyms: []
     audit:
       expression_validated: []
-      supplement_verified: []
+      supplement_verified:
+      - NIHMS1519806-supplement-9.xlsx MarkerGenes
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
       notes: ''
 novel_types:

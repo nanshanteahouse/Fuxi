@@ -1,0 +1,59 @@
+source_meta:
+  id: kolsch2021
+  short_name: Kölsch 2021 Neuron
+  pmid: '33357413'
+  journal: Neuron
+  year: 2021
+  species:
+  - Danio rerio
+  tissue: retina
+  class: Actinopterygii
+  regions: ['whole retina']
+  n_subtypes: 30
+  n_groups: 1
+
+markers:
+  RGC:
+    confirm:
+    - thy1
+    - isl2a
+    - isl1
+    add:
+    - npb.14
+    - tubb5.2
+    - nmbb.22
+    - c1ql3a.14
+    - tmsb.2
+    - ccka.15
+    - cr381599.1.11
+    - cr381599.1.18
+    - crhb.4
+    - mafaa.26
+    - zgc:110340.15
+    - atp1b1a.1
+    - npy
+    - dio1
+    - prph.1
+    - si:dkey-1h6.8.9
+    - cyb5a.1
+    - alcamb.2
+    - tbx3a
+    - zgc:110340.9
+    - cabz01063757.1.2
+    - pdyn
+    - gap43.20
+    - tspan18a.13
+    - vps37d.2
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS1658026-supplement-3.xlsx Adult (DE per cluster)
+      - NIHMS1658026-supplement-4.xlsx Adult (cluster TF expression)
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: 'Cluster→RGC subtype mapping not available from supplement. Markers are top DE genes pooled from 30 adult zebrafish RGC subclusters. Pan-RGC markers (rbpms2, pou4f1, gap43, isl1) are known from literature.'

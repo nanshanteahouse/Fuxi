@@ -14,66 +14,175 @@ source_meta:
   - ciliary margin
   n_subtypes: 5
   n_groups: 5
+
 markers:
   Proliferating_RPC:
-    add:
+    confirm:
     - DAPL1
-    - EEF1A1
     - FGF19
-    - FOXP1
-    - GN2BL1
     - HMGA1
-    - HNRNPA1
     - ID3
     - MDK
     - SFRP2
+    - ZIC1
+    add:
+    - EEF1A1
+    - FOXP1
+    - GN2BL1
+    - HNRNPA1
     - TMSB4X
     - TPT1
-    - ZIC1
+    refine:
+      DAPL1:
+        note: Early RPC marker; part of the CMZ early RPC gene signature (Supplementary Data 4 / MOESM7)
+        threshold: avg_log2FC > 0.5
+        pmid: '38670973'
+      FGF19:
+        note: Early RPC marker; highest aggregate expression in CMZ at 8 PCW (paper Fig 2B)
+        threshold: avg_log2FC > 0.5
+        pmid: '38670973'
+      SFRP2:
+        note: Wnt inhibitor; early RPC marker, more highly expressed in early vs late RPCs
+        threshold: avg_log2FC > 0.5
+        pmid: '38670973'
+      GN2BL1:
+        note: Published as "GN2BL1" in source (Supplementary Data 4 / MOESM7). Standard HGNC symbol is GNB2L1 (also known as RACK1, receptor for activated C kinase 1). Listed as early RPC marker.
+        threshold: avg_log2FC > 0.5
+        pmid: '38670973'
+    negative_markers: []
+    species: []
+    synonyms:
+    - PRPC
+    - Early_RPC
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - MOESM7 (Supplementary Data 4 - gene signatures)
+      - MOESM13 (Supplementary Data 5 - marker lists by group)
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: 'Gene symbol GN2BL1 is published as-is in source; standard HGNC symbol is GNB2L1/RACK1. Markers from MOESM7 gene_signatures and MOESM13 per-type lists. Confirm-tier markers are the 7 genes from MOESM7 Early RPCs signature with highest correlation.'
   RPC:
-    add:
+    confirm:
     - ASCL1
-    - BTG1
     - CCND1
+    - HES1
+    - HES5
+    - HES6
+    - SIX3
+    - SOX2
+    - VIM
+    add:
+    - BTG1
     - CKB
     - FOS
     - FRZB
-    - HES1
     - HES4
-    - HES5
-    - HES6
     - HMGB2
     - JUN
     - MALAT1
     - MYB
     - RORB
     - SFRP1
-    - SIX3
-    - SOX2
     - SOX4
     - SOX9
     - SPP1
-    - VIM
     - ZFP36L2
+    refine:
+      ASCL1:
+        note: Proneural bHLH TF; late RPC marker identified in CMZ pseudotime analysis
+        threshold: avg_log2FC > 0.5
+        pmid: '38670973'
+      HES1:
+        note: Notch effector; canonical retinal progenitor marker, expressed in both early and late RPCs
+        threshold: avg_log2FC > 0.5
+        pmid: '38670973'
+      HES6:
+        note: Notch modulator; shared across RPC → T1 → T2/T3 transitions; promotes neurogenic exit
+        threshold: avg_log2FC > 0.25
+        pmid: '38670973'
+      SOX2:
+        note: Core pluripotency/progenitor TF; definitive RPC marker
+        threshold: avg_log2FC > 0.5
+        pmid: '38670973'
+      SIX3:
+        note: Retinal patterning homeobox gene; expressed in early and late RPCs
+        threshold: avg_log2FC > 0.5
+        pmid: '38670973'
+    negative_markers: []
+    species: []
+    synonyms:
+    - Late_RPC
+    - Retinal_Progenitor_Cell
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - MOESM7 (Supplementary Data 4 - gene signatures)
+      - MOESM13 (Supplementary Data 5 - marker lists by group)
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: 'Markers from MOESM7 Late RPCs signature and MOESM13 NRPCs list. HES6 shared with T1/T2/T3 reflecting the RPC→neurogenic transition trajectory.'
   T1:
-    add:
+    confirm:
     - ATOH7
     - DLL3
-    - DLL4
-    - FAM131C
-    - GADD45A
-    - GADD45G
     - HES6
     - INSM1
-    - MFNG
-    - MYBL1
     - NEUROD1
     - NEUROD4
     - NEUROG2
     - OLIG2
+    add:
+    - DLL4
+    - FAM131C
+    - GADD45A
+    - GADD45G
+    - MFNG
+    - MYBL1
     - PCPB4
     - VXN
+    refine:
+      ATOH7:
+        note: Proneural bHLH TF (Math5); pioneer factor for RGC and neurogenic specification; definitive T1 marker
+        threshold: avg_log2FC > 0.5
+        pmid: '38670973'
+      NEUROG2:
+        note: Proneural bHLH TF; drives neuronal commitment in developing CNS and retina
+        threshold: avg_log2FC > 0.5
+        pmid: '38670973'
+      HES6:
+        note: Notch modulator; shared across RPC → T1 → T2/T3; promotes neurogenic transition by inhibiting HES1
+        threshold: avg_log2FC > 0.25
+        pmid: '38670973'
+      GADD45G:
+        note: Growth arrest and DNA-damage-inducible; shared with T3, reflecting continuous neurogenic trajectory
+        threshold: avg_log2FC > 0.25
+        pmid: '38670973'
+      PCPB4:
+        note: Published as "PCPB4" in source (Supplementary Data 4 / MOESM7). Standard HGNC symbol is PCP4 (Purkinje cell protein 4, PEP-19). Shared with T3.
+        threshold: avg_log2FC > 0.5
+        pmid: '38670973'
+    negative_markers: []
+    species: []
+    synonyms:
+    - Transient_neurogenic_progenitor_1
+    - T1_progenitor
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - MOESM7 (Supplementary Data 4 - gene signatures)
+      - MOESM13 (Supplementary Data 5 - marker lists by group)
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: 'Gene symbol PCPB4 is published as-is in source; standard HGNC symbol is PCP4. T1 represents the first neurogenic branch point after RPCs. Shared markers with T2 (NEUROD4, HES6) and T3 (NEUROD1, NEUROD4, GADD45G, PCPB4, VXN) reflect pseudotime continuity (paper Fig 1E-G, Fig S2B). T1→T2 leads to amacrine/horizontal fate; T1→T3 leads to photoreceptor/bipolar fate.'
   T2:
+    confirm:
+    - PRDM13
+    - PTF1A
+    - SOX11
     add:
     - ACKR3
     - BNIP3
@@ -83,25 +192,87 @@ markers:
     - HSPB1
     - NEUROD4
     - PGK1
-    - PRDM13
-    - PTF1A
-    - SOX11
     - SPATS2L
+    refine:
+      PRDM13:
+        note: PR domain zinc finger protein 13; key TF for horizontal and amacrine subtype specification; T2-defining marker
+        threshold: avg_log2FC > 0.5
+        pmid: '38670973'
+      PTF1A:
+        note: Pancreas transcription factor 1a; master regulator of amacrine and horizontal cell fate; T2-enriched
+        threshold: avg_log2FC > 0.5
+        pmid: '38670973'
+      NEUROD4:
+        note: Proneural bHLH TF; shared with T1 and T3, indicating continuous neurogenic trajectory
+        threshold: avg_log2FC > 0.25
+        pmid: '38670973'
+    negative_markers: []
+    species: []
+    synonyms:
+    - Transient_neurogenic_progenitor_2
+    - T2_progenitor
+    - Amacrine_horizontal_precursor
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - MOESM7 (Supplementary Data 4 - gene signatures)
+      - MOESM13 (Supplementary Data 5 - marker lists by group)
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: 'T2 represents the neurogenic branch toward amacrine and horizontal cells. PTF1A+PRDM13+ co-expression is the T2-defining signature (paper Fig 1C). NEUROD4 shared with T1/T3.'
   T3:
-    add:
+    confirm:
     - AIPL1
+    - FABP7
+    - NEUROD1
+    - NRL
+    - OTX2
+    - RCVRN
+    - RXRG
+    add:
     - CADPS
     - CD24
     - DCT
-    - FABP7
     - GADD45G
-    - NEUROD1
     - NEUROD4
-    - NRL
-    - OTX2
     - PCPB4
     - PI3KR1
-    - RCVRN
-    - RXRG
     - TFF1
     - VXN
+    refine:
+      NRL:
+        note: Neural retina leucine zipper; master TF for rod photoreceptor specification
+        threshold: avg_log2FC > 0.5
+        pmid: '38670973'
+      OTX2:
+        note: Orthodenticle homeobox 2; essential for photoreceptor and bipolar cell specification; T3-defining marker
+        threshold: avg_log2FC > 0.5
+        pmid: '38670973'
+      FABP7:
+        note: Fatty acid binding protein 7; T3-enriched marker (paper Fig 1D); also expressed in RPCs
+        threshold: avg_log2FC > 0.5
+        pmid: '38670973'
+      NEUROD1:
+        note: Proneural bHLH TF; shared with T1, indicating T1→T3 lineage continuity toward photoreceptor fate
+        threshold: avg_log2FC > 0.25
+        pmid: '38670973'
+      PCPB4:
+        note: Published as "PCPB4" in source (Supplementary Data 4 / MOESM7). Standard HGNC symbol is PCP4. Shared with T1.
+        threshold: avg_log2FC > 0.5
+        pmid: '38670973'
+    negative_markers: []
+    species: []
+    synonyms:
+    - Transient_neurogenic_progenitor_3
+    - T3_progenitor
+    - Photoreceptor_bipolar_precursor
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - MOESM7 (Supplementary Data 4 - gene signatures)
+      - MOESM13 (Supplementary Data 5 - marker lists by group)
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: 'Gene symbol PCPB4 is published as-is in source; standard HGNC symbol is PCP4. T3 represents the neurogenic branch toward photoreceptor and bipolar cells. NRL+OTX2+ co-expression is the T3-defining signature. Shared markers with T1 (NEUROD1, GADD45G, PCPB4, VXN) and T2 (NEUROD4) reflect pseudotime continuity (paper Fig 1E-G, Fig S2B).'

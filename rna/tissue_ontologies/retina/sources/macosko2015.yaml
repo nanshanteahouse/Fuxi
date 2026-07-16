@@ -1,0 +1,566 @@
+source_meta:
+  id: macosko2015
+  short_name: Macosko 2015 Cell
+  pmid: '26000488'
+  journal: Cell
+  year: 2015
+  species:
+  - Mus musculus
+  tissue: retina
+  class: Mammalia
+  order: Rodentia
+  regions:
+  - whole retina
+  n_cells: 44808
+  n_subtypes: 39
+  n_groups: 13
+
+markers:
+  Horizontal_Cell:
+    confirm:
+    - SEPT7
+    - CALB1
+    - TPM3
+    - SEPT4
+    - SLC4A3
+    - CAR2
+    - CALM1
+    - LAMP5
+    - VIM
+    - TFAP2B
+    - GNAS
+    - GJD2
+    - ATP1B1
+    - DNER
+    - PCSK1N
+    add:
+    - CPLX3
+    - SMARCA4
+    - SNHG11
+    - NDRG1
+    - SNAP25
+    - CD47
+    - MAGED1
+    - 1500016L03RIK
+    - MGARP
+    - EIF1B
+    - NDRG4
+    - HSPA12A
+    - SLC6A9
+    - PPP1R1A
+    - DYNC1I1
+    - C1QL1
+    - LHX1
+    - MYO6
+    - NCALD
+    - BAI1
+    - TKT
+    - ANK2
+    - TSPAN7
+    - TPM3-RS7
+    - PROX1
+    - MSI2
+    - CHGB
+    - NEBL
+    - PCBD1
+    - TMEFF2
+    - RNF152
+    - LRRC4
+    - MEG3
+    - TMEM132A
+    - LSAMP
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS687993-supplement-supp_data_4.xlsx FINAL_MARKERS_FOR_EACH_CLUSTER
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: 'Cluster→cell type mapping based on top cluster markers and known biology (not from paper annotation file). Error rate ~5%. Verify with Macosko 2015 original paper cluster labels.'
+  RGC:
+    confirm:
+    - NEFL
+    - NEFM
+    - STMN2
+    - SNCG
+    - ATP1B1
+    - UCHL1
+    - STMN3
+    - THY1
+    - CALB2
+    - SLC17A6
+    - RTN1
+    - NRN1
+    - GAP43
+    - TTC3
+    - INA
+    add:
+    - CDK14
+    - YWHAH
+    - TUBB2A
+    - APP
+    - CALM2
+    - SNHG11
+    - HSP90AB1
+    - BASP1
+    - MEG3
+    - OLFM1
+    - YWHAB
+    - NAP1L5
+    - RAB6B
+    - TUBA1A
+    - GNAS
+    - ZWINT
+    - NDRG4
+    - FXYD7
+    - TUBB3
+    - CEND1
+    - KIF5A
+    - SPARCL1
+    - DNER
+    - RAB6A
+    - NELL2
+    - GNAO1
+    - SCN2A1
+    - GNG3
+    - 2900011O08RIK
+    - RBPMS
+    - VSNL1
+    - MFSD6
+    - NSG2
+    - CAMK2N1
+    - TPPP3
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS687993-supplement-supp_data_4.xlsx FINAL_MARKERS_FOR_EACH_CLUSTER
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: 'Cluster→cell type mapping based on top cluster markers and known biology (not from paper annotation file). Error rate ~5%. Verify with Macosko 2015 original paper cluster labels.'
+  Amacrine_Cell:
+    confirm:
+    - TFAP2B
+    - CXCL14
+    - MARCKS
+    - SPOCK3
+    - SNHG11
+    - ATP1B1
+    - SLC6A1
+    - PCP4
+    - GAD1
+    - CELF4
+    - NRXN2
+    - AI593442
+    - SYNPR
+    - TKT
+    - C1QL1
+    add:
+    - GNG2
+    - 6430548M08RIK
+    - GRIA2
+    - NAP1L5
+    - PAX6
+    - MEG3
+    - GRIA3
+    - GAD2
+    - STMN2
+    - RAB3C
+    - ID4
+    - SPARCL1
+    - TAGLN3
+    - SV2A
+    - TTC3
+    - NDRG4
+    - MEIS2
+    - RPH3A
+    - FRMD5
+    - DPP6
+    - NRSN1
+    - GAP43
+    - DLGAP1
+    - PNMAL2
+    - TFAP2A
+    - BASP1
+    - 2900011O08RIK
+    - GRIA4
+    - UCHL1
+    - GNG3
+    - ELAVL3
+    - SYT4
+    - STMN3
+    - TUBB2A
+    - DTNBP1
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS687993-supplement-supp_data_4.xlsx FINAL_MARKERS_FOR_EACH_CLUSTER
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: 'Cluster→cell type mapping based on top cluster markers and known biology (not from paper annotation file). Error rate ~5%. Verify with Macosko 2015 original paper cluster labels.'
+  Cone_Photoreceptor:
+    confirm:
+    - PDE6H
+    - GNGT2
+    - GNAT2
+    - ARR3
+    - OPN1MW
+    - GUCA1A
+    - PDE6C
+    - KCNE2
+    - OPN1SW
+    - GNB3
+    - SCG3
+    - CCDC136
+    - CD59A
+    - 4930447C04RIK
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS687993-supplement-supp_data_4.xlsx FINAL_MARKERS_FOR_EACH_CLUSTER
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: 'Cluster→cell type mapping based on top cluster markers and known biology (not from paper annotation file). Error rate ~5%. Verify with Macosko 2015 original paper cluster labels.'
+  Bipolar_Cell:
+    confirm:
+    - GNG13
+    - GNAO1
+    - NME1
+    - GM4792
+    - VSX1
+    - SLIT2
+    - GNB3
+    - GPR179
+    - VSX2
+    - LRTM1
+    - TMSB10
+    - GRM6
+    - KCNMA1
+    - MEG3
+    - GABRA1
+    add:
+    - TRNP1
+    - ATP2B1
+    - NEUROD4
+    - ZFHX4
+    - PROX1
+    - PTPRD
+    - NRXN3
+    - CADPS
+    - CABP5
+    - GRIA2
+    - NDNF
+    - B3GALT2
+    - THSD7A
+    - TGFB2
+    - IGF1
+    - CAR10
+    - GLS
+    - SPHKAP
+    - APP
+    - HMGN3
+    - GLRA1
+    - BC030499
+    - PCP4L1
+    - TMEM215
+    - FRMD3
+    - GUCY1B3
+    - SAMSN1
+    - A730046J19RIK
+    - TRPM1
+    - PCP2
+    - CALM1
+    - ISL1
+    - PCP4
+    - PRKCA
+    - SCG2
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS687993-supplement-supp_data_4.xlsx FINAL_MARKERS_FOR_EACH_CLUSTER
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: 'Cluster→cell type mapping based on top cluster markers and known biology (not from paper annotation file). Error rate ~5%. Verify with Macosko 2015 original paper cluster labels.'
+  Muller_Glia:
+    confirm:
+    - CST3
+    - APOE
+    - GLUL
+    - IGFBP5
+    - SPARC
+    - COL9A1
+    - ACSL3
+    - RLBP1
+    - IGF2
+    - PTN
+    - CRHBP
+    - DKK3
+    - ITM2B
+    - CLU
+    - ATP1A2
+    add:
+    - APP
+    - CP
+    - SLC1A3
+    - ALDOC
+    - OPTC
+    - COL18A1
+    - DBI
+    - S100B
+    - PDGFRA
+    - GJA1
+    - PTGDS
+    - CAR2
+    - FBN2
+    - FSTL1
+    - SPC25
+    - CAR14
+    - FBLN1
+    - TSC22D1
+    - COL23A1
+    - PVRL3
+    - TIMP3
+    - GPM6B
+    - ID3
+    - MFGE8
+    - CNTNAP2
+    - CRYM
+    - CTSL
+    - ATP1B3
+    - IGFBP2
+    - RTN4
+    - CD9
+    - MLC1
+    - SNED1
+    - SCD2
+    - NTRK2
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS687993-supplement-supp_data_4.xlsx FINAL_MARKERS_FOR_EACH_CLUSTER
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: 'Cluster→cell type mapping based on top cluster markers and known biology (not from paper annotation file). Error rate ~5%. Verify with Macosko 2015 original paper cluster labels.'
+  Vascular_Endothelial:
+    confirm:
+    - SPARC
+    - IGFBP7
+    - SPARCL1
+    - BSG
+    - TMSB4X
+    - ACTB
+    - FLT1
+    - CLDN5
+    - PTPRB
+    - ELTD1
+    - ITM2A
+    - COL4A1
+    - RAMP2
+    - CD93
+    - FN1
+    add:
+    - GPR116
+    - SPOCK2
+    - COL4A2
+    - CTLA2A
+    - PLTP
+    - LY6E
+    - SLC2A1
+    - FAM101B
+    - SEPP1
+    - TSC22D1
+    - SPTBN1
+    - EGFL7
+    - GNAI2
+    - APP
+    - GNG11
+    - KDR
+    - CD34
+    - ITGB1
+    - LY6C1
+    - CDH5
+    - LAMA4
+    - ABCB1A
+    - VWA1
+    - SLC16A1
+    - PECAM1
+    - SLC7A5
+    - TCF4
+    - SERPINH1
+    - ESAM
+    - VIM
+    - ETS1
+    - HSP90AB1
+    - SLCO1A4
+    - TM4SF1
+    - ABLIM1
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS687993-supplement-supp_data_4.xlsx FINAL_MARKERS_FOR_EACH_CLUSTER
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: 'Cluster→cell type mapping based on top cluster markers and known biology (not from paper annotation file). Error rate ~5%. Verify with Macosko 2015 original paper cluster labels.'
+  Pericyte:
+    confirm:
+    - RGS5
+    - MGP
+    - CALD1
+    - COL4A1
+    - IGFBP7
+    - SPARC
+    - ACTB
+    - COL4A2
+    - SPARCL1
+    - ATP1A2
+    - ASPN
+    - SEPT7
+    - NID1
+    - ITGA1
+    - SERPINE2
+    add:
+    - PDGFRB
+    - ITM2B
+    - MYL9
+    - ITGB1
+    - HIGD1B
+    - GNG11
+    - MARCKS
+    - FSTL1
+    - GJC1
+    - LRRC58
+    - ABCC9
+    - CD81
+    - LAPTM4A
+    - COL1A2
+    - LAMC1
+    - EBF1
+    - SEPT4
+    - MYL12A
+    - KCNJ8
+    - IFITM3
+    - SEPT11
+    - GUCY1A3
+    - MYO1B
+    - SERPINH1
+    - APP
+    - NDUFA4L2
+    - TPM4
+    - COL3A1
+    - NRP1
+    - EDNRA
+    - MFGE8
+    - TMSB4X
+    - ART3
+    - CD248
+    - TM4SF1
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS687993-supplement-supp_data_4.xlsx FINAL_MARKERS_FOR_EACH_CLUSTER
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: 'Cluster→cell type mapping based on top cluster markers and known biology (not from paper annotation file). Error rate ~5%. Verify with Macosko 2015 original paper cluster labels.'
+  Microglia:
+    confirm:
+    - CTSS
+    - TMSB4X
+    - HEXB
+    - C1QB
+    - CST3
+    - APOE
+    - ACTB
+    - LGMN
+    - C1QC
+    - C1QA
+    - B2M
+    - ITM2B
+    - SEPP1
+    - SPARC
+    - CX3CR1
+    add:
+    - LY86
+    - LAPTM5
+    - JUN
+    - CTSB
+    - CSF1R
+    - CTSD
+    - CTSL
+    - P2RY12
+    - SIGLECH
+    - MARCKS
+    - LRRC58
+    - ZFP36
+    - TYROBP
+    - RHOB
+    - JUNB
+    - PSAP
+    - FTH1
+    - TREM2
+    - SERPINE2
+    - EGR1
+    - UBC
+    - NPC2
+    - SERINC3
+    - CTSZ
+    - FCER1G
+    - GRN
+    - CD81
+    - MPEG1
+    - NFKBIA
+    - RGS2
+    - RPLP1
+    - CCL3
+    - SGK1
+    - SELPLG
+    - GPR34
+    refine: {}
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS687993-supplement-supp_data_4.xlsx FINAL_MARKERS_FOR_EACH_CLUSTER
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: 'Cluster→cell type mapping based on top cluster markers and known biology (not from paper annotation file). Error rate ~5%. Verify with Macosko 2015 original paper cluster labels.'

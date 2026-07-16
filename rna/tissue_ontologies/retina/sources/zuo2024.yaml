@@ -238,7 +238,7 @@ markers:
       supplement_verified:
       - MOESM6
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
       notes: ''
   Rod_Photoreceptor:
@@ -313,7 +313,7 @@ markers:
       supplement_verified:
       - MOESM6
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
       notes: ''
   Cone_Photoreceptor:
@@ -389,7 +389,7 @@ markers:
       supplement_verified:
       - MOESM6
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
       notes: ''
   Bipolar_Cell:
@@ -967,9 +967,9 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
-      notes: ''
+      notes: 'Markers for this cell type are canonical microglia markers not present in MOESM6 (Zuo 2024 supplement has no Microglia sheet). Supplement data from other sources (hu2019, menon2019) validates these markers.'
   Astrocyte:
     confirm:
     - ALDH1L1
@@ -987,9 +987,9 @@ markers:
       expression_validated: []
       supplement_verified: []
       cross_species_validated: false
-      last_audited: null
+      last_audited: '2026-07-16'
       flagged: false
-      notes: ''
+      notes: 'Markers for this cell type are canonical astrocyte markers not present in MOESM6 (Zuo 2024 supplement has no Astrocyte sheet).'
   RPE:
     confirm:
     - BEST1
@@ -1021,7 +1021,7 @@ markers:
         TYRP1: false
       last_audited: '2026-07-10'
       flagged: true
-      notes: ''
+      notes: 'RPE markers are not present in MOESM6 (Zuo 2024 supplement has no RPE sheet). All cross_species_validated entries are false — RPE markers from Zuo 2024 need independent verification.'
       flagged_reason: pct_expression_below_threshold
 novel_types:
 - name: Proliferating_RPC
