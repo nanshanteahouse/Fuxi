@@ -13,6 +13,7 @@ import json
 import scanpy as sc
 import pandas as pd
 from core.utils import safe_plot
+from collections import Counter
 
 
 
@@ -171,6 +172,35 @@ def _check_zero_scores_and_retry(
 
     return all_scores, total_hits, n_clusters_total
 
+CATEGORY_PREFIX = "Broad_"
+
+
+def _classify_broad_category(cluster_scores: dict, kb: dict) -> str:
+    """Classify a cluster into a broad category using Fisher scores.
+
+    Filters cluster_scores to only keys starting with CATEGORY_PREFIX
+    (Broad_Progenitor, Broad_Neuron, Broad_Glia, Broad_Non-neural),
+    then returns the category name with the highest Fisher score.
+
+    Args:
+        cluster_scores: Dict of {type_key: Score} from score_cluster_against_kb()
+        kb: The full KB dict (unused; required for signature consistency)
+
+    Returns:
+        Category name string (e.g., "Broad_Neuron") or "" if no match.
+    """
+    from rna.utils.evidence_fusion import _resolve_score
+
+    broad_entries = {
+        k: v for k, v in cluster_scores.items()
+        if k.startswith(CATEGORY_PREFIX)
+    }
+    if not broad_entries:
+        return ""
+
+    best_type = max(broad_entries, key=lambda k: _resolve_score(cluster_scores, k)[0])
+    return best_type
+
 def run_unified_annotation(adata, CFG, logger):
     """
     KB-based unified annotation mode.
@@ -208,7 +238,12 @@ def run_unified_annotation(adata, CFG, logger):
         logger.warning("Failed to load KB '%s': %s", CFG.tissue_kb, exc)
         return None
 
-    n_types = sum(1 for k in kb if k != 'expert_rules')
+    n_types = sum(
+        1 for k in kb
+        if k != "expert_rules"
+        and not k.startswith("_")
+        and not k.startswith(CATEGORY_PREFIX)
+    )
     n_rules = len(kb.get('expert_rules', []))
     logger.info("Loaded KB: %s (%d cell types, %d rules)",
                 CFG.tissue_kb, n_types, n_rules)
@@ -298,13 +333,31 @@ def run_unified_annotation(adata, CFG, logger):
         target_class, target_order, CFG.tissue_kb, logger,
     )
 
+    # Pre-filter: strip Broad_* synthetic types from scoring before fusion.
+    # Fine-grained cell_type annotation must never see Broad_* entries.
+    # The original all_scores (with Broad_* entries) is preserved for
+    # _classify_broad_category() below.
+    fine_scores = {}
+    for cl_str, scores in all_scores.items():
+        fine_scores[cl_str] = {
+            k: v for k, v in scores.items()
+            if not k.startswith(CATEGORY_PREFIX)
+        }
+
     decisions, fusion_quality = fuse_all_clusters(
-        all_scores, all_rules, kb=kb, all_marker_dfs=marker_df,
+        fine_scores, all_rules, kb=kb, all_marker_dfs=marker_df,
         return_quality=True,
         low_quality_clusters=low_quality_clusters,
         unconstrained=getattr(CFG.ai, 'unconstrained_annotation', False),
     )
     logger.info("Evidence fusion: %d clusters processed", len(decisions))
+
+    # Build cell_category_map using ORIGINAL all_scores (with Broad_* entries)
+    cell_category_map = {}
+    for cl_str in all_scores:
+        category = _classify_broad_category(all_scores[cl_str], kb)
+        cell_category_map[cl_str] = category
+
 
     if not decisions:
         logger.warning("Evidence fusion produced no decisions — falling back")
@@ -341,17 +394,33 @@ def run_unified_annotation(adata, CFG, logger):
         )
 
         # Unconstrained annotations require build_annotation_prompt import here
-        from core.ai_prompts import build_annotation_prompt
+        from core.ai_prompts import build_annotation_prompt, build_hierarchical_annotation_prompt
         from core.ai_caller import ai_query
 
         unconstrained = getattr(CFG.ai, 'unconstrained_annotation', False)
-        sys_prompt, user_prompt = build_annotation_prompt(
-            adata, tissue, species, precomputed_rank=True,
-            extra_context=extra_context,
-            compact=n_clusters > 20,
-            kb_candidates=kb_candidates,
-            unconstrained=unconstrained,
-        )
+
+        # Use hierarchical prompt if KB has _hierarchy section
+        kb_hierarchy = kb.get("_hierarchy") if kb else None
+        if kb_hierarchy:
+            sys_prompt, user_prompt = build_hierarchical_annotation_prompt(
+                adata=adata,
+                tissue=tissue,
+                species=species,
+                kb_candidates=kb_candidates,
+                kb_hierarchy=kb_hierarchy,
+                precomputed_rank=True,
+                extra_context=extra_context,
+                compact=n_clusters > 20,
+                unconstrained=unconstrained,
+            )
+        else:
+            sys_prompt, user_prompt = build_annotation_prompt(
+                adata, tissue, species, precomputed_rank=True,
+                extra_context=extra_context,
+                compact=n_clusters > 20,
+                kb_candidates=kb_candidates,
+                unconstrained=unconstrained,
+            )
 
         try:
             response = ai_query(sys_prompt, user_prompt, cfg=CFG.ai)
@@ -365,7 +434,7 @@ def run_unified_annotation(adata, CFG, logger):
                 )
                 # Re-run fusion with AI context
                 decisions = fuse_all_clusters(
-                    all_scores, all_rules, kb=kb,
+                    fine_scores, all_rules, kb=kb,
                     all_marker_dfs=marker_df,
                     ai_results=ai_results,
                     low_quality_clusters=low_quality_clusters,
@@ -404,6 +473,12 @@ def run_unified_annotation(adata, CFG, logger):
             ),
         )
 
+    # For low-quality clusters, set cell_category to empty string
+    for cl_str in low_quality_clusters:
+        if cl_str in cell_category_map:
+            cell_category_map[cl_str] = ""
+
+
     adata.obs['cell_type'] = leiden_str.map(
         {k: v.cell_type for k, v in decision_map.items()}
     ).astype('category')
@@ -413,6 +488,10 @@ def run_unified_annotation(adata, CFG, logger):
     adata.obs['cell_subtype'] = leiden_str.map(
         {k: 'N/A' for k in decision_map}
     )
+    adata.obs['cell_category'] = leiden_str.map(
+        {k: cell_category_map.get(k, "") for k in decision_map}
+    ).astype('category')
+
 
     # annot_method: clean label from fusion method (+ AI suffix)
     def _clean_method(d):
@@ -462,6 +541,7 @@ def run_unified_annotation(adata, CFG, logger):
             'ai_suggested': d.ai_suggested,
             'reasoning': d.explanation,
             'diagnostic_category': d.diagnostic.category if d.diagnostic else '',
+            'cell_category': cell_category_map.get(str(cl_name), ""),
         })
     ann_df = pd.DataFrame(ann_records)
     ann_csv = os.path.join(CFG.table_dir, 'cell_type_annotations.csv')
@@ -469,6 +549,13 @@ def run_unified_annotation(adata, CFG, logger):
     logger.info("Annotation table saved: %s", ann_csv)
 
     logger.info("Cluster → cell type mapping (Unified):")
+    for rec in ann_records:
+        category_str = f" [{rec.get('cell_category', '')}]" if rec.get('cell_category') else ""
+        logger.info(
+            "  Cluster %s → %s%s (conf=%s, method=%s)",
+            rec['cluster'], rec['cell_type'], category_str,
+            rec['confidence'], rec['method'],
+        )
     for rec in ann_records:
         logger.info(
             "  Cluster %s → %s (conf=%s, method=%s)",
@@ -489,6 +576,8 @@ def run_unified_annotation(adata, CFG, logger):
               save='_05_annot_label_unified.pdf')
     safe_plot(sc.pl.umap, adata, color='annot_confidence', show=False,
               save='_05_confidence_unified.pdf')
+    safe_plot(sc.pl.umap, adata, color='cell_category', show=False,
+              save='_05_cell_category_unified.png')
 
     # ── j. Cell metadata export ───────────────────────────────────────────
     meta_df = pd.DataFrame({
@@ -500,13 +589,14 @@ def run_unified_annotation(adata, CFG, logger):
         'cell_subtype': adata.obs['cell_subtype'].values,
         'annot_confidence': adata.obs['annot_confidence'].values,
         'annot_method': adata.obs['annot_method'].values,
+        'cell_category': adata.obs['cell_category'].values,
     })
     meta_csv = os.path.join(CFG.table_dir, 'cell_metadata.csv')
     meta_df.to_csv(meta_csv, index=False)
     logger.info("Cell metadata exported: %s", meta_csv)
 
     # ── k. Annotation quality report ────────────────────────────────────────
-    _write_quality_report(adata, ann_records, fusion_quality, CFG, logger)
+    _write_quality_report(adata, ann_records, fusion_quality, cell_category_map, decision_map, CFG, logger)
 
     # ── l. Interactive review (--interactive flag) ──────────────────────────
     if getattr(CFG, 'interactive', False):
@@ -515,7 +605,7 @@ def run_unified_annotation(adata, CFG, logger):
     return decision_map
 
 
-def _write_quality_report(adata, ann_records, fusion_quality, CFG, logger):
+def _write_quality_report(adata, ann_records, fusion_quality, cell_category_map, decision_map, CFG, logger):
     """Write 05_annotation_quality.json summarising annotation health."""
     pass_cells = (
         (adata.obs['marker_validation'] == 'PASS').sum()
@@ -546,6 +636,9 @@ def _write_quality_report(adata, ann_records, fusion_quality, CFG, logger):
             "deep" if pass_rate < 0.3 else
             "default"
         ),
+        "categories_found": len(set(c for c in cell_category_map.values() if c)),
+        "transition_clusters": sum(1 for d in decision_map.values() if d.method == "transition_state"),
+        "category_distribution": {cat: count for cat, count in Counter(cell_category_map.values()).items() if cat},
     }
 
     quality_path = os.path.join(CFG.table_dir, '05_annotation_quality.json')

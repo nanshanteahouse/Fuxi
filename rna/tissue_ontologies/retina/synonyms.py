@@ -753,4 +753,44 @@ RETINA_SYNONYMS: dict[str, dict[str, str | list[str]]] = {
             "Macaca rod cell",
         ],
     },
+
+    "Broad_Progenitor": {
+        "display_name": "Progenitor",
+        "synonyms": [
+            "Progenitor", "progenitor", "Progenitors", "progenitors",
+            "RPC", "Retinal Progenitor Cell", "retinal progenitor",
+            "Progenitor cells", "progenitor cells", "Precursor",
+            "precursor", "Precursors", "Progenitor Cells",
+        ],
+    },
+
+    "Broad_Neuron": {
+        "display_name": "Neuron",
+        "synonyms": [
+            "Neuron", "neuron", "Neurons", "neurons",
+            "Neuronal", "neuronal", "Retinal neuron", "retinal neuron",
+            "Neuronal cell", "neuronal cell", "Neuron Cells",
+            "neuron cells", "Retinal Neurons",
+        ],
+    },
+
+    "Broad_Glia": {
+        "display_name": "Glia",
+        "synonyms": [
+            "Glia", "glia", "Glial", "glial",
+            "Glial cell", "glial cell", "Glial cells", "glial cells",
+            "Retinal glia", "retinal glia", "Neuroglia",
+            "neuroglia", "Glial Cells", "Retinal Glia",
+        ],
+    },
+
+    "Broad_Non-neural": {
+        "display_name": "Non-neural",
+        "synonyms": [
+            "Non-neural", "non-neural", "Non neural", "non neural",
+            "Nonneural", "nonneural", "Non-neuronal", "non-neuronal",
+            "Non neuronal", "non neuronal", "Mesenchymal",
+            "mesenchymal", "Vascular", "vascular", "Stromal", "stromal",
+        ],
+    },
 }

@@ -145,6 +145,93 @@ Rules:
     return ANNOTATION_SYSTEM_PROMPT, user_prompt
 
 
+def _filter_candidates_by_category(
+    kb_candidates: list[str],
+    kb_hierarchy: dict,
+    target_category: str | None = None,
+) -> list[str]:
+    """Filter KB candidates to those belonging to a specific broad category.
+
+    Args:
+        kb_candidates: Full list of cell type names from KB
+        kb_hierarchy: The _hierarchy dict from KB (with "categories" key)
+        target_category: Broad category name (e.g., "Progenitor", "Neuron", ...)
+            If None, returns the full (unfiltered) list.
+
+    Returns:
+        Filtered list of cell types belonging to target_category.
+    """
+    if not target_category or not kb_hierarchy:
+        return kb_candidates
+
+    categories = kb_hierarchy.get("categories", {})
+    if target_category not in categories:
+        return kb_candidates  # fallback: return unfiltered
+
+    member_set = set(categories[target_category].get("members", []))
+    # Also include the broad type itself
+    member_set.add(f"Broad_{target_category}")
+
+    return [c for c in kb_candidates if c in member_set]
+
+
+def build_hierarchical_annotation_prompt(
+    adata,
+    tissue: str,
+    species: str,
+    kb_candidates: list[str] | None = None,
+    kb_hierarchy: dict | None = None,
+    precomputed_rank: bool = False,
+    extra_context: str = "",
+    compact: bool = False,
+    unconstrained: bool = False,
+):
+    """Build hierarchical annotation prompt with broad-category constraint.
+
+    Like build_annotation_prompt(), but adds explicit instruction for the
+    AI to first determine the broad category (Progenitor / Neuron / Glia /
+    Non-neural) and then select a subtype only from within that category.
+
+    Args are identical to build_annotation_prompt() with one addition:
+        kb_hierarchy: The _hierarchy section from the KB (contains "categories")
+
+    Returns:
+        (system_prompt, user_prompt) tuple
+    """
+    # Get the base system+user prompts from the existing function
+    system_prompt, user_prompt = build_annotation_prompt(
+        adata=adata,
+        tissue=tissue,
+        species=species,
+        precomputed_rank=precomputed_rank,
+        extra_context=extra_context,
+        compact=compact,
+        kb_candidates=kb_candidates,
+        unconstrained=unconstrained,
+    )
+
+    # Add hierarchical instruction to user_prompt
+    if kb_hierarchy and kb_candidates:
+        cat_names = list(kb_hierarchy.get("categories", {}).keys())
+        cat_str = " | ".join(cat_names)
+        hierarchy_text = f"""
+HIERARCHICAL ANNOTATION — Two-step classification required:
+1. FIRST: Determine the broad category for each cluster. Choose from:
+   [{cat_str}]
+
+2. SECOND: Within that broad category, select the specific cell type from
+   the KB candidate list. A cluster's cell type MUST belong to its broad
+   category — cross-category assignments will be flagged as errors.
+
+IMPORTANT: Include "cell_category" AND "cell_type" in your JSON output.
+The cell_category field must be one of: {cat_str}.
+The cell_type field must be a subtype within that category from the candidate list.
+"""
+        user_prompt += hierarchy_text
+
+    return system_prompt, user_prompt
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  scATAC-seq — 染色质状态注释提示词
 # ═══════════════════════════════════════════════════════════════════════

@@ -44,7 +44,7 @@ class FusionDecision(NamedTuple):
     cell_type : str
         Final cell type name (from KB).
     confidence : str
-        ``'high'`` | ``'medium'`` | ``'low'`` | ``'unknown'`` | ``'rule'``.
+        ``'high'`` | ``'medium'`` | ``'low'`` | ``'unknown'`` | ``'rule'`` | ``'transition'``.
     score : float
         The score that led to this decision.
     method : str
@@ -74,13 +74,48 @@ class FusionDecision(NamedTuple):
     explanation: str
     alternative_rules: list
     diagnostic: Optional[DiagnosticInfo] = None
+    cell_category: str = ""
 
+
+
+def _is_transition_state(marker_scores: dict, kb: dict, delta_threshold: float = 0.15):
+    """Detect transition between two types of same lineage.
+
+    When Top-2 Fisher scores differ by < delta_threshold AND share
+    the same parent (broad category), return (top1_type, top2_type).
+    Otherwise return None.
+
+    CRITICAL: This function receives marker_scores that has ALREADY had
+    Broad_* keys stripped (by the caller upstream). It must NOT operate on
+    raw scores containing Broad_* entries.
+    """
+    if len(marker_scores) < 2:
+        return None
+    sorted_types = sorted(marker_scores.items(),
+                          key=lambda x: _resolve_score(marker_scores, x[0])[0],
+                          reverse=True)
+    top1_key, _ = sorted_types[0]
+    top2_key, _ = sorted_types[1]
+    score1, _ = _resolve_score(marker_scores, top1_key)
+    score2, _ = _resolve_score(marker_scores, top2_key)
+    if score1 - score2 >= delta_threshold:
+        return None
+    # Absolute score floor: top score must be >= 0.25 (same cutoff that
+    # separates marker_scoring_low from unknown in DECISION_TIERS).
+    if score1 < 0.25:
+        return None
+    parent1 = kb.get(top1_key, {}).get("parent", "")
+    parent2 = kb.get(top2_key, {}).get("parent", "")
+    if not parent1 or not parent2 or parent1 != parent2:
+        return None
+    return (top1_key, top2_key)
 
 # Decision priority tiers — evaluated in order.
 # Each tier is a (name, callable) where
 # callable(score, expert_rule_result, ai_suggestion) → bool.
 DECISION_TIERS = [
     ('expert_rule',           lambda s, e, a: e is not None),          # Tier 0
+    ('transition_state',   lambda s, e, a: False),               # Tier 1 (detected pre-loop)
     ('marker_scoring_high',   lambda s, e, a: s >= 0.7),               # Tier 1
     ('marker_scoring_medium', lambda s, e, a: 0.5 <= s < 0.7),         # Tier 2
     ('marker_scoring_low',    lambda s, e, a: 0.25 <= s < 0.5),        # Tier 3
@@ -93,6 +128,7 @@ _CONFIDENCE_MAP = {
     'marker_scoring_medium': 'medium',
     'marker_scoring_low': 'low',
     'unknown': 'unknown',
+    'transition_state': 'transition',
 }
 
 
@@ -187,6 +223,14 @@ def _explain(
         parts = ["No cell type could be confidently assigned"]
         if best_type and score > 0:
             parts.append(f"(best match: {best_type}, score: {score:.3f})")
+    elif method == "transition_state":
+        alt_text = "\n".join(alternative_rules) if alternative_rules else ""
+        return (
+            f"Transition state detected: {cell_type}\n"
+            f"  Confidence: {confidence}  Score: {score:.4f}\n"
+            f"  {alt_text}"
+        )
+
     else:
         parts = [
             f"Marker scoring selected {cell_type} "
@@ -413,6 +457,49 @@ def fuse_evidence(
 
     # ── Find the best-scoring cell type ─────────────────────────────────
     best_type, best_score, n_markers = _find_best_type(marker_scores)
+
+    # ── Transition State Detection ──
+    # Check if this cluster is in transition between two closely-scoring
+    # types of the same lineage. Runs BEFORE the normal tier loop.
+    # Broad_* keys are already stripped from marker_scores by the
+    # caller (run_unified_annotation), so _find_best_type() and
+    # _is_transition_state() only see fine-grained types.
+    if kb is not None:
+        transition = _is_transition_state(marker_scores, kb)
+        if transition is not None:
+            t1, t2 = transition
+            delta = abs(
+                _resolve_score(marker_scores, t1)[0] -
+                _resolve_score(marker_scores, t2)[0]
+            )
+            parent = kb.get(t1, {}).get("parent", "")
+            explanation = _explain(
+                cell_type=f"transition: {t1}→{t2}",
+                method="transition_state",
+                score=best_score,
+                n_markers=n_markers,
+                best_type=t1,
+                ai_suggestion=ai_suggestion,
+                ai_agreed=False,
+                alternative_rules=[
+                    f"Top-2 scores within {delta:.3f}, shared lineage {parent}",
+                    f"  {t1}: {_resolve_score(marker_scores, t1)[0]:.3f}",
+                    f"  {t2}: {_resolve_score(marker_scores, t2)[0]:.3f}",
+                ],
+            )
+            return FusionDecision(
+                cell_type=f"transition: {t1}→{t2}",
+                confidence="transition",
+                score=best_score,
+                method="transition_state",
+                n_markers_found=n_markers,
+                ai_agreed=False,
+                ai_suggested=ai_suggestion if ai_suggestion else "",
+                explanation=explanation,
+                alternative_rules=[],
+                diagnostic=None,
+                cell_category="",
+            )
 
     # ── Apply tiers 1–4 ────────────────────────────────────────────────
     for tier_name, tier_fn in DECISION_TIERS:
