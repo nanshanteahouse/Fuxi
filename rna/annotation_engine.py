@@ -175,7 +175,7 @@ def _check_zero_scores_and_retry(
 CATEGORY_PREFIX = "Broad_"
 
 
-def _classify_broad_category(cluster_scores: dict, kb: dict) -> str:
+def _classify_broad_category(cluster_scores: dict, kb: dict, is_developing: bool = False) -> str:
     """Classify a cluster into a broad category using Fisher scores.
 
     Filters cluster_scores to only keys starting with CATEGORY_PREFIX
@@ -185,6 +185,9 @@ def _classify_broad_category(cluster_scores: dict, kb: dict) -> str:
     Args:
         cluster_scores: Dict of {type_key: Score} from score_cluster_against_kb()
         kb: The full KB dict (unused; required for signature consistency)
+    is_developing: bool
+        When ``False``, skip Broad_Progenitor (adult tissue should never
+        be classified into a progenitor category).
 
     Returns:
         Category name string (e.g., "Broad_Neuron") or "" if no match.
@@ -195,6 +198,12 @@ def _classify_broad_category(cluster_scores: dict, kb: dict) -> str:
         k: v for k, v in cluster_scores.items()
         if k.startswith(CATEGORY_PREFIX)
     }
+    # Adult tissue: never assign Broad_Progenitor
+    if not is_developing:
+        broad_entries = {
+            k: v for k, v in broad_entries.items()
+            if k != f"{CATEGORY_PREFIX}Progenitor"
+        }
     if not broad_entries:
         return ""
 
@@ -291,6 +300,10 @@ def run_unified_annotation(adata, CFG, logger):
             logger.info("developmental_mode: auto-adjusted strictness from 'default' → 'deep'")
         logger.info("developmental_mode: enabled — relaxed constraints for developing tissue")
 
+    # ── tissue_maturity: gate developmental-specific logic ─────────────
+    _tissue_maturity = getattr(CFG, 'tissue_maturity', '')
+    is_developing = _tissue_maturity == 'developing' or _dev_mode
+
     rule_top_n, rule_pval = resolve_expert_rule_params(
         strictness=_strictness,
         top_n=_top_n,
@@ -349,13 +362,14 @@ def run_unified_annotation(adata, CFG, logger):
         return_quality=True,
         low_quality_clusters=low_quality_clusters,
         unconstrained=getattr(CFG.ai, 'unconstrained_annotation', False),
+        is_developing=is_developing,
     )
     logger.info("Evidence fusion: %d clusters processed", len(decisions))
 
     # Build cell_category_map using ORIGINAL all_scores (with Broad_* entries)
     cell_category_map = {}
     for cl_str in all_scores:
-        category = _classify_broad_category(all_scores[cl_str], kb)
+        category = _classify_broad_category(all_scores[cl_str], kb, is_developing=is_developing)
         cell_category_map[cl_str] = category
 
 
@@ -439,6 +453,7 @@ def run_unified_annotation(adata, CFG, logger):
                     ai_results=ai_results,
                     low_quality_clusters=low_quality_clusters,
                     unconstrained=getattr(CFG.ai, 'unconstrained_annotation', False),
+                    is_developing=is_developing,
                 )
                 decision_map = dict(zip(decision_clusters, decisions))
         except Exception as exc:

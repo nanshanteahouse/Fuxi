@@ -346,6 +346,7 @@ def fuse_evidence(
     alternative_rules: Optional[list] = None,
     low_quality_reason: str = "",
     unconstrained: bool = False,
+    is_developing: bool = False,
 ) -> 'FusionDecision':
     """Combine marker scores, expert rules, and AI into one decision.
 
@@ -368,6 +369,9 @@ def fuse_evidence(
     low_quality_reason : str
         Non-empty if the cluster was flagged by
         :func:`~utils.marker_scoring.detect_low_quality_cluster` (v3.1.0+).
+    is_developing : bool
+        When ``True``, enables developmental-specific logic such as
+        transition-state detection.  Should be ``False`` for adult tissue.
 
     Returns
     -------
@@ -465,7 +469,7 @@ def fuse_evidence(
     # Broad_* keys are already stripped from marker_scores by the
     # caller (run_unified_annotation), so _find_best_type() and
     # _is_transition_state() only see fine-grained types.
-    if kb is not None:
+    if kb is not None and is_developing:
         transition = _is_transition_state(marker_scores, kb)
         if transition is not None:
             t1, t2 = transition
@@ -569,6 +573,7 @@ def fuse_all_clusters(
     return_quality: bool = False,
     low_quality_clusters: Optional[dict] = None,
     unconstrained: bool = False,
+    is_developing: bool = False,
 ) -> list | tuple[list, dict]:
     """Process all clusters and return a list of :class:`FusionDecision`.
 
@@ -590,6 +595,10 @@ def fuse_all_clusters(
     low_quality_clusters : dict or None
         ``{cluster_id: reason_str}`` from
         :func:`~utils.marker_scoring.detect_low_quality_cluster` (v3.1.0+).
+    is_developing : bool
+        When ``True``, enables developmental-specific logic such as
+        transition-state detection.  Passed through to each
+        :func:`fuse_evidence` call.
 
     Returns
     -------
@@ -629,6 +638,7 @@ def fuse_all_clusters(
             alternative_rules=alt_rules,
             low_quality_reason=low_quality_clusters.get(str(cl), ""),
             unconstrained=unconstrained,
+            is_developing=is_developing,
         )
         decisions.append(decision)
 
