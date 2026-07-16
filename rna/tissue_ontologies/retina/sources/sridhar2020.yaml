@@ -1,0 +1,212 @@
+source_meta:
+  id: sridhar2020
+  short_name: Sridhar 2020 Cell Rep
+  pmid: '32023475'
+  journal: Cell Reports
+  year: 2020
+  species:
+  - Homo sapiens
+  tissue: retina
+  regions:
+  - fovea
+  - periphery
+  n_cells: 45000
+  n_subtypes: 15
+  n_groups: 11
+  class: Mammalia
+  order: Primates
+markers:
+  Proliferating_RPC:
+    confirm:
+    - HMGB2
+    - VIM
+    - SFRP2
+    - B2M
+    - TTYH1
+    add:
+    - CCND1
+    - HMGN2
+    - MEST
+    - SOX2
+    - DAPL1
+    - MDK
+    negative_markers: []
+    species: []
+    synonyms: []
+  NRPC:
+    confirm:
+    - ATOH7
+    - GAL
+    - RGS16
+    - DLL3
+    - HEY1
+    add:
+    - MIAT
+    - HES6
+    - SH3BGRL3
+    - RBP1
+    - GADD45A
+    - PCBP4
+    negative_markers: []
+    species: []
+    synonyms: []
+  NRPC_Cone_BC_fate:
+    confirm:
+    - PDLIM4
+    - RBP1
+    - ATP6V0B
+    - TMSB4X
+    - SOX4
+    - BTG1
+    add:
+    - RORB
+    - HNRNPA1
+    - H3F3A
+    - MARCKSL1
+    - RBM3
+    - UBC
+    negative_markers: []
+    species: []
+    synonyms: []
+  Photoreceptor_Precursor:
+    confirm:
+    - FABP7
+    - NEUROD1
+    - BSG
+    - RBP1
+    - H3F3B
+    - RBM3
+    add:
+    - ATP6V1G1
+    - FTL
+    - GSTP1
+    - SOX4
+    - STMN1
+    - RPS11
+    negative_markers: []
+    species: []
+    synonyms: []
+  RGC:
+    confirm:
+    - SNCG
+    - NEFL
+    - GAP43
+    - NEFM
+    - NRN1
+    add:
+    - SNCA
+    - RTN1
+    - UCHL1
+    - PRPH
+    - NSG1
+    - TUBB2A
+    negative_markers: []
+    species: []
+    synonyms: []
+  Amacrine_Cell:
+    confirm:
+    - ONECUT2
+    - CRABP1
+    - PAX6
+    - CD24
+    - STMN2
+    add:
+    - MLLT11
+    - PCSK1N
+    - SOX4
+    - MARCKSL1
+    - MGARP
+    - BTG1
+    negative_markers: []
+    species: []
+    synonyms: []
+  Cone_Photoreceptor:
+    confirm:
+    - AIPL1
+    - RCVRN
+    - SPON2
+    - NEUROD1
+    - FABP7
+    - GNB3
+    add:
+    - RXRG
+    - CRABP2
+    - PHLDA1
+    - LOXL1
+    - OTX2
+    - LMO4
+    negative_markers: []
+    species: []
+    synonyms: []
+  Rod_Photoreceptor:
+    confirm:
+    - RCVRN
+    - NEUROD1
+    - GSTP1
+    - TUBB4B
+    - PRDX1
+    - PCBP4
+    add:
+    - TPI1
+    - GUK1
+    - BSG
+    - ATP5A1
+    - H3F3B
+    - GABARAPL2
+    negative_markers: []
+    species: []
+    synonyms: []
+  Bipolar_Cell:
+    confirm:
+    - PCBP4
+    - H3F3B
+    - STMN1
+    - NDUFA4
+    - MT-CYB
+    - CCNI
+    add:
+    - TMSB4X
+    - MT-ND4
+    - MT-ATP6
+    - MT-CO2
+    - GSTP1
+    - MT-CO1
+    negative_markers: []
+    species: []
+    synonyms: []
+  Horizontal_Cell:
+    confirm:
+    - SOX4
+    - STMN2
+    - TUBB2B
+    - RTN1
+    - PCSK1N
+    - CD24
+    add:
+    - TUBA1A
+    - HN1
+    - MLLT11
+    - RORB
+    - MARCKSL1
+    - UBC
+    negative_markers: []
+    species: []
+    synonyms: []
+  Microglia:
+    confirm:
+    - PTN
+    - WIF1
+    - EMP3
+    - B2M
+    - CLIC1
+    - LAMP5
+    add:
+    - HES1
+    - PRDX6
+    - NFKBIA
+    - VIM
+    - CD63
+    - MYL6
+    negative_markers: []
+    species: []
+    synonyms: []

@@ -230,6 +230,7 @@ class MarkerSettings(BaseModel):
     validation_marginal_threshold: float = 0.25
     validation_pass_rate_min: float = 0.1
     quality_gate_min_pass_rate: float = 0.10
+    developmental_mode: bool = False
     step10_groupby: List[str] = Field(default_factory=list)
 
 

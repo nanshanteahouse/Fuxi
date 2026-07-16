@@ -427,6 +427,24 @@ def main():
             log.warning("Annotation Standardizer not available for tissue: %s", standardizer)
     log.info("Step 05: Cell type annotation (Major Lineage)")
 
+    # ── developmental_mode: auto-relax annotation parameters ────
+    _dev_mode = getattr(CFG.marker, 'developmental_mode', False)
+    if _dev_mode:
+        log.info("developmental_mode: enabled — auto-relaxing annotation constraints")
+        # Relax marker validation for developing tissue (less marker overlap)
+        CFG.marker.validation_min_overlap = getattr(CFG.marker, 'validation_min_overlap', 0.5)
+        CFG.marker.validation_marginal_threshold = getattr(CFG.marker, 'validation_marginal_threshold', 0.25)
+        if not hasattr(CFG, '_dev_overlap_set') or not CFG._dev_overlap_set:
+            # Only auto-adjust if user hasn't explicitly set these
+            if CFG.marker.validation_min_overlap == 0.5:
+                CFG.marker.validation_min_overlap = 0.10
+            if CFG.marker.validation_marginal_threshold == 0.25:
+                CFG.marker.validation_marginal_threshold = 0.05
+            CFG.ai.unconstrained_annotation = True
+            log.info("  validation_min_overlap: 0.5 → %.2f", CFG.marker.validation_min_overlap)
+            log.info("  validation_marginal_threshold: 0.25 → %.2f", CFG.marker.validation_marginal_threshold)
+            log.info("  ai.unconstrained_annotation → True (allow novel/transitional types)")
+
     adata = sc.read(CFG.cluster_h5ad)
     log.info("Loaded: %s — %d cells, %d clusters",
              CFG.cluster_h5ad, adata.n_obs, adata.obs['leiden'].nunique())

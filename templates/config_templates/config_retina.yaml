@@ -101,6 +101,7 @@ marker:
 
 # ── Knowledge base ──
 # tissue_kb: ""
+# developmental_mode: true  # enable for developing/fetal retina (relaxes validation, enables NRPC rules)
 
 # ── Differential expression ──
 de:

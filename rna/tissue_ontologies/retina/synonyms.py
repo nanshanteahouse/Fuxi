@@ -614,6 +614,12 @@ RETINA_SYNONYMS: dict[str, dict[str, str | list[str]]] = {
             "Neurogenic Retinal Progenitor Cells",
             "nrpc",
             "NRPCs",
+            "Npre",
+            "Neurogenic precursor",
+            "neurogenic precursor",
+            "Neurogenic Precursor",
+            "T1",
+            "Sridhar_T1",
         ],
     },
 

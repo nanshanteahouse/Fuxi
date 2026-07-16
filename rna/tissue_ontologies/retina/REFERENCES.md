@@ -6,11 +6,11 @@ Bibliography of all source papers whose data forms the retina knowledge base.
 
 | Metric | Value |
 |--------|-------|
-| Total sources | 16 |
+| Total sources | 17 |
 | Unique markers | ~2100 |
-| Cell types | ~70 |
-| Species | Homo sapiens (10), Mus musculus (3), Macaca fascicularis (1), Danio rerio (2), Gallus gallus (1), plus hahn2023's 13 vertebrate classes |
-| Journals | Nature Communications (5), Cell (3), Neuron (2), Nature Genetics (1), PLoS Biology (1), PLoS Genetics (1), Nature (1), eLife (1), Cell Genomics (1), Cell Reports (1), preprint (1) |
+| Cell types | ~75 |
+| Species | Homo sapiens (11), Mus musculus (3), Macaca fascicularis (1), Danio rerio (2), Gallus gallus (1), plus hahn2023's 13 vertebrate classes |
+| Journals | Nature Communications (6), Cell (3), Neuron (2), Nature Genetics (1), PLoS Biology (1), PLoS Genetics (1), Nature (1), eLife (1), Cell Genomics (1), Cell Reports (2), preprint (1) |
 | Sources with supplement verification | **16/16** |
 | Sources with empirical validation | 2 (hu2019, menon2019) |
 
@@ -128,6 +128,16 @@ Bibliography of all source papers whose data forms the retina knowledge base.
 - **Data source**: MOESM7 gene signatures + MOESM13 per-type marker lists
 - **Audit**: Full rewrite with complete audit blocks (2026-07-16)
 
+---
+
+### Sridhar et al. (2020) — NEW
+- **PMID**: 32023475
+- **Journal**: Cell Reports
+- **Title**: Single-Cell Transcriptomic Comparison of Human Fetal Retina, hPSC-Derived Retinal Organoids, and Long-Term Retinal Cultures
+- **Species**: Homo sapiens (fetal retina FD59, FD82)
+- **Contribution**: Fetal retina developmental atlas with three transitional cell populations (T1/T2/T3) identified as "postmitotic funnels" between progenitors and differentiated neurons. Provides developmental-stage-specific markers for NRPC (T1: ATOH7+GAL+RGS16+HEY1), NRPC_Cone_BC_fate (T2: PDLIM4+SOX4), and Photoreceptor_Precursor (T3: FABP7+NEUROD1).
+- **Data source**: mmc3 (FD59 top genes, 373 rows), mmc4 (FD82 top genes, 360 rows), mmc5 (D125C top5 markers)
+- **KB entries**: 11 cell types, ~120 markers
 ### Li et al. (2026)
 - **PMID**: 41578023
 - **Journal**: Nature Genetics
@@ -170,7 +180,7 @@ Bibliography of all source papers whose data forms the retina knowledge base.
 
 ### Cross-species coverage
 
-- **Human/Macaque**: Hu 2019, Menon 2019, Peng 2019, Chen 2023, Zuo 2024, Dorgau 2024, Li 2026, Wang 2026, Hoang 2023
+- **Human/Macaque**: Hu 2019, Menon 2019, Peng 2019, Chen 2023, Zuo 2024, Dorgau 2024, Li 2026, Wang 2026, Hoang 2023, Sridhar 2020
 - **Mouse**: Macosko 2015, Shekhar 2016, Tran 2019
 - **Zebrafish**: Kölsch 2021, Liu 2022
 - **Chicken**: Yamagata 2021
@@ -178,14 +188,14 @@ Bibliography of all source papers whose data forms the retina knowledge base.
 
 ### Audit methodology
 
-The 2026-07-16 cross-batch audit verified marker data across all 16 sources. Key actions:
+The 2026-07-16 cross-batch audit verified marker data across all 17 sources. Key actions:
 - dorgau2024: complete rewrite with audit blocks, gene symbol documentation
 - li2026: audit sections added to all 9 cell types
 - peng2019/tran2019/yamagata2021/hoang2023: structural fixes (dates, notes, supp verifications)
 - wang2026: 100% marker match verified against 11 xlsx supplement files
 - merge.py: None-value handling for empty YAML fields
-- 3 new sources added: macosko2015, kolsch2021, liu2022
+- 4 new sources added: macosko2015, kolsch2021, liu2022, sridhar2020
 
 ---
 
-*Generated from source_meta in 16 YAML source files. Last updated: 2026-07-16.*
+*Generated from source_meta in 17 YAML source files. Last updated: 2026-07-16.*

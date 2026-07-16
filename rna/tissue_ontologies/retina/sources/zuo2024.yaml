@@ -1075,6 +1075,20 @@ expert_rules:
   condition:
     markers_present:
       ATOH7: 0.5
+      PRDM13: 0.3
+      OTX2: 0.3
+    markers_absent:
+    - POU4F2
+    - ONECUT1
+    - NRL
+    - NR2E3
+  action: NRPC
+  source: zuo2024
+  notes: 'ATOH7+PRDM13+OTX2 without terminal differentiation TFs (POU4F2, ONECUT1, NRL, NR2E3) identifies neurogenic RPCs — key for distinguishing transitional states in developing retina'
+- priority: 8
+  condition:
+    markers_present:
+      ATOH7: 0.5
       POU4F2: 1.0
       ISL1: 0.5
   action: RGC

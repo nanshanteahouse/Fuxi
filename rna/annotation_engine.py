@@ -244,15 +244,22 @@ def run_unified_annotation(adata, CFG, logger):
                      species)
 
     # ── Resolve expert-rule constraint parameters ────────────────────
+    _strictness = getattr(CFG.marker, 'expert_rule_strictness', 'default')
+    _top_n = getattr(CFG.marker, 'expert_rule_top_n', 0)
+    _pval = getattr(CFG.marker, 'expert_rule_pval_cutoff', 0.0)
+
+    # ── developmental_mode: auto-relax constraints for developing tissues ──
+    _dev_mode = getattr(CFG.marker, 'developmental_mode', False)
+    if _dev_mode:
+        if _strictness == 'default':
+            _strictness = 'deep'
+            logger.info("developmental_mode: auto-adjusted strictness from 'default' → 'deep'")
+        logger.info("developmental_mode: enabled — relaxed constraints for developing tissue")
+
     rule_top_n, rule_pval = resolve_expert_rule_params(
-        strictness=getattr(CFG.marker, 'expert_rule_strictness', 'default'),
-        top_n=getattr(CFG.marker, 'expert_rule_top_n', 0),
-        pval_cutoff=getattr(CFG.marker, 'expert_rule_pval_cutoff', 0.0),
-    )
-    logger.info(
-        "Expert rules: strictness=%s → top_n=%d, pval_cutoff=%.3f",
-        getattr(CFG.marker, 'expert_rule_strictness', 'default'),
-        rule_top_n, rule_pval,
+        strictness=_strictness,
+        top_n=_top_n,
+        pval_cutoff=_pval,
     )
 
     # ── Compute per-cluster marker scores and expert rules ───────────
