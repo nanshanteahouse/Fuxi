@@ -382,6 +382,7 @@ def main():
             # and returns (system_prompt, user_prompt)
             sys_prompt, user_prompt = build_annotation_prompt(
                 sub, tissue=args.cell_type, species="unknown",
+                precomputed_rank=True,
             )
 
             result = ai_query(sys_prompt, user_prompt, CFG.ai)

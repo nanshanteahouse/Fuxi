@@ -90,7 +90,8 @@ def build_annotation_prompt(adata, tissue: str, species: str,
 
     # ── 计算 marker 基因（如尚未计算）────────────────────────────────
     if not precomputed_rank:
-        sc.tl.rank_genes_groups(adata, groupby="leiden", method="wilcoxon")
+        sc.tl.rank_genes_groups(adata, groupby="leiden", method="wilcoxon",
+                            use_raw=True if adata.raw is not None else None)
 
     # ── 提取每聚类 marker 基因 ───────────────────────────────────────
     n_top = 5 if compact else 20

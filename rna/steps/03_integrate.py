@@ -266,7 +266,7 @@ def main():
     bk_list = [b for b in batch_keys if b in adata.obs]
     collinear_warnings = []
     if CFG.harmony.collinearity_guard and report is not None and report.warnings:
-        collinear_warnings = [w for w in report.warnings if "perfectly collinear" in w.lower()]
+        collinear_warnings = [w for w in report.warnings if "perfectly collinear" in w.lower() and any(bc in w for bc in report.biology_cols)]
 
     if collinear_warnings:
         log.error("[collinearity-guard] Harmony ABORTED — batch_key perfectly collinear with biology:")
