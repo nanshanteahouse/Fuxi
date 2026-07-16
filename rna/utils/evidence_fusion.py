@@ -209,6 +209,7 @@ def _explain(
     best_type: Optional[str],
     ai_suggestion: Optional[str],
     ai_agreed: bool,
+    confidence: str = "",
     alternative_rules: Optional[list] = None,
 ) -> str:
     """Build a human-readable explanation."""
@@ -481,6 +482,7 @@ def fuse_evidence(
                 best_type=t1,
                 ai_suggestion=ai_suggestion,
                 ai_agreed=False,
+                confidence="transition",
                 alternative_rules=[
                     f"Top-2 scores within {delta:.3f}, shared lineage {parent}",
                     f"  {t1}: {_resolve_score(marker_scores, t1)[0]:.3f}",

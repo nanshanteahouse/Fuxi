@@ -499,6 +499,8 @@ def run_unified_annotation(adata, CFG, logger):
             return 'expert_rule'
         if d.method == 'unknown':
             return 'unknown'
+        if d.method == 'transition_state':
+            return 'transition_state'
         if d.ai_agreed or d.ai_suggested:
             return 'marker_scoring+ai'
         return 'marker_scoring'
