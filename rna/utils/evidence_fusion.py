@@ -227,7 +227,7 @@ def _explain(
     elif method == "transition_state":
         alt_text = "\n".join(alternative_rules) if alternative_rules else ""
         return (
-            f"Transition state detected: {cell_type}\n"
+            f"Transitional state detected: {cell_type}\n"
             f"  Confidence: {confidence}  Score: {score:.4f}\n"
             f"  {alt_text}"
         )
@@ -475,7 +475,7 @@ def fuse_evidence(
             )
             parent = kb.get(t1, {}).get("parent", "")
             explanation = _explain(
-                cell_type=f"transition: {t1}→{t2}",
+                cell_type=f"transitional: {t1}/{t2}",
                 method="transition_state",
                 score=best_score,
                 n_markers=n_markers,
@@ -490,7 +490,7 @@ def fuse_evidence(
                 ],
             )
             return FusionDecision(
-                cell_type=f"transition: {t1}→{t2}",
+                cell_type=f"transitional: {t1}/{t2}",
                 confidence="transition",
                 score=best_score,
                 method="transition_state",
