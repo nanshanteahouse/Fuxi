@@ -1,6 +1,8 @@
-3.1.0
+3.2.0
 
 Changelog:
+- 3.2.0: Added shekhar2016 source (Mus musculus BC subtypes, PMID 27565351, Cell 2016). 14 BC types (BC1A-BC8_BC9 + Bipolar_Cell/RBC), ~228 add-tier markers from supplement Hi Conf DE + KnownMarkers. Novel types: BC5C, BC5D. Cross-source conflicts added to peng2019/chen2023/li2026. hu2019 audit fixes: CALB1→RPC, GFAP removed, notes populated. li2026 fixes: GLUL/SLC1A3 removed from RGC/Amacrine, CALB1 removed from Bipolar_Cell.
+
 - 3.1.0: Added 4 expert rules for non-neuronal cell types (Astrocyte, Pericyte,
   Vascular_Endothelial, Fibroblast) in peng2020.py; extended _SPECIES_SYNONYMS in
   marker_scoring.py with missing common-name aliases (peromyscus, rhabdomys,

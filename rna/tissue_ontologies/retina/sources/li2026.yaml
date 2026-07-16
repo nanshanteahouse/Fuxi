@@ -57,7 +57,6 @@ markers:
     - CACNA2D3
     - CADM2
     - CADM3
-    - CALB1
     - CAMK2D
     - CCDC141
     - CCDC88A
@@ -395,7 +394,6 @@ markers:
     - CADM2
     - CADPS
     - CADPS2
-    - CALB1
     - CARTPT
     - CBLN2
     - CBLN4
@@ -530,7 +528,6 @@ markers:
     - GLIS3
     - GLRA1
     - GLRA3
-    - GLUL
     - GPC5
     - GPC5-AS2
     - GPM6A
@@ -804,7 +801,6 @@ markers:
     - SLC12A7
     - SLC17A8
     - SLC18A2
-    - SLC1A3
     - SLC22A3
     - SLC24A4
     - SLC2A13
@@ -983,7 +979,6 @@ markers:
     - GARS
     - GFPT1
     - GLRA3
-    - GLUL
     - GPC6
     - GPR26
     - GRB14
@@ -1096,7 +1091,6 @@ markers:
     - SGCD
     - SHANK2
     - SHISA9
-    - SLC1A3
     - SLC24A3
     - SLC6A1
     - SLC6A1-AS1
@@ -1211,3 +1205,44 @@ markers:
     - AQP4
     - GJA1
     - SLC1A2
+conflicts:
+- type_a:
+    cell_type: Muller_Glia
+    marker: GLUL
+  type_b:
+    cell_type: RGC
+    marker: GLUL
+  notes: GLUL (glutamine synthetase) is the canonical Muller_Glia marker. Listing it as RGC confirm is likely MG contamination (doublet signal). Removed from RGC confirm in 2026-07-16 audit. Kept as Muller_Glia confirm only.
+  source:
+    a: li2026
+    b: li2026
+- type_a:
+    cell_type: Muller_Glia
+    marker: SLC1A3
+  type_b:
+    cell_type: RGC
+    marker: SLC1A3
+  notes: SLC1A3 (GLAST) is a glial glutamate transporter strongly expressed by Muller_Glia. Present in RGC confirm likely reflects MG contamination or ambient RNA. Removed from RGC and Amacrine confirm in 2026-07-16 audit.
+  source:
+    a: li2026
+    b: li2026
+- type_a:
+    cell_type: Horizontal_Cell
+    marker: CALB1
+  type_b:
+    cell_type: Bipolar_Cell
+    marker: CALB1
+  notes: CALB1 appears in 5 cell types across sources. li2026 listed it as Bipolar_Cell confirm, but consensus across other sources supports Horizontal_Cell. Removed from Bipolar_Cell confirm in 2026-07-16 audit.
+  source:
+    a: li2026
+    b: li2026
+- type_a:
+    cell_type: Muller_Glia
+    marker: AQP4
+  type_b:
+    cell_type: Astrocyte
+    marker: AQP4
+  notes: AQP4 is expressed by both astrocytes and Muller glia. This is a known biological ambiguity and not an error, but should be handled by co-expression rules (RLBP1+AQP4->MG vs AQP4 alone->Astrocyte).
+  source:
+    a: li2026
+    b: li2026

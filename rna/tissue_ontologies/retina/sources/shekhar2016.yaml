@@ -1,0 +1,903 @@
+source_meta:
+  id: shekhar2016
+  short_name: Shekhar 2016 Cell
+  pmid: '27565351'
+  journal: Cell
+  year: 2016
+  species:
+  - Mus musculus
+  tissue: retina
+  regions:
+  - whole retina
+  n_cells: 24907
+  n_subtypes: 15
+  n_groups: 3
+  class: Mammalia
+  order: Rodentia
+markers:
+  Bipolar_Cell:
+    add:
+    - Lrrtm4
+    - Kcne2
+    - Il1rap
+    - Casp7
+    - Adrb1
+    - Prkca
+    - Strip2
+    - Nebl
+    - Vstm2b
+    - Tpbg
+    - Cabp5
+    - Grm6
+    - Isl1
+    - Otx2
+    - Vsx2
+    - Car8
+    - Sebox
+    refine:
+      Prkca:
+        note: PKC-alpha; definitive rod bipolar cell (RBC) marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Car8:
+        note: Carbonic anhydrase 8; RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Sebox:
+        note: RBC-specific marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Cabp5:
+        note: Ca2+-binding protein 5; BC3A, BC3B, BC5 and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Grm6:
+        note: Metabotropic glutamate receptor mGluR6; ON-cone BC and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Isl1:
+        note: ISL1 transcription factor; ON-cone BC and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Otx2:
+        note: Orthodenticle homeobox 2; pan-bipolar cell TF
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Vsx2:
+        note: Visual system homeobox 2 (Chx10); pan-bipolar cell marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS807574-supplement-11.xlsx Hi Conf
+      - NIHMS807574-supplement-10.xlsx KnownMarkers
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: Markers from Hi Conf sheet (top 10 DE genes per cluster) and KnownMarkers sheet (known BC marker expression).
+        All markers assigned to add tier per KB policy for single-source, pre-2020 studies.
+  BC1A:
+    add:
+    - Wfdc2
+    - Mylk
+    - Igsf3
+    - Fat4
+    - Pcdh17
+    - A930003A15Rik
+    - Tmeff2
+    - Gabrb1
+    - Tacr3
+    - Fezf2
+    - Vsx1
+    - Otx2
+    - Vsx2
+    refine:
+      Tacr3:
+        note: Known OFF-cone BC marker (BC1, BC2); labels bipolar cell subtypes in the OFF layer
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Vsx1:
+        note: ON-cone BC marker; labels BC2, BC3A, BC5C, BC7 subtypes
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Otx2:
+        note: Orthodenticle homeobox 2; pan-bipolar cell TF
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Vsx2:
+        note: Visual system homeobox 2 (Chx10); pan-bipolar cell marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS807574-supplement-11.xlsx Hi Conf
+      - NIHMS807574-supplement-10.xlsx KnownMarkers
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: Markers from Hi Conf sheet (top 10 DE genes per cluster) and KnownMarkers sheet (known BC marker expression).
+        All markers assigned to add tier per KB policy for single-source, pre-2020 studies.
+  BC1B:
+    add:
+    - Fezf1
+    - RP23-124H2.4
+    - Nxph1
+    - Wls
+    - Ncam2
+    - Pcdh10
+    - Lhx3
+    - Tacr3
+    - Gabrb1
+    - Lipa
+    - Vsx1
+    - Otx2
+    - Vsx2
+    refine:
+      Tacr3:
+        note: Known OFF-cone BC marker (BC1, BC2); labels bipolar cell subtypes in the OFF layer
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Vsx1:
+        note: ON-cone BC marker; labels BC2, BC3A, BC5C, BC7 subtypes
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Otx2:
+        note: Orthodenticle homeobox 2; pan-bipolar cell TF
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Vsx2:
+        note: Visual system homeobox 2 (Chx10); pan-bipolar cell marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS807574-supplement-11.xlsx Hi Conf
+      - NIHMS807574-supplement-10.xlsx KnownMarkers
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: Markers from Hi Conf sheet (top 10 DE genes per cluster) and KnownMarkers sheet (known BC marker expression).
+        All markers assigned to add tier per KB policy for single-source, pre-2020 studies.
+  BC2:
+    add:
+    - Ebf1
+    - Lamp5
+    - Kcna1
+    - Syt2
+    - Neto1
+    - Chrnb3
+    - Chrm2
+    - Bhlhe22
+    - Nxph1
+    - A330008L17Rik
+    - Tacr3
+    - Rcvrn
+    - Irx5
+    - Irx6
+    - Vsx1
+    - Scgn
+    - Otx2
+    - Vsx2
+    refine:
+      Tacr3:
+        note: Known OFF-cone BC marker (BC1, BC2); labels bipolar cell subtypes in the OFF layer
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Vsx1:
+        note: ON-cone BC marker; labels BC2, BC3A, BC5C, BC7 subtypes
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Syt2:
+        note: Synaptotagmin-2; labels BC2 and BC6 ribbon synapses
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Scgn:
+        note: Secretagogin; Ca2+-binding protein expressed in multiple BC subtypes
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Irx6:
+        note: Iroquois homeobox 6; OFF-cone BC marker (BC2, BC3A)
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Rcvrn:
+        note: Recoverin; OFF-cone BC marker (BC2)
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Otx2:
+        note: Orthodenticle homeobox 2; pan-bipolar cell TF
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Vsx2:
+        note: Visual system homeobox 2 (Chx10); pan-bipolar cell marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS807574-supplement-11.xlsx Hi Conf
+      - NIHMS807574-supplement-10.xlsx KnownMarkers
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: Markers from Hi Conf sheet (top 10 DE genes per cluster) and KnownMarkers sheet (known BC marker expression).
+        All markers assigned to add tier per KB policy for single-source, pre-2020 studies.
+  BC3A:
+    add:
+    - Angpt1
+    - Erbb4
+    - Kcnh7
+    - Irx6
+    - Irx5
+    - Chrnb3
+    - Gpr22
+    - Chrna6
+    - Esam
+    - Aipl1
+    - Vsx1
+    - Hcn4
+    - Grik1
+    - Cabp5
+    - Scgn
+    - Otx2
+    - Vsx2
+    refine:
+      Vsx1:
+        note: ON-cone BC marker; labels BC2, BC3A, BC5C, BC7 subtypes
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Scgn:
+        note: Secretagogin; Ca2+-binding protein expressed in multiple BC subtypes
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Irx6:
+        note: Iroquois homeobox 6; OFF-cone BC marker (BC2, BC3A)
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Hcn4:
+        note: Hyperpolarization-activated channel HCN4; BC3A marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Grik1:
+        note: Glutamate receptor ionotropic kainate 1 (GluK1); OFF-cone BC marker (BC3A, BC3B, BC4)
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Cabp5:
+        note: Ca2+-binding protein 5; BC3A, BC3B, BC5 and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Otx2:
+        note: Orthodenticle homeobox 2; pan-bipolar cell TF
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Vsx2:
+        note: Visual system homeobox 2 (Chx10); pan-bipolar cell marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS807574-supplement-11.xlsx Hi Conf
+      - NIHMS807574-supplement-10.xlsx KnownMarkers
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: Markers from Hi Conf sheet (top 10 DE genes per cluster) and KnownMarkers sheet (known BC marker expression).
+        All markers assigned to add tier per KB policy for single-source, pre-2020 studies.
+  BC3B:
+    add:
+    - Gng2
+    - A930009A15Rik
+    - Slc16a7
+    - Lrrtm3
+    - Otor
+    - Prkar2b
+    - Cacna2d2
+    - Slitrk6
+    - Nnat
+    - Dner
+    - Irx5
+    - Grik1
+    - Gria1
+    - Cabp5
+    - Scgn
+    - Otx2
+    - Vsx2
+    refine:
+      Scgn:
+        note: Secretagogin; Ca2+-binding protein expressed in multiple BC subtypes
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Prkar2b:
+        note: PKA regulatory subunit RII-beta; BC3B marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Grik1:
+        note: Glutamate receptor ionotropic kainate 1 (GluK1); OFF-cone BC marker (BC3A, BC3B, BC4)
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Cabp5:
+        note: Ca2+-binding protein 5; BC3A, BC3B, BC5 and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Otx2:
+        note: Orthodenticle homeobox 2; pan-bipolar cell TF
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Vsx2:
+        note: Visual system homeobox 2 (Chx10); pan-bipolar cell marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS807574-supplement-11.xlsx Hi Conf
+      - NIHMS807574-supplement-10.xlsx KnownMarkers
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: Markers from Hi Conf sheet (top 10 DE genes per cluster) and KnownMarkers sheet (known BC marker expression).
+        All markers assigned to add tier per KB policy for single-source, pre-2020 studies.
+  BC4:
+    add:
+    - Col11a1
+    - Calml4
+    - Nxph4
+    - Postn
+    - Fam19a4
+    - Mmp2
+    - Ppm1j
+    - Kcnd3
+    - Cnnm1
+    - Cacng2
+    - Grik1
+    - Gria1
+    - Scgn
+    - Otx2
+    - Vsx2
+    refine:
+      Scgn:
+        note: Secretagogin; Ca2+-binding protein expressed in multiple BC subtypes
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Grik1:
+        note: Glutamate receptor ionotropic kainate 1 (GluK1); OFF-cone BC marker (BC3A, BC3B, BC4)
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Otx2:
+        note: Orthodenticle homeobox 2; pan-bipolar cell TF
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Vsx2:
+        note: Visual system homeobox 2 (Chx10); pan-bipolar cell marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS807574-supplement-11.xlsx Hi Conf
+      - NIHMS807574-supplement-10.xlsx KnownMarkers
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: Markers from Hi Conf sheet (top 10 DE genes per cluster) and KnownMarkers sheet (known BC marker expression).
+        All markers assigned to add tier per KB policy for single-source, pre-2020 studies.
+  BC5A:
+    add:
+    - BC046251
+    - Ptprt
+    - Sox6
+    - Neurod2
+    - Hpca
+    - Kcng4
+    - RP23-363M4.1
+    - Chn2
+    - Hs3st4
+    - Meis2
+    - Hcn1
+    - Cabp5
+    - Grm6
+    - Isl1
+    - Scgn
+    - Otx2
+    - Vsx2
+    refine:
+      Kcng4:
+        note: ON-cone BC marker; labels BC5 subtypes; also known as Kv6.4
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Scgn:
+        note: Secretagogin; Ca2+-binding protein expressed in multiple BC subtypes
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Cabp5:
+        note: Ca2+-binding protein 5; BC3A, BC3B, BC5 and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Hcn1:
+        note: Hyperpolarization-activated channel HCN1; BC5 marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Grm6:
+        note: Metabotropic glutamate receptor mGluR6; ON-cone BC and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Isl1:
+        note: ISL1 transcription factor; ON-cone BC and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Otx2:
+        note: Orthodenticle homeobox 2; pan-bipolar cell TF
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Vsx2:
+        note: Visual system homeobox 2 (Chx10); pan-bipolar cell marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS807574-supplement-11.xlsx Hi Conf
+      - NIHMS807574-supplement-10.xlsx KnownMarkers
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: Markers from Hi Conf sheet (top 10 DE genes per cluster) and KnownMarkers sheet (known BC marker expression).
+        All markers assigned to add tier per KB policy for single-source, pre-2020 studies.
+  BC5B:
+    add:
+    - Chrm2
+    - Adarb2
+    - C1ql3
+    - Ddit4l
+    - Nwd2
+    - Rwdd3
+    - Cngb3
+    - Esrrg
+    - Pcdh7
+    - RP23-363M4.1
+    - Kcng4
+    - Hcn1
+    - Cabp5
+    - Grm6
+    - Isl1
+    - Scgn
+    - Otx2
+    - Vsx2
+    refine:
+      Kcng4:
+        note: ON-cone BC marker; labels BC5 subtypes; also known as Kv6.4
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Scgn:
+        note: Secretagogin; Ca2+-binding protein expressed in multiple BC subtypes
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Cabp5:
+        note: Ca2+-binding protein 5; BC3A, BC3B, BC5 and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Hcn1:
+        note: Hyperpolarization-activated channel HCN1; BC5 marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Grm6:
+        note: Metabotropic glutamate receptor mGluR6; ON-cone BC and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Isl1:
+        note: ISL1 transcription factor; ON-cone BC and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Otx2:
+        note: Orthodenticle homeobox 2; pan-bipolar cell TF
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Vsx2:
+        note: Visual system homeobox 2 (Chx10); pan-bipolar cell marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS807574-supplement-11.xlsx Hi Conf
+      - NIHMS807574-supplement-10.xlsx KnownMarkers
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: Markers from Hi Conf sheet (top 10 DE genes per cluster) and KnownMarkers sheet (known BC marker expression).
+        All markers assigned to add tier per KB policy for single-source, pre-2020 studies.
+  BC5C:
+    add:
+    - Areg
+    - Slitrk5
+    - Tmem200a
+    - Gabrr3
+    - Msrb2
+    - Cngb3
+    - Rwdd3
+    - Plxdc2
+    - Nwd2
+    - Vwc2l
+    - Kcng4
+    - Hcn1
+    - Cabp5
+    - Grm6
+    - Isl1
+    - Scgn
+    - Otx2
+    - Vsx2
+    refine:
+      Kcng4:
+        note: ON-cone BC marker; labels BC5 subtypes; also known as Kv6.4
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Scgn:
+        note: Secretagogin; Ca2+-binding protein expressed in multiple BC subtypes
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Cabp5:
+        note: Ca2+-binding protein 5; BC3A, BC3B, BC5 and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Hcn1:
+        note: Hyperpolarization-activated channel HCN1; BC5 marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Grm6:
+        note: Metabotropic glutamate receptor mGluR6; ON-cone BC and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Isl1:
+        note: ISL1 transcription factor; ON-cone BC and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Otx2:
+        note: Orthodenticle homeobox 2; pan-bipolar cell TF
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Vsx2:
+        note: Visual system homeobox 2 (Chx10); pan-bipolar cell marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS807574-supplement-11.xlsx Hi Conf
+      - NIHMS807574-supplement-10.xlsx KnownMarkers
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: Markers from Hi Conf sheet (top 10 DE genes per cluster) and KnownMarkers sheet (known BC marker expression).
+        All markers assigned to add tier per KB policy for single-source, pre-2020 studies.
+  BC5D:
+    add:
+    - Irx3
+    - Kirrel3
+    - Lrrtm1
+    - Cxcl14
+    - Ddit4l
+    - Cplx2
+    - Meis2
+    - Pcdh7
+    - Esrrg
+    - Mycn
+    - Kcng4
+    - Hcn1
+    - Cabp5
+    - Grm6
+    - Isl1
+    - Scgn
+    - Otx2
+    - Vsx2
+    refine:
+      Kcng4:
+        note: ON-cone BC marker; labels BC5 subtypes; also known as Kv6.4
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Scgn:
+        note: Secretagogin; Ca2+-binding protein expressed in multiple BC subtypes
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Cabp5:
+        note: Ca2+-binding protein 5; BC3A, BC3B, BC5 and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Hcn1:
+        note: Hyperpolarization-activated channel HCN1; BC5 marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Grm6:
+        note: Metabotropic glutamate receptor mGluR6; ON-cone BC and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Isl1:
+        note: ISL1 transcription factor; ON-cone BC and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Otx2:
+        note: Orthodenticle homeobox 2; pan-bipolar cell TF
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Vsx2:
+        note: Visual system homeobox 2 (Chx10); pan-bipolar cell marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS807574-supplement-11.xlsx Hi Conf
+      - NIHMS807574-supplement-10.xlsx KnownMarkers
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: Markers from Hi Conf sheet (top 10 DE genes per cluster) and KnownMarkers sheet (known BC marker expression).
+        All markers assigned to add tier per KB policy for single-source, pre-2020 studies.
+  BC6:
+    add:
+    - Cck
+    - Spock3
+    - Lect1
+    - Lhx3
+    - Cdh8
+    - Reln
+    - Tnnt1
+    - Vsx1
+    - Ppef2
+    - Cdc25c
+    - Syt2
+    - Grm6
+    - Isl1
+    - Scgn
+    - Otx2
+    - Vsx2
+    refine:
+      Vsx1:
+        note: ON-cone BC marker; labels BC2, BC3A, BC5C, BC7 subtypes
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Syt2:
+        note: Synaptotagmin-2; labels BC2 and BC6 ribbon synapses
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Scgn:
+        note: Secretagogin; Ca2+-binding protein expressed in multiple BC subtypes
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Grm6:
+        note: Metabotropic glutamate receptor mGluR6; ON-cone BC and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Isl1:
+        note: ISL1 transcription factor; ON-cone BC and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Otx2:
+        note: Orthodenticle homeobox 2; pan-bipolar cell TF
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Vsx2:
+        note: Visual system homeobox 2 (Chx10); pan-bipolar cell marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS807574-supplement-11.xlsx Hi Conf
+      - NIHMS807574-supplement-10.xlsx KnownMarkers
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: Markers from Hi Conf sheet (top 10 DE genes per cluster) and KnownMarkers sheet (known BC marker expression).
+        All markers assigned to add tier per KB policy for single-source, pre-2020 studies.
+  BC7:
+    add:
+    - Gnat3
+    - A930006I01Rik
+    - Rgs3
+    - Kcnab1
+    - Sec1
+    - Sox5
+    - Fn1
+    - Igfn1
+    - Hs3st4
+    - Palld
+    - Vsx1
+    - Grm6
+    - Isl1
+    - Otx2
+    - Vsx2
+    refine:
+      Vsx1:
+        note: ON-cone BC marker; labels BC2, BC3A, BC5C, BC7 subtypes
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Grm6:
+        note: Metabotropic glutamate receptor mGluR6; ON-cone BC and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Isl1:
+        note: ISL1 transcription factor; ON-cone BC and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Otx2:
+        note: Orthodenticle homeobox 2; pan-bipolar cell TF
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Vsx2:
+        note: Visual system homeobox 2 (Chx10); pan-bipolar cell marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS807574-supplement-11.xlsx Hi Conf
+      - NIHMS807574-supplement-10.xlsx KnownMarkers
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: Markers from Hi Conf sheet (top 10 DE genes per cluster) and KnownMarkers sheet (known BC marker expression).
+        All markers assigned to add tier per KB policy for single-source, pre-2020 studies.
+  BC8_BC9:
+    add:
+    - Cpne9
+    - Tshz2
+    - Nsg2
+    - Adarb2
+    - Plcb1
+    - Timeless
+    - Serpini1
+    - Sec1
+    - Rpgrip1
+    - Ppef2
+    - Vsx1
+    - Grm6
+    - Isl1
+    - Scgn
+    - Otx2
+    - Vsx2
+    refine:
+      Vsx1:
+        note: ON-cone BC marker; labels BC2, BC3A, BC5C, BC7 subtypes
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Scgn:
+        note: Secretagogin; Ca2+-binding protein expressed in multiple BC subtypes
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Grm6:
+        note: Metabotropic glutamate receptor mGluR6; ON-cone BC and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Isl1:
+        note: ISL1 transcription factor; ON-cone BC and RBC marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Otx2:
+        note: Orthodenticle homeobox 2; pan-bipolar cell TF
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+      Vsx2:
+        note: Visual system homeobox 2 (Chx10); pan-bipolar cell marker
+        threshold: log-effect > 2.0
+        pmid: '27565351'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS807574-supplement-11.xlsx Hi Conf
+      - NIHMS807574-supplement-10.xlsx KnownMarkers
+      cross_species_validated: false
+      last_audited: '2026-07-16'
+      flagged: false
+      notes: Markers from Hi Conf sheet (top 10 DE genes per cluster) and KnownMarkers sheet (known BC marker expression).
+        All markers assigned to add tier per KB policy for single-source, pre-2020 studies.
+novel_types:
+- name: BC5C
+  parent: Bipolar_Cell
+  markers:
+  - Areg
+  - Slitrk5
+  - Tmem200a
+  - Gabrr3
+  - Msrb2
+  - Cngb3
+  - Rwdd3
+  - Plxdc2
+  - Nwd2
+  - Vwc2l
+  - Kcng4
+  - Hcn1
+  - Cabp5
+  - Grm6
+  - Isl1
+  - Scgn
+  - Otx2
+  - Vsx2
+  species:
+  - Mus musculus
+  source: shekhar2016
+- name: BC5D
+  parent: Bipolar_Cell
+  markers:
+  - Irx3
+  - Kirrel3
+  - Lrrtm1
+  - Cxcl14
+  - Ddit4l
+  - Cplx2
+  - Meis2
+  - Pcdh7
+  - Esrrg
+  - Mycn
+  - Kcng4
+  - Hcn1
+  - Cabp5
+  - Grm6
+  - Isl1
+  - Scgn
+  - Otx2
+  - Vsx2
+  species:
+  - Mus musculus
+  source: shekhar2016
+expert_rules:
+- priority: 1
+  condition:
+    markers_present:
+      PRKCA: 1.0
+  action: Bipolar_Cell
+  source: shekhar2016
+  notes: Prkca (PKC-alpha) is the definitive rod bipolar cell (RBC) marker
+- priority: 2
+  condition:
+    markers_present:
+      VSX2: 1.0
+      OTX2: 1.0
+  action: Bipolar_Cell
+  source: shekhar2016
+  notes: Vsx2 + Otx2 co-expression is the pan-bipolar cell signature
+conflicts: []

@@ -101,6 +101,7 @@ markers:
     - MKI67
     - NOTCH1
     - PAX6
+    - CALB1
     refine:
       VSX2:
         note: canonical RPC marker; expressed throughout fetal stages 5-24 GW
@@ -123,7 +124,7 @@ markers:
         MKI67: false
       last_audited: '2026-07-10'
       flagged: true
-      notes: ''
+      notes: 'CALB1 moved from Horizontal_Cell to RPC per 2026-07-10 supplement cross-validation (grep confirmed CALB1 in cluster 3/RPC, not cluster 4/HC). HES1/MKI67/NOTCH1 may be HVG-filtered artifacts (absent from Hu 2019 5K HVG set). See notes/kb/2026-07-10_kb_supplement_cross_validation.md §7.'
       pct_expressed:
         PAX6: 0.6856
         SOX2: 0.4483
@@ -137,7 +138,6 @@ markers:
     - GLUL
     - RLBP1
     add:
-    - GFAP
     refine: {}
     negative_markers: []
     species: []
@@ -180,7 +180,7 @@ markers:
         ASCL1: false
       last_audited: '2026-07-10'
       flagged: true
-      notes: ''
+      notes: 'GFAP removed from Hu 2019 attribution (0 grep hits in Hu supplement data). CRALBP/RDH10/SLC1A3/VIM removed from marker list (HVG-filtered artifacts). See notes/kb/2026-07-10_kb_supplement_cross_validation.md §7.'
       pct_expressed:
         RLBP1: 0.6548
         SLC1A3: 0.6454
@@ -335,7 +335,6 @@ markers:
     - ONECUT1
     - PROX1
     add:
-    - CALB1
     - ONECUT2
     refine: {}
     negative_markers: []
@@ -366,7 +365,7 @@ markers:
         TFAP2B: true
       last_audited: '2026-07-10'
       flagged: true
-      notes: ''
+      notes: 'CALB1 removed (was incorrectly assigned to HC; Hu 2019 supplement shows CALB1 in cluster 3/RPC, not cluster 4/HC). ONECUT2/STMN2/TFAP2B validated against GSE118614. See notes/kb/2026-07-10_kb_supplement_cross_validation.md §3.1.'
       pct_expressed:
         ONECUT2: 0.7118
         STMN2: 0.8629

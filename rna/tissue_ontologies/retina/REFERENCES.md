@@ -6,12 +6,12 @@ Bibliography of all source papers whose data forms the retina knowledge base.
 
 | Metric | Value |
 |--------|-------|
-| Total sources | 11 |
-| Unique markers | 1406 |
-| Cell types | 39 |
-| Species | Homo sapiens (9), Macaca fascicularis (1), Mus musculus (1), Gallus gallus (1), plus hahn2023's 13 vertebrate classes |
-| Journals | Nature Communications (4), Neuron (1), eLife (1), PLoS Biology (1), Nature (1), Cell (1), Nature Genetics (1), Cell Genomics (1), preprint (1) |
-| Sources with supplement verification | **11/11** |
+| Total sources | 12 |
+| Unique markers | ~1628 |
+| Cell types | 52 |
+| Species | Homo sapiens (9), Macaca fascicularis (1), Mus musculus (2), Gallus gallus (1), plus hahn2023's 13 vertebrate classes |
+| Journals | Nature Communications (4), Neuron (1), eLife (1), PLoS Biology (1), Nature (1), Cell (2), Nature Genetics (1), Cell Genomics (1), preprint (1) |
+| Sources with supplement verification | **12/12** |
 | Sources with empirical validation | 2 (hu2019, menon2019) |
 ---
 
@@ -146,4 +146,4 @@ Bibliography of all source papers whose data forms the retina knowledge base.
 Each source was audited against its original publication supplements. Markers were cross-validated against source data files. Discrepancies between AI-generated marker lists and supplement-verified data were corrected. Add-tier markers absent from the highly variable gene (HVG) set were removed.
 ---
 
-*Generated from source_meta in 11 YAML source files. Last updated: 2026-07-15.*
+*Generated from source_meta in 12 YAML source files. Last updated: 2026-07-16.*

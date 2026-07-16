@@ -717,3 +717,24 @@ expert_rules:
   action: Muller_Glia
   source: chen2023
   notes: 'RLBP1 is retina MG-specific. GFAP alone drives Astrocyte scoring, but RLBP1+GFAP co-expression in retina indicates reactive Muller glia, not astrocyte. This rule ensures MG wins when both markers are present.'
+conflicts:
+- type_a:
+    cell_type: Muller_Glia
+    marker: PRKG1
+  type_b:
+    cell_type: RGC
+    marker: PRKG1
+  notes: Intra-source conflict. PRKG1 listed as Muller_Glia(add) AND RGC(confirm) in the same source. RGC may express low-level PRKG1 but this inflates MG scoring since MG is also positive.
+  source:
+    a: chen2023
+    b: chen2023
+- type_a:
+    cell_type: Muller_Glia
+    marker: WIF1
+  type_b:
+    cell_type: Astrocyte
+    marker: WIF1
+  notes: WIF1 is listed as confirm for both Muller_Glia AND Astrocyte in the same source. Ambiguous glial marker that should not drive differential scoring.
+  source:
+    a: chen2023
+    b: chen2023
