@@ -331,10 +331,9 @@ markers:
       flagged_reason: pct_expression_below_threshold
   Muller_Glia:
     confirm:
-    - GFAP
     - GLUL
     - RLBP1
-    add:
+    - GFAP
     - APOE
     - CLU
     - CRABP1
