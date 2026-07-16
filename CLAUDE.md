@@ -26,7 +26,7 @@ core/              Shared infrastructure (no biology libs)
   preprocess/        Format detection, archive extract, config gen
   anatomy.py         CCI anatomy constraint system
   enrichment_tissue.py / grn_tissue.py  Tissue-aware scoring
-  paper_insights.py / paper_registry.py / run_reproduce.py
+  paper_insights.py / registry.py / run_reproduce.py
 
 rna/               scRNA-seq module
   steps/            13 pipeline steps (00_load → 12_cell_interaction)
@@ -112,8 +112,8 @@ Both modes use `--step N` to run one step at a time. The difference is whether t
 
 ```bash
 python core/paper_insights.py --pmid <PMID>       # AI paper interpretation
-python core/paper_registry.py --build              # build paper→GSE→config index
-python core/paper_registry.py --verify             # check registry consistency
+python -m core.registry report               # print summary
+python -m core.registry verify              # check registry consistency
 python core/run_reproduce.py --all --dry-run       # preview reproducibility
 python core/run_reproduce.py <paper_dir>           # reproduce a single paper
 ```

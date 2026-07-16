@@ -39,8 +39,8 @@ python core/run_pipeline.py --modality rna --resume --config ...
 
 # Paper tools
 python core/paper_insights.py --pmid <PMID>       # AI paper interpretation
-python core/paper_registry.py --build              # build paper→GSE→config index
-python core/paper_registry.py --verify             # check registry consistency
+python -m core.registry report               # print summary
+python -m core.registry verify              # check registry consistency
 python core/run_reproduce.py --all --dry-run       # preview reproducibility
 python core/run_reproduce.py <paper_dir>           # reproduce a single paper
 ```
@@ -53,7 +53,7 @@ python core/run_reproduce.py <paper_dir>           # reproduce a single paper
 | ATAC steps | `atac/steps/` (10 steps: 00_load → 09_integrate) |
 | Spatial steps | `spatial/steps/` (11 steps: 00_load → 10_cell_interaction) |
 | Shared core | `core/` (config, utils, ai_caller, preprocess) |
-| Paper tools | `core/paper_insights.py`, `core/paper_registry.py`, `core/run_reproduce.py` |
+| Paper tools | `core/paper_insights.py`, `core/registry.py`, `core/run_reproduce.py` |
 | Project configs | `projects/{modality}/{GSE_ID}/config_*.yaml` |
 | Config templates | `templates/config_templates/*.yaml` |
 
@@ -83,7 +83,7 @@ When user requests to analyze or reproduce a dataset, check the **master registr
 7. **If not found** — Ask user whether to download and register:
    ```bash
    python core/paper_insights.py --pmid <PMID>
-   python core/paper_registry.py --build
+   python -m core.registry report
    ```
 
 

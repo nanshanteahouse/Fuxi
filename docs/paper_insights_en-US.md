@@ -240,12 +240,12 @@ Each figure entry contains a boolean `reproducible` field and a `reproducibility
 
 ### 6.1 PaperRegistry — Build the paper index
 
-`paper_registry.py` scans all paper insights and existing project configs to automatically build a paper→GSE→config mapping:
+`registry.py` scans all paper insights and existing project configs to automatically build a paper→GSE→config mapping:
 
 ```bash
-python core/paper_registry.py --build   # generates projects/papers/registry.yaml
-python core/paper_registry.py --verify  # check consistency
-python core/paper_registry.py --build --dry-run  # preview without writing
+python -m core.registry report   # generates projects/registry/{papers,datasets,links}.yaml
+python -m core.registry verify  # check consistency
+python -m core.registry report --dry-run  # preview without writing
 ```
 
 The generated `registry.yaml` labels each GSE with a status: `config_exists` (already configured), `not_configured` (needs preprocessing), `data_not_downloaded` (needs GEO download), etc.
@@ -272,7 +272,7 @@ python core/run_reproduce.py projects/papers/.../ --gse GSE107618
 python core/paper_insights.py --pmid 31269016
 
 # Step 2: Build registry
-python core/paper_registry.py --build
+python -m core.registry report
 
 # Step 3: Preview reproducibility
 python core/run_reproduce.py --all --dry-run

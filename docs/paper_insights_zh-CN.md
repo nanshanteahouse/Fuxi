@@ -240,12 +240,12 @@ reproduction_status:
 
 ### 6.1 PaperRegistry — 构建论文索引
 
-`paper_registry.py` 扫描所有论文的 `insights.yaml` 和已有项目配置，自动构建论文→GEO→配置的映射关系：
+`registry.py` 扫描所有论文的 `insights.yaml` 和已有项目配置，自动构建论文→GEO→配置的映射关系：
 
 ```bash
-python core/paper_registry.py --build   # 生成 projects/papers/registry.yaml
-python core/paper_registry.py --verify  # 检查一致性
-python core/paper_registry.py --build --dry-run  # 预览不写入
+python -m core.registry report   # 生成 projects/registry/{papers,datasets,links}.yaml
+python -m core.registry verify  # 检查一致性
+python -m core.registry report --dry-run  # 预览不写入
 ```
 
 生成的 `registry.yaml` 为每个 GSE 标记状态：`config_exists`（已有配置）、`not_configured`（待生成）、`data_not_downloaded`（需下载数据）等。
@@ -272,7 +272,7 @@ python core/run_reproduce.py projects/papers/.../ --gse GSE107618
 python core/paper_insights.py --pmid 31269016
 
 # Step 2: 构建注册表
-python core/paper_registry.py --build
+python -m core.registry report
 
 # Step 3: 预览可复现性
 python core/run_reproduce.py --all --dry-run
