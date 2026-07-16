@@ -551,6 +551,11 @@ def _build_datasets_and_links(
             # 检测 data_root
             data_root = f"{{FUXI_DATA_ROOT}}/{gse_id}"
             data_root_exists = scanned.get("data_root_exists", False)
+            # 对所有数据集检测 FUXI_DATA_ROOT
+            if not data_root_exists:
+                fdr = os.environ.get("FUXI_DATA_ROOT", "")
+                if fdr:
+                    data_root_exists = os.path.isdir(os.path.join(fdr, gse_id))
             ds_status = DatasetStatus.DATA_DOWNLOADED if data_root_exists else DatasetStatus.DATA_NOT_DOWNLOADED
 
             # 如果有 config 存在，升级状态
