@@ -520,7 +520,6 @@ def _v1_to_paper_entry(
 def _build_datasets_and_links(
     v1_papers: list[dict[str, Any]],
     scanned_gses: dict[str, dict[str, Any]],
-    audit_data: dict[str, dict[str, Any]],
 ):
     """从 v1 registry + 扫描结果构建 datasets 和 links。
 
@@ -631,8 +630,7 @@ def _build_datasets_and_links(
                 modalities=modalities,
                 status=ds_status.value,
                 data_root=data_root,
-                notes=v1_notes if v1_notes else "",
-                **_dataset_audit_fields(audit_data.get(gse_id, {})),
+                notes=v1_notes if v1_notes else ""
             )
 
     # 孤儿数据集检测
@@ -657,23 +655,8 @@ def _build_datasets_and_links(
                 modalities=mods,
                 status=DatasetStatus.ORPHAN.value,
                 data_root=data_root,
-                notes="由迁移脚本自动发现的孤儿数据集",
-                **_dataset_audit_fields(audit_data.get(gse_id, {})),
+                notes="由迁移脚本自动发现的孤儿数据集"
             )
-    return datasets, links, orphan_gses
-
-
-def _dataset_audit_fields(ad: dict) -> dict[str, Any]:
-    return {
-        k: v
-        for k in (
-            "species", "tissue", "data_format",
-            "size_desc", "parent_series",
-            "n_samples", "n_cells", "sample_info",
-            "paper_pmids",
-        )
-        if (v := ad.get(k))
-    }
     return datasets, links, orphan_gses
 
 
@@ -710,11 +693,6 @@ def build_master_registry(
     scanned_gses = _scan_project_gses()
     print(f"  ✓ 管线目录: {len(scanned_gses)} 个数据集目录")
 
-    # 4.5 加载 audit.md
-    audit_path = os.path.join(os.environ.get("FUXI_DATA_ROOT", ""), "dataset_audit.md")
-    audit_data = _parse_audit_table(audit_path)
-    print(f"  ✓ audit.md: {len(audit_data)} 个数据集补充信息")
-
     # 5. 转换 papers
     print("\n📄 转换论文条目...")
     papers: list[PaperEntry] = []
@@ -730,7 +708,7 @@ def build_master_registry(
 
     # 6. 构建 datasets + links
     print("\n🔗 构建数据集与关联...")
-    datasets, links, orphan_gses = _build_datasets_and_links(v1_papers, scanned_gses, audit_data)
+    datasets, links, orphan_gses = _build_datasets_and_links(v1_papers, scanned_gses)
     print(f"  ✓ {len(datasets)} 个数据集 (其中 {len(orphan_gses)} 个孤儿)")
     print(f"  ✓ {len(links)} 条关联")
 
