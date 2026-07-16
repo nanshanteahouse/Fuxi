@@ -161,6 +161,16 @@ class DatasetEntry(BaseModel):
     dataset_yaml: Optional[str] = None
     relationships: list[DatasetRelationship] = []
     notes: str = ""
+    # ── 来自 dataset_audit.md 的补充字段 ──
+    species: str = ""
+    tissue: str = ""
+    data_format: str = ""
+    size_desc: str = ""
+    parent_series: str = ""
+    n_samples: Optional[int] = None
+    n_cells: Optional[int] = None
+    sample_info: str = ""
+    paper_pmids: list[str] = []
 
 
 class PaperEntry(BaseModel):

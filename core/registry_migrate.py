@@ -361,8 +361,66 @@ def _scan_pending_pdfs() -> dict[str, str]:
     return result
 
 
-# ═══════════════════════════════════════════════════════
-# 主迁移逻辑
+def _parse_audit_table(audit_path: str) -> dict[str, dict[str, Any]]:
+    if not os.path.isfile(audit_path):
+        return {}
+    with open(audit_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+    result: dict[str, dict[str, Any]] = {}
+    in_table = False
+    for line in lines:
+        s = line.strip()
+        if not s.startswith("|"):
+            continue
+        if s.startswith("| **GSE"):
+            in_table = True
+        if not in_table or "---" in s:
+            continue
+        cells = [c.strip() for c in s.split("|")[1:-1]]
+        if len(cells) < 11:
+            continue
+        gse_raw = cells[0].replace("**", "").strip()
+        if not gse_raw.startswith("GSE"):
+            continue
+        species = cells[1].replace("*", "").strip()
+        tissue = cells[2].replace("*", "").strip()
+        data_format = cells[4].strip()
+        size_desc = cells[5].strip() if cells[5] != "—" else ""
+        parent_raw = cells[9].strip()
+        notes_raw = cells[10].strip()
+        paper_raw = cells[11].strip()
+        pmids = re.findall(r"\[(\d+)\]\(https://pubmed[^)]+\)", paper_raw)
+        n_samples, n_cells, sinfo = _parse_sample_info(notes_raw)
+        parent_series = ""
+        if parent_raw and parent_raw != "—":
+            m = re.search(r"(GSE\d+)", parent_raw)
+            parent_series = m.group(1) if m else ""
+        result[gse_raw] = {
+            "species": species, "tissue": tissue,
+            "data_format": data_format, "size_desc": size_desc,
+            "parent_series": parent_series,
+            "n_samples": n_samples, "n_cells": n_cells,
+            "sample_info": sinfo or notes_raw,
+            "paper_pmids": list(dict.fromkeys(pmids)),
+        }
+    return result
+
+
+def _parse_sample_info(text: str) -> tuple[Optional[int], Optional[int], str]:
+    ns, nc = None, None
+    m = re.search(r"(\d+)\s*(?:供体|donors?|samples?|样本|eyes?|时间点)", text, re.I)
+    if m:
+        ns = int(m.group(1))
+    m = re.search(r"[>~]?(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*[Kk]\b", text)
+    if m:
+        nc = int(float(m.group(1).replace(",", "")) * 1000)
+    else:
+        m = re.search(r"(\d{1,3}(?:,\d{3})*)\s*(?:cells?|核|nuclei)", text, re.I)
+        if m:
+            nc = int(m.group(1).replace(",", ""))
+    return ns, nc, text
+
+
 # ═══════════════════════════════════════════════════════
 
 
@@ -462,7 +520,8 @@ def _v1_to_paper_entry(
 def _build_datasets_and_links(
     v1_papers: list[dict[str, Any]],
     scanned_gses: dict[str, dict[str, Any]],
-) -> tuple[dict[str, DatasetEntry], list[PaperDatasetLink], list[str]]:
+    audit_data: dict[str, dict[str, Any]],
+):
     """从 v1 registry + 扫描结果构建 datasets 和 links。
 
     处理:
@@ -573,6 +632,7 @@ def _build_datasets_and_links(
                 status=ds_status.value,
                 data_root=data_root,
                 notes=v1_notes if v1_notes else "",
+                **_dataset_audit_fields(audit_data.get(gse_id, {})),
             )
 
     # 孤儿数据集检测
@@ -598,8 +658,22 @@ def _build_datasets_and_links(
                 status=DatasetStatus.ORPHAN.value,
                 data_root=data_root,
                 notes="由迁移脚本自动发现的孤儿数据集",
+                **_dataset_audit_fields(audit_data.get(gse_id, {})),
             )
+    return datasets, links, orphan_gses
 
+
+def _dataset_audit_fields(ad: dict) -> dict[str, Any]:
+    return {
+        k: v
+        for k in (
+            "species", "tissue", "data_format",
+            "size_desc", "parent_series",
+            "n_samples", "n_cells", "sample_info",
+            "paper_pmids",
+        )
+        if (v := ad.get(k))
+    }
     return datasets, links, orphan_gses
 
 
@@ -636,6 +710,11 @@ def build_master_registry(
     scanned_gses = _scan_project_gses()
     print(f"  ✓ 管线目录: {len(scanned_gses)} 个数据集目录")
 
+    # 4.5 加载 audit.md
+    audit_path = os.path.join(os.environ.get("FUXI_DATA_ROOT", ""), "dataset_audit.md")
+    audit_data = _parse_audit_table(audit_path)
+    print(f"  ✓ audit.md: {len(audit_data)} 个数据集补充信息")
+
     # 5. 转换 papers
     print("\n📄 转换论文条目...")
     papers: list[PaperEntry] = []
@@ -651,7 +730,7 @@ def build_master_registry(
 
     # 6. 构建 datasets + links
     print("\n🔗 构建数据集与关联...")
-    datasets, links, orphan_gses = _build_datasets_and_links(v1_papers, scanned_gses)
+    datasets, links, orphan_gses = _build_datasets_and_links(v1_papers, scanned_gses, audit_data)
     print(f"  ✓ {len(datasets)} 个数据集 (其中 {len(orphan_gses)} 个孤儿)")
     print(f"  ✓ {len(links)} 条关联")
 
