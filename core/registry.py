@@ -100,6 +100,53 @@ class RelationshipType(str, Enum):
 
 
 # ═══════════════════════════════════════════════════════
+# Legacy types (used by run_reproduce.py)
+# ═══════════════════════════════════════════════════════
+
+
+class ExperimentGroup:
+    """An experimental sub-grouping within a dataset."""
+
+    def __init__(self, *, group_name, sample_ids, subset_suffix, modality, status,
+                 config_path=None, figures=None):
+        self.group_name: str = group_name
+        self.sample_ids: list[str] = sample_ids
+        self.subset_suffix: str = subset_suffix
+        self.modality: str = modality
+        self.status: str = status
+        self.config_path: Optional[str] = config_path
+        self.figures: list[str] = figures or []
+
+
+def _dict_to_exp_group(data: dict[str, Any]) -> ExperimentGroup:
+    return ExperimentGroup(
+        group_name=data["group_name"],
+        sample_ids=data["sample_ids"],
+        subset_suffix=data["subset_suffix"],
+        modality=data["modality"],
+        status=data["status"],
+        config_path=data.get("config_path"),
+        figures=data.get("figures", []),
+    )
+
+
+def detect_modality(config_path: str) -> str:
+    """Detect modality from a pipeline config file.
+
+    Uses a regex scan for ``CFG.modality = "..."`` rather than importing
+    the file (avoids side-effects). Returns the modality string or
+    ``"unknown"`` if detection fails.
+    """
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            content = f.read()
+    except Exception:
+        return "unknown"
+
+    match = re.search(r"""CFG\.modality\s*=\s*["'](\w+)["']""", content)
+    return match.group(1) if match else "unknown"
+
+# ═══════════════════════════════════════════════════════
 # Sub-models
 # ═══════════════════════════════════════════════════════
 
@@ -140,11 +187,12 @@ class KbSourceEntry(BaseModel):
 
 
 class DatasetConfig(BaseModel):
-    """单个数据集配置."""
+    """single config for one modality run."""
     model_config = ConfigDict(extra="forbid")
     path: str
     pipeline_status: str = "not_configured"
     exists: bool = True
+    experiments: list[dict[str, Any]] = []
 
 
 class ModalityInfo(BaseModel):
