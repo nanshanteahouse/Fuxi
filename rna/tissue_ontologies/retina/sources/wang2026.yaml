@@ -1,0 +1,384 @@
+source_meta:
+  id: wang2026
+  short_name: Wang 2026 Cell Rep
+  pmid: '41528844'
+  journal: Cell Reports
+  year: 2026
+  species:
+  - Homo sapiens
+  tissue: RPE + choroid
+  regions:
+  - posterior pole
+  n_cells: null
+  n_subtypes: null
+  n_groups: 9
+markers:
+  RPE:
+    add:
+    - LINC00276
+    - TRPM3
+    - OTX2-AS1
+    - MYRIP
+    - GPM6A
+    - CACNB2
+    - PLD5
+    - ATP10B
+    - OPCML
+    - BEST1
+    - RGR
+    - STRIP2
+    - RPE65
+    - CACNA2D3
+    - DAAM1
+    refine:
+      TRPM3:
+        note: Transient receptor potential channel; highest fraction expressed in RPE (0.997). Novel RPE marker from Wang
+          2026.
+        threshold: mean_log2FC > 3.2
+        pmid: '41528844'
+      MYRIP:
+        note: Myosin VIIA and Rab interacting protein; involved in melanosome transport in RPE.
+        threshold: mean_log2FC > 2.9
+        pmid: '41528844'
+      BEST1:
+        note: Bestrophin-1; canonical RPE marker; mutations cause Best vitelliform macular dystrophy. Confirms existing KB
+          consensus (Menon 2019, Hu 2019).
+        threshold: mean_log2FC > 2.6
+        pmid: '41528844'
+      RGR:
+        note: RPE-retinal G protein-coupled receptor; visual cycle component enriched in RPE. Confirms existing KB consensus
+          (Menon 2019).
+        threshold: mean_log2FC > 2.6
+        pmid: '41528844'
+      RPE65:
+        note: Visual cycle isomerase; essential for retinoid recycling; RPE-specific. Confirms existing KB consensus (Menon
+          2019).
+        threshold: mean_log2FC > 2.3
+        pmid: '41528844'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS2142963-supplement-6 SupData1 scRNA-seq markers
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Vascular_Endothelial:
+    add:
+    - FLT1
+    - VWF
+    - ST6GALNAC3
+    - ANO2
+    - LDB2
+    - PTPRB
+    - PLPP1
+    - GRB10
+    - ARL15
+    - PIK3R3
+    refine:
+      FLT1:
+        note: VEGFR1; vascular endothelial growth factor receptor 1; top-ranked endothelial marker. Confirms existing KB consensus
+          (Menon 2019).
+        threshold: mean_log2FC > 3.2
+        pmid: '41528844'
+      VWF:
+        note: von Willebrand factor; canonical endothelial marker. Confirms existing KB consensus (Menon 2019).
+        threshold: mean_log2FC > 2.7
+        pmid: '41528844'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS2142963-supplement-6 SupData1 scRNA-seq markers
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Fibroblast:
+    add:
+    - RARRES1
+    - PDZRN4
+    - BICC1
+    - CDH11
+    - SETBP1
+    - EBF1
+    - GPC6
+    - EYA1
+    - AKAP12
+    - LEPR
+    refine:
+      RARRES1:
+        note: Retinoic acid receptor responder 1; top fibroblast marker in choroid.
+        threshold: mean_log2FC > 2.5
+        pmid: '41528844'
+      PDZRN4:
+        note: PDZ domain containing RING finger 4; choroidal fibroblast marker.
+        threshold: mean_log2FC > 2.5
+        pmid: '41528844'
+      CDH11:
+        note: Cadherin-11; osteoblast/fibroblast cadherin; mesenchymal marker.
+        threshold: mean_log2FC > 2.2
+        pmid: '41528844'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS2142963-supplement-6 SupData1 scRNA-seq markers
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Macrophage:
+    add:
+    - F13A1
+    - CD163
+    - SLC1A3
+    - MRC1
+    - RAB31
+    - SLC8A1
+    - STAB1
+    - TLR2
+    - SLCO2B1
+    - DOCK4
+    refine:
+      F13A1:
+        note: Coagulation factor XIII A chain; top choroidal macrophage marker (log2FC=3.7). Distinguishes choroidal macrophages
+          from retinal microglia.
+        threshold: mean_log2FC > 3.7
+        pmid: '41528844'
+      CD163:
+        note: Scavenger receptor; classical macrophage marker. Choroidal macrophage subtype distinct from C1QA+ retinal microglia.
+        threshold: mean_log2FC > 3.0
+        pmid: '41528844'
+      MRC1:
+        note: Mannose receptor C-type 1; alternatively activated macrophage marker.
+        threshold: mean_log2FC > 2.8
+        pmid: '41528844'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS2142963-supplement-6 SupData1 scRNA-seq markers
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Melanocyte:
+    add:
+    - SYNPR
+    - TYR
+    - TEX41
+    - ABCB5
+    - KCNQ5
+    - ENOX1
+    - PAX3
+    - PDE10A
+    - CHSY3
+    - PMEL
+    refine:
+      TYR:
+        note: Tyrosinase; key enzyme in melanin biosynthesis; canonical melanocyte marker.
+        threshold: mean_log2FC > 3.1
+        pmid: '41528844'
+      ABCB5:
+        note: ATP-binding cassette subfamily B member 5; melanocyte stem cell marker.
+        threshold: mean_log2FC > 2.9
+        pmid: '41528844'
+      PMEL:
+        note: Premelanosome protein; melanocyte lineage marker; structural component of melanosomes.
+        threshold: mean_log2FC > 2.3
+        pmid: '41528844'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS2142963-supplement-6 SupData1 scRNA-seq markers
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Pericyte:
+    add:
+    - MYH11
+    - CARMN
+    - PRKG1
+    - SORBS1
+    - SYNPO2
+    - LPP
+    - RBPMS
+    - CALD1
+    - RCAN2
+    - NR2F2-AS1
+    refine:
+      MYH11:
+        note: Myosin heavy chain 11; smooth muscle/pericyte contractile marker.
+        threshold: mean_log2FC > 2.6
+        pmid: '41528844'
+      RBPMS:
+        note: RNA-binding protein with multiple splicing; also known as RGC marker in retina, but found in choroidal pericytes.
+        threshold: mean_log2FC > 1.6
+        pmid: '41528844'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS2142963-supplement-6 SupData1 scRNA-seq markers
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  Schwann_Cell:
+    add:
+    - NRXN1
+    - CDH19
+    - SCN7A
+    - ADGRB3
+    - XKR4
+    - SLC35F1
+    - GRIK2
+    - SORCS1
+    - NEGR1
+    - NRXN3
+    refine:
+      NRXN1:
+        note: Neurexin-1; top Schwann cell marker (log2FC=4.2). Choroidal nerve fiber-associated glial cell marker.
+        threshold: mean_log2FC > 4.2
+        pmid: '41528844'
+      CDH19:
+        note: Cadherin-19; Schwann cell specific cadherin; peripheral glial marker.
+        threshold: mean_log2FC > 3.1
+        pmid: '41528844'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS2142963-supplement-6 SupData1 scRNA-seq markers
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  B_Cell:
+    add:
+    - BANK1
+    - ARHGAP24
+    - RALGPS2
+    - ARHGAP15
+    - PLCG2
+    - SMAP2
+    - RIPOR2
+    - MGAT5
+    - PDE7A
+    - ANKRD44
+    refine:
+      BANK1:
+        note: B cell scaffold protein with ankyrin repeats 1; top B cell marker.
+        threshold: mean_log2FC > 3.4
+        pmid: '41528844'
+      PLCG2:
+        note: Phospholipase C gamma 2; B cell receptor signaling effector.
+        threshold: mean_log2FC > 2.0
+        pmid: '41528844'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS2142963-supplement-6 SupData1 scRNA-seq markers
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+  T_Cell:
+    add:
+    - PARP8
+    - AOAH
+    - PTPRC
+    - SKAP1
+    - STAT4
+    - CD247
+    - SYTL3
+    - CNOT6L
+    - FYN
+    - PRKCH
+    refine:
+      PTPRC:
+        note: CD45; common leukocyte antigen; pan-immune marker. Expressed in T cells and other immune cells.
+        threshold: mean_log2FC > 3.1
+        pmid: '41528844'
+      STAT4:
+        note: Signal transducer and activator of transcription 4; Th1-associated transcription factor.
+        threshold: mean_log2FC > 2.8
+        pmid: '41528844'
+      CD247:
+        note: CD3 zeta chain; T cell receptor complex component; T cell specific.
+        threshold: mean_log2FC > 2.7
+        pmid: '41528844'
+    negative_markers: []
+    species: []
+    synonyms: []
+    audit:
+      expression_validated: []
+      supplement_verified:
+      - NIHMS2142963-supplement-6 SupData1 scRNA-seq markers
+      cross_species_validated: false
+      last_audited: null
+      flagged: false
+      notes: ''
+novel_types:
+- Macrophage
+- Melanocyte
+- Schwann_Cell
+- B_Cell
+- T_Cell
+expert_rules:
+- priority: 10
+  condition:
+    markers_present:
+      BEST1: 1.0
+      RPE65: 1.0
+      RGR: 0.5
+  action: RPE
+  source: wang2026
+  notes: BEST1+RPE65 is the canonical RPE signature; RPE65 is the visual cycle isomerase specific to RPE
+- priority: 9
+  condition:
+    markers_present:
+      VWF: 1.0
+      PECAM1: 1.0
+      FLT1: 0.5
+  action: Vascular_Endothelial
+  source: wang2026
+  notes: VWF+PECAM1 canonical vascular endothelial signature; FLT1 is the top-ranked marker by log2FC in this study
+- priority: 8
+  condition:
+    markers_present:
+      F13A1: 1.0
+      CD163: 0.5
+  action: Macrophage
+  source: wang2026
+  notes: F13A1+CD163 is a choroidal macrophage signature distinct from retinal microglia (C1QA/B+)
+- priority: 7
+  condition:
+    markers_present:
+      TYR: 1.0
+      PMEL: 0.5
+  action: Melanocyte
+  source: wang2026
+  notes: TYR+PMEL canonical melanocyte signature; choroidal melanocyte marker
+conflicts: []

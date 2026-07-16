@@ -6,12 +6,12 @@ Bibliography of all source papers whose data forms the retina knowledge base.
 
 | Metric | Value |
 |--------|-------|
-| Total sources | 12 |
-| Unique markers | ~1628 |
-| Cell types | 52 |
-| Species | Homo sapiens (9), Macaca fascicularis (1), Mus musculus (2), Gallus gallus (1), plus hahn2023's 13 vertebrate classes |
+| Total sources | 13 |
+| Unique markers | ~1723 |
+| Cell types | 57 |
+| Species | Homo sapiens (10), Macaca fascicularis (1), Mus musculus (2), Gallus gallus (1), plus hahn2023's 13 vertebrate classes |
 | Journals | Nature Communications (4), Neuron (1), eLife (1), PLoS Biology (1), Nature (1), Cell (2), Nature Genetics (1), Cell Genomics (1), preprint (1) |
-| Sources with supplement verification | **12/12** |
+| Sources with supplement verification | **13/13** |
 | Sources with empirical validation | 2 (hu2019, menon2019) |
 ---
 
@@ -137,6 +137,10 @@ Bibliography of all source papers whose data forms the retina knowledge base.
 
 **Yamagata et al. (2021)** provides the first avian (Gallus gallus) retina entries, including the Chicken_Double_Cone — a non-mammalian photoreceptor type with no mammalian homolog.
 
+**Shekhar et al. (2016)** provides the first mouse (Mus musculus) bipolar cell subtype entries, covering 14 BC types (BC1A-BC8_BC9 + Rod Bipolar Cell) from 26 Louvain-Jaccard clusters in the Vsx2-GFP Drop-seq dataset. Adds ~228 add-tier markers from supplement DE genes and known marker literature.
+
+**Wang et al. (2026)** provides the first RPE/choroid-specific entries, covering 9 cell types (RPE, Vascular_Endothelial, Fibroblast, Macrophage, Melanocyte, Pericyte, Schwann_Cell, B_Cell, T_Cell) from human scRNA-seq. Adds 95 add-tier markers from supplement SupData1.
+
 ### Empirically validated sources
 
 **Hu et al. (2019)** and **Menon et al. (2019)** have both supplement-derived markers and independent empirical validation (GSE107618, GSE118614), providing the highest-confidence marker backbone for the human retina knowledge base.
@@ -146,4 +150,4 @@ Bibliography of all source papers whose data forms the retina knowledge base.
 Each source was audited against its original publication supplements. Markers were cross-validated against source data files. Discrepancies between AI-generated marker lists and supplement-verified data were corrected. Add-tier markers absent from the highly variable gene (HVG) set were removed.
 ---
 
-*Generated from source_meta in 12 YAML source files. Last updated: 2026-07-16.*
+*Generated from source_meta in 13 YAML source files. Last updated: 2026-07-16.*
