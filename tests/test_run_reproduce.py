@@ -34,7 +34,7 @@ from core.dataset_schema import (
 
 
 class TestDetectModality:
-    """Modality detection from pipeline config files (reuses paper_registry)."""
+    """Modality detection from pipeline config files (reuses registry)."""
 
     def test_rna(self, tmp_path: Path) -> None:
         p = tmp_path / "config_test.py"
@@ -236,7 +236,7 @@ class TestRunPipelineForGse:
 
     def test_experiment_group_param(self, tmp_path: Path) -> None:
         """Passing ExperimentGroup should not error (stored for W2.4)."""
-        from core.paper_registry_models import ExperimentGroup, DatasetStatus
+        from core.registry import ExperimentGroup, DatasetStatus
 
         config_path = self._make_config(tmp_path, "rna")
         eg = ExperimentGroup(
