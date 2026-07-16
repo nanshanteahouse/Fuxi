@@ -409,7 +409,7 @@ def fuse_evidence(
     alternative_rules: Optional[list] = None,
     low_quality_reason: str = "",
     unconstrained: bool = False,
-    is_developing: bool = False,
+    allows_transitions: bool = False,
     incompatible_transitions: Optional[list] = None,
 ) -> 'FusionDecision':
     """Combine marker scores, expert rules, and AI into one decision.
@@ -433,9 +433,9 @@ def fuse_evidence(
     low_quality_reason : str
         Non-empty if the cluster was flagged by
         :func:`~utils.marker_scoring.detect_low_quality_cluster` (v3.1.0+).
-    is_developing : bool
-        When ``True``, enables developmental-specific logic such as
-        transition-state detection.  Should be ``False`` for adult tissue.
+    allows_transitions : bool
+        When ``True``, enables transition-state detection between closely
+        related cell types (e.g. developing/tissue-remodelling contexts).
     incompatible_transitions : list or None
         List of [type_a, type_b] pairs explicitly forbidden as
         developmental transitions.  Passed through to
@@ -537,7 +537,7 @@ def fuse_evidence(
     # Broad_* keys are already stripped from marker_scores by the
     # caller (run_unified_annotation), so _find_best_type() and
     # _is_transition_state() only see fine-grained types.
-    if kb is not None and is_developing:
+    if kb is not None and allows_transitions:
         transition = _is_transition_state(
             marker_scores, kb,
             incompatible_transitions=incompatible_transitions,
@@ -644,7 +644,7 @@ def fuse_all_clusters(
     return_quality: bool = False,
     low_quality_clusters: Optional[dict] = None,
     unconstrained: bool = False,
-    is_developing: bool = False,
+    allows_transitions: bool = False,
     incompatible_transitions: Optional[list] = None,
 ) -> list | tuple[list, dict]:
     """Process all clusters and return a list of :class:`FusionDecision`.
@@ -667,9 +667,9 @@ def fuse_all_clusters(
     low_quality_clusters : dict or None
         ``{cluster_id: reason_str}`` from
         :func:`~utils.marker_scoring.detect_low_quality_cluster` (v3.1.0+).
-    is_developing : bool
-        When ``True``, enables developmental-specific logic such as
-        transition-state detection.  Passed through to each
+    allows_transitions : bool
+        When ``True``, enables transition-state detection between closely
+        related cell types.  Passed through to each
         :func:`fuse_evidence` call.
     incompatible_transitions : list or None
         List of [type_a, type_b] pairs explicitly forbidden as
@@ -714,7 +714,7 @@ def fuse_all_clusters(
             alternative_rules=alt_rules,
             low_quality_reason=low_quality_clusters.get(str(cl), ""),
             unconstrained=unconstrained,
-            is_developing=is_developing,
+            allows_transitions=allows_transitions,
             incompatible_transitions=incompatible_transitions,
         )
         decisions.append(decision)
