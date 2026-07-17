@@ -798,7 +798,7 @@ def _cmd_register_gse(
         paper = registry.get_paper(pmid)
         if paper is None:
             print(f"\u26a0\ufe0f  PMID {pmid} not found in registry - skipping link")
-            print(f"       Run: python -m core.registry add-paper --pmid {pmid}")
+            print(f"       Run: python -m core.registry register --pmid {pmid}")
             continue
         existing = any(
             ln.paper_id == pmid and ln.dataset_id == gse_id
@@ -842,11 +842,17 @@ def main() -> None:
 
     sub.add_parser("find-orphans", help="查找孤儿数据集")
 
-    p_register_gse = sub.add_parser("register-gse", help="注册GSE数据集（抓取SOFT元数据\u2192PMID\u2192链接已有论文）")
-    p_register_gse.add_argument("gse_id", help="GEO 数据集 ID (如 GSE164044)")
-    p_register_gse.add_argument("--dry-run", action="store_true", help="预览不写入")
+    p_register = sub.add_parser("register", help="注册论文/数据集（--pmid | --gse | --xml | --pdf）")
+    p_register.add_argument("--pmid", default=None, help="PubMed ID (NCBI 自动下载)")
+    p_register.add_argument("--gse", default=None, help="GEO 数据集 ID (如 GSE164044)")
+    p_register.add_argument("--paper-dir", default=None, help="已有 paper 目录 (含 insights.yaml)")
+    p_register.add_argument("--xml", dest="xml_path", default=None, help="本地 PMC XML 文件路径")
+    p_register.add_argument("--pdf", default=None, help="PDF 文件路径 (pymupdf4llm → md → LLM)")
+    p_register.add_argument("--dry-run", action="store_true", help="预览不写入")
+    p_register.add_argument("--download", action="store_true",
+                            help="Auto-download GSE datasets from NCBI GEO after paper import.")
 
-    p_add = sub.add_parser("add-paper", help="新增论文（调 paper_insights → 直接写 registry）")
+    p_add = sub.add_parser("add-paper", help="[DEPRECATED] 请改用 register --pmid")
     p_add.add_argument("--pmid", default=None, help="PubMed ID (NCBI 自动下载)")
     p_add.add_argument("--paper-dir", default=None, help="已有 paper 目录 (含 insights.yaml)")
     p_add.add_argument("--xml", dest="xml_path", default=None, help="本地 PMC XML 文件路径")
@@ -857,7 +863,7 @@ def main() -> None:
     args = parser.parse_args()
     reg_path = args.registry if hasattr(args, "registry") else None
 
-    if args.command in ("report", "verify", "reset-gse", "find-orphans", "add-paper", "register-gse"):
+    if args.command in ("report", "verify", "reset-gse", "find-orphans", "add-paper", "register"):
         registry = load_master_registry(reg_path)
 
     if args.command == "report":
@@ -888,11 +894,20 @@ def main() -> None:
                 mod_str = ", ".join(ds.modalities.keys()) if ds.modalities else "?"
                 print(f"  - {ds_id}  ({mod_str}, status={ds.status})")
         supp_orphans = registry.find_orphan_supplements()
-    elif args.command == "register-gse":
-        registry = _cmd_register_gse(registry, args.gse_id, dry_run=args.dry_run)
+    elif args.command == "register":
+        if args.gse:
+            registry = _cmd_register_gse(registry, args.gse, dry_run=args.dry_run)
+        elif args.pmid or args.xml_path or args.pdf or args.paper_dir:
+            registry = _cmd_add_paper(registry, pmid=args.pmid or "", xml=args.xml_path or "",
+                                      pdf=args.pdf or "", paper_dir=args.paper_dir or "",
+                                      dry_run=args.dry_run, download=args.download)
+        else:
+            print("\u274c Must specify --pmid, --gse, --xml, --pdf, or --paper-dir")
+            return registry
         if not args.dry_run:
             save_master_registry(registry, reg_path)
     elif args.command == "add-paper":
+        print("\u26a0\ufe0f  [DEPRECATED] add-paper \u5df2\u5f03\u7528\uff0c\u8bf7\u6539\u7528: register --pmid <PMId>")
         registry = _cmd_add_paper(registry, pmid=args.pmid or "", xml=args.xml_path or "",
                                   pdf=args.pdf or "", paper_dir=args.paper_dir or "",
                                   dry_run=args.dry_run, download=args.download)

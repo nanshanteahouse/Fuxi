@@ -41,7 +41,7 @@ python core/run_pipeline.py --modality rna --resume --config ...
 python core/paper_insights.py --pmid <PMID>       # AI paper interpretation
 python -m core.registry report               # print summary
 python -m core.registry verify              # check registry consistency
-python -m core.registry register-gse GSE164044  # register GSE → PMID link
+python -m core.registry register --gse GSE164044  # register GSE → PMID link
 python -m core.registry find-orphans        # list orphan datasets
 python core/run_reproduce.py --all --dry-run       # preview reproducibility
 python core/run_reproduce.py <paper_dir>           # reproduce a single paper
@@ -80,11 +80,11 @@ When user requests to analyze or reproduce a dataset, check the **master registr
    ```
 5. **If paper found** — Read `projects/papers/<paper_dir>/insights.yaml` for metadata.
    Cross-validate with NCBI: `python core/paper_insights.py --pmid <PMID>`.
-6. **Add new paper (from PMID)** — `python -m core.registry add-paper --pmid <PMID>`
+6. **Register from PMID** — `python -m core.registry register --pmid <PMID>`
    (calls paper_insights, then directly writes projects/registry/).
-7. **Register existing GSE** — `python -m core.registry register-gse GSE164044`
+7. **Register from GSE** — `python -m core.registry register --gse GSE164044`
    (fetches SOFT metadata, finds PMID(s), links to existing paper entry).
-   Use `--dry-run` to preview: `python -m core.registry register-gse --dry-run GSE164044`
+   Use `--dry-run` to preview: `python -m core.registry register --gse GSE164044 --dry-run`
 8. **If not found** — Ask user whether to download and register:
    ```bash
    python core/paper_insights.py --pmid <PMID>

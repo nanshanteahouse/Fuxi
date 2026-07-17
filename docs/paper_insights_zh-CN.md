@@ -247,10 +247,10 @@ reproduction_status:
 从 NCBI PMC 下载全文，AI 提取 GSE 编号，自动注册：
 
 ```bash
-python -m core.registry add-paper --pmid 31493975
-python -m core.registry add-paper --xml local.xml          # 本地 XML
-python -m core.registry add-paper --pdf paper.pdf          # PDF 回退
-python -m core.registry add-paper --paper-dir projects/papers/.../  # 已有 insights.yaml
+python -m core.registry register --pmid 31493975
+python -m core.registry register --xml local.xml          # 本地 XML
+python -m core.registry register --pdf paper.pdf          # PDF 回退
+python -m core.registry register --paper-dir projects/papers/.../  # 已有 insights.yaml
 ```
 
 #### 通过 GSE 编号注册
@@ -258,8 +258,8 @@ python -m core.registry add-paper --paper-dir projects/papers/.../  # 已有 ins
 从 NCBI GEO SOFT 元数据自动获取 PMID，链接到已有论文：
 
 ```bash
-python -m core.registry register-gse GSE164044            # 注册
-python -m core.registry register-gse --dry-run GSE164044  # 预览
+python -m core.registry register --gse GSE164044            # 注册
+python -m core.registry register --gse GSE164044 --dry-run  # 预览
 ```
 
 #### 查询与验证

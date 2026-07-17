@@ -247,10 +247,10 @@ Each figure entry contains a boolean `reproducible` field and a `reproducibility
 Downloads full text from NCBI PMC, extracts GSE IDs via AI, registers automatically:
 
 ```bash
-python -m core.registry add-paper --pmid 31493975
-python -m core.registry add-paper --xml local.xml          # Local XML
-python -m core.registry add-paper --pdf paper.pdf          # PDF fallback
-python -m core.registry add-paper --paper-dir projects/papers/.../  # Existing insights.yaml
+python -m core.registry register --pmid 31493975
+python -m core.registry register --xml local.xml          # Local XML
+python -m core.registry register --pdf paper.pdf          # PDF fallback
+python -m core.registry register --paper-dir projects/papers/.../  # Existing insights.yaml
 ```
 
 #### Register via GSE accession
@@ -258,8 +258,8 @@ python -m core.registry add-paper --paper-dir projects/papers/.../  # Existing i
 Fetches NCBI GEO SOFT metadata to discover PMID(s) and links to existing papers:
 
 ```bash
-python -m core.registry register-gse GSE164044            # Register
-python -m core.registry register-gse --dry-run GSE164044  # Preview
+python -m core.registry register --gse GSE164044            # Register
+python -m core.registry register --gse GSE164044 --dry-run  # Preview
 ```
 
 #### Query & Verify
