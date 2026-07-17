@@ -700,7 +700,7 @@ def _cmd_add_paper(
         elif pdf:
             cmd.extend(["--pdf", pdf])
             print(f"\U0001f50d pdf={pdf}: calling paper_insights ...")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        result = subprocess.run(cmd, capture_output=True, text=True)
         if result.returncode != 0:
             print(f"\u274c paper_insights failed (exit={result.returncode})")
             if result.stderr:
