@@ -772,7 +772,8 @@ def main() -> None:
     p_add.add_argument("--xml", dest="xml_path", default=None, help="本地 PMC XML 文件路径")
     p_add.add_argument("--pdf", default=None, help="PDF 文件路径 (pymupdf4llm → md → LLM)")
     p_add.add_argument("--dry-run", action="store_true", help="预览不写入")
-
+    p_add.add_argument("--download", action="store_true",
+                        help="Auto-download GSE datasets from NCBI GEO after paper import.")
     args = parser.parse_args()
     reg_path = args.registry if hasattr(args, "registry") else None
 
@@ -808,7 +809,9 @@ def main() -> None:
                 print(f"  - {ds_id}  ({mod_str}, status={ds.status})")
         supp_orphans = registry.find_orphan_supplements()
     elif args.command == "add-paper":
-        registry = _cmd_add_paper(registry, pmid=args.pmid or "", xml=args.xml_path or "", pdf=args.pdf or "", paper_dir=args.paper_dir or "", dry_run=args.dry_run)
+        registry = _cmd_add_paper(registry, pmid=args.pmid or "", xml=args.xml_path or "",
+                                  pdf=args.pdf or "", paper_dir=args.paper_dir or "",
+                                  dry_run=args.dry_run, download=args.download)
         if not args.dry_run:
             save_master_registry(registry, reg_path)
 

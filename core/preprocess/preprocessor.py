@@ -667,6 +667,11 @@ Examples:
              'Use to direct output to a temp location for review.',
     )
     parser.add_argument(
+        '--download', action='store_true',
+        help='Auto-download GSE data from NCBI GEO before preprocessing '
+             '(requires wget or curl; uses FUXI_DATA_ROOT).',
+    )
+    parser.add_argument(
         '--verbose', '-v', action='store_true',
         help='Verbose output (show all detected files)',
     )
@@ -682,6 +687,7 @@ Examples:
         input_dir=args.input_dir,
         dataset_name=args.name,
         data_root=args.data_root,
+        download=args.download,
         query_ncbi=args.query_ncbi,
         dry_run=args.dry_run,
         force=args.force,
