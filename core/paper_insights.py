@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Any, Union
 
 from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+import time
 
 
 # Ensure repo root is on sys.path for standalone CLI usage
@@ -40,7 +42,7 @@ from core.ai_prompts import (
 )
 
 from core.paper_converter import PaperSource, PmcXmlSource, MarkdownSource, Pymupdf4llmSource
-
+from core.paper_converter import PaperSource, PmcXmlSource, MarkdownSource, Pymupdf4llmSource, PubmedSource
 logger = logging.getLogger(__name__)
 
 # -- Section / figure regex patterns --------------------------------------------
@@ -212,6 +214,9 @@ def _extract_data_access(meta: dict | None, methods: dict | None, full_text: str
     if not result["geo_ids"] and full_text:
         result["geo_ids"] = _extract_geo_ids(full_text)
 
+    # Deduplicate while preserving order
+    result["geo_ids"] = list(dict.fromkeys(result["geo_ids"]))
+    result["sra_ids"] = list(dict.fromkeys(result["sra_ids"]))
     return result
 
 
@@ -257,6 +262,40 @@ def _extract_methods_summary(methods_data: dict | None, full_text: str = "") -> 
 # ---------------------------------------------------------------------------
 _METHODOLOGY_METHODS_MAX_CHARS = 8000
 
+
+
+def _resolve_doi_to_pmid(doi: str) -> str | None:
+    """Resolve a DOI to PubMed ID via NCBI E-utilities esearch.
+
+    Returns PMID string or None on failure. Includes rate limiting (0.35s)
+    and exponential backoff on 429/503.
+    """
+    if not doi or not doi.strip():
+        return None
+    doi = doi.strip()
+    url = (
+        'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
+        f'?db=pubmed&term={doi}[doi]&retmode=json'
+    )
+    time.sleep(0.35)  # NCBI rate limit: ~3 req/s
+    for attempt in range(3):
+        try:
+            req = Request(url)
+            req.add_header('User-Agent', 'Fuxi/1.0 (paper-insights; academic use)')
+            with urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+                idlist = data.get('esearchresult', {}).get('idlist', [])
+                if idlist:
+                    return str(idlist[0])
+                return None
+        except HTTPError as e:
+            if e.code in (429, 503):
+                time.sleep(0.5 * (2 ** attempt))
+                continue
+            return None
+        except (URLError, OSError, json.JSONDecodeError):
+            return None
+    return None
 
 class PaperInsights:
     """Extract structured insights from paper markdown using AI prompts."""
@@ -317,15 +356,26 @@ class PaperInsights:
         return result
 
     @staticmethod
-    def extract_metadata(abstract_text: str, cfg) -> dict:
-        """Extract experimental design, key findings, data notes from abstract via LLM.
+    def extract_metadata(abstract_text: str, cfg, full_text: str = "") -> dict:
+        """Extract experimental design, key findings, data notes via LLM.
+
+        Uses both the abstract and the first ~2000 chars of the full text
+        (which usually contains title/authors/journal) for bibliographic fields.
 
         Returns parsed dict or {} on failure. Skips gracefully if abstract is empty.
         """
         if not abstract_text.strip():
             logger.info("Abstract empty -- skipping metadata extraction")
             return {}
-        raw = ai_query(PAPER_META_SYSTEM_PROMPT, PAPER_META_USER_TEMPLATE.format(abstract_text=abstract_text), cfg, expect_json=True)
+        full_beginning = full_text[:2000].strip() if full_text else ""
+        raw = ai_query(
+            PAPER_META_SYSTEM_PROMPT,
+            PAPER_META_USER_TEMPLATE.format(
+                full_text_beginning=full_beginning or "(not available)",
+                abstract_text=abstract_text,
+            ),
+            cfg, expect_json=True,
+        )
         if raw is None:
             return {}
         return _safe_json_parse(raw, "abstract metadata")
@@ -424,6 +474,41 @@ class PaperInsights:
             },
         }
 
+        # ── Bibliographic backfill ──
+        # The AI bibliographic extractor has access to the full text beginning
+        # (title, author list, journal, etc.) and is generally more reliable
+        # than filename-derived metadata. Override filename-derived values
+        # when the AI provides a substantively better value.
+        biblio = (meta or {}).get("bibliographic", {}) or {}
+        if biblio:
+            _is_good = lambda v: v is not None and str(v).strip() != "" \
+                and not str(v).startswith("pymupdf4llm_")
+            _is_bad = lambda v: v is None or str(v).strip() == "" \
+                or str(v).startswith("pymupdf4llm_")
+            for _key, _bkey in [("pmid", "pmid"), ("title", "title"),
+                                 ("journal", "journal"), ("year", "year"),
+                                 ("first_author", "first_author"), ("doi", "doi")]:
+                ai_v = biblio.get(_bkey)
+                pm_v = paper_meta.get(_key)
+                if not _is_good(ai_v):
+                    continue  # AI has nothing useful for this field
+                if _is_bad(pm_v):
+                    paper_meta[_key] = ai_v
+                elif _key in ("title", "journal"):
+                    if len(str(ai_v)) > len(str(pm_v)):
+                        paper_meta[_key] = ai_v
+                else:
+                    paper_meta[_key] = ai_v
+
+        # ── NCBI PMID resolution ──
+        # When AI couldn't extract PMID from the text but we have a DOI,
+        # resolve it via NCBI E-utilities esearch.
+        if not paper_meta.get("pmid") and paper_meta.get("doi"):
+            resolved = _resolve_doi_to_pmid(str(paper_meta["doi"]))
+            if resolved:
+                logger.info("Resolved DOI %s → PMID %s", paper_meta["doi"], resolved)
+                paper_meta["pmid"] = resolved
+
         if methodology:
             result["methodology_patterns"] = methodology.get("methodology_patterns", methodology)
 
@@ -463,7 +548,7 @@ class PaperInsights:
         meta: dict = {}
         if sections.get("abstract"):
             logger.info("Extracting metadata from abstract...")
-            meta = self.extract_metadata(sections["abstract"], cfg)
+            meta = self.extract_metadata(sections["abstract"], cfg, full_text=md_text)
 
         figures: list[dict] = []
         if sections.get("results"):
@@ -516,23 +601,30 @@ def _resolve_source(args) -> PaperSource:
     elif args.source == "pdf":
         if not args.pdf:
             raise ValueError("--source pdf requires --pdf <path>")
-        return Pymupdf4llmSource(args.pdf)
+        return Pymupdf4llmSource(args.pdf, pmid=args.pmid)
 
     elif args.source == "md":
         if not args.positional:
             raise ValueError("--source md requires a positional .md file argument")
         return MarkdownSource(args.positional)
 
-    # --source auto (default): PMC -> PDF -> MD fallback
+    # --source auto (default): PMC -> PubMed -> PDF -> MD fallback
+    pubmed_pmid = args.pmid or (_resolve_doi_to_pmid(args.doi) if args.doi else None)
+
     if args.pmid or args.doi or args.xml:
         try:
             return PmcXmlSource(pmid=args.pmid, doi=args.doi, xml_path=args.xml)
         except (RuntimeError, ValueError, HTTPError, URLError) as e:
-            logger.warning("PMC source failed: %s. Trying fallback...", e)
+            logger.warning("PMC source failed: %s. Trying PubMed fallback...", e)
+            if pubmed_pmid:
+                try:
+                    return PubmedSource(pubmed_pmid)
+                except (RuntimeError, ValueError, HTTPError, URLError) as e2:
+                    logger.warning("PubMed fallback also failed: %s", e2)
 
     if args.pdf:
         try:
-            return Pymupdf4llmSource(args.pdf)
+            return Pymupdf4llmSource(args.pdf, pmid=pubmed_pmid)
         except ImportError:
             logger.warning("pymupdf4llm not installed, skipping PDF fallback")
 

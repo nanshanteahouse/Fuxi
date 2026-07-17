@@ -635,6 +635,164 @@ class PmcXmlSource(PaperSource):
         return '\n\n'.join(sections.values())
 
 
+# ═══════════════════════════════════════════════════════════════════════════════════
+#  PubmedSource — PubMed metadata + abstract (PMC fallback)
+# ═══════════════════════════════════════════════════════════════════════════════════
+
+
+def _fetch_pubmed_metadata(pmid: str) -> dict:
+    """Fetch paper metadata from NCBI PubMed esummary.
+
+    Returns dict with keys: pmid, doi, title, first_author, journal, year.
+    Used as reliable metadata source when PMC XML is unavailable.
+    Mirrors the rate-limit + retry pattern of ``PmcXmlSource._ncbi_fetch``.
+    """
+    url = (
+        'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi'
+        f'?db=pubmed&id={pmid}&retmode=json'
+    )
+    time.sleep(0.35)
+    for attempt in range(3):
+        try:
+            req = Request(url)
+            req.add_header('User-Agent', 'Fuxi/1.0 (paper-converter; academic use)')
+            with urlopen(req, timeout=15) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+                article = list(data.get('result', {}).values())[1]
+        except (HTTPError, URLError, OSError, json.JSONDecodeError, IndexError) as e:
+            if isinstance(e, HTTPError) and e.code in (429, 503):
+                time.sleep(0.5 * (2 ** attempt))
+                continue
+            return {}
+        break
+    else:
+        return {}
+
+    meta: dict = {
+        'pmid': pmid,
+        'doi': None,
+        'title': article.get('title', '').rstrip('.'),
+        'first_author': None,
+        'journal': article.get('source', ''),
+        'year': None,
+    }
+
+    # Authors: first surname
+    authors = article.get('authors', [])
+    if authors:
+        first = authors[0]
+        meta['first_author'] = first.get('name', '').split()[0] if first.get('name') else None
+
+    # Year from pubdate: "2020 Jun 19" → "2020"
+    pubdate = article.get('pubdate', '')
+    if pubdate:
+        yr_match = re.match(r'(\d{4})', str(pubdate))
+        if yr_match:
+            meta['year'] = yr_match.group(1)
+
+    # DOI from elocationid: "pii: dev185660. doi: 10.1242/dev.185660"
+    eloc = article.get('elocationid', '')
+    if eloc:
+        doi_match = re.search(r'\b(10\.\d{4,}/[^\s]+)', str(eloc))
+        if doi_match:
+            meta['doi'] = doi_match.group(1).rstrip('.')
+
+    return meta
+
+
+def _fetch_pubmed_abstract(pmid: str) -> str:
+    """Fetch abstract text from NCBI PubMed efetch."""
+    url = (
+        'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi'
+        f'?db=pubmed&id={pmid}&retmode=text&rettype=abstract'
+    )
+    time.sleep(0.35)
+    for attempt in range(3):
+        try:
+            req = Request(url)
+            req.add_header('User-Agent', 'Fuxi/1.0 (paper-converter; academic use)')
+            with urlopen(req, timeout=15) as resp:
+                return resp.read().decode('utf-8').strip()
+        except HTTPError as e:
+            if e.code in (429, 503):
+                time.sleep(0.5 * (2 ** attempt))
+                continue
+            return ""
+        except (URLError, OSError):
+            return ""
+    return ""
+
+
+class PubmedSource(PaperSource):
+    """Fetch paper metadata + abstract from PubMed (PMC-unavailable fallback).
+
+    Uses NCBI E-utilities esummary for bibliographic metadata and efetch
+    for the abstract text. Does NOT provide full body text or figures.
+
+    Pair with ``Pymupdf4llmSource`` via ``--pdf`` for full-text analysis.
+
+    Parameters
+    ----------
+    pmid : str
+        PubMed ID.
+    """
+
+    def __init__(self, pmid: str) -> None:
+        if not pmid:
+            raise ValueError('PubmedSource requires a PMID')
+        self._pmid = str(pmid)
+        self._metadata: Optional[dict] = None
+        self._abstract: Optional[str] = None
+        self._paper_name: Optional[str] = None
+
+    # ── Metadata ────────────────────────────────────────────────────────────────────
+
+    def get_metadata(self) -> dict:
+        if self._metadata is None:
+            self._metadata = _fetch_pubmed_metadata(self._pmid)
+        return dict(self._metadata)
+
+    # ── Abstract ─────────────────────────────────────────────────────────────────────
+
+    def _get_abstract(self) -> str:
+        if self._abstract is None:
+            self._abstract = _fetch_pubmed_abstract(self._pmid)
+        return self._abstract
+
+    def get_sections(self) -> dict[str, str]:
+        abstract = self._get_abstract()
+        if not abstract:
+            return {}
+        # Strip leading citation line ("1. Journal. Year... doi:...") from
+        # efetch output so the AI only sees the abstract text.
+        text_parts = abstract.split('\n\n', 1)
+        body = text_parts[1] if len(text_parts) > 1 else abstract
+        return {'abstract': body}
+
+    def get_figure_blocks(self) -> list[str]:
+        return []
+
+    def get_text(self) -> str:
+        sections = self.get_sections()
+        return '\n\n'.join(sections.values())
+
+    # ── Paper name ─────────────────────────────────────────────────────────────────
+
+    def _compute_paper_name(self) -> str:
+        meta = self.get_metadata()
+        year = str(meta.get('year') or 'XXXX')
+        author = _slugify(str(meta.get('first_author') or 'Unknown'), max_len=20)
+        journal = _slugify(str(meta.get('journal') or 'Journal'), max_len=10)
+        title_slug = _slugify(str(meta.get('title') or ''), max_len=40)
+        name = f'{year}_{author}_{journal}_{title_slug}'.strip('_')
+        name = name[:100].rstrip('_')
+        name = _slugify(name, max_len=100)
+        return name or 'Unknown_Paper'
+
+    def get_paper_name(self) -> str:
+        if self._paper_name is None:
+            self._paper_name = self._compute_paper_name()
+        return self._paper_name
 
 
 # ═══════════════════════════════════════════════════════════════════════════════════
@@ -773,10 +931,10 @@ class MarkdownSource(PaperSource):
     def _compute_paper_name(self) -> str:
         """Build paper name in ``{year}_{first_author}_{journal}_{title}`` format."""
         meta = self._metadata if self._metadata is not None else self._parse_filename_meta()
-        year = str(meta.get('year', 'XXXX'))
-        author = _slugify(str(meta.get('first_author', 'Unknown')), max_len=20)
-        journal = _slugify(str(meta.get('journal', 'Journal')), max_len=10)
-        title_slug = _slugify(str(meta.get('title', '')), max_len=40)
+        year = str(meta.get('year') or 'XXXX')
+        author = _slugify(str(meta.get('first_author') or 'Unknown'), max_len=20)
+        journal = _slugify(str(meta.get('journal') or 'Journal'), max_len=10)
+        title_slug = _slugify(str(meta.get('title') or ''), max_len=40)
 
         name = f'{year}_{author}_{journal}_{title_slug}'.strip('_')
         name = name[:100].rstrip('_')
@@ -822,7 +980,7 @@ class MarkdownSource(PaperSource):
 class Pymupdf4llmSource(PaperSource):
     """Convert a PDF paper via pymupdf4llm (optional), delegate to MarkdownSource."""
 
-    def __init__(self, pdf_path: str) -> None:
+    def __init__(self, pdf_path: str, pmid: str | None = None) -> None:
         # Lazy import — raises ImportError if pymupdf4llm not installed
         try:
             import pymupdf4llm
@@ -851,6 +1009,7 @@ class Pymupdf4llmSource(PaperSource):
         self._md_source = MarkdownSource(tmp_path)
         self._pdf_path = pdf_path
         self._tmp_path = tmp_path  # store for cleanup in __del__
+        self._pmid = pmid  # optional PubMed ID for authoritative metadata
 
     def __del__(self) -> None:
         """Clean up the temporary .md file on garbage collection."""
@@ -859,24 +1018,118 @@ class Pymupdf4llmSource(PaperSource):
                 os.unlink(self._tmp_path)
             except OSError:
                 pass
-    # ── Delegate public API to MarkdownSource ─────────────────────────────────────
+    # ── Metadata from PDF filename (not temp .md file) ─────────────────
+
+    def _parse_pdf_filename_meta(self) -> dict:
+        """Parse year/author/journal from the original PDF filename.
+
+        Supports two formats:
+          {year}_{author}_{journal}_{title}.pdf
+          {pmid}.pdf  (just a PubMed ID)
+        """
+        fname = Path(self._pdf_path).stem  # e.g. '2026_Wohlschlegel_CellRep_RA-Foveal-Development'
+        parts = fname.split('_')
+        meta: dict = {
+            "filename": Path(self._pdf_path).name,
+            "stem": fname,
+            "year": None,
+            "first_author": None,
+            "journal": None,
+            "title": fname,
+        }
+        # Pattern: {year}_{author}_{journal}_{title}
+        if len(parts) >= 3 and parts[0].isdigit() and len(parts[0]) in (2, 4):
+            meta["year"] = parts[0]
+            meta["first_author"] = parts[1]
+            meta["journal"] = parts[2]
+            meta["title"] = '_'.join(parts[3:]) if len(parts) > 3 else parts[2]
+        else:
+            # Fallback: maybe the PDF file name is just a PMID like "32467236.pdf"
+            if parts[0].isdigit() and len(parts[0]) in (7, 8):
+                meta["pmid"] = parts[0]
+        return meta
+
+    def _parse_text_title(self) -> str | None:
+        """Extract the paper title from the markdown text.
+
+        Strategy: find hash-marked headings, prefer the longest one that is not
+        a known section heading. The paper title is typically the most prominent
+        (longest) heading in the preamble before the main sections.
+        """
+        _section_keywords = {"abstract", "introduction", "results", "discussion",
+                           "methods", "materials", "acknowledgements", "acknowledgments",
+                           "references", "supplementary", "figures", "figure legends",
+                           "abbreviations", "conflict", "author contributions",
+                           "data availability", "keywords", "key words", "acknowledgment",
+                           "conclusions", "declarations", "consent", "ethics",
+                           "stem cells", "techniques", "resources"}
+        candidates = []
+        for line in self._md_source.get_text().split('\n'):
+            stripped = line.strip()
+            if not stripped or not stripped.startswith('#'):
+                continue
+            text = stripped.lstrip('#').strip().rstrip('.')
+            if len(text) < 20:
+                continue
+            lower = text.lower()
+            # Skip known section headings
+            if lower in _section_keywords or any(lower.startswith(w) for w in _section_keywords):
+                continue
+            # Skip copyright / DOI / license lines that start with a hash
+            if any(text.lower().startswith(w) for w in ["copyright", "©", "doi:", "the author"]):
+                continue
+            candidates.append(text)
+        # Return the longest hash line (most likely the title)
+        if candidates:
+            candidates.sort(key=len, reverse=True)
+            return candidates[0]
+        # Fallback: first non-empty line that looks like a title
+        for line in self._md_source.get_text().split('\n'):
+            stripped = line.strip()
+            if len(stripped) > 30 and not any(stripped.lower().startswith(w) for w in
+                    ["figure", "fig.", "abstract", "introduction", "copyright", "©",
+                     "published", "journal", "the author", "doi:"]):
+                return stripped
+        return None
+
+    def get_metadata(self) -> dict:
+        """Return paper metadata, preferring NCBI PubMed when PMID is available.
+
+        When ``--pmid`` is provided, use authoritative NCBI esummary data.
+        Falls back to PDF-filename-derived metadata otherwise, with text-title
+        extraction when the filename doesn't follow the structured pattern.
+        """
+        if self._pmid:
+            return _fetch_pubmed_metadata(self._pmid)  # authoritative
+
+        meta = self._parse_pdf_filename_meta()
+        if meta.get("title") and not meta["title"].startswith("pymupdf4llm_") \
+                and not str(meta.get("year") or "").isdigit():
+            # PDF filename gave us nothing useful — try text-derived title
+            text_title = self._parse_text_title()
+            if text_title:
+                meta["title"] = text_title[:200]
+        return meta
+
+    def get_paper_name(self) -> str:
+        """Build paper name from PDF-derived metadata instead of temp-file name.
+        """
+        meta = self.get_metadata()
+        year = str(meta.get('year') or 'XXXX')
+        author = _slugify(str(meta.get('first_author') or 'PDF'), max_len=20)
+        journal = _slugify(str(meta.get('journal') or 'Paper'), max_len=10)
+        title_slug = _slugify(str(meta.get('title') or ''), max_len=40)
+
+        name = f'{year}_{author}_{journal}_{title_slug}'.strip('_')
+        name = name[:100].rstrip('_')
+        name = _slugify(name, max_len=100)
+        return name or 'Unknown_Paper'
 
     def get_sections(self) -> dict[str, str]:
-        """Return parsed sections by canonical key (delegated to MarkdownSource)."""
         return self._md_source.get_sections()
 
     def get_figure_blocks(self) -> list[str]:
-        """Return extracted figure blocks (delegated to MarkdownSource)."""
         return self._md_source.get_figure_blocks()
 
-    def get_metadata(self) -> dict:
-        """Return filename-derived metadata (delegated to MarkdownSource)."""
-        return self._md_source.get_metadata()
-
-    def get_paper_name(self) -> str:
-        """Return computed paper name (delegated to MarkdownSource)."""
-        return self._md_source.get_paper_name()
-
     def get_text(self) -> str:
-        """Return full paper text (delegated to MarkdownSource)."""
         return self._md_source.get_text()
