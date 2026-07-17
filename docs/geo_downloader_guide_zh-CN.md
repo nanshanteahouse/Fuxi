@@ -14,7 +14,9 @@
 3. [三种使用方式](#3-三种使用方式)
    - [方式 1：独立 CLI](#方式-1独立-cli)
    - [方式 2：预处理脚本带 --download](#方式-2预处理脚本带---download)
-   - [方式 3：Registry add-paper 带 --download](#方式-3registry-add-paper-带---download)
+   - [方式 3：Registry register --pmid 带 --download](#方式-3registry-register---pmid-带---download)
+   - [方式 3.1：选择性数据集注册](#方式-31选择性数据集注册)
+   - [方式 3.2：注销（deregister）](#方式-32注销deregister)
 4. [独立命令行详解](#4-独立命令行详解)
    - [4.1 完整参数](#41-完整参数)
    - [4.2 用法示例](#42-用法示例)
@@ -43,6 +45,7 @@
    - [9.3 非单细胞数据（bulk RNA-seq、STARR-seq 等）](#93-非单细胞数据bulk-rna-seqstarr-seq-等)
    - [9.4 Visium 空间转录组（GSM 级文件限制）](#94-visium-空间转录组gsm-级文件限制)
    - [9.5 多模态（Multiome）数据](#95-多模态multiome数据)
+   - [9.6 多数据集论文过滤](#96-多数据集论文过滤)
 10. [常见问题（FAQ）](#10-常见问题faq)
     - [Q1: 下载中断了怎么办？](#q1-下载中断了怎么办)
     - [Q2: 提示 "Neither wget nor curl found" 怎么处理？](#q2-提示-neither-wget-nor-curl-found-怎么处理)
@@ -140,16 +143,84 @@ python core/preprocess/preprocessor.py --gse GSE107618 --modality rna --download
 
 预处理脚本的 Phase 0a 会自动调用下载器，数据就绪后进入格式检测和 config 生成。如果数据已存在则跳过下载。
 
-### 方式 3：Registry `add-paper` 带 `--download`
+### 方式 3：Registry `register --pmid` 带 `--download`
 
-新增论文时自动下载关联的 GSE 数据集：
+通过 Registry 注册论文时自动下载关联的 GSE 数据集。`register --pmid` 会先调用 `paper_insights` 解析论文，然后进入交互式数据集选择：
 
 ```bash
-python -m core.registry add-paper --pmid 31269016 --download
+python -m core.registry register --pmid 31269016 --download
 ```
 
-流程：论文解读 → 注册到 Registry → 自动下载论文中提取到的所有 GSE 数据集。
+流程：论文解读 → 交互式数据集选择 → 注册到 Registry → 自动下载所选数据集。
 
+关键参数：
+- `--datasets GSE1,GSE2` — 非交互式，只注册并下载指定数据集
+- `--all` — 注册所有数据集（旧版行为，跳过选择界面）
+- `--download` — 注册后自动下载数据
+
+### 方式 3.1：选择性数据集注册
+
+当一篇论文关联多个 GSE 数据集时（例如一篇单细胞论文同时提交了 scRNA-seq 和 Hi-C 数据），你可以只选择需要的部分进行注册。
+
+**交互式模式（默认）**：
+
+```bash
+python -m core.registry register --pmid 31493975
+```
+
+运行后会解析论文，列出所有关联的 GSE 数据集及 SOFT 元数据摘要：
+
+```
+Found 2 datasets:
+  [1] GSE164044  | single-cell RNA-seq of human retina
+  [2] GSE35156   | Hi-C of retinal cell lines
+
+Select datasets (comma-separated numbers, or 'all'): 1
+```
+
+输入 `1` 后只注册 GSE164044，GSE35156 被跳过。输入 `all` 或直接回车（如果只有一个数据集）则注册全部。
+
+**非交互式模式（脚本用）**：
+
+```bash
+# 只注册指定数据集
+python -m core.registry register --pmid 31493975 --datasets GSE164044
+
+# 注册全部（跳过选择）
+python -m core.registry register --pmid 31493975 --all
+```
+
+`--datasets` 接受逗号分隔的 GSE 编号列表，适合 shell 脚本中批量调用。`--all` 保持旧版行为，注册所有数据集。
+
+**配合 `--download`**：
+
+```bash
+# 交互选择后下载所选数据集
+python -m core.registry register --pmid 31493975 --download
+
+# 非交互：只下载 GSE164044
+python -m core.registry register --pmid 31493975 --datasets GSE164044 --download
+```
+
+### 方式 3.2：注销（deregister）
+
+注册错误或不再需要某个数据集/论文时，可以使用 `deregister` 命令从 Registry 中移除。
+
+```bash
+# 移除单个数据集
+python -m core.registry deregister --gse GSE35156
+
+# 无确认（脚本用）
+python -m core.registry deregister --gse GSE35156 --force
+
+# 移除论文 + 级联删除未被其他论文引用的数据集
+python -m core.registry deregister --pmid 31493975 --cascade
+
+# 预览（不执行）
+python -m core.registry deregister --pmid 31493975 --cascade --dry-run
+```
+
+`--cascade` 只删除孤立数据集（不被其他任何论文引用的数据集）。如果某个数据集同时被多篇论文引用，级联删除只会移除数据集与目标论文的关联，但保留数据集条目本身。
 ---
 
 ## 4. 独立命令行详解
@@ -446,7 +517,7 @@ update_registry_after_download()
 
 **预处理脚本**：使用 `--download` 参数时，Registry 更新作为流程的一部分自动执行。数据集先标记为已下载，然后预处理脚本进入自己的阶段。
 
-**Registry add-paper**：使用 `--download` 参数时，新增论文并下载数据后，关联关系自动写入 Registry。
+**Registry register --pmid**：使用 `--download` 参数时，新增论文并下载数据后，关联关系自动写入 Registry。
 
 ### 8.4 查看结果
 
@@ -520,6 +591,18 @@ GSE235583/
 ### 9.5 多模态（Multiome）数据
 
 对于同时包含 RNA 和 ATAC 的多模态数据集（如 GSE310245，6 samples），下载器会一并下载所有文件。后续 `preprocessor.py` 会自动检测多模态结构并生成 RNA 和 ATAC 两份 config。
+
+### 9.6 多数据集论文过滤
+
+一篇论文可能同时提交 scRNA-seq、ATAC-seq、Hi-C、ChIP-seq 等多种数据。你可以使用 `register --pmid` 的交互模式或 `--datasets` 参数只注册单细胞相关数据集，跳过不适合管线流程的数据。例如：
+
+```bash
+# 交互模式：运行后输入序号选择需要的 GSE
+python -m core.registry register --pmid 31493975
+
+# 非交互模式：直接指定
+python -m core.registry register --pmid 31493975 --datasets GSE164044
+```
 
 ---
 

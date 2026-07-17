@@ -14,7 +14,9 @@
 3. [Three ways to use it](#3-three-ways-to-use-it)
    - [Method 1: Standalone CLI](#method-1-standalone-cli)
    - [Method 2: Preprocessor with --download](#method-2-preprocessor-with---download)
-   - [Method 3: Registry add-paper with --download](#method-3-registry-add-paper-with---download)
+   - [Method 3: Registry register --pmid with --download](#method-3-registry-register---pmid-with---download)
+   - [Method 3.1: Selective dataset registration](#method-31-selective-dataset-registration)
+   - [Method 3.2: Deregistering (deregister)](#method-32-deregistering-deregister)
 4. [Standalone CLI reference](#4-standalone-cli-reference)
    - [4.1 Full flags](#41-full-flags)
    - [4.2 Examples](#42-examples)
@@ -43,6 +45,7 @@
    - [9.3 Non-single-cell data (bulk RNA-seq, STARR-seq, etc.)](#93-non-single-cell-data-bulk-rna-seq-starr-seq-etc)
    - [9.4 Visium spatial data (GSM-level files)](#94-visium-spatial-data-gsm-level-files)
    - [9.5 Multiome data](#95-multiome-data)
+   - [9.6 Filtering multi-dataset papers](#96-filtering-multi-dataset-papers)
 10. [FAQ](#10-faq)
     - [Q1: Download was interrupted. Do I need to start over?](#q1-download-was-interrupted-do-i-need-to-start-over)
     - [Q2: The downloader says "Neither wget nor curl found". What do I do?](#q2-the-downloader-says-neither-wget-nor-curl-found-what-do-i-do)
@@ -133,15 +136,72 @@ python core/preprocess/preprocessor.py --gse GSE107618 --modality rna --download
 
 This triggers Phase 0a: the preprocessor calls the downloader, then proceeds directly to archive extraction and config generation. One command from raw accession to runnable pipeline config. If the data is already downloaded, the preprocessor skips the download phase. The registry update happens as part of the same flow, with the dataset marked as downloaded before the preprocessor begins its own phases.
 
-### Method 3: Registry `add-paper --download`
+### Method 3: Registry `register --pmid` with `--download`
 
 When adding a new paper to Fuxi's Master Registry, you can auto-download all linked GEO datasets at the same time.
 
 ```bash
-python -m core.registry add-paper --pmid 31269016 --download
+python -m core.registry register --pmid 31269016 --download
 ```
 
-This creates the paper entry, registers all GSE accessions from the paper's data availability statement, and triggers downloads for each one.
+This runs the paper insight pipeline (see `paper_insights.py`), registers the paper entry, and then enters an interactive dataset selection mode. It shows each GSE dataset found in the paper's data availability statement with its SOFT metadata and lets you choose which to register.
+
+The `register --pmid` subcommand offers three registration modes:
+
+1. **Interactive (default)**: Shows SOFT metadata for each GSE dataset found, then prompts you to enter comma-separated numbers (e.g. `1,3`) to select which to register. Press Enter with no input to register all.
+2. **`--datasets GSE1,GSE2`**: Bypass the interactive prompt and register only the specified GSE accessions. Useful for scripts and automation.
+3. **`--all`**: Register every dataset found without prompting. This matches the old behavior of `add-paper`.
+
+### Method 3.1: Selective dataset registration
+
+When a paper mentions multiple GSE datasets, you can choose exactly which ones to register.
+
+**Interactive mode** shows metadata for each GSE before you decide:
+
+```
+$ python -m core.registry register --pmid 31493975
+Found 2 datasets:
+  [1] GSE164044 — scRNA-seq of human retina (Homo sapiens, 64 samples)
+  [2] GSE35156 — Hi-C of retinal cells (Homo sapiens, 6 samples)
+
+Enter numbers to register (e.g. 1,2) or leave empty for all: 1
+```
+
+Here the user chose only the scRNA-seq dataset (GSE164044) and skipped the Hi-C dataset, since Hi-C is off-topic for a single-cell RNA pipeline.
+
+**Non-interactive mode** with `--datasets` is useful for scripts:
+
+```bash
+python -m core.registry register --pmid 31493975 --datasets GSE164044
+```
+
+This registers only GSE164044, skipping the selection prompt entirely.
+
+**Register everything** (backward-compatible old behavior):
+
+```bash
+python -m core.registry register --pmid 31269016 --all --download
+```
+
+### Method 3.2: Deregistering (deregister)
+
+To remove datasets or papers from the registry:
+
+```bash
+# Remove a single dataset
+python -m core.registry deregister --gse GSE35156
+
+# Skip confirmation (for scripts)
+python -m core.registry deregister --gse GSE35156 --force
+
+# Remove a paper + cascade-delete orphan datasets
+python -m core.registry deregister --pmid 31493975 --cascade
+
+# Preview without deleting
+python -m core.registry deregister --pmid 31493975 --cascade --dry-run
+```
+
+The `--cascade` flag only removes datasets that are not shared with other papers. Datasets linked to multiple papers are kept intact.
 
 ---
 
@@ -498,6 +558,8 @@ GEO contains many types of experiments. The downloader fetches all supplementary
 
 Bulk RNA-seq or other non-single-cell data may still download successfully but then fail format detection during preprocessing.
 
+When using `register --pmid`, use interactive mode or `--datasets` to skip non-single-cell datasets during registration.
+
 ### 9.4 Visium spatial data (GSM-level files)
 
 For 10X Visium spatial datasets, GEO often stores individual files per GSM sample rather than a single SpaceRanger output directory. The downloader downloads whatever supplementary files NCBI hosts. You may need to reorganize the files after download.
@@ -513,6 +575,18 @@ python core/geo_downloader.py --gse GSE310245
 ```
 
 The Fuxi preprocessor (`preprocessor.py`) automatically detects the multimodal structure during the next phase and generates separate RNA and ATAC pipeline configs.
+
+### 9.6 Filtering multi-dataset papers
+
+A paper may submit scRNA-seq, ATAC-seq, Hi-C, ChIP-seq, and other data types together. Use interactive mode or `--datasets` with `register --pmid` to register only the single-cell-relevant datasets, skipping those unsuitable for the pipeline. For example:
+
+```bash
+# Interactive: enter index numbers to select which GSEs to register
+python -m core.registry register --pmid 31493975
+
+# Non-interactive: specify directly
+python -m core.registry register --pmid 31493975 --datasets GSE164044
+```
 
 ---
 

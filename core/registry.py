@@ -612,11 +612,109 @@ def _build_slug_local(first_author: str, year: str, journal: str, pmid: Optional
     ab = _JOURNAL_ABBREVS.get(j, "unknown")
     return f"{author}{yr}_{ab}"
 
+def _select_datasets_interactive(
+    geo_ids: list[str],
+    select_all: bool = False,
+    datasets_filter: list[str] | None = None,
+) -> list[str]:
+    """Let user choose which GEO datasets to register from a paper.
+
+    Displays SOFT metadata for each GSE and prompts for selection.
+
+    Args:
+        geo_ids: GEO accession IDs found in the paper's data_access section.
+        select_all: If True, register all without prompting (--all flag).
+        datasets_filter: Explicit GSE list from --datasets flag.
+
+    Returns:
+        List of selected GEO accession IDs (may be empty).
+    """
+    if not geo_ids:
+        return []
+
+    # --all flag: register everything
+    if select_all:
+        print(f"\n\U0001f4e6 Registering all {len(geo_ids)} dataset(s)")
+        for gse in geo_ids:
+            print(f"   ✔  {gse}")
+        return geo_ids
+
+    # --datasets flag: explicit filter
+    if datasets_filter:
+        normalized = [g.upper() for g in datasets_filter]
+        unknown = set(normalized) - {g.upper() for g in geo_ids}
+        if unknown:
+            print(f"⚠️  Warning: {', '.join(sorted(unknown))} not found in paper's GEO list")
+        valid = [g for g in normalized if g in {x.upper() for x in geo_ids}]
+        if not valid:
+            print("❌ No valid datasets selected — registering paper only")
+            return []
+        print(f"\n\U0001f4e6 Registering {len(valid)} selected dataset(s)")
+        for gse in valid:
+            matched = next(x for x in geo_ids if x.upper() == gse)
+            print(f"   ✔  {matched}")
+        return valid
+
+    # Interactive mode: fetch SOFT metadata for each GSE and display
+    from core.geo_downloader import fetch_soft_metadata
+
+    print(f"\n\n\U0001f50d Found {len(geo_ids)} GEO dataset(s) in the paper:\n")
+
+    entries: list[dict] = []
+    for i, gse in enumerate(geo_ids, 1):
+        try:
+            meta = fetch_soft_metadata(gse)
+            title = meta.get("title", "?")[:80]
+            n_samples = meta.get("n_samples", "?")
+            organism = meta.get("organism", "?")
+            series_type = meta.get("series_type", "?")
+            is_superseries = meta.get("is_superseries", False)
+            platforms = meta.get("platform_title", "?")
+        except Exception:
+            title = n_samples = organism = series_type = platforms = "?"
+            is_superseries = False
+        tag = " [SuperSeries]" if is_superseries else ""
+        print(f"  {i}. {gse}{tag}")
+        print(f"     {title}")
+        print(f"     {series_type} | {n_samples} samples | {organism}")
+        if platforms and platforms != "?":
+            print(f"     Platform: {platforms[:90]}")
+        print()
+
+    print("Enter numbers to register (comma-separated), 'all', or '0' to skip:")
+    try:
+        choice = input("> ").strip()
+    except (EOFError, KeyboardInterrupt):
+        print("⏭️  Skipping dataset registration")
+        return []
+
+    if choice in ("0", ""):
+        print("⏭️  Skipping dataset registration — paper registered without datasets")
+        return []
+    if choice.lower() == "all":
+        print(f"\n   ✔  Registering all {len(geo_ids)} dataset(s)")
+        return geo_ids
+
+    try:
+        indices = [int(x.strip()) for x in choice.split(",")]
+        selected = [geo_ids[i - 1] for i in indices if 1 <= i <= len(geo_ids)]
+        if not selected:
+            print("⏭️  No valid indices — registering paper only")
+            return []
+        print(f"\n   ✔  Registering {len(selected)} selected dataset(s)")
+        for gse in selected:
+            print(f"      {gse}")
+        return selected
+    except (ValueError, IndexError):
+        print("⚠️  Invalid input — registering paper only")
+        return []
 def _register_from_insights(
     registry: MasterRegistry,
     insights: dict[str, Any],
     subdir: str,
     dry_run: bool = False,
+    select_all: bool = False,
+    datasets: list[str] | None = None,
 ) -> MasterRegistry:
     """共享登记逻辑：从 insights.yaml 读 meta -> 写入 registry"""
     meta = insights.get("paper_meta", {}) or {}
@@ -650,8 +748,14 @@ def _register_from_insights(
         insights=InsightEntry(status="generated", insights_path="insights.yaml"),
     )
     geo_ids = (insights.get("data_access", {}) or {}).get("geo_ids", []) or []
+
+    # ── Selective dataset registration ──
+    selected_ids = _select_datasets_interactive(
+        geo_ids, select_all=select_all, datasets_filter=datasets
+    )
+
     new_links: list[PaperDatasetLink] = []
-    for gse_id in geo_ids:
+    for gse_id in selected_ids:
         if gse_id not in registry.datasets:
             registry.datasets[gse_id] = DatasetEntry(
                 repository=RepositoryType.GEO,
@@ -666,7 +770,7 @@ def _register_from_insights(
     print(f"\u2705 Added: {slug}")
     print(f"   {str(meta.get('title', ''))[:100]}")
     print(f"   {meta.get('journal', '')} ({meta.get('year', '')})")
-    print(f"   GSEs: {', '.join(geo_ids) or 'none'}")
+    print(f"   GSEs: {', '.join(selected_ids or geo_ids) or 'none'}")
     if dry_run:
         print("\n\U0001f4a1 --dry-run, not saved")
     return registry
@@ -680,6 +784,8 @@ def _cmd_add_paper(
     paper_dir: str = "",
     dry_run: bool = False,
     download: bool = False,
+    select_all: bool = False,
+    datasets: list[str] | None = None,
 ) -> MasterRegistry:
     import subprocess
     import sys
@@ -746,7 +852,8 @@ def _cmd_add_paper(
         print("\u274c Must specify --pmid, --xml, or --paper-dir")
         return registry
 
-    return _register_from_insights(registry, insights, subdir, dry_run)
+    return _register_from_insights(registry, insights, subdir, dry_run,
+                                    select_all=select_all, datasets=datasets)
 
 
 def _cmd_register_gse(
@@ -819,6 +926,105 @@ def _cmd_register_gse(
         print("\n\U0001f4a1 --dry-run, not saved")
     return registry
 
+def _cmd_deregister(
+    registry: MasterRegistry,
+    gse_id: str = "",
+    pmid: str = "",
+    cascade: bool = False,
+    force: bool = False,
+    dry_run: bool = False,
+    reg_path: str | None = None,
+) -> MasterRegistry:
+    """Remove a dataset and/or paper from the registry."""
+    action = "DRY-RUN" if dry_run else "REMOVE"
+    if gse_id:
+        return _deregister_gse(registry, gse_id.upper(), action, force, dry_run, reg_path)
+    elif pmid:
+        return _deregister_paper(registry, pmid, action, cascade, force, dry_run, reg_path)
+    else:
+        print("Must specify --gse or --pmid")
+        return registry
+
+
+def _deregister_gse(
+    registry: MasterRegistry,
+    gse_id: str, action: str, force: bool, dry_run: bool, reg_path: str | None,
+) -> MasterRegistry:
+    ds = registry.datasets.get(gse_id)
+    if ds is None:
+        print(f"Dataset {gse_id} not in registry")
+        return registry
+    links_to_remove = [ln for ln in registry.links if ln.dataset_id == gse_id]
+    linked_papers = [ln.paper_id for ln in links_to_remove]
+    print(f"\n  [{action}] Dataset: {gse_id}")
+    print(f"   Status: {ds.status}")
+    if linked_papers:
+        print(f"   Linked to papers: {', '.join(linked_papers)}")
+    else:
+        print(f"   Linked to papers: none (orphan)")
+    if not force:
+        print(f"\nConfirm {action.lower()} of {gse_id}? [y/N]: ", end="")
+        try:
+            if input().strip().lower() != "y":
+                print("  Cancelled")
+                return registry
+        except (EOFError, KeyboardInterrupt):
+            print("  Cancelled")
+            return registry
+    if not dry_run:
+        del registry.datasets[gse_id]
+        registry.links = [ln for ln in registry.links if ln.dataset_id != gse_id]
+        save_master_registry(registry, reg_path)
+    print(f"   Done: {action}d {gse_id} ({len(links_to_remove)} link(s) removed)")
+    return registry
+
+
+def _deregister_paper(
+    registry: MasterRegistry,
+    pmid: str, action: str, cascade: bool, force: bool, dry_run: bool, reg_path: str | None,
+) -> MasterRegistry:
+    paper = registry.get_paper(pmid)
+    if paper is None:
+        print(f"Paper {pmid} not in registry")
+        return registry
+    links_to_remove = [ln for ln in registry.links if ln.paper_id == pmid]
+    linked_gses = [ln.dataset_id for ln in links_to_remove]
+    orphan_gses: list[str] = []
+    shared_gses: list[str] = []
+    for gse_id in linked_gses:
+        other_links = [ln for ln in registry.links if ln.dataset_id == gse_id and ln.paper_id != pmid]
+        if other_links:
+            shared_gses.append(gse_id)
+        else:
+            orphan_gses.append(gse_id)
+    print(f"\n  [{action}] Paper: {pmid} ({paper.slug})")
+    print(f"   Title: {paper.title[:100]}")
+    print(f"   Datasets: {', '.join(linked_gses) or 'none'}")
+    if shared_gses:
+        print(f"   Shared with other papers: {', '.join(shared_gses)}")
+    if orphan_gses and cascade:
+        print(f"   Cascade: {', '.join(orphan_gses)}")
+    if not force:
+        suffix = " (paper + cascade datasets)" if cascade and orphan_gses else ""
+        print(f"\nConfirm {action.lower()} of {pmid}{suffix}? [y/N]: ", end="")
+        try:
+            if input().strip().lower() != "y":
+                print("  Cancelled")
+                return registry
+        except (EOFError, KeyboardInterrupt):
+            print("  Cancelled")
+            return registry
+    if not dry_run:
+        registry.papers = [p for p in registry.papers if p.paper_id != pmid]
+        registry.links = [ln for ln in registry.links if ln.paper_id != pmid]
+        if cascade:
+            for gse_id in orphan_gses:
+                if gse_id in registry.datasets:
+                    del registry.datasets[gse_id]
+        save_master_registry(registry, reg_path)
+    removed = f"paper + {len(orphan_gses)} dataset(s)" if cascade and orphan_gses else "paper"
+    print(f"   Done: {action}d {removed} ({len(links_to_remove)} link(s) removed)")
+    return registry
 def main() -> None:
     import argparse
 
@@ -851,6 +1057,10 @@ def main() -> None:
     p_register.add_argument("--dry-run", action="store_true", help="预览不写入")
     p_register.add_argument("--download", action="store_true",
                             help="Auto-download GSE datasets from NCBI GEO after paper import.")
+    p_register.add_argument("--datasets", default=None,
+                            help="只注册指定 GSE（逗号分隔，如 GSE87064,GSE164044）")
+    p_register.add_argument("--all", dest="register_all", action="store_true",
+                            help="注册论文中全部 GEO 数据集（跳过交互确认）")
 
     p_add = sub.add_parser("add-paper", help="[DEPRECATED] 请改用 register --pmid")
     p_add.add_argument("--pmid", default=None, help="PubMed ID (NCBI 自动下载)")
@@ -860,10 +1070,18 @@ def main() -> None:
     p_add.add_argument("--dry-run", action="store_true", help="预览不写入")
     p_add.add_argument("--download", action="store_true",
                         help="Auto-download GSE datasets from NCBI GEO after paper import.")
+
+    p_deregister = sub.add_parser("deregister", help="Delete dataset/paper from registry")
+    p_deregister.add_argument("--pmid", default=None, help="PubMed ID to remove")
+    p_deregister.add_argument("--gse", default=None, help="GEO dataset ID to remove")
+    p_deregister.add_argument("--cascade", action="store_true",
+                              help="Also remove orphan datasets (not shared with other papers)")
+    p_deregister.add_argument("--force", "-f", action="store_true", help="Skip confirmation prompt")
+    p_deregister.add_argument("--dry-run", action="store_true", help="Preview without deleting")
     args = parser.parse_args()
     reg_path = args.registry if hasattr(args, "registry") else None
 
-    if args.command in ("report", "verify", "reset-gse", "find-orphans", "add-paper", "register"):
+    if args.command in ("report", "verify", "reset-gse", "find-orphans", "add-paper", "register", "deregister"):
         registry = load_master_registry(reg_path)
 
     if args.command == "report":
@@ -898,9 +1116,14 @@ def main() -> None:
         if args.gse:
             registry = _cmd_register_gse(registry, args.gse, dry_run=args.dry_run)
         elif args.pmid or args.xml_path or args.pdf or args.paper_dir:
+            datasets_list = None
+            if hasattr(args, "datasets") and args.datasets:
+                datasets_list = [d.strip() for d in args.datasets.split(",")]
+            select_all = getattr(args, "register_all", False)
             registry = _cmd_add_paper(registry, pmid=args.pmid or "", xml=args.xml_path or "",
                                       pdf=args.pdf or "", paper_dir=args.paper_dir or "",
-                                      dry_run=args.dry_run, download=args.download)
+                                      dry_run=args.dry_run, download=args.download,
+                                      select_all=select_all, datasets=datasets_list)
         else:
             print("\u274c Must specify --pmid, --gse, --xml, --pdf, or --paper-dir")
             return registry
@@ -911,6 +1134,12 @@ def main() -> None:
         registry = _cmd_add_paper(registry, pmid=args.pmid or "", xml=args.xml_path or "",
                                   pdf=args.pdf or "", paper_dir=args.paper_dir or "",
                                   dry_run=args.dry_run, download=args.download)
+        if not args.dry_run:
+            save_master_registry(registry, reg_path)
+    elif args.command == "deregister":
+        registry = _cmd_deregister(registry, gse_id=args.gse or "", pmid=args.pmid or "",
+                                   cascade=args.cascade, force=args.force,
+                                   dry_run=args.dry_run, reg_path=reg_path)
         if not args.dry_run:
             save_master_registry(registry, reg_path)
 
