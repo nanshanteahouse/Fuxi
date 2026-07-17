@@ -370,6 +370,7 @@ class SpatialConfig(BaseModel):
     run_autocorr: bool = True
     moran_percentile: int = 90
     svg_n_top: int = 2000
+    run_segmentation: bool = False
 
 
 # ═══════════════════════════════════════════════════════════════════════

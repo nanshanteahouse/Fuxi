@@ -83,20 +83,29 @@ def main():
         log.info("  Image features extracted")
 
         # ── Optional: tissue segmentation ──
-        # sq.im.segment() requires additional dependencies (scikit-image, etc.)
-        # Skipped by default — enable via CFG flag when needed
-        # if getattr(CFG, 'run_image_segmentation', False):
-        #     log.info("  Running image segmentation...")
-        #     sq.im.segment(
-        #         adata,
-        #         method='watershed',
-        #         library_id=library_id,
-        #     )
-        #     log.info("  Segmentation complete")
+        if CFG.spatial.run_segmentation:
+            log.info("  Running image segmentation (method=watershed)...")
+            try:
+                sq.im.segment(
+                    adata,
+                    method='watershed',
+                    library_id=library_id,
+                )
+                log.info("  Segmentation complete")
+            except ImportError:
+                log.warning("scikit-image not installed — skipping segmentation")
+
+        # ── Multi-scale image features ──
+        log.info("  Computing multi-scale image features...")
+        sq.im.calculate_image_features(
+            adata,
+            features=['summary', 'texture'],
+            library_id=library_id,
+        )
+        log.info("  Multi-scale image features added")
 
     except Exception as exc:
         log.warning("Image processing failed: %s — continuing with raw image", exc)
-        # Don't fail — image processing is optional enhancement
 
     safe_write(adata, output_path, cfg=CFG)
     log.info("Step 02 complete, took %.1fs", time.time() - t0)
