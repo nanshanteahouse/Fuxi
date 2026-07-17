@@ -251,7 +251,7 @@ def main():
                                 n_annotatable += 1
                         rate = n_annotatable / n_total if n_total > 0 else 0.0
                         entry['kb_annotatable_rate'] = rate
-                        _log_enrich.info(f"KB annotatable rate: {rate:.3f}")
+                        _log_enrich.info("KB annotatable rate: %.3f", rate)
 
                 except Exception as e:
                     _log_enrich.warning("Enrichment failed for n_neighbors=%d, resolution=%.1f: %s",
@@ -394,7 +394,8 @@ def main():
                     sc.pl.umap(adata, color='leiden', ax=ax, show=False,
                                legend_fontsize=8,
                                title=f'min_dist={md}, spread={sp}')
-                except Exception:
+                except Exception as e:
+                    log.debug("Plot annotation failed: %s", e)
                     ax.text(0.5, 0.5, 'Error', ha='center', va='center',
                             transform=ax.transAxes)
             for j in range(len(sweep_results), len(axes_flat)):
@@ -426,7 +427,8 @@ def main():
                         sc.pl.umap(adata, color=leiden_key, ax=ax,
                                    legend_fontsize=5,
                                    title=f'n={n}, r={res}')
-                    except Exception:
+                    except Exception as e:
+                        log.debug("Plot annotation failed: %s", e)
                         ax.text(0.5, 0.5, 'Error', ha='center', va='center',
                                 transform=ax.transAxes)
                     finally:

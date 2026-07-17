@@ -17,6 +17,7 @@ from core.utils import setup_logger, resolve_config, safe_write
 import scanpy as sc
 import squidpy as sq
 import numpy as np
+import scipy.sparse
 
 
 def main():
@@ -86,7 +87,6 @@ def main():
 
     if not hvg_selected:
         log.info("Falling back to manual variance-based HVG selection...")
-        import scipy.sparse
         X = adata.X
         if scipy.sparse.issparse(X):
             mean = np.array(X.mean(axis=0)).flatten()

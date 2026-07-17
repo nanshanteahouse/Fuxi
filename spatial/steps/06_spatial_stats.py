@@ -285,7 +285,8 @@ def main():
                     try:
                         safe_plot(sc.pl.umap, adata, color=gene, ax=ax,
                                   show=False, title=gene, use_raw=True)
-                    except Exception:
+                    except Exception as e:
+                        log.warning("Top marker UMAP annotation failed: %s", e)
                         ax.text(0.5, 0.5, 'Error', ha='center', va='center')
                 for j in range(len(top_genes), axes.size):
                     axes[j // 3, j % 3].axis('off')

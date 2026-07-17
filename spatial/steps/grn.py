@@ -318,7 +318,6 @@ def main():
 
     pseudo_df = build_pseudobulk(adata, group_col, use_raw=True, log=log)
 
-    import decoupler as dc
 
     species = getattr(CFG.grn, 'species', 'human')
     log.info("Regulon: CollecTRI (%s)", species)

@@ -80,7 +80,8 @@ def _detect_peaks(vals, log):
         else:
             is_multimodal = False
         return n_peaks, x_range[peaks].tolist(), density[peaks].tolist(), x_range, density, is_multimodal
-    except Exception:
+    except Exception as e:
+        log.warning("Peak detection failed: %s", e)
         return 0, [], [], np.array([]), np.array([]), False
 
 
@@ -158,8 +159,8 @@ def _mad_thresholds(adata, cfg, log):
         log.info("  nFeature distribution: %d KDE peak%s (P10=%.0f, P90=%.0f)%s",
                  n_peaks, "" if n_peaks == 1 else "s", p10, p90,
                  " — MULTIMODAL" if is_multimodal else "")
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("Reliability check failed: %s", e)
 
     # ---- total_counts ----
     if cfg.expression_type == "raw_counts":

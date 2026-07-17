@@ -141,8 +141,8 @@ def spatial_neighbors_summary(adata, CFG, log):
             n_edges = connectivities.nnz
             avg_degree = n_edges / max(adata.n_obs, 1)
             log.info("  Spatial graph: %d edges, avg degree %.1f", n_edges, avg_degree)
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("spatial_neighbors_summary failed: %s", e)
 
 
 def main():
@@ -200,8 +200,8 @@ def main():
             try:
                 safe_plot(sc.pl.umap, adata, color=col, show=False,
                           save=f'_09_{col}.pdf')
-            except Exception:
-                pass
+            except Exception as e:
+                log.warning("UMAP plot failed: %s", e)
 
     log.info("Step 09 complete, took %.1fs", time.time() - t0)
 
