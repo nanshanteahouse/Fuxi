@@ -93,32 +93,40 @@ RNA_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5, 11}
 #  ATAC step registry
 # ═══════════════════════════════════════════════════════════════════════
 ATAC_STEPS = [
-    ("00", "00_load.py",          "Load fragments.tsv.gz → 00_raw.h5ad"),
-    ("01", "01_qc.py",            "QC + TSS enrichment + doublet detection → 01_filtered.h5ad"),
-    ("02", "02_process.py",       "Peak calling + TF-IDF + spectral + KNN → 02_processed.h5ad"),
-    ("03", "03_cluster.py",       "Multi-param Leiden + UMAP → 03_clustered.h5ad"),
-    ("04", "04_annotate.py",      "AI-assisted chromatin state annotation → 04_annotated.h5ad"),
-    ("05", "05_marker_peaks.py",  "Differential peak accessibility → marker_peaks.csv"),
-    ("06", "06_motif.py",         "Motif enrichment + chromVAR → motif_results.csv"),
-    ("07", "07_trajectory.py",    "ATAC pseudotime trajectory → 07_trajectory.h5ad"),
-    ("08", "08_enrichment.py",    "GO/KEGG enrichment on peak-associated genes → enrichment_*.csv"),
-    ("09", "09_integrate.py",     "RNA+ATAC integration via muon → 09_integrated.h5ad"),
+    ("00", "00_load.py",            "Load fragments.tsv.gz → 00_raw.h5ad"),
+    ("01", "01_doublet.py",          "Scrublet doublet detection → 01_doublet.h5ad"),
+    ("02", "02_qc.py",               "QC filtering + TSS + peak calling + peak matrix → 02_filtered.h5ad"),
+    ("03", "03_process.py",           "Feature selection + spectral + Harmony + KNN → 03_processed.h5ad"),
+    ("04", "04_cluster.py",           "Multi-param Leiden + UMAP → 04_clustered.h5ad"),
+    ("05", "05_peaks.py",             "Post-clustering peak calling → 05_peaks.h5ad"),
+    ("06", "06_annotate.py",          "AI-assisted chromatin state annotation → 05_annotated.h5ad"),
+    ("07", "07_subcluster.py",        "Subcluster analysis (placeholder)"),
+    ("08", "08_marker_peaks.py",      "Differential peak accessibility → marker_peaks.csv"),
+    ("09", "09_motif.py",             "Motif enrichment → motif_results.csv"),
+    ("10", "10_trajectory.py",        "ATAC pseudotime trajectory → 10_trajectory.h5ad"),
+    ("11", "11_enrichment.py",        "GO/KEGG enrichment on peak-associated genes → enrichment_*.csv"),
+    ("12", "12_exploratory.py",       "Exploratory analysis (placeholder)"),
+    ("13", "13_integrate.py",         "RNA+ATAC integration via muon → 13_integrated.h5ad"),
 ]
 
 ATAC_CHECKPOINT_FILES = [
     "00_raw.h5ad",           # step 00
-    "01_filtered.h5ad",      # step 01
-    "02_processed.h5ad",     # step 02
-    "03_clustered.h5ad",     # step 03
-    "04_annotated.h5ad",     # step 04
-    "marker_peaks.csv",      # step 05
-    "motif_results.csv",     # step 06
-    "07_trajectory.h5ad",    # step 07
-    "enrichment_*.csv",      # step 08 (glob)
-    "09_integrated.h5ad",    # step 09
+    "01_doublet.h5ad",       # step 01
+    "02_filtered.h5ad",      # step 02
+    "03_processed.h5ad",     # step 03
+    "04_clustered.h5ad",     # step 04
+    "05_peaks.h5ad",         # step 05
+    "05_annotated.h5ad",     # step 06
+    "",                      # step 07 (placeholder)
+    "marker_peaks.csv",      # step 08
+    "motif_results.csv",     # step 09
+    "10_trajectory.h5ad",    # step 10
+    "enrichment_*.csv",      # step 11
+    "",                      # step 12 (placeholder)
+    "13_integrated.h5ad",    # step 13
 ]
 
-ATAC_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+ATAC_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 13}
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -156,7 +164,7 @@ SPATIAL_CHECKPOINT_FILES = [
     "05_annotated.h5ad",     # step 12 (GRN reads 05_annotated)
 ]
 
-SPATIAL_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5, 11, 12}
+SPATIAL_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5}
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -210,11 +218,15 @@ def _get_step_dependency(step: int, steps, checkpoints, modality: str = "rna") -
     """Return the checkpoint file that step `step` reads from."""
     if modality == "atac":
         deps = {
-            5: checkpoints[4],
-            6: checkpoints[4],
-            7: checkpoints[4],
-            8: checkpoints[5],
-            9: checkpoints[4],
+            2: checkpoints[0],    # 02_qc reads raw_h5ad
+            3: checkpoints[1],    # 03_process reads doublet_h5ad
+            6: checkpoints[4],    # 06_annotate reads clustered_h5ad
+            8: checkpoints[6],    # 08_marker_peaks reads annotated_h5ad
+            9: checkpoints[6],    # 09_motif reads annotated_h5ad
+            10: checkpoints[6],   # 10_trajectory reads annotated_h5ad
+            11: checkpoints[8],   # 11_enrichment reads marker_peaks.csv
+            12: checkpoints[6],   # 12_exploratory reads annotated_h5ad
+            13: checkpoints[6],   # 13_integrate reads annotated_h5ad
         }
         return deps.get(step, checkpoints[step - 1] if step > 0 else "")
     if modality == "spatial":
