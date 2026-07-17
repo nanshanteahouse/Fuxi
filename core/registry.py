@@ -922,6 +922,10 @@ def _cmd_register_gse(
                 paper_id=pmid, dataset_id=gse_id, role=LinkRole.RELATED,
             ))
             print(f"\u2705  Linked {gse_id} \u2192 {pmid} ({paper.slug})")
+            # Auto-heal: if paper was marked no_geo, update to generated
+            if paper.insights and paper.insights.status == InsightStatus.NO_GEO:
+                paper.insights.status = InsightStatus.GENERATED
+                print(f"  \u2705  Updated insights.status: no_geo \u2192 generated")
             linked += 1
         else:
             print(f"\u2139\ufe0f  Link {gse_id} \u2192 {pmid} already exists")

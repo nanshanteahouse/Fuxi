@@ -715,6 +715,7 @@ def enrich_dataset_from_soft(
         from core.registry import (
             load_master_registry,
             save_master_registry,
+            InsightStatus,
             LinkRole,
             PaperDatasetLink,
         )
@@ -766,6 +767,10 @@ def enrich_dataset_from_soft(
                 role=LinkRole.PRIMARY,
             ))
             log.info("  link: %s ↔ %s", paper.paper_id, gse_id)
+            # Auto-heal: if paper was marked no_geo, update to generated
+            if paper.insights and paper.insights.status == InsightStatus.NO_GEO:
+                paper.insights.status = InsightStatus.GENERATED
+                log.info("  insights.status: no_geo → generated")
             changed = True
 
     # ── Append summary excerpt to notes (if notes empty) ────────
