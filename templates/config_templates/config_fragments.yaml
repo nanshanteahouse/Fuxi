@@ -19,6 +19,13 @@ atac:
   min_fragments: 1000
   max_fragments: 50000
   min_tsse: 7.0
+
+  # Harmony batch correction
+  harmony_use_harmony: false
+  harmony_batch_key: sample
+
+  # Multi-metric clustering (stability + gain)
+  multi_metric_enabled: false
   # max_blacklist_ratio: 0.05
   # min_peak_region_fragments: 300
 

@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Step 07: ATAC pseudotime trajectory
+Step 10: ATAC pseudotime trajectory
 ======================================
   - Reads annotated AnnData
   - Computes pseudotime (optional — requires root_cell_types in config)
   - Plots pseudotime on UMAP
 
-Input:  04_annotated.h5ad
-Output: 07_trajectory.h5ad
+Input:  05_annotated.h5ad
+Output: 10_trajectory.h5ad
 """
 
 import sys, os, time, argparse
@@ -23,8 +23,8 @@ def main():
     args = args_parser.parse_args()
 
     CFG = resolve_config(args.config)
-    log = setup_logger("07_trajectory", os.path.join(CFG.log_dir, "07_trajectory.log"))
-    log.info("Step 07: ATAC pseudotime")
+    log = setup_logger("10_trajectory", os.path.join(CFG.log_dir, "10_trajectory.log"))
+    log.info("Step 10: ATAC pseudotime")
 
     if os.path.exists(CFG.trajectory_h5ad):
         log.info("Skip: %s exists.", CFG.trajectory_h5ad)
@@ -58,7 +58,7 @@ def main():
         pass
 
     safe_write(data, CFG.trajectory_h5ad, cfg=CFG)
-    log.info("Step 07 complete, took %.1fs", time.time() - t0)
+    log.info("Step 10 complete, took %.1fs", time.time() - t0)
 
 
 if __name__ == '__main__':

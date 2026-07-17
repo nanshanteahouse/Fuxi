@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Step 05: Marker peaks — differential accessibility
+Step 08: Marker peaks — differential accessibility
 =====================================================
   - Computes marker peaks per cell_type (or leiden cluster)
   - Summarizes result as CSV
 
-Input:  04_annotated.h5ad
+Input:  05_annotated.h5ad
 Output: marker_peaks.csv
 """
 
@@ -23,8 +23,8 @@ def main():
     args = args_parser.parse_args()
 
     CFG = resolve_config(args.config)
-    log = setup_logger("05_marker_peaks", os.path.join(CFG.log_dir, "05_marker_peaks.log"))
-    log.info("Step 05: Marker peaks")
+    log = setup_logger("08_marker_peaks", os.path.join(CFG.log_dir, "08_marker_peaks.log"))
+    log.info("Step 08: Marker peaks")
 
     data = snap.read(CFG.annotated_h5ad)
     log.info("Loaded: %d cells, %d peaks (backed mode)", data.n_obs, data.n_vars)
@@ -55,7 +55,7 @@ def main():
     except Exception as e:
         log.warning("Heatmap failed: %s", e)
 
-    log.info("Step 05 complete, took %.1fs", time.time() - t0)
+    log.info("Step 08 complete, took %.1fs", time.time() - t0)
 
 
 if __name__ == '__main__':

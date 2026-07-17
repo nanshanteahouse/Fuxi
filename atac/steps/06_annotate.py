@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Step 04: AI-assisted chromatin state annotation
+Step 06: AI-assisted chromatin state annotation
 =================================================
   - Reads clustered AnnData
   - Computes marker regions per cluster
   - AI annotation with disk caching to avoid redundant LLM calls
 
-Input:  03_clustered.h5ad
-Output: 04_annotated.h5ad
+Input:  04_clustered.h5ad
+Output: 05_annotated.h5ad
 """
 
 import sys, os, time, argparse, json
@@ -26,8 +26,8 @@ def main():
     args = args_parser.parse_args()
 
     CFG = resolve_config(args.config)
-    log = setup_logger("04_annotate", os.path.join(CFG.log_dir, "04_annotate.log"))
-    log.info("Step 04: Chromatin state annotation")
+    log = setup_logger("06_annotate", os.path.join(CFG.log_dir, "06_annotate.log"))
+    log.info("Step 06: Chromatin state annotation")
 
     if os.path.exists(CFG.annotated_h5ad):
         log.info("Skip: %s exists.", CFG.annotated_h5ad)
@@ -97,7 +97,7 @@ def main():
         lambda x: annotations.get(x, {}).get('confidence', 'medium'))
 
     safe_write(data, CFG.annotated_h5ad, cfg=CFG, compression_override=None)
-    log.info("Step 04 complete, took %.1fs", time.time() - t0)
+    log.info("Step 06 complete, took %.1fs", time.time() - t0)
 
 
 if __name__ == '__main__':

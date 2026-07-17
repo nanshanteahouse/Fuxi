@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Step 01: QC filtering + MACS3 peak calling + peak matrix + doublet detection
-==============================================================================
-  - Filter cells by fragment counts (Snapatac2 2.9: no TSS add_tsse avail)
+Step 02: QC filtering + MACS3 peak calling + peak matrix
+================================
+  - Filter cells by fragment counts + TSS enrichment
   - Call peaks via MACS3 → export BED → create peak-by-cell matrix
   - Scrublet doublet detection (requires .X, i.e. peak matrix)
 
 Input:  00_raw.h5ad (fragment-level AnnData)
-Output: 01_filtered.h5ad (peak-by-cell matrix with qc flags)
+Output: 02_filtered.h5ad (peak-by-cell matrix with qc flags)
 """
 
 import sys, os, time, argparse, tempfile, traceback
@@ -31,8 +31,8 @@ def main():
     args = args_parser.parse_args()
 
     CFG = resolve_config(args.config)
-    log = setup_logger("01_qc", os.path.join(CFG.log_dir, "01_qc.log"))
-    log.info("Step 01: QC + MACS3 + peak matrix + doublet")
+    log = setup_logger("02_qc", os.path.join(CFG.log_dir, "02_qc.log"))
+    log.info("Step 02: QC + MACS3 + peak matrix + doublet")
 
     if os.path.exists(CFG.filtered_h5ad):
         log.info("Skip: %s exists.", CFG.filtered_h5ad)
@@ -42,10 +42,28 @@ def main():
     data = snap.read(CFG.raw_h5ad)
     log.info("Loaded: %d cells (backed mode)", data.n_obs)
 
-    # ── Filter cells (counts only; TSS not available in 2.9) ──
+    # ── TSS enrichment score
+    try:
+        genome_obj = snap.genome.hg38 if CFG.atac.genome=="hg38" else snap.genome.mm10
+        snap.metrics.tsse(data, genome_obj, inplace=True)
+        log.info("TSS enrichment: mean=%.2f", data.obs['tsse'].mean())
+        data.uns['library_tsse'] = float(data.obs['tsse'].median())
+    except Exception as e:
+        log.warning("TSS enrichment failed: %s - setting NaN", e)
+        data.obs['tsse'] = float('nan')
+        data.uns['library_tsse'] = 0.0
+
+    # ── Fragment size distribution
+    try:
+        from core.utils import safe_plot
+        os.makedirs(os.path.join(CFG.figure_dir,"02_qc"), exist_ok=True)
+        safe_plot(snap.pl.frag_size_distr, data, show=False, save=os.path.join(CFG.figure_dir,"02_qc","fragment_size_distribution.png"))
+    except Exception as e:
+        log.warning("Frag size plot failed: %s", e)
+    # ── Filter cells ──
     n0 = data.n_obs
     snap.pp.filter_cells(data, min_counts=CFG.atac.min_fragments,
-                         max_counts=CFG.atac.max_fragments, min_tsse=None)
+                         max_counts=CFG.atac.max_fragments, min_tsse=CFG.atac.min_tsse)
     log.info("Filtered: %d → %d cells (-%.1f%%)",
              n0, data.n_obs, 100 * (n0 - data.n_obs) / max(n0, 1))
 
@@ -97,9 +115,9 @@ def main():
         log.warning("Scrublet failed, marking all cells as non-doublets")
         peak_data.obs['predicted_doublet'] = False
 
-    validate_adata(peak_data, stage_name="01_qc", logger=log)
+    validate_adata(peak_data, stage_name="02_qc", logger=log)
     safe_write(peak_data, CFG.filtered_h5ad, cfg=CFG, compression_override=None)
-    log.info("Step 01 complete (%.1fs)", time.time() - t0)
+    log.info("Step 02 complete (%.1fs)", time.time() - t0)
 
 
 if __name__ == '__main__':

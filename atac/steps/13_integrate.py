@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Step 09: RNA+ATAC integration via muon (optional)
+Step 13: RNA+ATAC integration via muon (optional)
 ===================================================
   - Reads ATAC annotated AnnData + RNA AnnData
   - Matches common cells
   - Builds MuData object with muon
 
-Input:  04_annotated.h5ad + CFG.rna_h5ad
-Output: 09_integrated.h5ad
+Input:  05_annotated.h5ad + CFG.rna_h5ad
+Output: 13_integrated.h5ad
 """
 
 import sys, os, time, argparse, gc
@@ -23,8 +23,8 @@ def main():
     args = args_parser.parse_args()
 
     CFG = resolve_config(args.config)
-    log = setup_logger("09_integrate", os.path.join(CFG.log_dir, "09_integrate.log"))
-    log.info("Step 09: RNA+ATAC integration")
+    log = setup_logger("13_integrate", os.path.join(CFG.log_dir, "13_integrate.log"))
+    log.info("Step 13: RNA+ATAC integration")
 
     if os.path.exists(CFG.integrated_h5ad):
         log.info("Skip: %s exists.", CFG.integrated_h5ad)
@@ -73,7 +73,7 @@ def main():
     finally:
         gc.collect()
 
-    log.info("Step 09 complete, took %.1fs", time.time() - t0)
+    log.info("Step 13 complete, took %.1fs", time.time() - t0)
 
 
 if __name__ == '__main__':

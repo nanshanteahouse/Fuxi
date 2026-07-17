@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Step 06: Motif enrichment (Snapatac2 2.9 standalone API)
+Step 09: Motif enrichment (Snapatac2 2.9 standalone API)
 ==========================================================
   - Load JASPAR motifs
   - Run motif enrichment per cluster (top significant peaks, sorted by p-value)
@@ -25,8 +25,8 @@ def main():
     args = args_parser.parse_args()
 
     CFG = resolve_config(args.config)
-    log = setup_logger("06_motif", os.path.join(CFG.log_dir, "06_motif.log"))
-    log.info("Step 06: Motif enrichment")
+    log = setup_logger("09_motif", os.path.join(CFG.log_dir, "09_motif.log"))
+    log.info("Step 09: Motif enrichment")
 
     data = snap.read(CFG.annotated_h5ad)
     log.info("Loaded: %d cells, %d peaks (backed mode)", data.n_obs, data.n_vars)
@@ -83,7 +83,7 @@ def main():
     except Exception as e:
         log.warning("Motif analysis failed: %s", e)
 
-    log.info("Step 06 complete, took %.1fs", time.time() - t0)
+    log.info("Step 09 complete, took %.1fs", time.time() - t0)
 
 
 if __name__ == '__main__':

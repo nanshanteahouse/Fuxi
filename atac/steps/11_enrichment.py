@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Step 08: GO/KEGG enrichment on marker peak-associated regions
+Step 11: GO/KEGG enrichment on marker peak-associated regions
 ===============================================================
   - Reads marker_peaks.csv from step 05
   - Peak-to-gene mapping via nearest TSS (pybedtools)
   - Enrichr over-representation analysis per group
 
-Input:  marker_peaks.csv (from step 05)
+Input:  marker_peaks.csv (from step 08)
 Output: enrichment_results.csv
 """
 
@@ -148,8 +148,8 @@ def main():
     args = args_parser.parse_args()
 
     CFG = resolve_config(args.config)
-    log = setup_logger("08_enrichment", os.path.join(CFG.log_dir, "08_enrichment.log"))
-    log.info("Step 08: GO/KEGG enrichment")
+    log = setup_logger("11_enrichment", os.path.join(CFG.log_dir, "11_enrichment.log"))
+    log.info("Step 11: GO/KEGG enrichment")
 
     marker_csv = os.path.join(CFG.table_dir, "marker_peaks.csv")
     if not os.path.exists(marker_csv):
@@ -227,7 +227,7 @@ def main():
         pd.DataFrame().to_csv(os.path.join(table_dir, "enrichment_results.csv"), index=False)
 
     gc.collect()
-    log.info("Step 08 complete, took %.1fs", time.time() - t0)
+    log.info("Step 11 complete, took %.1fs", time.time() - t0)
 
 
 if __name__ == '__main__':

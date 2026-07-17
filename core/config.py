@@ -399,6 +399,9 @@ class ATACConfig(BaseModel):
     motif_db: str = "JASPAR2024"
     terminal_cell_types: List[str] = Field(default_factory=list)
     max_cells: Optional[int] = None
+    harmony_use_harmony: bool = False
+    harmony_batch_key: str = "sample"
+    multi_metric_enabled: bool = False
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -632,19 +635,23 @@ class Config(BaseModel):
     # ── ATAC: checkpoint 路径 ──
     @property
     def filtered_h5ad(self) -> str:
-        return os.path.join(self.h5ad_dir, "01_filtered.h5ad")
+        return os.path.join(self.h5ad_dir, "02_filtered.h5ad")
 
     @property
     def processed_h5ad(self) -> str:
-        return os.path.join(self.h5ad_dir, "02_processed.h5ad")
+        return os.path.join(self.h5ad_dir, "03_processed.h5ad")
 
     @property
     def clustered_h5ad(self) -> str:
-        return os.path.join(self.h5ad_dir, "03_clustered.h5ad")
+        return os.path.join(self.h5ad_dir, "04_clustered.h5ad")
 
     @property
     def trajectory_h5ad(self) -> str:
-        return os.path.join(self.h5ad_dir, "07_trajectory.h5ad")
+        return os.path.join(self.h5ad_dir, "10_trajectory.h5ad")
+
+    @property
+    def peak_h5ad(self) -> str:
+        return os.path.join(self.h5ad_dir, "05_peaks.h5ad")
 
     # ── Spatial: checkpoint paths ──
     @property

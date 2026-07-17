@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-Step 02: Feature selection + spectral + KNN
-=============================================
+Step 03: Feature selection + spectral + KNN
+======================================================================================
   - Remove doublets (predicted_doublet column)
   - Select top features (IDF-weighted)
   - Matrix-free spectral embedding (SnapATAC2 Lanczos algorithm)
+  - Harmony batch correction (optional)
   - KNN graph construction
 
-Input:  01_filtered.h5ad
-Output: 02_processed.h5ad
+Input:  01_doublet.h5ad
+Output: 03_processed.h5ad
 """
 
 import sys, os, time, argparse, gc
@@ -26,15 +27,15 @@ def main():
     args = args_parser.parse_args()
 
     CFG = resolve_config(args.config)
-    log = setup_logger("02_process", os.path.join(CFG.log_dir, "02_process.log"))
-    log.info("Step 02: Feature selection + spectral + KNN")
+    log = setup_logger("03_process", os.path.join(CFG.log_dir, "03_process.log"))
+    log.info("Step 03: Feature selection + spectral + KNN")
 
     if os.path.exists(CFG.processed_h5ad):
         log.info("Skip: %s exists.", CFG.processed_h5ad)
         return
 
     # Load to memory (SnapATAC2 backed mode does not support subscript/copy)
-    data = snap.read(CFG.filtered_h5ad, backed=None)
+    data = snap.read(CFG.doublet_h5ad, backed=None)
     log.info("Loaded: %d cells, %d peaks (in-memory)", data.n_obs, data.n_vars)
 
     # ── Remove predicted doublets ──
@@ -66,13 +67,22 @@ def main():
         log.info("Spectral with Nyström (sample_size=%s)", sample_size)
     snap.tl.spectral(data, **spectral_kwargs)
 
-    # ── KNN graph ──
-    snap.pp.knn(data, n_neighbors=CFG.clustering.n_neighbors)
+    # ── KNN graph (with optional Harmony batch correction) ──
+    if CFG.atac.harmony_use_harmony and CFG.atac.harmony_batch_key in data.obs:
+        n_b=data.obs[CFG.atac.harmony_batch_key].nunique()
+        if n_b>=2:
+            log.info("Harmony (batch=%s, %d batches)...",CFG.atac.harmony_batch_key,n_b)
+            snap.pp.harmony(data,batch=CFG.atac.harmony_batch_key)
+            snap.pp.knn(data,n_neighbors=CFG.clustering.n_neighbors,use_rep='X_spectral_harmony')
+        else:
+            log.info("Harmony skipped: only %d batch(es)",n_b);snap.pp.knn(data,n_neighbors=CFG.clustering.n_neighbors)
+    else:
+        snap.pp.knn(data,n_neighbors=CFG.clustering.n_neighbors)
 
-    validate_adata(data, stage_name="02_process", logger=log)
+    validate_adata(data, stage_name="03_process", logger=log)
     safe_write(data, CFG.processed_h5ad, cfg=CFG, compression_override=None)
     gc.collect()
-    log.info("Step 02 complete, took %.1fs", time.time() - t0)
+    log.info("Step 03 complete, took %.1fs", time.time() - t0)
 
 
 if __name__ == '__main__':

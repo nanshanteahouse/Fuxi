@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Step 03: Multi-param Leiden + UMAP
+Step 04: Multi-param Leiden + UMAP
 =====================================
   - Grid search over n_neighbors × resolutions
   - Each KNN graph shared across all resolutions (no redundant recomputation)
   - Silhouette score for quality evaluation (sampled for large datasets)
   - Stores only the selected best combination in obsm / obs
 
-Input:  02_processed.h5ad
-Output: 03_clustered.h5ad
+Input:  03_processed.h5ad
+Output: 04_clustered.h5ad
 """
 
 import sys, os, time, argparse
@@ -121,8 +121,8 @@ def main():
     args = args_parser.parse_args()
 
     CFG = resolve_config(args.config)
-    log = setup_logger("03_cluster", os.path.join(CFG.log_dir, "03_cluster.log"))
-    log.info("Step 03: Multi-param Leiden + UMAP")
+    log = setup_logger("04_cluster", os.path.join(CFG.log_dir, "04_cluster.log"))
+    log.info("Step 04: Multi-param Leiden + UMAP")
 
     if os.path.exists(CFG.clustered_h5ad):
         log.info("Skip: %s exists.", CFG.clustered_h5ad)
@@ -213,7 +213,7 @@ def main():
         }
 
     safe_write(data, CFG.clustered_h5ad, cfg=CFG, compression_override=None)
-    log.info("Step 03 complete, took %.1fs", time.time() - t0)
+    log.info("Step 04 complete, took %.1fs", time.time() - t0)
 
 
 if __name__ == '__main__':
