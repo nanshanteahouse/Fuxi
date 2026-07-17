@@ -131,7 +131,7 @@ SPATIAL_STEPS = [
     ("03", "03_normalize.py",      "Normalize + HVG + spatial graph -> 03_processed.h5ad"),
     ("04", "04_cluster.py",        "PCA + UMAP + Leiden clustering -> 04_clustered.h5ad"),
     ("05", "05_annotate.py",       "Cell type annotation (AI / score_genes) -> 05_annotated.h5ad"),
-    ("06", "06_spatial_de.py",     "DE + spatially variable genes -> marker & SVG CSVs"),
+    ("06", "06_spatial_de.py",     "DE + SVG + nhood enrichment + co-occurrence -> CSVs + figures"),
     ("07", "07_trajectory.py",     "Pseudotime analysis -> 07_trajectory.h5ad"),
     ("08", "08_enrichment.py",     "GO/KEGG enrichment -> enrichment CSVs"),
     ("09", "09_exploratory.py",    "Spatial visualization -> figures + CSVs"),

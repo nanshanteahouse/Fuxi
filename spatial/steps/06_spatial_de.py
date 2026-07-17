@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """
-Step 06: Differential expression + spatially variable genes (SVG)
-=====================================================================
+Step 06: DE + SVG + nhood enrichment + co-occurrence
+========================================================================
   1. Per-cluster DE (Wilcoxon rank-sum) — marker_genes_per_group.csv
   2. Spatially variable genes via Moran's I (sq.gr.spatial_autocorr)
   3. Export SVG rankings
+  4. Nhood enrichment (sq.gr.nhood_enrichment) — heatmap + CSV
+  5. Co-occurrence (sq.gr.co_occurrence) — distance plot
+  6. Interaction matrix (sq.gr.interaction_matrix) — heatmap
 
 Input:  05_annotated.h5ad
-Output: marker_genes_per_group.csv, svg_rankings.csv
+Output: marker_genes_per_group.csv, svg_rankings.csv, nhood_enrichment_zscore.csv, co_occurrence_plot.png
 """
 import sys, os, time, argparse
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
@@ -144,6 +147,75 @@ def plot_top_svg(adata, moran_df, CFG, log):
         log.warning("SVG spatial plot failed: %s", e)
 
 
+def run_nhood_enrichment(adata, CFG, log):
+    """Nhood enrichment analysis — cluster co-localization z-scores."""
+    if 'spatial_connectivities' not in adata.obsp:
+        log.warning("spatial_connectivities missing — skipping nhood enrichment")
+        return None
+
+    group_col = 'cell_type' if 'cell_type' in adata.obs else 'leiden'
+    log.info("Nhood enrichment (groupby='%s')...", group_col)
+    try:
+        sq.gr.nhood_enrichment(adata, cluster_key=group_col)
+        sq.pl.nhood_enrichment(adata, cluster_key=group_col, show=False)
+        fig_path = os.path.join(CFG.figure_dir, '06_spatial_de', 'nhood_enrichment_heatmap.png')
+        os.makedirs(os.path.dirname(fig_path), exist_ok=True)
+        plt.savefig(fig_path, dpi=150, bbox_inches='tight')
+        plt.close()
+
+        enrich_key = 'nhood_enrichment'
+        if enrich_key in adata.uns:
+            enrich_df = pd.DataFrame(adata.uns[enrich_key])
+            csv_path = os.path.join(CFG.table_dir, 'nhood_enrichment_zscore.csv')
+            enrich_df.to_csv(csv_path)
+            log.info("Nhood enrichment z-scores saved: %s", csv_path)
+            return enrich_df
+    except Exception as e:
+        log.warning("Nhood enrichment failed: %s", e)
+    return None
+
+
+def run_co_occurrence(adata, CFG, log):
+    """Co-occurrence analysis — cluster spatial co-occurrence vs distance."""
+    if 'spatial_connectivities' not in adata.obsp:
+        log.warning("spatial_connectivities missing — skipping co-occurrence")
+        return
+
+    group_col = 'cell_type' if 'cell_type' in adata.obs else 'leiden'
+    log.info("Co-occurrence analysis (groupby='%s')...", group_col)
+    try:
+        sq.gr.co_occurrence(adata, cluster_key=group_col)
+        sq.pl.co_occurrence(adata, cluster_key=group_col, show=False)
+        fig_path = os.path.join(CFG.figure_dir, '06_spatial_de', 'co_occurrence_plot.png')
+        os.makedirs(os.path.dirname(fig_path), exist_ok=True)
+        plt.savefig(fig_path, dpi=150, bbox_inches='tight')
+        plt.close()
+        log.info("Co-occurrence plot saved: %s", fig_path)
+    except Exception as e:
+        log.warning("Co-occurrence failed: %s", e)
+
+
+def run_interaction_matrix(adata, CFG, log):
+    """Interaction matrix — cluster pairwise interaction counts."""
+    if 'spatial_connectivities' not in adata.obsp:
+        log.warning("spatial_connectivities missing — skipping interaction matrix")
+        return
+
+    group_col = 'cell_type' if 'cell_type' in adata.obs else 'leiden'
+    log.info("Interaction matrix (groupby='%s')...", group_col)
+    try:
+        sq.gr.interaction_matrix(adata, cluster_key=group_col)
+        sq.pl.interaction_matrix(adata, cluster_key=group_col, show=False)
+        fig_path = os.path.join(CFG.figure_dir, '06_spatial_de', 'interaction_matrix_heatmap.png')
+        os.makedirs(os.path.dirname(fig_path), exist_ok=True)
+        plt.savefig(fig_path, dpi=150, bbox_inches='tight')
+        plt.close()
+        log.info("Interaction matrix heatmap saved: %s", fig_path)
+    except Exception as e:
+        log.warning("Interaction matrix failed: %s", e)
+
+
+
 def main():
     t0 = time.time()
     args_parser = argparse.ArgumentParser()
@@ -152,7 +224,7 @@ def main():
 
     CFG = resolve_config(args.config)
     log = setup_logger("06_spatial_de", os.path.join(CFG.log_dir, "06_spatial_de.log"))
-    log.info("Step 06: DE + spatially variable genes (SVG)")
+    log.info("Step 06: DE + SVG + nhood enrichment + co-occurrence")
 
     input_path = os.path.join(CFG.h5ad_dir, "05_annotated.h5ad")
     if not os.path.exists(input_path):
@@ -180,6 +252,14 @@ def main():
                 log.info("  Marked %d top SVGs in adata.var['spatially_variable']",
                          adata.var['spatially_variable'].sum())
 
+    # ── 3. Nhood enrichment ──
+    run_nhood_enrichment(adata, CFG, log)
+
+    # ── 4. Co-occurrence ──
+    run_co_occurrence(adata, CFG, log)
+
+    # ── 5. Interaction matrix ──
+    run_interaction_matrix(adata, CFG, log)
     # ── Plot top DE marker per cell type ──
     if marker_df is not None and 'cell_type' in adata.obs:
         group_col = 'cell_type'
