@@ -155,6 +155,12 @@ def main():
     log = setup_logger("09_exploratory", os.path.join(CFG.log_dir, "09_exploratory.log"))
     log.info("Step 09: Exploratory spatial analysis")
 
+    # ── Napari interactive viewer (optional) ──
+    try:
+        import napari
+        log.info("napari available — interactive viewer can be launched")
+    except ImportError:
+        log.info("napari not installed, install for interactive viewer")
     # Load the most complete data available
     input_path = os.path.join(CFG.h5ad_dir, "05_annotated.h5ad")
     if not os.path.exists(input_path):
