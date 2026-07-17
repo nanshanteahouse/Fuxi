@@ -141,7 +141,6 @@ marker:
 ai:
   enabled: false
 ```
-```
 
 ## Key Modules
 
