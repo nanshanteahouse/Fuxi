@@ -131,11 +131,13 @@ SPATIAL_STEPS = [
     ("03", "03_normalize.py",      "Normalize + HVG + spatial graph -> 03_processed.h5ad"),
     ("04", "04_cluster.py",        "PCA + UMAP + Leiden clustering -> 04_clustered.h5ad"),
     ("05", "05_annotate.py",       "Cell type annotation (AI / score_genes) -> 05_annotated.h5ad"),
-    ("06", "06_spatial_de.py",     "DE + SVG + nhood enrichment + co-occurrence -> CSVs + figures"),
+    ("06", "06_spatial_stats.py",     "DE + SVG + nhood enrichment + co-occurrence -> CSVs + figures"),
     ("07", "07_trajectory.py",     "Pseudotime analysis -> 07_trajectory.h5ad"),
     ("08", "08_enrichment.py",     "GO/KEGG enrichment -> enrichment CSVs"),
     ("09", "09_exploratory.py",    "Spatial visualization -> figures + CSVs"),
     ("10", "10_cell_interaction.py",  "CCI spatial cell-cell interaction (LIANA+) -> tables + figures"),
+    ("11", "subcluster.py",          "Conditional subclustering per cell type -> 05_sub_{type}.h5ad"),
+    ("12", "grn.py",                  "Conditional GRN analysis via decoupler -> TF activity CSV + heatmap"),
 ]
 
 SPATIAL_CHECKPOINT_FILES = [
@@ -150,9 +152,11 @@ SPATIAL_CHECKPOINT_FILES = [
     "05_annotated.h5ad",     # step 08
     "05_annotated.h5ad",     # step 09
     "05_annotated.h5ad",     # step 10
+    "05_annotated.h5ad",     # step 11 (subcluster reads 05_annotated)
+    "05_annotated.h5ad",     # step 12 (GRN reads 05_annotated)
 ]
 
-SPATIAL_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5}
+SPATIAL_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5, 11, 12}
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -221,6 +225,8 @@ def _get_step_dependency(step: int, steps, checkpoints, modality: str = "rna") -
             8: checkpoints[6],   # enrichment reads DE CSVs
             9: checkpoints[5],   # exploratory reads annotated
             10: checkpoints[5],  # CCI reads 05_annotated
+            11: checkpoints[5],  # subcluster reads 05_annotated
+            12: checkpoints[5],  # GRN reads 05_annotated
         }
         return deps.get(step, checkpoints[step - 1] if step > 0 else "")
     # RNA dependencies
