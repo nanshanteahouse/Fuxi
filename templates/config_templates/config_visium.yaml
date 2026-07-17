@@ -18,6 +18,7 @@ spatial:
   run_autocorr: true
   svg_n_top: 2000
   moran_percentile: 90
+  # run_segmentation: false
 
 # ── Dataset metadata ──
 tissue: "{{TISSUE}}"
@@ -33,12 +34,14 @@ qc:
   min_cells_per_gene: 3
   # use_adaptive_thresholds: true
   # mad_n_mads: 3.0
+  # use_adaptive_thresholds: false
 
 # ── HVG ──
 hvg:
   n_top_genes: 4000
   flavor: seurat_v3
   # use_regress_out: false
+  # forced_genes: []
 
 # ── PCA ──
 pca:
@@ -58,6 +61,7 @@ clustering:
   param_grid_spread: [1.0]
   umap_min_dist: 0.3
   umap_spread: 1.0
+  # umap_paga_init: false
 
 # ── Cell type markers ──
 # TODO: Add known marker genes for {{TISSUE}} tissue.
@@ -65,6 +69,11 @@ marker:
   marker_dict: {}
   # tissue_kb: ""
 
+# ── Subcluster (fine-resolution annotation) ──
+# subcluster:
+#   types: []
+#   resolution: 0.4
+#   min_cells: 50
 # ── Differential expression ──
 de:
   method: wilcoxon
@@ -94,6 +103,13 @@ enrichment:
   # min_size: 15
   # max_size: 500
   # permutations: 1000
+
+# ── GRN regulatory network analysis ──
+# grn:
+#   run: true
+#   species: human
+#   min_regulon_size: 5
+#   n_top_regulons: 50
 
 # ── CCI spatial cell-cell interaction analysis ──
 cci:
