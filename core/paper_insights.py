@@ -423,10 +423,12 @@ class PaperInsights:
             blocks = self.extract_figure_blocks(sections["results"])
             logger.info("Found %d figure blocks", len(blocks))
             for i, block in enumerate(blocks):
-                logger.info("Figure %d/%d...", i + 1, len(blocks))
+                sys.stderr.write(f"\r  Figure {i+1}/{len(blocks)}...")
+                sys.stderr.flush()
                 fig = self.extract_figure(block, cfg)
                 if fig:
                     figures.append(fig)
+            sys.stderr.write("\n")
 
         methods: dict = {}
         if sections.get("methods"):
@@ -494,6 +496,7 @@ def main() -> None:
         parser.error("--pmid and --xml are mutually exclusive")
 
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(levelname)s [%(name)s] %(message)s", stream=sys.stderr)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
     cfg = _build_cfg_from_env()
     logger.info("Using env-based LLM config")
