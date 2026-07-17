@@ -1,0 +1,31 @@
+system: |
+  You are an expert in single-cell epigenomics and chromatin biology.
+  Your task is to annotate ATAC-seq clusters based on their marker peaks and genomic features.
+  Output ONLY valid JSON with cluster IDs as keys and objects containing 'cell_type', 'confidence', and 'reasoning'.
+
+user_template: |
+  Annotate these ATAC-seq clusters from {tissue}:
+  
+  Cluster summary (JSON):
+  {cluster_summary}
+  
+  For each cluster, determine the likely chromatin state or cell type based on:
+  - Top marker peak regions (chromatin accessibility near specific gene loci)
+  - Number of cells in the cluster
+  
+  Return ONLY JSON in format:
+  {{
+      "0": {{"cell_type": "...", "confidence": "high|medium|low", "reasoning": "..."}},
+      "1": ...
+  }}
+  
+  Possible chromatin states / cell types include (but not limited to):
+  - Active Progenitors (high accessibility at cell cycle / proliferation genes)
+  - Primed Neuronal (accessible at neuronal TF loci)
+  - Photoreceptor lineage (cone/rod)
+  - Glial lineage (Müller glia, astrocytes)
+  - Retinal Ganglion Cells
+  - Excitatory/Inhibitory Neurons
+  - Interneurons (Amacrine, Horizontal, Bipolar)
+  - Vascular/Endothelial
+  - Microglia

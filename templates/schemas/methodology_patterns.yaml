@@ -1,0 +1,172 @@
+# =============================================================================
+# methodology_patterns.yaml — 论文方法论模式 Schema (v2 Domain-Agnostic)
+# =============================================================================
+# 用途：为任何单细胞/组学论文提取方法论模式
+# 定位：不限于视网膜，不限于 Fuxi 已有论文库
+#       任何领域（肿瘤/免疫/神经/发育/植物...）的单细胞论文通用
+# 版本：v2
+# 设计原则：
+#   1. Domain-agnostic — retina/肿瘤/免疫/神经 通用
+#   2. Archetype-driven — 每个论文有一个核心"原型"
+#   3. Comparative-ready — 支持跨领域/跨物种/跨平台比较
+# =============================================================================
+
+methodology_patterns:
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 1. 论文原型（Paper Archetype）
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 这篇论文最核心的"研究类型"是什么？
+  #
+  # atlas           → "我们测了 X 个细胞，找到了 Y 种细胞类型/状态"
+  #                   例：Human Cell Atlas, Tabula Sapiens, 视网膜图谱
+  # development     → "我们看了时间序列，重构了 A→B→C 的分化轨迹"
+  #                   例：器官发育、谱系追踪、分化路径
+  # perturbation    → "我们做了扰动（KO/处理/疾病），看了细胞怎么变"
+  #                   例：CRISPR screen, 药物处理, 疾病模型
+  # disease_comp    → "我们比较了正常 vs 疾病，发现了差异细胞/通路"
+  #                   例：肿瘤免疫、神经退行、炎症
+  # multiomic       → "我把多模态数据整合起来，发现了单一模态看不到的东西"
+  #                   例：RNA+ATAC, RNA+蛋白, 空间+单细胞
+  # method          → "我们开发了一个新工具/新方法"
+  #                   例：新算法、新实验 protocol、新分析流程
+  # comparative     → "我们比较了不同条件/物种/区域之间的差异"
+  #                   例：跨物种、跨组织、跨条件比较
+  # review          → "我们总结了这个领域的进展"
+  # integrative     → "我们把多个数据集整合起来做 meta 分析"
+  # ===========================================================================
+
+  archetype:
+    primary: ~               # <str> atlas | development | perturbation | disease_comp | multiomic | method | comparative | review | integrative
+    secondary: []            # <list[str]> 次级类型（如果有混合）
+    confidence: "high"       # <str> high | medium | low
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 2. 研究策略（Experimental Strategy）
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 实验是怎么设计的？（不限领域）
+  #
+  # design:
+  #   cross_sectional  → 单一时间点/横断面
+  #   time_course      → 时间序列
+  #   case_control     → 对照/实验组
+  #   cohort           → 大队列
+  #   perturbation     → 扰动实验
+  #
+  # scale:
+  #   focused       → 1 种条件/处理
+  #   broad         → 2-5 种
+  #   comprehensive → 5+ 种
+  # ===========================================================================
+
+  strategy:
+    design: ~                # <str> cross_sectional | time_course | case_control | cohort | perturbation
+    domain: ~                # <str> 研究领域：如 "retina", "cancer_immunology", "neurodegeneration", "developmental_biology", "plant", "immunology"
+    species: []              # <list[str]> NCBI taxonomy names
+    tissue_or_system: ~      # <str> 组织/系统：如 "retina", "PBMC", "tumor_microenvironment", "brain_cortex", "liver"
+    tissue_info: ~           # <str> 亚区域或细胞类型富集描述
+    cell_count_estimate: ~   # <str> 如 "~25000", ">1M"
+    modalities: []           # <list[str]> scRNA-seq / scATAC-seq / multiome / spatial / CITE-seq / snRNA-seq / bulk RNA-seq / Hi-C / proteomics
+    has_validation: false    # <bool> 是否有独立验证
+    validation_methods: []   # <list[str]> FISH / IHC / functional_assay / KO / clinical_corr / immunostaining / multi_platform
+    scale: ~                 # <str> focused | broad | comprehensive
+    replicates: ~            # <str> single_batch | multi_batch | multi_center | meta_analysis
+    platform: ~              # <str> "10x Genomics", "Drop-seq", "Smart-seq2", "sci-RNA-seq", "Slide-seq"
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 3. 叙事情节（Narrative Arc）
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 论文怎么"讲故事"？
+  #
+  # story_type:
+  #   discovery   → "我们发现了之前不知道的东西"
+  #   comparative → "我们比较了A和B"
+  #   mechanistic → "我们解释了机制"
+  #   resource    → "我们建了一个资源（图谱/工具/数据库）"
+  #   validation  → "我们验证了假设/复现了结果 / 提供了证据链"
+  #
+  # argument_structure:
+  #   bottom_up    → 数据驱动：大规模采集 → 发现模式 → 提出假说 → 验证
+  #   top_down     → 假说驱动：提出假说 → 设计实验 → 验证 → 结论
+  #   comparative  → 对比驱动：A vs B → 找差异 → 解释差异
+  #   integrative  → 整合驱动：多模态/多数据集 → 关联 → 综合模型
+  #   pipeline     → 流程驱动：方法A → 方法B → 方法C → 最终产出
+  # ===========================================================================
+
+  narrative:
+    hook: ~                  # <str> 核心切入点/动机（一句话）
+    story_type: ~            # <str> discovery | comparative | mechanistic | resource | validation
+    evidence_chain: []       # <list[str]> 论证线索链（3-6步）
+    key_claim: ~             # <str> 核心主张（一句话）
+    argument_structure: ~    # <str> bottom_up | top_down | comparative | integrative | pipeline
+    climax: ~                # <str> 最关键的科学发现
+    open_questions: []       # <list[str]> 未解决的问题/下一步方向
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 4. 工具箱（Technical Toolbox）
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 用了什么分析工具和流程？
+  # ===========================================================================
+
+  toolbox:
+    pipeline_framework: ~    # <str> Scanpy | Seurat | custom | mixed | snapatac2 | squidpy | muon | scvi
+    core_algorithms:
+      normalization: ~       # <str>
+      hvg_selection: ~       # <str>
+      dimensionality_reduction: ~  # <str>
+      visualization: []      # <list[str]>
+      clustering: []         # <list[str]>
+      integration: ~         # <str> "Harmony", "CCA", "scVI", "BBKNN", "Conos", "scANVI"
+      trajectory: ~          # <str> "Monocle", "Slingshot", "PAGA", "scVelo", "Palantir", "CellRank"
+      de_method: ~           # <str> "Wilcoxon", "MAST", "pseudobulk", "DESeq2", "SCEPTRE"
+      annotation_method: ~   # <str> marker_based | reference_mapped | ai_assisted | cluster_then_annotate
+      batch_correction: ~    # <str>
+      doublet_detection: ~   # <str> "Scrublet", "DoubletFinder", "QD"
+    functional_analysis:
+      enrichment: []         # <list[str]> GO / KEGG / Reactome / GSEA
+      grn: ~                 # <str> SCENIC / pySCENIC / CellOracle
+      cci: ~                 # <str> CellChat / NicheNet / LIANA / CellPhoneDB
+      perturbation: ~        # <str> Mixscape / pertpy / scPerturb
+    ai_used: false           # <bool>
+    ai_tool: ~               # <str> CellTypist / scGPT / Geneformer / custom LLM
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 5. 领域贡献（Scholarly Contribution）
+  # ═══════════════════════════════════════════════════════════════════════════
+  # 这篇论文给整个领域留下了什么？
+  #
+  # contribution_type:
+  #   cell_type_catalog         → 新的细胞类型/状态分类
+  #   marker_resource           → 新的 marker 基因/蛋白
+  #   developmental_trajectory  → 发育/分化轨迹
+  #   disease_mechanism         → 疾病机制/靶点
+  #   gene_regulatory_network   → 调控网络
+  #   methodology               → 新工具/方法
+  #   data_resource             → 公开数据集/图谱
+  #   benchmark_comparison      → 基准比较
+  #   conceptual_framework      → 概念框架/新理论
+  #
+  # novelty:
+  #   incremental      → 在已知框架内增加细节
+  #   confirmatory     → 验证/复现了先前的结论
+  #   field_defining   → 定义了新的研究方向/标准
+  #   paradigm_shift   → 改变了领域的基本认知
+  # ===========================================================================
+
+  contribution:
+    contribution_type: ~     # <str>
+    novelty: ~               # <str> incremental | confirmatory | field_defining | paradigm_shift
+    reusable_assets:         # <list[dict]> 可复用的产出物
+      - type: ~              # marker_genes | cell_type_annotation | reference_atlas | software | dataset | protocol | model
+        name: ~              # <str>
+        count: ~             # <int>
+    field_impact: ~          # <str> references | benchmark | resource | software | protocol | conceptual
+    cross_species: false     # <bool>
+    cross_tissue: false      # <bool>
+    cross_modality: false    # <bool>
+    cross_condition: false   # <bool>
+    provides_reference: false # <bool>
+
+# =============================================================================
+# EOF
+# =============================================================================

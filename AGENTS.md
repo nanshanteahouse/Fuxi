@@ -39,13 +39,14 @@ python core/run_pipeline.py --modality rna --resume --config ...
 
 # Paper tools
 python core/paper_insights.py --pmid <PMID>       # AI paper interpretation
+python core/paper_insights.py --pmid <PMID> --methodology  # + methodology patterns
+python core/methodology_batch.py                          # batch methodology backfill
 python -m core.registry report               # print summary
 python -m core.registry verify              # check registry consistency
 python -m core.registry register --gse GSE164044  # register GSE → PMID link
 python -m core.registry find-orphans        # list orphan datasets
 python core/run_reproduce.py --all --dry-run       # preview reproducibility
 python core/run_reproduce.py <paper_dir>           # reproduce a single paper
-```
 
 ### Key paths
 
@@ -56,8 +57,10 @@ python core/run_reproduce.py <paper_dir>           # reproduce a single paper
 | Spatial steps | `spatial/steps/` (11 steps: 00_load → 10_cell_interaction) |
 | Shared core | `core/` (config, utils, ai_caller, preprocess) |
 | Paper tools | `core/paper_insights.py`, `core/registry.py`, `core/run_reproduce.py` |
+| Methodology tools | `core/methodology_batch.py`, `core/paper_insights.py --methodology` |
 | Project configs | `projects/{modality}/{GSE_ID}/config_*.yaml` |
 | Config templates | `templates/config_templates/*.yaml` |
+| Brainstorming | `projects/notebook/` (methodology_ideas, keywords, etc.) |
 
 ### Dataset lookup & unified registry
 
@@ -91,6 +94,34 @@ When user requests to analyze or reproduce a dataset, check the **master registr
    python -m core.registry report
    ```
 
+
+### Methodology Pattern Analysis
+
+Extract and compare the methodological "fingerprint" of any single-cell/omics paper —
+domain-agnostic across retina, cancer, immunology, and beyond.
+
+The framework captures 5 dimensions:
+- **archetype** — what type of study (atlas, development, perturbation, disease_comp, multiomic, ...)
+- **strategy** — experimental design (species, tissue, cell count, modalities, validation)
+- **narrative** — how the story is told (argument_structure: bottom_up / top_down / comparative / ...)
+- **toolbox** — computational pipeline (framework, algorithms, AI usage)
+- **contribution** — what the paper leaves to the field (novelty, reusable assets, field impact)
+
+```bash
+# Single paper
+python core/paper_insights.py --pmid <PMID> --methodology
+
+# Batch backfill all registered papers
+python core/methodology_batch.py
+python core/methodology_batch.py --dry-run    # preview first
+python core/methodology_batch.py --workers 8  # custom concurrency
+
+# Read methodology_patterns from insights.yaml
+python -c "import yaml; d=yaml.safe_load(open('projects/papers/<paper>/insights.yaml')); print(d.get('methodology_patterns', {}).get('archetype', {})"
+
+# Schema reference
+# templates/schemas/methodology_patterns.yaml
+```
 
 ### Critical conventions
 

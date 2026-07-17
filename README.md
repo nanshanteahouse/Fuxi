@@ -32,18 +32,29 @@ Fuxi is a unified monorepo for single-cell multi-omics analysis, merging the pre
 
 ```
 fuxi/
-├── core/              # Shared infrastructure (utils, ai_caller, config, run_pipeline)
-│   └── preprocess/    # Preprocessing pipeline (format detect → extract → config gen)
-├── rna/               # scRNA-seq module (13 steps, utils, tissue_ontologies)
-├── atac/              # scATAC-seq module (steps)
-├── spatial/           # Spatial transcriptomics module (steps)
-├── projects/          # Dataset-specific configs, organized by modality
+├── core/              # Shared infrastructure
+│   ├── prompts/       # LLM prompt templates (YAML)
+│   ├── preprocess/    # Format detection → extraction → config generation
+│   ├── ai_prompts.py  # Prompt imports + annotation build functions
+│   ├── ai_caller.py   # Unified LLM API with retry + caching
+│   ├── config.py      # Unified Config dataclass (Pydantic v2)
+│   ├── run_pipeline.py# CLI dispatcher for all modalities
+│   ├── paper_insights.py  # AI-assisted paper metadata + methodology extraction
+│   ├── paper_converter.py # PMC XML / PDF → structured markdown
+│   ├── registry.py    # Paper ↔ dataset unified registry
+│   └── methodology_batch.py  # Parallel methodology pattern backfill
+├── rna/               # scRNA-seq module (13 steps)
+├── atac/              # scATAC-seq module (10 steps)
+├── spatial/           # Spatial transcriptomics module (11 steps)
+├── projects/          # Project-specific data (gitignored)
+│   ├── papers/        # Paper insights + NCBI XML
+│   ├── notebook/      # Agent-driven brainstorming notes
 │   ├── rna/           # RNA dataset configs
 │   ├── atac/          # ATAC dataset configs
 │   └── spatial/       # Spatial dataset configs
 ├── tests/             # Unified test suite
-├── templates/         # Config templates (10X h5/mtx, CSV, fragments, retina, etc.)
-└── docs/              # Architecture & pipeline documentation
+├── templates/         # Config templates + schemas
+└── docs/              # Pipeline & architecture docs
 ```
 
 ## Quick Start
@@ -130,32 +141,24 @@ marker:
 ai:
   enabled: false
 ```
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', '..', '..'))
-from core.config import Config, AIConfig
-from core.utils import data_root
-
-CFG = Config()
-CFG.modality = "rna"
-CFG.project_dir = os.path.dirname(os.path.abspath(__file__))
-CFG.data_dir = os.path.join(data_root(), "<GSE_ID>")
-# ... dataset-specific settings ...
-
-CFG.resolve_paths()
 ```
 
 ## Key Modules
 
 | Module | Purpose |
 |--------|---------|
-| `core/utils.py` | safe_write, safe_plot, setup_logger, resolve_config, validate_adata, monitor_performance, find_rna_h5ad, find_rna_marker_csv, load_scRNA_markers |
-| `core/ai_caller.py` | Unified LLM calls with retry, thinking mode, disk caching, model auto-discovery |
-| `core/ai_prompts.py` | RNA + ATAC annotation prompts, interpretation templates |
-| `core/config.py` | Merged Config dataclass with all RNA + ATAC fields |
-| `core/run_pipeline.py` | Unified CLI with `--modality rna\|atac\|spatial` dispatch, 13 RNA / 10 ATAC / 11 spatial steps |
+| `core/utils.py` | I/O, logging, config resolution, AnnData validation, marker loading |
+| `core/ai_caller.py` | Unified LLM API with retry, thinking mode, disk caching |
+| `core/ai_prompts.py` | Prompt imports from YAML + annotation build functions |
+| `core/prompts/` | LLM prompt templates stored as YAML (7 prompt groups) |
+| `core/config.py` | Unified Config dataclass (Pydantic v2) for all modalities |
+| `core/run_pipeline.py` | CLI with `--modality rna|atac|spatial` dispatch |
+| `core/paper_insights.py` | AI-driven paper metadata, figures, methods, and methodology extraction |
+| `core/paper_converter.py` | PMC XML / PDF → structured markdown |
+| `core/registry.py` | Paper ↔ dataset master registry (44 papers, 69 datasets) |
+| `core/methodology_batch.py` | Parallel methodology pattern backfill (ThreadPoolExecutor) |
 | `core/dataset_schema.py` | Python model for dataset.yaml |
-| `core/dataset_detector.py` | Auto-detect modality from file patterns |
-| `core/preprocess/` | Preprocessing pipeline: format detection, archive extraction, config generation |
+| `core/preprocess/` | Format detection, archive extraction, config generation |
 
 ## Citation
 

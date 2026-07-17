@@ -6,7 +6,7 @@ Reads a paper's PDF-to-text markdown file and uses LLM (via core.ai_caller)
 to generate a structured insights.yaml for reproduction tracking.
 
 Usage:
-    python core/paper_insights.py <paper.md> [--output OUTPUT] [--force]
+    python core/paper_insights.py <paper.md> [--output OUTPUT] [--force] [--methodology]
 """
 
 import re
@@ -35,14 +35,19 @@ from core.ai_prompts import (
     PAPER_FIGURE_USER_TEMPLATE,
     PAPER_METHODS_SYSTEM_PROMPT,
     PAPER_METHODS_USER_TEMPLATE,
+    PAPER_METHODOLOGY_SYSTEM_PROMPT,
+    PAPER_METHODOLOGY_USER_TEMPLATE,
 )
 
 from core.paper_converter import PaperSource, PmcXmlSource, MarkdownSource, Pymupdf4llmSource
 
 logger = logging.getLogger(__name__)
 
-# ── Section / figure regex patterns ────────────────────────────────────────────
-_SECTION_RE = re.compile(r'^(?:#+\s*)?(SUMMARY|Abstract|Introduction|Results|Discussion|Methods|Materials\s*(?:and|&)\s*Methods|Experimental\s*Procedures)(?!(?-i:[a-z]))', re.MULTILINE | re.IGNORECASE)
+# -- Section / figure regex patterns --------------------------------------------
+_SECTION_RE = re.compile(
+    r'^(?:#+\s*)?(SUMMARY|Abstract|Introduction|Results|Discussion|Methods|Materials\s*(?:and|&)\s*Methods|Experimental\s*Procedures)(?!(?-i:[a-z]))',
+    re.MULTILINE | re.IGNORECASE,
+)
 _FIGURE_RE = re.compile(r'(?:Figure|Fig\.?)\s+\d+[a-z]?', re.IGNORECASE)
 
 _METHOD_KEYWORDS = [
@@ -123,7 +128,7 @@ def _yaml_dump(data: Any, indent: int = 0) -> list[str]:
     if isinstance(data, str):
         if '\n' in data:
             return [f"{pfx}|"] + [f"{pfx}  {l}" for l in data.split('\n')]
-        escaped = data.replace('"', '\\"')
+        escaped = data.replace('\\', '\\\\').replace('\"', '\\"')
         return [f'{pfx}"{escaped}"']
     if isinstance(data, dict):
         if not data:
@@ -133,7 +138,6 @@ def _yaml_dump(data: Any, indent: int = 0) -> list[str]:
             ks = str(k)
             sub = _yaml_dump(v, indent + 1)
             if isinstance(v, dict):
-                # Dict values always need multiline YAML format
                 lines.append(f"{pfx}{ks}:")
                 lines.extend(sub)
             elif len(sub) == 1 and not sub[0].startswith("  " * (indent + 1) + "-"):
@@ -151,9 +155,8 @@ def _yaml_dump(data: Any, indent: int = 0) -> list[str]:
             if len(sub) == 1:
                 lines.append(f"{pfx}- {sub[0].strip()}")
             elif isinstance(item, dict) and len(sub) > 1:
-                # Inline first key after - for readability
                 first = sub[0].lstrip()
-                remaining = sub[1:] 
+                remaining = sub[1:]
                 lines.append(f"{pfx}- {first}")
                 lines.extend(remaining)
             else:
@@ -170,7 +173,6 @@ def _build_cfg_from_env() -> _LLMConfig:
         api_base=os.environ.get("LLM_API_BASE", "https://api.deepseek.com/v1"),
         model=os.environ.get("LLM_MODEL", "deepseek-v4-flash"),
     )
-
 
 
 
@@ -249,6 +251,13 @@ def _extract_methods_summary(methods_data: dict | None, full_text: str = "") -> 
         result["key_methods"] = _extract_key_methods(full_text)
 
     return result
+
+# ---------------------------------------------------------------------------
+# Methodology-safe truncation: clip methods to a max token budget for LLM
+# ---------------------------------------------------------------------------
+_METHODOLOGY_METHODS_MAX_CHARS = 8000
+
+
 class PaperInsights:
     """Extract structured insights from paper markdown using AI prompts."""
 
@@ -343,13 +352,42 @@ class PaperInsights:
         return _safe_json_parse(raw, "methods")
 
     @staticmethod
+    def extract_methodology(abstract: str, methods_text: str, key_findings: list[str], cfg) -> dict:
+        """Extract methodology patterns (5 dimensions) from paper sections via LLM.
+
+        Returns dict with 'methodology_patterns' key, or {} on failure.
+        Skips gracefully if both abstract and methods are empty.
+        """
+        if not abstract.strip() and not methods_text.strip():
+            logger.info("Abstract + methods both empty -- skipping methodology extraction")
+            return {}
+
+        kf_text = "\n".join(f"- {kf}" for kf in key_findings) if key_findings else "(no key findings available)"
+
+        user_prompt = PAPER_METHODOLOGY_USER_TEMPLATE.format(
+            abstract=abstract.strip() or "(abstract not available)",
+            methods=methods_text.strip()[:_METHODOLOGY_METHODS_MAX_CHARS] or "(methods not available)",
+            key_findings=kf_text,
+        )
+        raw = ai_query(PAPER_METHODOLOGY_SYSTEM_PROMPT, user_prompt, cfg, expect_json=True)
+        if raw is None:
+            return {}
+        return _safe_json_parse(raw, "methodology_patterns")
+
+    @staticmethod
     def merge_to_insights(meta: dict, figures: list[dict], methods_data: dict, paper_meta: dict,
-                          full_text: str = "", methods_text: str = "") -> dict:
-        """Merge LLM-extracted metadata, figures, and methods into a single insights dict.
+                          full_text: str = "", methods_text: str = "",
+                          methodology: dict | None = None) -> dict:
+        """Merge LLM-extracted metadata, figures, methods, and methodology into a single insights dict.
 
         Args:
+            meta: Metadata dict from extract_metadata().
+            figures: List of figure dicts from extract_figure().
+            methods_data: Methods dict from extract_methods().
+            paper_meta: Paper metadata from PaperSource.get_metadata().
             full_text: Full markdown text for regex fallback in data_access extraction.
             methods_text: Methods section text for regex fallback in methods extraction.
+            methodology: Optional methodology_patterns dict from extract_methodology().
         """
         # Deduplicate figures by id while preserving order
         seen: set[str] = set()
@@ -368,7 +406,7 @@ class PaperInsights:
         fig_count = len(unique_figs)
         repro_count = sum(1 for f in unique_figs if f.get("reproducible"))
 
-        return {
+        result = {
             "paper_meta": paper_meta,
             "experimental_design": meta.get("experimental_design", {}) if meta else {},
             "key_findings": list(meta.get("key_findings", [])) if meta else [],
@@ -386,13 +424,22 @@ class PaperInsights:
             },
         }
 
+        if methodology:
+            result["methodology_patterns"] = methodology.get("methodology_patterns", methodology)
 
-    def run(self, source: Union[PaperSource, str], cfg, output_path: str | None = None, force: bool = False) -> str:
+        return result
+
+
+    def run(self, source: Union[PaperSource, str], cfg, output_path: str | None = None,
+            force: bool = False, extract_methodology: bool = False) -> str:
         """Full pipeline: read, split, extract, merge, write.
 
         Returns path to written file, or "SKIPPED" if output exists and not force.
 
         Auto-creates subdirectory for output if needed.
+
+        Args:
+            extract_methodology: If True, also run methodology pattern extraction (5 dimensions).
         """
         if isinstance(source, str):
             source = MarkdownSource(source)
@@ -435,8 +482,25 @@ class PaperInsights:
             logger.info("Extracting methods...")
             methods = self.extract_methods(sections["methods"], cfg)
 
-        insights = self.merge_to_insights(meta, figures, methods_data=methods, paper_meta=source.get_metadata(),
-                                        full_text=md_text, methods_text=sections.get("methods", ""))
+        # Optional methodology pattern extraction
+        methodology: dict | None = None
+        if extract_methodology:
+            logger.info("Extracting methodology patterns...")
+            key_findings = list(meta.get("key_findings", [])) if meta else []
+            abstract_for_meth = sections.get("abstract", "") or md_text[:4000]
+            methods_for_meth = sections.get("methods", "") or md_text
+            methodology = self.extract_methodology(
+                abstract_for_meth,
+                methods_for_meth,
+                key_findings,
+                cfg,
+            )
+
+        insights = self.merge_to_insights(
+            meta, figures, methods_data=methods, paper_meta=source.get_metadata(),
+            full_text=md_text, methods_text=sections.get("methods", ""),
+            methodology=methodology,
+        )
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text('\n'.join(_yaml_dump(insights)) + '\n', encoding="utf-8")
         logger.info("Wrote insights to %s", out_path)
@@ -490,6 +554,7 @@ def main() -> None:
     parser.add_argument("--output", "-o", type=str, default=None, help="Output path")
     parser.add_argument("--force", "-f", action="store_true", default=False, help="Overwrite existing output")
     parser.add_argument("--verbose", "-v", action="store_true", default=False, help="Enable debug logging")
+    parser.add_argument("--methodology", "-m", action="store_true", default=False, help="Also extract methodology patterns (5 dimensions: archetype, strategy, narrative, toolbox, contribution)")
     args = parser.parse_args()
 
     if args.pmid and args.xml:
@@ -502,7 +567,10 @@ def main() -> None:
     logger.info("Using env-based LLM config")
 
     source = _resolve_source(args)
-    result = PaperInsights().run(source=source, cfg=cfg, output_path=args.output, force=args.force)
+    result = PaperInsights().run(
+        source=source, cfg=cfg, output_path=args.output, force=args.force,
+        extract_methodology=args.methodology,
+    )
     print("SKIPPED" if result == "SKIPPED" else f"Done: {result}")
 
 if __name__ == "__main__":
