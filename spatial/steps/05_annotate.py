@@ -20,10 +20,9 @@ import scanpy as sc
 import pandas as pd
 import numpy as np
 
-log: logging.Logger
 
 
-def score_genes_mode(adata, CFG):
+def score_genes_mode(adata, CFG, log):
     """Marker gene scoring-based annotation fallback."""
     log.info("Score_genes mode — marker gene-based annotation")
 
@@ -75,7 +74,7 @@ def score_genes_mode(adata, CFG):
         adata.obs['annot_confidence'] = adata.obs['leiden'].map(confidence).astype(float).values
 
 
-def ai_annotate(adata, CFG):
+def ai_annotate(adata, CFG, log):
     """AI-based annotation via LLM."""
     log.info("AI mode — computing marker genes...")
 
@@ -107,10 +106,23 @@ def ai_annotate(adata, CFG):
         species = CFG.species
         compact = n_clusters > 20
 
+        # Build spatial context for AI prompt
+        spatial_parts = [f"Spatial transcriptomics dataset — {adata.n_obs} spots"]
+        platform = CFG.spatial.platform or ''
+        if platform:
+            spatial_parts.append(f"Platform: {platform}")
+        if 'spatial' in adata.obsm:
+            coords = adata.obsm['spatial']
+            spatial_parts.append(
+                f"Tissue coordinates: X [{coords[:,0].min():.0f}, {coords[:,0].max():.0f}], "
+                f"Y [{coords[:,1].min():.0f}, {coords[:,1].max():.0f}]"
+            )
+        extra_context = " | ".join(spatial_parts)
+
         sys_prompt, user_prompt = build_annotation_prompt(
             adata, tissue, species,
             precomputed_rank=True,
-            extra_context=f"Spatial transcriptomics ({CFG.spatial.platform} platform)",
+            extra_context=extra_context,
             compact=compact,
         )
 
@@ -180,7 +192,6 @@ def ai_annotate(adata, CFG):
 
 
 def main():
-    global log
     t0 = time.time()
     args_parser = argparse.ArgumentParser()
     args_parser.add_argument("--config", default="../config.py")
@@ -252,12 +263,12 @@ def main():
         # Mode 2: AI mode
         elif ai_enabled and ai_annot_on:
             log.info("AI mode - LLM-based annotation")
-            annot_result = ai_annotate(adata, CFG)
+            annot_result = ai_annotate(adata, CFG, log)
 
         # Mode 3: Score_genes fallback
         if annot_result is None:
             log.info("Falling back to score_genes mode")
-            score_genes_mode(adata, CFG)
+            score_genes_mode(adata, CFG, log)
     finally:
         CFG.marker.marker_dict = _saved_marker_dict
 
