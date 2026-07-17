@@ -20,17 +20,18 @@
 
 `paper_insights.py` 利用 LLM 从论文中自动提取结构化见解，生成 `insights.yaml`。不再需要手动通读论文——AI 替你完成摘要、关键发现、实验设计、图元数据的提取，并标注每张图是否能基于 GEO 数据复现。
 
-### 三层输入策略
+### 四层输入策略
 
 | 层 | 输入 | 质量 | 依赖 |
 |----|------|------|------|
 | 🥇 PMC XML | `--pmid` / `--xml` | 最佳 | 零 pip 依赖（stdlib） |
-| 🥈 PDF | `--pdf` | 良好 | `pymupdf4llm`（可选） |
-| 🥉 Markdown | `.md` 文件 | 一般 | 零依赖 |
+| 🥈 PubMed | `--pmid` | 元数据最佳 | 零依赖（stdlib） |
+| 🥉 PDF | `--pdf` | 良好 | `pymupdf4llm`（可选） |
+| 🏅 Markdown | `.md` 文件 | 一般 | 零依赖 |
 
 ### 覆盖率
 
-多数视网膜研究论文在 PMC 中有全文 JATS XML，可直接用 `--pmid` 获取，无需任何额外安装。
+多数论文在 PMC 中有全文 JATS XML。不在 PMC 时自动回退到 PubMed（获取权威元数据和摘要），仍可完成注册。PDF 提供完整全文分析。
 
 ---
 
@@ -47,13 +48,13 @@ export LLM_MODEL=deepseek-v4-flash    # 可选，默认值
 uv sync  # 或 pip install -r requirements/base.txt
 ```
 
-### 可选（PDF 回退）
+### 可选（PDF 全文）
 
 ```bash
 pip install -r requirements/paper.txt
 ```
 
-不安装 `pymupdf4llm` 不影响核心功能；PMC XML 路径（占 88% 用例）不需要它。
+不安装 `pymupdf4llm` 不影响核心功能；PMC XML 和 PubMed 回退路径覆盖绝大多数用例。
 
 ---
 
@@ -91,7 +92,7 @@ python core/paper_insights.py --pdf paper.pdf --force
 ### 3.4 自动回退（默认行为）
 
 ```bash
-# 尝试 PMC → 失败则回退到 PDF → 再失败则尝试 .md
+# 尝试 PMC → 不在 PMC? PubMed → 再失败 → PDF → 最后尝试 .md
 python core/paper_insights.py --pmid 31269016 --pdf paper.pdf --source auto
 ```
 
@@ -105,7 +106,7 @@ python core/paper_insights.py projects/papers/2019_Menon_NatCommun_Human-Retina-
 
 ---
 
-## 4. 三种输入源
+## 4. 四种输入源
 
 ### 4.1 PmcXmlSource — PMC XML（推荐）
 
@@ -116,9 +117,19 @@ python core/paper_insights.py --xml local.xml     # 本地 XML 文件
 ```
 
 **优点**：结构精确（`<sec>` 分节、`<fig>` 分图标签），无文本粘连，不含格式噪声。  
-**局限**：需要论文在 PMC 中有全文；约 12% 论文不可用。
+**局限**：需要论文在 PMC 中有全文 JATS XML；不在 PMC 时自动回退到 PubMed。
 
-### 4.2 Pymupdf4llmSource — PDF 回退
+### 4.2 PubmedSource — PubMed 元数据（PMC 回退）
+
+```bash
+python core/paper_insights.py --pmid 32467236    # 论文不在 PMC 也可注册
+```
+
+当论文未收录于 PMC 时自动启用。通过 NCBI E-utilities 获取权威 bibliographic 元数据（title、journal、year、first_author、pmid、doi）和摘要文本。
+
+**优点**：100% 可靠元数据（NCBI 官方），零额外依赖，零安装。
+**局限**：只提供元数据 + 摘要，无正文和图表；如需完整分析，配合 `--pdf` 使用。
+### 4.3 Pymupdf4llmSource — PDF 回退
 
 ```bash
 pip install -r requirements/paper.txt
@@ -128,7 +139,7 @@ python core/paper_insights.py --pdf paper.pdf --force
 **优点**：质量远超 markitdown（54/100 vs 14/100），单 pip 安装。  
 **局限**：需要额外依赖；PMC XML 优先。
 
-### 4.3 MarkdownSource — .md 文件
+### 4.4 MarkdownSource — .md 文件
 
 ```bash
 python core/paper_insights.py paper.md --force

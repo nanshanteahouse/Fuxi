@@ -9,7 +9,7 @@
 1. [Overview](#1-overview)
 2. [Installation](#2-installation)
 3. [Quick Start](#3-quick-start)
-4. [Three Source Types](#4-three-source-types)
+4. [Four Source Types](#4-four-source-types)
 5. [Output Structure](#5-output-structure)
 6. [Pipeline Integration](#6-pipeline-integration)
 7. [FAQ](#7-faq)
@@ -20,17 +20,18 @@
 
 `paper_insights.py` uses an LLM to extract structured insights from academic papers, producing an `insights.yaml` file. No more manually reading papers—AI handles abstract extraction, key findings, experimental design, figure metadata, and annotates whether each figure can be reproduced from GEO data.
 
-### Three-Tier Source Strategy
+### Four-Tier Source Strategy
 
 | Tier | Input | Quality | Dependencies |
 |------|-------|---------|-------------|
 | 🥇 PMC XML | `--pmid` / `--xml` | Best | Zero pip deps (stdlib) |
-| 🥈 PDF | `--pdf` | Good | `pymupdf4llm` (optional) |
-| 🥉 Markdown | `.md` file | Fair | None |
+| 🥈 PubMed | `--pmid` | Metadata best | Zero deps (stdlib) |
+| 🥉 PDF | `--pdf` | Good | `pymupdf4llm` (optional) |
+| 🏅 Markdown | `.md` file | Fair | None |
 
 ### Coverage
 
-Most retina research papers have full-text JATS XML in PMC, retrievable via `--pmid` with zero extra installation.
+Most papers are available as full-text JATS XML in PMC. When not in PMC, PubMed metadata (title, journal, year, authors) and abstract are fetched automatically via NCBI E-utilities — reliable registration without any extra dependency. PDF provides full-text analysis.
 
 ---
 
@@ -47,13 +48,13 @@ export LLM_MODEL=deepseek-v4-flash    # optional, this is the default
 uv sync  # or pip install -r requirements/base.txt
 ```
 
-### Optional (PDF fallback)
+### Optional (PDF full-text)
 
 ```bash
 pip install -r requirements/paper.txt
 ```
 
-Not installing `pymupdf4llm` does not affect core functionality; the PMC XML path (covering 88% of use cases) does not need it.
+Not installing `pymupdf4llm` does not affect core functionality; PMC XML and PubMed fallback paths cover the vast majority of use cases.
 
 ---
 
@@ -91,7 +92,7 @@ python core/paper_insights.py --pdf paper.pdf --force
 ### 3.4 Auto Fallback (default behavior)
 
 ```bash
-# Try PMC → fall back to PDF → fall back to .md
+# Try PMC → not in PMC? PubMed → PDF → .md
 python core/paper_insights.py --pmid 31269016 --pdf paper.pdf --source auto
 ```
 
@@ -105,7 +106,7 @@ Pass the `.md` file directly.
 
 ---
 
-## 4. Three Source Types
+## 4. Four Source Types
 
 ### 4.1 PmcXmlSource — PMC XML (recommended)
 
@@ -116,9 +117,19 @@ python core/paper_insights.py --xml local.xml     # Local XML file
 ```
 
 **Pros**: Structurally precise (`<sec>` sections, `<fig>` labels), no text gluing, no formatting noise.  
-**Limits**: Requires the paper to have full-text in PMC; ~12% of papers unavailable.
+**Limits**: Requires full-text JATS XML in PMC; for papers not in PMC, PubMed metadata is used as automatic fallback.
 
-### 4.2 Pymupdf4llmSource — PDF fallback
+### 4.2 PubmedSource — PubMed metadata (PMC fallback)
+
+```bash
+python core/paper_insights.py --pmid 32467236    # Works even if paper is not in PMC
+```
+
+Automatically enabled when a paper is not archived in PMC. Fetches authoritative bibliographic metadata (title, journal, year, first author, PMID, DOI) and abstract text via NCBI E-utilities.
+
+**Pros**: 100% reliable metadata (NCBI official), zero extra deps, zero install.
+**Limits**: Metadata + abstract only — no body text or figures; pair with `--pdf` for full analysis.
+### 4.3 Pymupdf4llmSource — PDF fallback
 
 ```bash
 pip install -r requirements/paper.txt
@@ -128,7 +139,8 @@ python core/paper_insights.py --pdf paper.pdf --force
 **Pros**: Far better quality than markitdown (54/100 vs 14/100), single pip install.  
 **Limits**: Extra dependency; prefer PMC XML when available.
 
-### 4.3 MarkdownSource — .md files
+### 4.4 MarkdownSource — .md files
+
 
 ```bash
 python core/paper_insights.py paper.md --force
