@@ -4,6 +4,7 @@ import logging
 import os
 import shutil
 from typing import Optional
+import anndata
 
 
 def safe_write(adata, target: str,
@@ -33,6 +34,7 @@ def safe_write(adata, target: str,
     # Respect cfg.h5ad_tempdir (from ATACseq config)
     if cfg is not None:
         tmpdir = getattr(cfg, 'h5ad_tempdir', tmpdir)
+    anndata.settings.allow_write_nullable_strings = True
 
     # WSL /mnt mounts: use explicit copy+unlink instead of shutil.move
     # to avoid "Invalid cross-device link" on DrvFs (Windows mounts).

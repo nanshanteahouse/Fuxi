@@ -26,7 +26,7 @@ def main():
     args_parser.add_argument("--config", default="../config.py")
     args = args_parser.parse_args()
 
-    CFG = resolve_config(args.config, modality="spatial")
+    CFG = resolve_config(args.config)
     log = setup_logger("03_normalize", os.path.join(CFG.log_dir, "03_normalize.log"))
     log.info("Step 03: Normalization + HVG + spatial graph + PCA")
 
