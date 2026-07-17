@@ -679,6 +679,7 @@ def _cmd_add_paper(
     pdf: str = "",
     paper_dir: str = "",
     dry_run: bool = False,
+    download: bool = False,
 ) -> MasterRegistry:
     import subprocess
     import sys
@@ -690,6 +691,9 @@ def _cmd_add_paper(
     # ── PMID / XML / PDF 模式：调 paper_insights ──
     if pmid or xml or pdf:
         cmd = [sys.executable, "core/paper_insights.py"]
+        if pmid:
+            cmd.extend(["--pmid", pmid])
+            print(f"\U0001f50d pmid={pmid}: calling paper_insights ...")
         if xml:
             cmd.extend(["--xml", xml])
             print(f"\U0001f50d xml={xml}: calling paper_insights ...")
