@@ -238,17 +238,38 @@ reproduction_status:
 
 ## 6. 与管线联动
 
-### 6.1 PaperRegistry — 构建论文索引
+### 6.1 PaperRegistry — 论文注册与索引
 
-`registry.py` 扫描所有论文的 `insights.yaml` 和已有项目配置，自动构建论文→GEO→配置的映射关系：
+`registry.py` 管理论文→GEO 数据集的五域映射关系。注册方式有两种：
+
+#### 通过 PMID 自动注册（推荐）
+
+从 NCBI PMC 下载全文，AI 提取 GSE 编号，自动注册：
 
 ```bash
-python -m core.registry report   # 生成 projects/registry/{papers,datasets,links}.yaml
-python -m core.registry verify  # 检查一致性
-python -m core.registry report --dry-run  # 预览不写入
+python -m core.registry add-paper --pmid 31493975
+python -m core.registry add-paper --xml local.xml          # 本地 XML
+python -m core.registry add-paper --pdf paper.pdf          # PDF 回退
+python -m core.registry add-paper --paper-dir projects/papers/.../  # 已有 insights.yaml
 ```
 
-生成的 `registry.yaml` 为每个 GSE 标记状态：`config_exists`（已有配置）、`not_configured`（待生成）、`data_not_downloaded`（需下载数据）等。
+#### 通过 GSE 编号注册
+
+从 NCBI GEO SOFT 元数据自动获取 PMID，链接到已有论文：
+
+```bash
+python -m core.registry register-gse GSE164044            # 注册
+python -m core.registry register-gse --dry-run GSE164044  # 预览
+```
+
+#### 查询与验证
+
+```bash
+python -m core.registry report      # 汇总报告
+python -m core.registry verify      # 一致性校验
+python -m core.registry find-orphans  # 查找无关联论文的孤儿数据集
+python -m core.registry reset-gse GSE12345  # 重置数据集状态
+```
 
 ### 6.2 run_reproduce — 论文复现
 

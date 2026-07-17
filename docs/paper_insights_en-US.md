@@ -238,17 +238,38 @@ Each figure entry contains a boolean `reproducible` field and a `reproducibility
 
 ## 6. Pipeline Integration
 
-### 6.1 PaperRegistry — Build the paper index
+### 6.1 PaperRegistry — Paper Registration & Indexing
 
-`registry.py` scans all paper insights and existing project configs to automatically build a paper→GSE→config mapping:
+`registry.py` manages paper→GEO dataset mappings across five domains. Two registration paths:
+
+#### Auto-register via PMID (recommended)
+
+Downloads full text from NCBI PMC, extracts GSE IDs via AI, registers automatically:
 
 ```bash
-python -m core.registry report   # generates projects/registry/{papers,datasets,links}.yaml
-python -m core.registry verify  # check consistency
-python -m core.registry report --dry-run  # preview without writing
+python -m core.registry add-paper --pmid 31493975
+python -m core.registry add-paper --xml local.xml          # Local XML
+python -m core.registry add-paper --pdf paper.pdf          # PDF fallback
+python -m core.registry add-paper --paper-dir projects/papers/.../  # Existing insights.yaml
 ```
 
-The generated `registry.yaml` labels each GSE with a status: `config_exists` (already configured), `not_configured` (needs preprocessing), `data_not_downloaded` (needs GEO download), etc.
+#### Register via GSE accession
+
+Fetches NCBI GEO SOFT metadata to discover PMID(s) and links to existing papers:
+
+```bash
+python -m core.registry register-gse GSE164044            # Register
+python -m core.registry register-gse --dry-run GSE164044  # Preview
+```
+
+#### Query & Verify
+
+```bash
+python -m core.registry report      # Summary report
+python -m core.registry verify      # Consistency check
+python -m core.registry find-orphans  # Find datasets with no linked paper
+python -m core.registry reset-gse GSE12345  # Reset dataset status
+```
 
 ### 6.2 run_reproduce — Reproduce papers through the pipeline
 

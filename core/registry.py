@@ -747,6 +747,78 @@ def _cmd_add_paper(
         return registry
 
     return _register_from_insights(registry, insights, subdir, dry_run)
+
+
+def _cmd_register_gse(
+    registry: MasterRegistry,
+    gse_id: str,
+    dry_run: bool = False,
+) -> MasterRegistry:
+    """Register a GSE dataset by SOFT metadata \u2192 PMID link.
+
+    1. Fetch SOFT metadata from NCBI to get PMID(s)
+    2. Create DatasetEntry if not already present
+    3. Link to each PMID found (if PMID exists in registry)
+    """
+    from core.geo_downloader import fetch_soft_metadata
+
+    gse_id = gse_id.upper()
+
+    try:
+        meta = fetch_soft_metadata(gse_id)
+    except Exception as e:
+        print(f"\u274c Failed to fetch metadata for {gse_id}: {e}")
+        return registry
+
+    title = meta.get("title", "") or ""
+    pmid_list = meta.get("pmid", []) or []
+    print(f"\n\U0001f50d {gse_id}: {title[:100]}")
+    print(f"   PMIDs: {', '.join(pmid_list) or 'none'}")
+
+    if not pmid_list:
+        print(f"\u26a0\ufe0f  No PMID found in GEO metadata for {gse_id}")
+        print("   Registering dataset without paper link")
+
+    if gse_id not in registry.datasets:
+        data_root = f"{{FUXI_DATA_ROOT}}/{gse_id}"
+        resolved = resolve_path(data_root)
+        status = "data_downloaded" if os.path.isdir(resolved) else "data_not_downloaded"
+        registry.datasets[gse_id] = DatasetEntry(
+            repository=RepositoryType.GEO,
+            status=status,
+            data_root=data_root,
+        )
+        print(f"\u2705  Created dataset entry: {gse_id} ({status})")
+    else:
+        ds = registry.datasets[gse_id]
+        print(f"\u2139\ufe0f  Dataset {gse_id} already exists (status={ds.status})")
+
+    linked = 0
+    for pmid in pmid_list:
+        paper = registry.get_paper(pmid)
+        if paper is None:
+            print(f"\u26a0\ufe0f  PMID {pmid} not found in registry - skipping link")
+            print(f"       Run: python -m core.registry add-paper --pmid {pmid}")
+            continue
+        existing = any(
+            ln.paper_id == pmid and ln.dataset_id == gse_id
+            for ln in registry.links
+        )
+        if not existing:
+            registry.links.append(PaperDatasetLink(
+                paper_id=pmid, dataset_id=gse_id, role=LinkRole.RELATED,
+            ))
+            print(f"\u2705  Linked {gse_id} \u2192 {pmid} ({paper.slug})")
+            linked += 1
+        else:
+            print(f"\u2139\ufe0f  Link {gse_id} \u2192 {pmid} already exists")
+
+    if linked:
+        print(f"\n   Total new links: {linked}")
+    if dry_run:
+        print("\n\U0001f4a1 --dry-run, not saved")
+    return registry
+
 def main() -> None:
     import argparse
 
@@ -770,6 +842,10 @@ def main() -> None:
 
     sub.add_parser("find-orphans", help="查找孤儿数据集")
 
+    p_register_gse = sub.add_parser("register-gse", help="注册GSE数据集（抓取SOFT元数据\u2192PMID\u2192链接已有论文）")
+    p_register_gse.add_argument("gse_id", help="GEO 数据集 ID (如 GSE164044)")
+    p_register_gse.add_argument("--dry-run", action="store_true", help="预览不写入")
+
     p_add = sub.add_parser("add-paper", help="新增论文（调 paper_insights → 直接写 registry）")
     p_add.add_argument("--pmid", default=None, help="PubMed ID (NCBI 自动下载)")
     p_add.add_argument("--paper-dir", default=None, help="已有 paper 目录 (含 insights.yaml)")
@@ -781,7 +857,7 @@ def main() -> None:
     args = parser.parse_args()
     reg_path = args.registry if hasattr(args, "registry") else None
 
-    if args.command in ("report", "verify", "reset-gse", "find-orphans", "add-paper"):
+    if args.command in ("report", "verify", "reset-gse", "find-orphans", "add-paper", "register-gse"):
         registry = load_master_registry(reg_path)
 
     if args.command == "report":
@@ -812,6 +888,10 @@ def main() -> None:
                 mod_str = ", ".join(ds.modalities.keys()) if ds.modalities else "?"
                 print(f"  - {ds_id}  ({mod_str}, status={ds.status})")
         supp_orphans = registry.find_orphan_supplements()
+    elif args.command == "register-gse":
+        registry = _cmd_register_gse(registry, args.gse_id, dry_run=args.dry_run)
+        if not args.dry_run:
+            save_master_registry(registry, reg_path)
     elif args.command == "add-paper":
         registry = _cmd_add_paper(registry, pmid=args.pmid or "", xml=args.xml_path or "",
                                   pdf=args.pdf or "", paper_dir=args.paper_dir or "",
