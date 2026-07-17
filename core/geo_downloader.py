@@ -225,15 +225,28 @@ def _parse_soft_metadata(text: str) -> dict:
         "n_samples": 0,
         "sample_list": [],
         "is_superseries": False,
+        "subseries_ids": [],
     }
 
     lines = text.split("\n")
 
     # ── Detect SuperSeries ──
-    for line in lines[:50]:
-        if "SuperSeries" in line and ("composed of" in line or "This SuperSeries" in line):
-            meta["is_superseries"] = True
-            break
+    subseries_ids = []
+    for line in lines:
+        if line.startswith("!Series_relation = SuperSeries of:"):
+            sub_id = line.split(":", 1)[-1].strip()
+            if sub_id.startswith("GSE"):
+                subseries_ids.append(sub_id)
+                meta["is_superseries"] = True
+
+    # Fallback: check summary for older format
+    if not meta["is_superseries"]:
+        for line in lines[:50]:
+            if "SuperSeries" in line and ("composed of" in line or "This SuperSeries" in line):
+                meta["is_superseries"] = True
+                break
+
+    meta["subseries_ids"] = subseries_ids
 
     # ── Parse header fields ──
     for line in lines:

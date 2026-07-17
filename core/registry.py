@@ -896,10 +896,15 @@ def _cmd_register_gse(
         data_root = f"{{FUXI_DATA_ROOT}}/{gse_id}"
         resolved = resolve_path(data_root)
         status = "data_downloaded" if os.path.isdir(resolved) else "data_not_downloaded"
+        subseries_list = [{"id": sid, "note": ""} for sid in meta.get("subseries_ids", [])]
+        is_ss = meta.get("is_superseries", False)
         registry.datasets[gse_id] = DatasetEntry(
             repository=RepositoryType.GEO,
             status=status,
             data_root=data_root,
+            type="SuperSeries" if is_ss else "SingleAccession",
+            non_pipeline=is_ss,
+            subseries=subseries_list if is_ss else [],
         )
         print(f"\u2705  Created dataset entry: {gse_id} ({status})")
     else:
