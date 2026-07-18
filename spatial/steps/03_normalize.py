@@ -123,7 +123,7 @@ def main():
     sq.gr.spatial_neighbors(
         adata,
         n_neighs=CFG.spatial.neighbors_n,
-        radius=CFG.spatial.neighbors_radius,
+        radius=None if CFG.spatial.neighbors_radius == 0 else CFG.spatial.neighbors_radius,
         coord_type='generic',
     )
     log.info("  Spatial graph: n_neighs=%d, radius=%.1f", CFG.spatial.neighbors_n, CFG.spatial.neighbors_radius)

@@ -67,19 +67,17 @@ def main():
     log.info("Processing image for library_id='%s'...", library_id)
 
     try:
-        # Crop image to tissue bounding box
+        # Create ImageContainer from AnnData (Squidpy 1.8 API)
+        img = sq.im.ImageContainer.from_adata(adata, library_id=library_id)
+
+        # Crop image to tissue bounding box + smooth
         if CFG.spatial.crop_image:
             log.info("  Cropping image to tissue region...")
-            sq.im.process(
-                adata,
-                library_id=library_id,
-                crop=CFG.spatial.crop_image,
-                mask_circle=True,
-            )
-        else:
-            # Minimum processing: extract basic features
-            sq.im.process(adata, library_id=library_id)
-
+        sq.im.process(
+            img,
+            library_id=library_id,
+            method='smooth',
+        )
         log.info("  Image features extracted")
 
         # ── Optional: tissue segmentation ──
@@ -87,20 +85,21 @@ def main():
             log.info("  Running image segmentation (method=watershed)...")
             try:
                 sq.im.segment(
-                    adata,
+                    img,
                     method='watershed',
                     library_id=library_id,
                 )
                 log.info("  Segmentation complete")
             except ImportError:
                 log.warning("scikit-image not installed — skipping segmentation")
-
         # ── Multi-scale image features ──
         log.info("  Computing multi-scale image features...")
         sq.im.calculate_image_features(
             adata,
+            img,
             features=['summary', 'texture'],
             library_id=library_id,
+            layer='hires_smooth',
         )
         log.info("  Multi-scale image features added")
 
