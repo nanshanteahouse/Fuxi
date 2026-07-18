@@ -148,6 +148,7 @@ def grid_search_clustering(
         evaluation_fn,
         fixed_kwargs,
         results,
+        n_jobs=n_jobs,
     )
 
     return results
@@ -255,6 +256,7 @@ def _grid_search_serial(
     evaluation_fn: Callable[..., float] | None,
     fixed_kwargs: dict[str, Any],
     results: list[dict[str, Any]],
+    n_jobs: int = 1,
 ) -> None:
     """Serialize grid-search: group by *group_idx*, call neighbours/UMAP once."""
 
@@ -298,12 +300,33 @@ def _grid_search_serial(
                 pass
 
         # 3. Evaluate each (resolution, ...) combo within the same graph
-        for combo in group_combos:
-            params = dict(zip(param_names, combo))
-            merged = {**group_merged, **params}
-            _try_one_combo(
-                adata, clusterer, evaluation_fn, params, merged, results
+        if n_jobs > 1 and len(group_combos) > 1:
+            # Parallel: each resolution is independent within the shared graph
+            _eval_one = _make_combo_evaluator(
+                adata, clusterer, evaluation_fn, param_names, group_merged,
             )
+            try:
+                from joblib import Parallel, delayed
+                n_workers = min(n_jobs, len(group_combos))
+                group_results = Parallel(n_jobs=n_workers, backend='threading')(
+                    delayed(_eval_one)(combo) for combo in group_combos
+                )
+                results.extend([r for r in group_results if r is not None])
+            except Exception:
+                # Fallback to serial if threading fails (e.g. segfault in leiden)
+                for combo in group_combos:
+                    params = dict(zip(param_names, combo))
+                    merged = {**group_merged, **params}
+                    _try_one_combo(
+                        adata, clusterer, evaluation_fn, params, merged, results,
+                    )
+        else:
+            for combo in group_combos:
+                params = dict(zip(param_names, combo))
+                merged = {**group_merged, **params}
+                _try_one_combo(
+                    adata, clusterer, evaluation_fn, params, merged, results,
+                )
 
 
 def _try_one_combo(
@@ -339,3 +362,40 @@ def _try_one_combo(
             entry["score"] = None
 
     results.append(entry)
+
+
+def _make_combo_evaluator(
+    adata: Any,
+    clusterer: Callable[..., str],
+    evaluation_fn: Callable[..., float] | None,
+    param_names: list[str],
+    base_kwargs: dict[str, Any],
+) -> Callable[..., dict[str, Any] | None]:
+    """Return a callable that evaluates one combo and returns a result dict.
+
+    This is used by the threaded parallel loop: each worker calls the
+    clusterer (which writes to a distinct obs column via key_added) and
+    returns the result without mutating shared data structures.
+    """
+    def _eval(combo: tuple[Any, ...]) -> dict[str, Any] | None:
+        params = dict(zip(param_names, combo))
+        merged = {**base_kwargs, **params}
+        entry: dict[str, Any] = dict(params)
+        try:
+            cluster_key = clusterer(adata, **merged)
+            entry["cluster_key"] = cluster_key
+        except Exception:
+            entry["error"] = "clusterer failed"
+            return entry
+        try:
+            labels = adata.obs[cluster_key]
+            entry["n_clusters"] = int(labels.nunique())
+        except Exception:
+            entry["n_clusters"] = None
+        if evaluation_fn is not None:
+            try:
+                entry["score"] = evaluation_fn(adata, cluster_key, **merged)
+            except Exception:
+                entry["score"] = None
+        return entry
+    return _eval

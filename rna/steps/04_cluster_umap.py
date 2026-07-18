@@ -111,6 +111,7 @@ def main():
         umap_fn=_umap_fn,
         evaluation_fn=_evaluation_fn,
         group_key='n_neighbors',
+        n_jobs=CFG.execution.n_jobs,
         random_seed=CFG.execution.random_seed,
     )
 
