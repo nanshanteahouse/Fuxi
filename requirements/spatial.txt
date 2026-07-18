@@ -6,5 +6,6 @@
 -r base.txt
 
 # ══ Spatial (Squidpy) ══════════════════════════════════════════════════
-squidpy>=1.5.1
+squidpy>=1.8.1
 liana>=1.0.0
+# 可选: napari         09_exploratory 交互式查看器，缺失降级为静态图

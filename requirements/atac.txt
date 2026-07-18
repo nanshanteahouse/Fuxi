@@ -7,11 +7,15 @@
 
 # ══ scATAC-seq ══════════════════════════════════════════════════════════
 snapatac2>=2.9.0
-macs3>=3.0.4
-muon>=0.1.7
 mudata>=0.3.0
-pyranges>=0.1.0
-pybedtools>=0.12.0
-tobias>=0.17.0
-scvi-tools>=1.4.0
-cellrank>=2.3.0
+polars>=1.0
+
+# ══ 可选 / 有守卫 (缺失时自动降级，不阻塞管道) ═══════════════════════
+#   pybedtools      11_enrichment 策略1 (peak→gene 映射，需 bedtools 二进制)
+#   muon            13_integrate 多组学整合增强
+
+# ══ 预留策略层 (代码未接线，备用) ═════════════════════════════════════
+#   tobias            ATAC 足迹分析
+#   pyranges          基因组区间运算
+#   scvi-tools        深度整合/注释
+#   cellrank          命运轨迹

@@ -9,11 +9,13 @@
 #
 # 文件结构:
 #   requirements/
-#   ├── base.txt     共享核心 (numpy, scipy, pandas, openai ...)
-#   ├── rna.txt       scRNA-seq  (Scanpy, Scrublet, Harmony ...)
-#   ├── atac.txt      scATAC-seq (Snapatac2, MACS3, muon ...)
-#   ├── spatial.txt   spatial    (Squidpy, 预留)
-#   └── all.txt       全部模态
+#   ├── base.txt     共享核心 (numpy, scipy, pandas, scanpy, pydantic ...)
+#   ├── rna.txt       scRNA-seq  (harmonypy, Scrublet, decoupler, LIANA ...)
+#   ├── atac.txt      scATAC-seq (Snapatac2, Mudata, polars ...)
+#   ├── spatial.txt   spatial    (Squidpy, LIANA ...)
+#   ├── paper.txt     论文工具   (pymupdf4llm, pymupdf)
+#   ├── dev.txt       开发测试   (pytest, ruff, deepdiff) — 不进 all.txt
+#   └── all.txt       全部模态 + 论文工具
 # ═══════════════════════════════════════════════════════════════════════
 
 -r requirements/all.txt

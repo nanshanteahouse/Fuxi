@@ -6,3 +6,4 @@
 -r rna.txt
 -r atac.txt
 -r spatial.txt
+-r paper.txt
