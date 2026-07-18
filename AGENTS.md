@@ -62,38 +62,72 @@ python core/run_reproduce.py <paper_dir>           # reproduce a single paper
 | Config templates | `templates/config_templates/*.yaml` |
 | Brainstorming | `projects/notebook/` (methodology_ideas, keywords, etc.) |
 
-### Dataset lookup & unified registry
+### Dataset & Paper lookup
 
-When user requests to analyze or reproduce a dataset, check the **master registry** first:
+When user requests to analyze a dataset, look up a paper, or reproduce results,
+use targeted queries first rather than scanning the entire registry.
 
-1. **Quick summary** — `python -m core.registry report`
-   (counts papers, datasets, links, orphans).
-2. **Consistency check** — `python -m core.registry verify`
-   (detects stale config paths, missing dirs, orphan datasets).
-3. **Find orphans** — `python -m core.registry find-orphans`
-   (datasets or supplement dirs with no linked paper).
-4. **Programmatic query** — python import:
-   ```python
-   from core.registry import load_master_registry
-   reg = load_master_registry()
-   reg.get_dataset_links("41578023")   # paper → datasets
-   reg.get_paper_links("GSE118614")    # dataset → papers
-   reg.get_paper(paper_id="41578023")  # by PMID/slug
-   reg.find_orphans()
-   ```
-5. **If paper found** — Read `projects/papers/<paper_dir>/insights.yaml` for metadata.
-   Cross-validate with NCBI: `python core/paper_insights.py --pmid <PMID>`.
-6. **Register from PMID** — `python -m core.registry register --pmid <PMID>`
-   (calls paper_insights, then directly writes projects/registry/).
-7. **Register from GSE** — `python -m core.registry register --gse GSE164044`
-   (fetches SOFT metadata, finds PMID(s), links to existing paper entry).
-   Use `--dry-run` to preview: `python -m core.registry register --gse GSE164044 --dry-run`
-8. **If not found** — Ask user whether to download and register:
-   ```bash
-   python core/paper_insights.py --pmid <PMID>
-   python -m core.registry report
-   ```
+#### 1. Targeted status check (preferred for exact IDs)
 
+```bash
+# Check a single GSE — shows registration, data, config, pipeline status
+python -m core.registry status --gse GSE164044
+
+# Check a paper and all its linked datasets
+python -m core.registry status --pmid 31493975
+```
+
+This is the **primary entry point** for any exact GSE or PMID query.
+One command replaces piecing together 3+ separate checks, and would have
+prevented the "not registered" misdiagnosis described earlier.
+
+#### 2. Fuzzy paper search (vague description)
+
+```bash
+# Search by keyword in title, author, journal, year, PMID, slug
+python -m core.registry list-papers --query "retina development"
+python -m core.registry list-papers --query "author:Norrie"
+python -m core.registry list-papers --query "2024"
+```
+
+Use `list-papers` when the user gives a vague description (no exact PMID/GSE).
+Once narrowed to a candidate, use `status --pmid` for the full picture.
+
+#### 3. Global registry commands
+
+```bash
+python -m core.registry report          # summary counts
+python -m core.registry verify          # consistency check
+python -m core.registry find-orphans    # orphan datasets
+```
+
+#### 4. Decision tree from `status` output
+
+| Status shows | Next step |
+|---|---|
+| Data downloaded + config exists | `python core/run_pipeline.py --modality <mod> --config <path>` |
+| Data downloaded + no config | Generate config via `core/preprocess/` or copy from `templates/config_templates/` |
+| Data not downloaded | Download data (GEO) then repeat status check |
+| Not registered | `register --gse <GSE>` or `register --pmid <PMID>` first |
+| PMID not in registry | `python core/paper_insights.py --pmid <PMID>` then register |
+
+#### 5. Registration
+
+```bash
+python -m core.registry register --gse GSE164044              # GSE → PMID auto-link
+python -m core.registry register --gse GSE164044 --dry-run    # preview first
+python -m core.registry register --pmid 31493975              # paper → GSE linkage
+```
+
+#### 6. Programmatic query (for scripts / advanced use)
+
+```python
+from core.registry import load_master_registry
+reg = load_master_registry()
+reg.get_dataset_links("41578023")     # paper → datasets
+reg.get_paper_links("GSE118614")      # dataset → papers
+reg.get_paper(paper_id="41578023")    # by PMID/slug
+reg.find_orphans()
 
 ### Methodology Pattern Analysis
 
