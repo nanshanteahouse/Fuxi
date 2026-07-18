@@ -588,6 +588,166 @@ def _cmd_reset_gse(
     return registry
 
 
+
+def _show_gse_status(
+    registry: MasterRegistry,
+    gse_id: str,
+    indent: str = "",
+) -> None:
+    """Print comprehensive status for a single GSE dataset."""
+    ds = registry.get_dataset(gse_id)
+
+    # -- Registry status --
+    if ds:
+        print(f"{indent}Registry:   \u2705 registered  (status={ds.status})")
+        paper_links = registry.get_paper_links(gse_id)
+        for p_id, role in paper_links:
+            paper = registry.get_paper(p_id)
+            slug = paper.slug if paper else "?"
+            title_short = (paper.title or "?")[:60] if paper else "?"
+            print(f"{indent}             PMID {p_id}  ({slug})")
+            print(f"{indent}             \"{title_short}\"  role={role.name}")
+    else:
+        print(f"{indent}Registry:   \u274c not registered")
+
+    # -- Data status --
+    data_root = os.environ.get("FUXI_DATA_ROOT", "")
+    data_dir = os.path.join(data_root, gse_id) if data_root else ""
+    if data_dir and os.path.isdir(data_dir):
+        files = sorted(os.listdir(data_dir))
+        print(f"{indent}Data:       \u2705 downloaded")
+        print(f"{indent}             {data_dir}")
+        raw_files = [f for f in files if not f.endswith(".tar") and f != "filelist.txt"]
+        if raw_files:
+            if len(raw_files) <= 8:
+                for f in raw_files:
+                    print(f"{indent}             \U0001f4c4 {f}")
+            else:
+                print(f"{indent}             {len(raw_files)} files (show all with ls)")
+        tars = [f for f in files if f.endswith(".tar") or f.endswith(".tar.gz")]
+        if tars:
+            print(f"{indent}             \U0001f4e6 {len(tars)} archive(s): {', '.join(tars)}")
+    else:
+        print(f"{indent}Data:       \u274c not downloaded  (expected: {data_dir})")
+
+    # -- Config status --
+    print(f"{indent}Config:")
+    found_config = False
+    for mod in ["rna", "atac", "spatial"]:
+        config_dir = os.path.join("projects", mod, gse_id)
+        if os.path.isdir(config_dir):
+            config_files = [
+                f for f in os.listdir(config_dir)
+                if f.endswith(".yaml") and f.startswith("config_")
+            ]
+            if config_files:
+                found_config = True
+                print(f"{indent}             \u2705 {mod}: {', '.join(config_files)}")
+            else:
+                print(f"{indent}             \u26a0\ufe0f  {mod}: dir exists, no config yaml")
+        else:
+            print(f"{indent}             \u274c {mod}: not found")
+
+    # -- Registry modality configs --
+    if ds and ds.modalities:
+        print(f"{indent}Modalities (registry):")
+        for mod_key, mod_info in ds.modalities.items():
+            for cfg in mod_info.configs:
+                cfg_exists = os.path.exists(resolve_path(cfg.path)) if cfg.path else False
+                status_icon = "\u2705" if cfg_exists else "\u274c"
+                print(f"{indent}             {status_icon} {mod_key}: {cfg.path}  (pipeline={cfg.pipeline_status})")
+
+    # -- Next step --
+    if not ds:
+        print(f"{indent}\U0001f4a1 Next:  python -m core.registry register --gse {gse_id}")
+    elif data_dir and os.path.isdir(data_dir) and not found_config:
+        print(f"{indent}\U0001f4a1 Next:  Generate config (data downloaded, no config yet)")
+        print(f"{indent}          Create projects/rna/{gse_id}/config_{gse_id}.yaml from template")
+    elif found_config:
+        print(f"{indent}\U0001f4a1 Next:  python core/run_pipeline.py --modality <mod> --step 0 --config <config_path>")
+
+
+def _cmd_status(
+    registry: MasterRegistry,
+    gse_id: str = "",
+    pmid: str = "",
+) -> None:
+    """Print comprehensive status for a GSE or PMID."""
+    if pmid:
+        paper = registry.get_paper(pmid) or registry.get_paper_by_pmid(pmid)
+        if paper is None:
+            print(f"\u274c PMID {pmid} not found in registry")
+            print(f"\U0001f4a1 Run: python core/paper_insights.py --pmid {pmid}")
+            print(f"    Then: python -m core.registry register --pmid {pmid}")
+            return
+        print(f"\U0001f4cb Paper: {paper.paper_id}  ({paper.slug})")
+        print(f"   Title: {paper.title}")
+        if paper.journal:
+            print(f"   Journal: {paper.journal} ({paper.year})")
+        if paper.first_author:
+            print(f"   First author: {paper.first_author}")
+        if paper.doi:
+            print(f"   DOI: {paper.doi}")
+        print()
+        linked = registry.get_dataset_links(paper.paper_id)
+        if linked:
+            for i, (ds_id, role) in enumerate(linked):
+                if i > 0:
+                    print()
+                print(f"--- Dataset {i + 1}: {ds_id} (role={role.name}) ---")
+                _show_gse_status(registry, ds_id, indent="   ")
+        else:
+            print("   (No linked datasets)")
+    elif gse_id:
+        gse_id = gse_id.upper()
+        print(f"\U0001f4cb {gse_id}:")
+        _show_gse_status(registry, gse_id, indent="   ")
+    else:
+        print("\u274c Must specify --gse or --pmid")
+
+
+def _cmd_list_papers(
+    registry: MasterRegistry,
+    query: str = "",
+) -> None:
+    """Search registered papers by keyword."""
+    if not query:
+        print(f"\U0001f4da All registered papers ({len(registry.papers)} total):")
+        results = registry.papers
+    else:
+        q = query.lower()
+        results = []
+        for p in registry.papers:
+            fields = [
+                p.paper_id or "",
+                p.pmid or "",
+                p.title or "",
+                p.journal or "",
+                p.first_author or "",
+                p.slug or "",
+                p.year or "",
+            ]
+            if any(q in f.lower() for f in fields):
+                results.append(p)
+        if not results:
+            print(f"\u274c No papers matching '{query}'")
+            return
+        print(f"\U0001f4da Search '{query}' \u2192 {len(results)} match(es):")
+
+    for i, p in enumerate(results, 1):
+        linked = registry.get_dataset_links(p.paper_id)
+        gse_str = ", ".join(ds_id for ds_id, _ in linked[:4])
+        if len(linked) > 4:
+            gse_str += f" ... (+{len(linked) - 4} more)"
+        pmid_display = p.pmid or "no-pmid"
+        print(f"  {i}. {pmid_display}  {p.slug}")
+        title_short = (p.title or "?")[:80]
+        print(f"     {title_short}")
+        if gse_str:
+            print(f"     GSE: {gse_str}")
+        print()
+
+
 _JOURNAL_ABBREVS = {
     "cell": "cell", "neuron": "neuron", "nature": "nature",
     "nature communications": "natcomms", "nature genetics": "natgenet",
@@ -1086,6 +1246,13 @@ def main() -> None:
     p_add.add_argument("--download", action="store_true",
                         help="Auto-download GSE datasets from NCBI GEO after paper import.")
 
+    p_status = sub.add_parser("status", help="Check GSE/PMID comprehensive status")
+    p_status.add_argument("--gse", default=None, help="GEO dataset ID (e.g. GSE164044)")
+    p_status.add_argument("--pmid", default=None, help="PubMed ID (e.g. 31493975)")
+
+    p_list = sub.add_parser("list-papers", help="Search registered papers by keyword")
+    p_list.add_argument("--query", default="", help="Keyword to search (title, author, journal, etc.)")
+
     p_deregister = sub.add_parser("deregister", help="Delete dataset/paper from registry")
     p_deregister.add_argument("--pmid", default=None, help="PubMed ID to remove")
     p_deregister.add_argument("--gse", default=None, help="GEO dataset ID to remove")
@@ -1096,7 +1263,7 @@ def main() -> None:
     args = parser.parse_args()
     reg_path = args.registry if hasattr(args, "registry") else None
 
-    if args.command in ("report", "verify", "reset-gse", "find-orphans", "add-paper", "register", "deregister"):
+    if args.command in ("report", "verify", "reset-gse", "find-orphans", "add-paper", "register", "deregister", "status", "list-papers"):
         registry = load_master_registry(reg_path)
 
     if args.command == "report":
@@ -1151,6 +1318,16 @@ def main() -> None:
                                   dry_run=args.dry_run, download=args.download)
         if not args.dry_run:
             save_master_registry(registry, reg_path)
+    elif args.command == "status":
+        _cmd_status(
+            registry,
+            gse_id=args.gse or "",
+            pmid=args.pmid or "",
+        )
+
+    elif args.command == "list-papers":
+        _cmd_list_papers(registry, query=args.query)
+
     elif args.command == "deregister":
         registry = _cmd_deregister(registry, gse_id=args.gse or "", pmid=args.pmid or "",
                                    cascade=args.cascade, force=args.force,
