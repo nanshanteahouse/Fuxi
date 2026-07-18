@@ -35,7 +35,7 @@ def main():
         return
 
     # Load to memory (SnapATAC2 backed mode does not support subscript/copy)
-    data = snap.read(CFG.doublet_h5ad, backed=None)
+    data = snap.read(CFG.filtered_h5ad, backed=None)
     log.info("Loaded: %d cells, %d peaks (in-memory)", data.n_obs, data.n_vars)
 
     # ── Remove predicted doublets ──
