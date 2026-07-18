@@ -165,29 +165,29 @@ python -m core.registry register --pmid 31269016 --download
 **交互式模式（默认）**：
 
 ```bash
-python -m core.registry register --pmid 31493975
+python -m core.registry register --pmid 00000000
 ```
 
 运行后会解析论文，列出所有关联的 GSE 数据集及 SOFT 元数据摘要：
 
 ```
 Found 2 datasets:
-  [1] GSE164044  | single-cell RNA-seq of human retina
+  [1] GSE123456  | single-cell RNA-seq of human retina
   [2] GSE35156   | Hi-C of retinal cell lines
 
 Select datasets (comma-separated numbers, or 'all'): 1
 ```
 
-输入 `1` 后只注册 GSE164044，GSE35156 被跳过。输入 `all` 或直接回车（如果只有一个数据集）则注册全部。
+输入 `1` 后只注册 GSE123456，GSE35156 被跳过。输入 `all` 或直接回车（如果只有一个数据集）则注册全部。
 
 **非交互式模式（脚本用）**：
 
 ```bash
 # 只注册指定数据集
-python -m core.registry register --pmid 31493975 --datasets GSE164044
+python -m core.registry register --pmid 00000000 --datasets GSE123456
 
 # 注册全部（跳过选择）
-python -m core.registry register --pmid 31493975 --all
+python -m core.registry register --pmid 00000000 --all
 ```
 
 `--datasets` 接受逗号分隔的 GSE 编号列表，适合 shell 脚本中批量调用。`--all` 保持旧版行为，注册所有数据集。
@@ -196,10 +196,10 @@ python -m core.registry register --pmid 31493975 --all
 
 ```bash
 # 交互选择后下载所选数据集
-python -m core.registry register --pmid 31493975 --download
+python -m core.registry register --pmid 00000000 --download
 
-# 非交互：只下载 GSE164044
-python -m core.registry register --pmid 31493975 --datasets GSE164044 --download
+# 非交互：只下载 GSE123456
+python -m core.registry register --pmid 00000000 --datasets GSE123456 --download
 ```
 
 ### 方式 3.2：注销（deregister）
@@ -214,10 +214,10 @@ python -m core.registry deregister --gse GSE35156
 python -m core.registry deregister --gse GSE35156 --force
 
 # 移除论文 + 级联删除未被其他论文引用的数据集
-python -m core.registry deregister --pmid 31493975 --cascade
+python -m core.registry deregister --pmid 00000000 --cascade
 
 # 预览（不执行）
-python -m core.registry deregister --pmid 31493975 --cascade --dry-run
+python -m core.registry deregister --pmid 00000000 --cascade --dry-run
 ```
 
 `--cascade` 只删除孤立数据集（不被其他任何论文引用的数据集）。如果某个数据集同时被多篇论文引用，级联删除只会移除数据集与目标论文的关联，但保留数据集条目本身。
@@ -523,6 +523,7 @@ update_registry_after_download()
 
 ```bash
 # 查看注册表摘要
+python -m core.registry status --gse GSE123456      # 查看 GSE 状态（注册、数据、配置）
 python -m core.registry report
 
 # 查看特定数据集的注册信息
@@ -598,10 +599,10 @@ GSE235583/
 
 ```bash
 # 交互模式：运行后输入序号选择需要的 GSE
-python -m core.registry register --pmid 31493975
+python -m core.registry register --pmid 00000000
 
 # 非交互模式：直接指定
-python -m core.registry register --pmid 31493975 --datasets GSE164044
+python -m core.registry register --pmid 00000000 --datasets GSE123456
 ```
 
 ---

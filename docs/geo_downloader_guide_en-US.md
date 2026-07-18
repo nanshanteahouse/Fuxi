@@ -159,23 +159,23 @@ When a paper mentions multiple GSE datasets, you can choose exactly which ones t
 **Interactive mode** shows metadata for each GSE before you decide:
 
 ```
-$ python -m core.registry register --pmid 31493975
+$ python -m core.registry register --pmid 00000000
 Found 2 datasets:
-  [1] GSE164044 — scRNA-seq of human retina (Homo sapiens, 64 samples)
+  [1] GSE123456 — scRNA-seq of human retina (Homo sapiens, 64 samples)
   [2] GSE35156 — Hi-C of retinal cells (Homo sapiens, 6 samples)
 
 Enter numbers to register (e.g. 1,2) or leave empty for all: 1
 ```
 
-Here the user chose only the scRNA-seq dataset (GSE164044) and skipped the Hi-C dataset, since Hi-C is off-topic for a single-cell RNA pipeline.
+Here the user chose only the scRNA-seq dataset (GSE123456) and skipped the Hi-C dataset, since Hi-C is off-topic for a single-cell RNA pipeline.
 
 **Non-interactive mode** with `--datasets` is useful for scripts:
 
 ```bash
-python -m core.registry register --pmid 31493975 --datasets GSE164044
+python -m core.registry register --pmid 00000000 --datasets GSE123456
 ```
 
-This registers only GSE164044, skipping the selection prompt entirely.
+This registers only GSE123456, skipping the selection prompt entirely.
 
 **Register everything** (backward-compatible old behavior):
 
@@ -195,10 +195,10 @@ python -m core.registry deregister --gse GSE35156
 python -m core.registry deregister --gse GSE35156 --force
 
 # Remove a paper + cascade-delete orphan datasets
-python -m core.registry deregister --pmid 31493975 --cascade
+python -m core.registry deregister --pmid 00000000 --cascade
 
 # Preview without deleting
-python -m core.registry deregister --pmid 31493975 --cascade --dry-run
+python -m core.registry deregister --pmid 00000000 --cascade --dry-run
 ```
 
 The `--cascade` flag only removes datasets that are not shared with other papers. Datasets linked to multiple papers are kept intact.
@@ -480,9 +480,8 @@ The standalone CLI calls `update_registry_after_download()` automatically after 
 
 After the download and registry update complete, inspect the results with the registry CLI:
 
-```bash
-python -m core.registry report
-```
+python -m core.registry status --gse GSE123456      # Check registration, data, config status
+python -m core.registry report                       # Summary counts
 
 Or query a specific dataset programmatically:
 
@@ -582,10 +581,10 @@ A paper may submit scRNA-seq, ATAC-seq, Hi-C, ChIP-seq, and other data types tog
 
 ```bash
 # Interactive: enter index numbers to select which GSEs to register
-python -m core.registry register --pmid 31493975
+python -m core.registry register --pmid 00000000
 
 # Non-interactive: specify directly
-python -m core.registry register --pmid 31493975 --datasets GSE164044
+python -m core.registry register --pmid 00000000 --datasets GSE123456
 ```
 
 ---
