@@ -109,8 +109,10 @@ class StandardOntology:
             If **tissue** has no synonyms module.
         """
         if tissue == "retina":
-            from rna.tissue_ontologies.retina.synonyms import RETINA_SYNONYMS
-            return RETINA_SYNONYMS
+            import yaml
+            from pathlib import Path
+            _syn_path = Path(__file__).parent / "tissue_ontologies" / "retina" / "synonyms.yaml"
+            return yaml.safe_load(_syn_path.read_text(encoding="utf-8"))
         raise NotImplementedError(f"No synonyms for tissue: {tissue}")
 
     @staticmethod
