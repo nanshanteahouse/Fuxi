@@ -417,6 +417,12 @@ class ExecutionConfig(BaseModel):
     scanpy_verbosity: int = 2
     force_csr: bool = True
     use_float32: bool = True
+    # ── Memory / performance policy ──
+    # speed   = no tradeoffs (dense PCA, full regress_out, fastest)
+    # balanced = avoid dense copies (arpack PCA, skip regress_out)
+    # memory  = maximum savings (arpack + subsample UMAP train)
+    memory_policy: str = "speed"
+    memory_limit: str = "auto"  # auto = psutil detect | e.g. 64GB | 128GB
 
 
 # ═══════════════════════════════════════════════════════════════════════
