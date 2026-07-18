@@ -55,7 +55,25 @@ def main():
     log = setup_logger("03_integrate", os.path.join(CFG.log_dir, "03_integrate.log"))
     log.info("Step 03: Normalize + HVG selection + PCA + Harmony (integrated)")
     from core.utils import validate_adata
+    # ── 读取 ──
+    adata = sc.read(CFG.qc_h5ad)
+    log.info("Loaded: %d cells × %d genes", adata.n_obs, adata.n_vars)
 
+    # ── Memory policy detection ──
+    mem_policy = getattr(CFG.execution, 'memory_policy', 'speed')
+    log.info("Memory policy: %s", mem_policy)
+    # Warn if dense allocation would consume >30% of available RAM
+    try:
+        import psutil
+        avail_gb = psutil.virtual_memory().available / 1e9
+        est_dense_gb = adata.n_obs * adata.n_vars * 8 / 1e9
+        if est_dense_gb > avail_gb * 0.3:
+            log.warning(
+                "Estimated dense memory %.1f GB exceeds 30%% of available %.1f GB — "
+                "consider memory_policy=balanced", est_dense_gb, avail_gb,
+            )
+    except ImportError:
+        pass
     # ── 读取 ──
     adata = sc.read(CFG.qc_h5ad)
     log.info("Loaded: %d cells × %d genes", adata.n_obs, adata.n_vars)
@@ -153,7 +171,12 @@ def main():
             log.warning("Cell cycle scoring failed (skipped): %s", e)
 
     # ── 回归技术变异 / 细胞周期分数 (HVG 子集, normalize+log1p 后) ──
-    if CFG.normalization.score_cell_cycle:
+    # regress_out internally densifies → large temporary allocation; skip in
+    # balanced/memory modes unless cell cycle scoring is explicitly enabled.
+    _skip_regress = mem_policy in ('balanced', 'memory') and not CFG.normalization.score_cell_cycle
+    if _skip_regress:
+        log.info("memory_policy=%s — skipping regress_out (avoids dense allocation)", mem_policy)
+    elif CFG.normalization.score_cell_cycle:
         try:
             log.info("Regressing cell cycle scores: S_score, G2M_score ...")
             sc.pp.regress_out(adata, ['S_score', 'G2M_score'])
@@ -192,6 +215,11 @@ def main():
     # ── 保存全基因副本到 .raw ──
     adata.raw = adata_full
     log.info(".raw saved (full genes: %d vars)", adata_full.n_vars)
+    # Release full-gene reference to free memory
+    del adata_full
+    import gc
+    gc.collect()
+    log.info("  full-gene reference released from local namespace")
 
     # ── 可选: 自动性别检测 ──
     if getattr(CFG.normalization, 'detect_sex', False):
@@ -205,9 +233,11 @@ def main():
         sys.exit(1)
 
     # ── PCA ──
-    log.info("PCA (%d components)...", CFG.pca.n_pcs_full)
+    # arpack = iterative (low memory), randomized = fast (dense allocation)
+    _solver = 'arpack' if mem_policy in ('balanced', 'memory') else 'randomized'
+    log.info("PCA (%d components, solver=%s)...", CFG.pca.n_pcs_full, _solver)
     sc.pp.pca(adata, n_comps=CFG.pca.n_pcs_full,
-              svd_solver='randomized', random_state=CFG.execution.random_seed)
+              svd_solver=_solver, random_state=CFG.execution.random_seed)
     var_ratio = adata.uns['pca']['variance_ratio']
     log.info("  top-5 variance ratio: %.4f", var_ratio[:5].sum())
     log.info("  Cumulative variance ratio first 50 PCs: %.4f", var_ratio[:50].sum())
