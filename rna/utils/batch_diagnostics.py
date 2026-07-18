@@ -117,7 +117,7 @@ def _compute_purity_one_shot(adata, col: str, use_rep: str = "X_pca") -> float:
     adata = adata.copy()
     try:
         sc.pp.neighbors(adata, n_neighbors=15, use_rep=use_rep)
-        sc.tl.leiden(adata, resolution=1.0, key_added="_diag_leiden")
+        sc.tl.leiden(adata, resolution=1.0, key_added="_diag_leiden", flavor='igraph', directed=False, n_iterations=2)
     except Exception:
         return 1.0
     ct = pd.crosstab(adata.obs["_diag_leiden"], adata.obs[col])

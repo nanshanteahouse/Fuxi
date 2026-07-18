@@ -302,7 +302,8 @@ def main():
     for res in CFG.clustering.leiden_resolutions:
         key = f'sub_leiden_r{res}'
         sc.tl.leiden(sub, resolution=res, key_added=key,
-                     random_state=CFG.execution.random_seed, flavor=CFG.clustering.leiden_flavor)
+                     random_state=CFG.execution.random_seed, flavor=CFG.clustering.leiden_flavor,
+                     directed=False, n_iterations=2)
         n_cl = sub.obs[key].nunique()
         log.info("  r=%.1f → %d subclusters", res, n_cl)
 

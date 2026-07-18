@@ -296,6 +296,7 @@ def _compute_stability(adata, resolution, leiden_flavor: Literal['leidenalg', 'i
                 random_state=seed,
                 flavor=leiden_flavor,
                 n_iterations=2,
+                directed=False,
             )
             label_sets.append(adata.obs[key].values)
         except Exception:

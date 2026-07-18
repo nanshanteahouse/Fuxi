@@ -140,7 +140,8 @@ def run_subclustering(adata, CFG, subcluster_types, resolution, min_cells, logge
         sc.pp.neighbors(sub, n_pcs=50, use_rep='X_pca_harmony',
                         random_state=42)
         sc.tl.leiden(sub, resolution=resolution, key_added='subcluster',
-                     random_state=42, flavor=CFG.clustering.leiden_flavor)
+                     random_state=42, flavor=CFG.clustering.leiden_flavor,
+                     directed=False, n_iterations=2)
         labels = np.array(sub.obs['cell_type'].astype(str)
                           + '_' + sub.obs['subcluster'].astype(str))
         adata.obs.loc[mask, 'cell_type_sub'] = labels.tolist()

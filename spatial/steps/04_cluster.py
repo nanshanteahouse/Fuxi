@@ -101,6 +101,7 @@ def main():
             adata, resolution=resolution, key_added=leiden_key,
             random_state=CFG.execution.random_seed,
             flavor=getattr(CFG.clustering, 'leiden_flavor', 'igraph'),
+            directed=False, n_iterations=2,
         )
         adata.obsm[umap_key] = adata.obsm['X_umap'].copy()
         return leiden_key
