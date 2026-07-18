@@ -22,6 +22,7 @@ spatial:
 
 # ── Dataset metadata ──
 tissue: "{{TISSUE}}"
+# tissue_kb: ""  # auto-inferred from 'tissue' when matching KB exists
 # tissue_maturity: "unknown"   # "developing" | "adult" | "unknown"
 species: "{{SPECIES}}"
 
@@ -67,7 +68,6 @@ clustering:
 # TODO: Add known marker genes for {{TISSUE}} tissue.
 marker:
   marker_dict: {}
-  # tissue_kb: ""
 
 # ── Subcluster (fine-resolution annotation) ──
 # subcluster:
