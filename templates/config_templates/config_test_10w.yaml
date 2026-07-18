@@ -83,6 +83,7 @@ ai:
 execution:
   n_jobs: 4
   random_seed: 42
+  memory_policy: speed
   # force_csr: true
   # use_float32: true
   # limit_blas_threads: true

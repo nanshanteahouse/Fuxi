@@ -94,6 +94,7 @@ cci:
 execution:
   n_jobs: 0
   random_seed: 42
+  memory_policy: speed
 
 # ── Downsampling (optional) ──
 # downsample:

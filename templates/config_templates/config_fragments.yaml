@@ -101,6 +101,7 @@ enrichment:
 execution:
   n_jobs: 0
   random_seed: 42
+  memory_policy: speed
   # force_csr: true
   # use_float32: true
   # limit_blas_threads: true
