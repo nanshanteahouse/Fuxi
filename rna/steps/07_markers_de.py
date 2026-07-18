@@ -29,6 +29,7 @@ def layer1_markers(adata, CFG, log, group_col):
     sc.tl.rank_genes_groups(
         adata, groupby=group_col, method=CFG.de.method,
         n_genes=CFG.de.n_genes * 2, use_raw=True, pts=True,
+        n_jobs=getattr(CFG.execution, 'n_jobs', 1),
         random_state=CFG.execution.random_seed,
     )
 
@@ -82,6 +83,7 @@ def _layer2_one_pair(ct, s1, s2, adata, ct_col, CFG, log):
         sc.tl.rank_genes_groups(
             sub, groupby='stage', groups=[s2], reference=s1,
             method='t-test', n_genes=CFG.de.n_genes,
+            n_jobs=getattr(CFG.execution, 'n_jobs', 1),
             use_raw=True, random_state=CFG.execution.random_seed,
         )
         de_df = sc.get.rank_genes_groups_df(sub, group=s2)
