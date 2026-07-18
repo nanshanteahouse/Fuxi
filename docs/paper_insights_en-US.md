@@ -259,7 +259,7 @@ Each figure entry contains a boolean `reproducible` field and a `reproducibility
 Downloads full text from NCBI PMC, extracts GSE IDs via AI, registers automatically:
 
 ```bash
-python -m core.registry register --pmid 31493975
+python -m core.registry register --pmid 00000000
 python -m core.registry register --xml local.xml          # Local XML
 python -m core.registry register --pdf paper.pdf          # PDF fallback
 python -m core.registry register --paper-dir projects/papers/.../  # Existing insights.yaml
@@ -270,17 +270,19 @@ python -m core.registry register --paper-dir projects/papers/.../  # Existing in
 Fetches NCBI GEO SOFT metadata to discover PMID(s) and links to existing papers:
 
 ```bash
-python -m core.registry register --gse GSE164044            # Register
-python -m core.registry register --gse GSE164044 --dry-run  # Preview
+python -m core.registry register --gse GSE123456            # Register
+python -m core.registry register --gse GSE123456 --dry-run  # Preview
 ```
 
 #### Query & Verify
 
-```bash
-python -m core.registry report      # Summary report
-python -m core.registry verify      # Consistency check
-python -m core.registry find-orphans  # Find datasets with no linked paper
-python -m core.registry reset-gse GSE12345  # Reset dataset status
+python -m core.registry status --gse GSE123456      # Check GSE status (reg, data, config)
+python -m core.registry status --pmid 00000000      # Check paper status + linked datasets
+python -m core.registry list-papers --query retina   # Search registered papers by keyword
+python -m core.registry report                       # Summary counts
+python -m core.registry verify                       # Consistency check
+python -m core.registry find-orphans                 # Find datasets with no linked paper
+python -m core.registry reset-gse GSE12345           # Reset dataset status
 ```
 
 ### 6.2 run_reproduce — Reproduce papers through the pipeline

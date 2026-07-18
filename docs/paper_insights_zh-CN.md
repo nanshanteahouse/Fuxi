@@ -258,7 +258,7 @@ reproduction_status:
 从 NCBI PMC 下载全文，AI 提取 GSE 编号，自动注册：
 
 ```bash
-python -m core.registry register --pmid 31493975
+python -m core.registry register --pmid 00000000
 python -m core.registry register --xml local.xml          # 本地 XML
 python -m core.registry register --pdf paper.pdf          # PDF 回退
 python -m core.registry register --paper-dir projects/papers/.../  # 已有 insights.yaml
@@ -269,17 +269,19 @@ python -m core.registry register --paper-dir projects/papers/.../  # 已有 insi
 从 NCBI GEO SOFT 元数据自动获取 PMID，链接到已有论文：
 
 ```bash
-python -m core.registry register --gse GSE164044            # 注册
-python -m core.registry register --gse GSE164044 --dry-run  # 预览
+python -m core.registry register --gse GSE123456            # 注册
+python -m core.registry register --gse GSE123456 --dry-run  # 预览
 ```
 
 #### 查询与验证
 
-```bash
-python -m core.registry report      # 汇总报告
-python -m core.registry verify      # 一致性校验
-python -m core.registry find-orphans  # 查找无关联论文的孤儿数据集
-python -m core.registry reset-gse GSE12345  # 重置数据集状态
+python -m core.registry status --gse GSE123456      # 查看 GSE 状态（注册、数据、配置）
+python -m core.registry status --pmid 00000000      # 查看论文状态 + 关联数据集
+python -m core.registry list-papers --query retina   # 关键词搜索已注册论文
+python -m core.registry report                       # 汇总统计
+python -m core.registry verify                       # 一致性校验
+python -m core.registry find-orphans                 # 查找无关联论文的孤儿数据集
+python -m core.registry reset-gse GSE12345           # 重置数据集状态
 ```
 
 ### 6.2 run_reproduce — 论文复现
