@@ -247,6 +247,27 @@ class DESettings(BaseModel):
     logfc_cutoff: float = 0.25
     stage_pairwise: bool = True
     auto_switch_on_low_quality: bool = False
+    pseudobulk: PseudobulkDESettings = Field(default_factory=lambda: PseudobulkDESettings())
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 11b — PseudobulkDESettings (nested under de)
+# ═══════════════════════════════════════════════════════════════════════
+class PseudobulkDESettings(BaseModel):
+    """Pseudobulk differential expression via PyDESeq2."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    celltype_col: str = "cell_type"
+    sample_col: str = "sample"
+    design: str = "~condition"
+    contrast_column: str = "condition"
+    contrast_treatment: str = ""
+    contrast_baseline: str = ""
+    alpha: float = 0.05
+    min_cells_per_sample: int = 10
+    min_cells_per_group: int = 3
+    lfc_shrink: bool = True
+    n_jobs: int = 0
+    output_dir: str = ""
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -510,7 +531,7 @@ class Config(BaseModel):
     target_order: str = ""
 
     # ═══════════════════════════════════════════════════════════════════
-    # 20 个主题子模型
+    # 21 个主题子模型
     # ═══════════════════════════════════════════════════════════════════
     data_input: DataInputConfig = Field(default_factory=DataInputConfig)
     sample_meta: SampleMetaConfig = Field(default_factory=SampleMetaConfig)

@@ -11,6 +11,7 @@ harmonypy>=2.0
 leidenalg>=0.10.0
 gseapy>=1.1.0
 decoupler>=2.0
+pydeseq2>=0.5
 liana>=1.0.0
 statsmodels>=0.14
 igraph>=1.0
