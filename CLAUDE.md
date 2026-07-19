@@ -60,7 +60,7 @@ Subject: imperative, lowercase, ≤72 chars. Body explains *why*, not *what*.
 `CFG.hvg.n_top_genes`, `CFG.clustering.cluster_selection_method`, `CFG.qc.min_genes`.
 `.py` configs are rejected — use `.yaml`. See `core/config.py` for all 20 topic models.
 
-**Core scripts.** Step scripts under `rna/steps/`, `atac/steps/`, `spatial/steps/` must not be edited in place. Copy to `projects/{modality}/{GSE_ID}/` for dataset-specific changes, then run the copy directly. Write a note to `notes/suggestions/` after.
+**Core scripts.** Step scripts under `rna/steps/`, `atac/steps/`, `spatial/steps/` must not be edited in place. Copy to `projects/{modality}/{GSE_ID}/` for dataset-specific changes, then run the copy directly.
 
 **Code organization.** 500 LOC soft cap for core modules and step scripts; 400 for utility modules. Algorithm engines under `*_utils/` at 500 LOC.
 
