@@ -589,18 +589,26 @@ class PmcXmlSource(PaperSource):
     # ── Paper name ─────────────────────────────────────────────────────────────────
 
     def _compute_paper_name(self) -> str:
-        """Build paper name in ``{year}_{first_author}_{journal}_{title_slug}`` format."""
+        """Build paper name in ``{pmid}_{year}_{first_author}_{journal}_{title_slug}`` format.
+
+        PMID prefix ensures global uniqueness and easy PubMed lookup.
+        Falls back to ``{year}_{first_author}_{journal}_{title_slug}`` if no PMID.
+        """
         meta = self._metadata if self._metadata is not None else self._parse_metadata()
+        pmid = str(meta.get('pmid', '')).strip()
         year = str(meta.get('year', 'XXXX'))
         author = _slugify(str(meta.get('first_author', 'Unknown')), max_len=20)
         journal = _slugify(str(meta.get('journal', 'Journal')), max_len=10)
         title_slug = _slugify(str(meta.get('title', '')), max_len=40)
 
-        name = f'{year}_{author}_{journal}_{title_slug}'.strip('_')
-        # Enforce 100-char limit
-        name = name[:100].rstrip('_')
+        if pmid:
+            name = f'{pmid}_{year}_{author}_{journal}_{title_slug}'.strip('_')
+        else:
+            name = f'{year}_{author}_{journal}_{title_slug}'.strip('_')
+        # Enforce 120-char limit (was 100, +9 for PMID prefix)
+        name = name[:120].rstrip('_')
         # Replace any remaining special characters
-        name = _slugify(name, max_len=100)
+        name = _slugify(name, max_len=120)
         return name or 'Unknown_Paper'
 
     # ── Public API ─────────────────────────────────────────────────────────────────
@@ -780,13 +788,17 @@ class PubmedSource(PaperSource):
 
     def _compute_paper_name(self) -> str:
         meta = self.get_metadata()
+        pmid = str(meta.get('pmid', '')).strip()
         year = str(meta.get('year') or 'XXXX')
         author = _slugify(str(meta.get('first_author') or 'Unknown'), max_len=20)
         journal = _slugify(str(meta.get('journal') or 'Journal'), max_len=10)
         title_slug = _slugify(str(meta.get('title') or ''), max_len=40)
-        name = f'{year}_{author}_{journal}_{title_slug}'.strip('_')
-        name = name[:100].rstrip('_')
-        name = _slugify(name, max_len=100)
+        if pmid:
+            name = f'{pmid}_{year}_{author}_{journal}_{title_slug}'.strip('_')
+        else:
+            name = f'{year}_{author}_{journal}_{title_slug}'.strip('_')
+        name = name[:120].rstrip('_')
+        name = _slugify(name, max_len=120)
         return name or 'Unknown_Paper'
 
     def get_paper_name(self) -> str:
@@ -929,16 +941,23 @@ class MarkdownSource(PaperSource):
     # ── Paper name ─────────────────────────────────────────────────────────────────
 
     def _compute_paper_name(self) -> str:
-        """Build paper name in ``{year}_{first_author}_{journal}_{title}`` format."""
+        """Build paper name in ``{pmid}_{year}_{first_author}_{journal}_{title}`` format.
+
+        For PDF sources, PMID is extracted from filename if named as '<PMID>.pdf'.
+        """
         meta = self._metadata if self._metadata is not None else self._parse_filename_meta()
+        pmid = str(meta.get('pmid', '')).strip()
         year = str(meta.get('year') or 'XXXX')
         author = _slugify(str(meta.get('first_author') or 'Unknown'), max_len=20)
         journal = _slugify(str(meta.get('journal') or 'Journal'), max_len=10)
         title_slug = _slugify(str(meta.get('title') or ''), max_len=40)
 
-        name = f'{year}_{author}_{journal}_{title_slug}'.strip('_')
-        name = name[:100].rstrip('_')
-        name = _slugify(name, max_len=100)
+        if pmid:
+            name = f'{pmid}_{year}_{author}_{journal}_{title_slug}'.strip('_')
+        else:
+            name = f'{year}_{author}_{journal}_{title_slug}'.strip('_')
+        name = name[:120].rstrip('_')
+        name = _slugify(name, max_len=120)
         return name or 'Unknown_Paper'
 
     # ── Public API ─────────────────────────────────────────────────────────────────
