@@ -261,6 +261,21 @@ def main():
     args = args_parser.parse_args()
     CFG = resolve_config(args.config)
     log = setup_logger("07_de", os.path.join(CFG.log_dir, "07_markers_de.log"))
+
+    # ── Pseudobulk dispatch (de.method: pseudobulk) ───────────────────
+    if CFG.de.method == "pseudobulk":
+        input_h5ad = os.path.join(CFG.h5ad_dir, "05_annotated.h5ad")
+        if not os.path.exists(input_h5ad):
+            input_h5ad = CFG.cluster_h5ad
+            log.warning("05_annotated.h5ad not found, falling back to: %s", input_h5ad)
+        adata = sc.read(input_h5ad)
+        log.info("Loaded: %s — %d cells", input_h5ad, adata.n_obs)
+
+        from rna.utils.pseudobulk_de import run_pseudobulk_de
+        run_pseudobulk_de(adata, CFG, log)
+
+        log.info("Step 07 (pseudobulk) complete, took %.1fs", time.time() - t0)
+        return
     log.info("Step 07: Marker genes + differential expression analysis")
 
     # 优先加载 05_annotated.h5ad，回退到 cluster_h5ad
