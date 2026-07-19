@@ -403,6 +403,140 @@ class MasterRegistry(BaseModel):
                     "source": p.paper_id,
                 })
 
+        # ── 6. 检查 dataset.paper_pmids 引用的 paper_id 是否存在 ──
+        for ds_id, ds in self.datasets.items():
+            for pmid in ds.paper_pmids:
+                if pmid not in known_papers:
+                    findings.append({
+                        "level": "error",
+                        "message": (
+                            f"paper_pmids 引用的 paper_id={pmid} 不在 papers.yaml 中"
+                            f" (dataset={ds_id})"
+                        ),
+                        "source": ds_id,
+                    })
+
+        # ── 7. 检查 dataset 的 paper_pmids 是否与 links 同步 ──
+        dataset_linked_papers: dict[str, set[str]] = {}
+        for ln in self.links:
+            dataset_linked_papers.setdefault(ln.dataset_id, set()).add(ln.paper_id)
+        for ds_id, linked_ids in dataset_linked_papers.items():
+            ds = self.datasets.get(ds_id)
+            if ds is None:
+                continue
+            ds_pmids = set(ds.paper_pmids)
+            missing_in_pmids = linked_ids - ds_pmids
+            if missing_in_pmids:
+                findings.append({
+                    "level": "warn",
+                    "message": (
+                        f"links 中有但 paper_pmids 缺失: {sorted(missing_in_pmids)}"
+                        f" (dataset={ds_id})"
+                    ),
+                    "source": ds_id,
+                })
+
+        # ── 8. 检查 status 与 notes 是否矛盾 ──
+        for ds_id, ds in self.datasets.items():
+            if (ds.status
+                    and "not_downloaded" in ds.status
+                    and "downloaded" in ds.notes.lower()):
+                # SuperSeries 的 status=not_downloaded 但 notes=downloaded 是常见模式
+                if ds.type != "SuperSeries":
+                    findings.append({
+                        "level": "warn",
+                        "message": (
+                            f"status={ds.status} 但 notes 含 'downloaded'"
+                            f" (dataset={ds_id})"
+                        ),
+                        "source": ds_id,
+                    })
+            # 子模态已下载但顶层标记未下载（如 GSE277326）
+            if ds.status == "data_not_downloaded" and ds.modalities:
+                downloaded_mods = [
+                    m for m, mi in ds.modalities.items()
+                    if mi.status == "data_downloaded"
+                ]
+                if downloaded_mods:
+                    findings.append({
+                        "level": "warn",
+                        "message": (
+                            f"status=data_not_downloaded 但模态 {downloaded_mods} 已标记 data_downloaded"
+                            f" (dataset={ds_id})"
+                        ),
+                        "source": ds_id,
+                    })
+
+        # ── 9. 检查 insights 骨架（有路径但内容为空）──
+        papers_root = "projects/papers"
+        for p in self.papers:
+            if not p.insights.insights_path or not p.paper_dir:
+                continue
+            yaml_path = os.path.join(papers_root, p.paper_dir, p.insights.insights_path)
+            if not os.path.isfile(yaml_path):
+                continue
+            try:
+                with open(yaml_path, "r", encoding="utf-8") as f:
+                    insights_data = yaml.safe_load(f)
+            except Exception:
+                continue
+            if not isinstance(insights_data, dict):
+                continue
+            kf = insights_data.get("key_findings")
+            figs = insights_data.get("figures")
+            ed = insights_data.get("experimental_design")
+            is_skeleton = (
+                (not kf or len(kf) == 0)
+                and (not figs or len(figs) == 0)
+                and (not ed or len(ed) == 0)
+            )
+            # 综述期刊：骨架属正常状态（无原始数据可提取）
+            REVIEW_KEYWORDS = ["review", "annual review", "progress in"]
+            journal_lower = (p.journal or "").lower()
+            is_review_journal = any(kw in journal_lower for kw in REVIEW_KEYWORDS)
+            if is_skeleton and p.insights.status == InsightStatus.GENERATED:
+                if is_review_journal:
+                    continue  # 综述骨架属正常，不报
+                findings.append({
+                    "level": "warn",
+                    "message": (
+                        f"insights.status=generated 但 insights.yaml 为骨架"
+                        f" (无 key_findings/figures/experimental_design)"
+                        f" (paper_id={p.paper_id})"
+                    ),
+                    "source": p.paper_id,
+                })
+            if is_skeleton and p.insights.status == InsightStatus.PDF_ONLY:
+                # 有 insights_path 但 status 仍是默认 PDF_ONLY → 应标记为 pending
+                findings.append({
+                    "level": "warn",
+                    "message": (
+                        f"insights.yaml 为骨架但 status=pdf_only"
+                        f" (应设为 pending 或 generated)"
+                        " (paper_id={p.paper_id})"
+                    ),
+                    "source": p.paper_id,
+                })
+
+        # ── 10. 检查 orphan paper directories ──
+        known_dirs = {p.paper_dir for p in self.papers if p.paper_dir}
+        if os.path.isdir(papers_root):
+            for entry in os.listdir(papers_root):
+                entry_path = os.path.join(papers_root, entry)
+                if not os.path.isdir(entry_path):
+                    continue
+                if entry == "pdf" or entry.startswith("_"):
+                    continue
+                if entry not in known_dirs:
+                    findings.append({
+                        "level": "warn",
+                        "message": (
+                            f"projects/papers/{entry}/ 无对应 paper_dir"
+                            f" (建议移除或补注册)"
+                        ),
+                        "source": entry,
+                    })
+
         return findings
 
 
@@ -1200,6 +1334,18 @@ def _deregister_paper(
     removed = f"paper + {len(orphan_gses)} dataset(s)" if cascade and orphan_gses else "paper"
     print(f"   Done: {action}d {removed} ({len(links_to_remove)} link(s) removed)")
     return registry
+
+def _auto_verify(registry: MasterRegistry) -> None:
+    findings = registry.verify()
+    if not findings:
+        return
+    n_err = sum(1 for f in findings if f.get('level') == 'error')
+    n_warn = sum(1 for f in findings if f.get('level') == 'warn')
+    print(f"[verify] {n_err} error(s), {n_warn} warning(s)")
+    for f in findings:
+        icon = f"[{f['level'].upper()}]"
+        print(f"  {icon} {f['source']}: {f['message']}")
+
 def main() -> None:
     import argparse
 
@@ -1311,6 +1457,7 @@ def main() -> None:
             return registry
         if not args.dry_run:
             save_master_registry(registry, reg_path)
+            _auto_verify(registry)
     elif args.command == "add-paper":
         print("\u26a0\ufe0f  [DEPRECATED] add-paper \u5df2\u5f03\u7528\uff0c\u8bf7\u6539\u7528: register --pmid <PMId>")
         registry = _cmd_add_paper(registry, pmid=args.pmid or "", xml=args.xml_path or "",
@@ -1318,6 +1465,7 @@ def main() -> None:
                                   dry_run=args.dry_run, download=args.download)
         if not args.dry_run:
             save_master_registry(registry, reg_path)
+            _auto_verify(registry)
     elif args.command == "status":
         _cmd_status(
             registry,
@@ -1334,6 +1482,7 @@ def main() -> None:
                                    dry_run=args.dry_run, reg_path=reg_path)
         if not args.dry_run:
             save_master_registry(registry, reg_path)
+            _auto_verify(registry)
 
 
 if __name__ == "__main__":
