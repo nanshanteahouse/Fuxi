@@ -51,7 +51,7 @@ import networkx as nx
 _REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO))
 
-from rna.tissue_ontologies.retina import retina_expert_kb
+from rna.tissue_ontologies import load_kb
 
 
 # ── Defaults ────────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ COSINE_THRESHOLD = 0.25
 
 def _load_kb_markers() -> dict[str, set]:
     """Load the retina KB and return ``{cell_type: set(marker_genes)}``."""
-    kb = retina_expert_kb
+    kb = load_kb("retina")
     kb_types = {
         k for k in kb
         if not k.startswith("_") and k != "expert_rules" and isinstance(kb[k], dict)

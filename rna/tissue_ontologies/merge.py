@@ -1,13 +1,16 @@
 """
-tissue_ontologies/retina/merge.py — Retina KB merge engine.
+tissue_ontologies/merge.py — Tissue-agnostic KB merge engine.
 
-Loads all source YAML files from ``sources/``, merges their markers with consensus
-scoring, detects conflicts, and emits a unified KB dict consumable by
-``marker_scoring.py``.
+Loads all source YAML files from a ``sources/`` directory, merges their markers
+with consensus scoring, detects conflicts, resolves them, and emits a unified KB
+dict consumable by ``marker_scoring.py``.
 
 Usage::
 
-    from tissue_ontologies.retina.merge import retina_expert_kb
+    from rna.tissue_ontologies.merge import build_tissue_kb
+    kb = build_tissue_kb("rna/tissue_ontologies/retina/sources",
+                         type_aliases={"Retinal_Ganglion_Cell": "RGC"},
+                         hierarchy_yaml_path="rna/tissue_ontologies/retina/hierarchy.yaml")
 """
 
 import logging
@@ -15,36 +18,24 @@ import os
 from typing import Any, Dict, List, Optional, Set
 
 import yaml
-from rna.utils.hierarchy import (
-    load_hierarchy_yaml, build_hierarchy, compute_private_markers,
-    CATEGORY_PREFIX,
-)
 
 logger = logging.getLogger(__name__)
 
-# ═══════════════════════════════════════════════════════════════════════
-#  Type-key synonym table for cross-source merging
-# ═══════════════════════════════════════════════════════════════════════
-
-TYPE_ALIASES: Dict[str, str] = {
-    "Retinal_Ganglion_Cell": "RGC",
-}
 
 # ═══════════════════════════════════════════════════════════════════════
 #  Source loading
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def load_all_sources(sources_dir: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Auto-discover and load all YAML source files from ``sources/``.
+def load_all_sources(sources_dir: str) -> List[Dict[str, Any]]:
+    """Auto-discover and load all YAML source files from *sources_dir*.
 
     Excludes ``schema.yaml`` (documentation only) and files starting with ``_``.
 
     Parameters
     ----------
-    sources_dir : str or None
-        Path to the sources directory.  When ``None`` (default) it is
-        inferred relative to this file's location.
+    sources_dir : str
+        Path to the sources directory containing per-publication ``.yaml`` files.
 
     Returns
     -------
@@ -52,11 +43,6 @@ def load_all_sources(sources_dir: Optional[str] = None) -> List[Dict[str, Any]]:
         Each entry has keys ``meta``, ``markers``, ``novel_types``,
         ``expert_rules``, ``conflicts``, ``source_id``.
     """
-    if sources_dir is None:
-        sources_dir = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "sources"
-        )
-
     sources: List[Dict[str, Any]] = []
     entries = sorted(os.listdir(sources_dir))
 
@@ -64,7 +50,7 @@ def load_all_sources(sources_dir: Optional[str] = None) -> List[Dict[str, Any]]:
         if not entry.endswith(".yaml"):
             continue
         if entry.startswith("_"):
-            continue  # skip _TEMPLATE.py etc.
+            continue  # skip _TEMPLATE etc.
         if entry == "schema.yaml":
             continue  # documentation only
 
@@ -121,7 +107,6 @@ def compute_consensus_level(source_count: int) -> str:
     ----------
     source_count : int
         Number of distinct sources that list this marker for the type.
-        Total number of source files available (informational, 7 by default).
 
     Returns
     -------
@@ -142,14 +127,28 @@ def compute_consensus_level(source_count: int) -> str:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def _normalize_type_key(key: str) -> str:
+def _normalize_type_key(
+    key: str, type_aliases: Optional[Dict[str, str]] = None
+) -> str:
     """Map a source-internal type key to the canonical KB name.
 
-    Currently handles:
+    Parameters
+    ----------
+    key : str
+        Raw type key from a source file.
+    type_aliases : dict or None
+        Mapping of alternative names to canonical names, e.g.
+        ``{"Retinal_Ganglion_Cell": "RGC"}``.  When ``None`` no aliasing
+        is applied.
 
-        * ``Retinal_Ganglion_Cell`` → ``RGC``
+    Returns
+    -------
+    str
+        Canonical type key.
     """
-    return TYPE_ALIASES.get(key, key)
+    if type_aliases is None:
+        return key
+    return type_aliases.get(key, key)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -157,22 +156,27 @@ def _normalize_type_key(key: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def merge_markers(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
+def merge_markers(
+    sources: List[Dict[str, Any]],
+    type_aliases: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
     """Aggregate markers across sources, grouped by canonical cell type.
 
-    Uses :data:`TYPE_ALIASES` to normalise type keys; logs a warning when
+    Uses *type_aliases* to normalise type keys; logs a warning when
     a synonym match is made.
 
     Parameters
     ----------
     sources : list[dict]
         Source dicts as returned by :func:`load_all_sources`.
+    type_aliases : dict or None
+        Mapping for type-key normalisation.
 
     Returns
     -------
     dict
         ``{canonical_type: {...}}`` with internal tracking of which sources
-        contributed each marker (see source for full key list).
+        contributed each marker.
     """
     merged: Dict[str, Any] = {}
 
@@ -183,7 +187,7 @@ def merge_markers(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
 
         # ── Main markers dict ─────────────────────────────────────
         for raw_key, marker_data in src.get("markers", {}).items():
-            canonical = _normalize_type_key(raw_key)
+            canonical = _normalize_type_key(raw_key, type_aliases)
 
             if canonical not in merged:
                 merged[canonical] = {
@@ -220,6 +224,7 @@ def merge_markers(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
             # Refine
             for gene, refine_data in (marker_data.get('refine') or {}).items():
                 entry['refine'].setdefault(gene, []).append(refine_data)
+
             # Negative markers (union across sources)
             neg = marker_data.get('negative_markers') or []
             if isinstance(neg, list):
@@ -237,7 +242,7 @@ def merge_markers(sources: List[Dict[str, Any]]) -> Dict[str, Any]:
             if not nt_name:
                 continue
 
-            canonical = _normalize_type_key(nt_name)
+            canonical = _normalize_type_key(nt_name, type_aliases)
 
             if canonical not in merged:
                 merged[canonical] = {
@@ -291,7 +296,10 @@ def _register_marker(
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def detect_conflicts(sources: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+def detect_conflicts(
+    sources: List[Dict[str, Any]],
+    type_aliases: Optional[Dict[str, str]] = None,
+) -> Dict[str, List[Dict[str, Any]]]:
     """Find annotation conflicts between sources.
 
     Two kinds of conflict are reported:
@@ -325,7 +333,7 @@ def detect_conflicts(sources: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, 
     for src in sources:
         src_id = src["source_id"]
         for raw_key, marker_data in src.get("markers", {}).items():
-            canonical = _normalize_type_key(raw_key)
+            canonical = _normalize_type_key(raw_key, type_aliases)
             for tier in ("confirm", "add"):
                 for gene in marker_data.get(tier) or {}:
                     gene_type_map.setdefault(gene, {}).setdefault(canonical, set()).add(
@@ -429,16 +437,18 @@ def resolve_conflicts(
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def _rule_dedup_key(rule: Dict[str, Any]) -> str:
+def _rule_dedup_key(
+    rule: Dict[str, Any], type_aliases: Optional[Dict[str, str]] = None
+) -> str:
     """Deterministic string key for a rule (condition + action).
 
-    Normalises the action through ``TYPE_ALIASES`` so that rules with
+    Normalises the action through *type_aliases* so that rules with
     ``Retinal_Ganglion_Cell`` and ``RGC`` actions are treated as duplicates.
     Includes ``markers_absent`` in the key so that rules that differ only
     by exclusion markers are NOT treated as duplicates.
     """
     condition = rule.get("condition", {})
-    action = _normalize_type_key(rule.get("action", ""))
+    action = _normalize_type_key(rule.get("action", ""), type_aliases)
     markers = condition.get("markers_present", {})
     absent = condition.get("markers_absent", [])
     sorted_genes = sorted(markers.keys())
@@ -448,7 +458,10 @@ def _rule_dedup_key(rule: Dict[str, Any]) -> str:
     return f"{action}|{marker_str}{absent_str}"
 
 
-def merge_rules(sources: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def merge_rules(
+    sources: List[Dict[str, Any]],
+    type_aliases: Optional[Dict[str, str]] = None,
+) -> List[Dict[str, Any]]:
     """Merge expert rules from all sources, deduplicated by condition+action.
 
     When the same logical rule appears in multiple sources, the entry with
@@ -465,8 +478,10 @@ def merge_rules(sources: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         for rule in src.get("expert_rules", []):
             # Normalize action through type aliases
             rule_normalized = dict(rule)
-            rule_normalized["action"] = _normalize_type_key(rule.get("action", ""))
-            key = _rule_dedup_key(rule_normalized)
+            rule_normalized["action"] = _normalize_type_key(
+                rule.get("action", ""), type_aliases
+            )
+            key = _rule_dedup_key(rule_normalized, type_aliases)
             existing_priority = seen.get(key, {}).get("priority", 999)
             if key not in seen or rule_normalized.get("priority", 999) < existing_priority:
                 seen[key] = rule_normalized
@@ -615,32 +630,64 @@ def build_final_kb(
     return kb
 
 
-
 # ═══════════════════════════════════════════════════════════════════════
-#  Module-level convenience: build the KB once at import time
+#  Orchestrator: build a complete tissue KB in one call
 # ═══════════════════════════════════════════════════════════════════════
 
-_sources: List[Dict[str, Any]] = load_all_sources()
-_merged_types: Dict[str, Any] = merge_markers(_sources)
-_merged_rules: List[Dict[str, Any]] = merge_rules(_sources)
-_conflicts: Dict[str, List[Dict[str, Any]]] = detect_conflicts(_sources)
-_resolved: Dict[str, List[Dict[str, Any]]] = resolve_conflicts(_conflicts, _sources)
-retina_expert_kb: Dict[str, Any] = build_final_kb(
-    _merged_types, _merged_rules, _sources
-)
 
-# ── Build cell-type hierarchy from YAML config ────────────────────────────
-_HIERARCHY_PATH = os.path.join(os.path.dirname(__file__), "hierarchy.yaml")
-if os.path.isfile(_HIERARCHY_PATH):
-    _hierarchy_cfg = load_hierarchy_yaml(_HIERARCHY_PATH)
-    build_hierarchy(retina_expert_kb, _hierarchy_cfg)
-    compute_private_markers(retina_expert_kb, _hierarchy_cfg)
+def build_tissue_kb(
+    sources_dir: str,
+    type_aliases: Optional[Dict[str, str]] = None,
+    hierarchy_yaml_path: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Build a complete Knowledge Base for a tissue from YAML sources.
 
+    This is the primary entry point.  It loads all YAML sources from
+    *sources_dir*, merges markers, detects and resolves conflicts,
+    merges expert rules, assembles the final KB dict, and optionally
+    builds a cell-type hierarchy.
 
-# Log a summary of the built KB
-logger.info(
-    "Built retina_expert_kb: %d types, %d rules, %d conflicts flagged",
-    sum(1 for k in retina_expert_kb if k != "expert_rules"),
-    len(retina_expert_kb.get("expert_rules", [])),
-    len(_resolved.get("flagged", [])),
-)
+    Parameters
+    ----------
+    sources_dir : str
+        Path to the directory containing per-publication ``{name}.yaml`` files.
+    type_aliases : dict or None
+        Mapping of alternative type-key names → canonical names.
+    hierarchy_yaml_path : str or None
+        If provided, builds ``Broad_*`` category entries and computes
+        private markers using :mod:`rna.utils.hierarchy`.
+
+    Returns
+    -------
+    dict
+        Complete KB with keys like ``"Rod_Photoreceptor"``,
+        ``"expert_rules"``, and ``"_meta"``.
+    """
+    sources = load_all_sources(sources_dir)
+    merged_types = merge_markers(sources, type_aliases)
+    merged_rules = merge_rules(sources, type_aliases)
+    conflicts = detect_conflicts(sources, type_aliases)
+    _resolved = resolve_conflicts(conflicts, sources)
+    kb = build_final_kb(merged_types, merged_rules, sources)
+
+    # Optionally build hierarchy
+    if hierarchy_yaml_path and os.path.isfile(hierarchy_yaml_path):
+        from rna.utils.hierarchy import (
+            load_hierarchy_yaml,
+            build_hierarchy,
+            compute_private_markers,
+        )
+        cfg = load_hierarchy_yaml(hierarchy_yaml_path)
+        build_hierarchy(kb, cfg)
+        compute_private_markers(kb, cfg)
+
+    # Log summary
+    n_types = sum(1 for k in kb if k not in ("expert_rules", "_meta") and not k.startswith("_"))
+    logger.info(
+        "Built tissue KB: %d types, %d rules, %d conflicts flagged",
+        n_types,
+        len(kb.get("expert_rules", [])),
+        len(_resolved.get("flagged", [])),
+    )
+
+    return kb

@@ -29,7 +29,7 @@ sys.path.insert(0, REPO_ROOT)
 SOURCES_DIR = os.path.join(
     REPO_ROOT, "rna", "tissue_ontologies", "retina", "sources"
 )
-SCHEMA_PATH = os.path.join(SOURCES_DIR, "schema.yaml")
+SCHEMA_PATH = os.path.join(REPO_ROOT, "rna", "tissue_ontologies", "schema.yaml")
 
 # ── Default audit section (NEW* in schema) ────────────────────────────────────
 EMPTY_AUDIT = {

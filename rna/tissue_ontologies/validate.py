@@ -1,12 +1,11 @@
 """
-tissue_ontologies/retina/validate.py — KB validation routines.
+tissue_ontologies/validate.py — Tissue-agnostic KB validation routines.
 
 Usage::
 
-    from tissue_ontologies.retina import retina_expert_kb
-    from tissue_ontologies.retina.validate import validate_kb
+    from rna.tissue_ontologies.validate import validate_kb
 
-    is_valid, errors = validate_kb(retina_expert_kb)
+    is_valid, errors = validate_kb(kb)
     if not is_valid:
         for e in errors:
             print(f"  ERROR: {e}")
@@ -39,7 +38,7 @@ def validate_kb(kb: Dict[str, Any]) -> Tuple[bool, List[str]]:
     Parameters
     ----------
     kb : dict
-        The KB produced by :func:`tissue_ontologies.retina.merge.build_final_kb`.
+        The KB produced by :func:`tissue_ontologies.merge.build_final_kb`.
 
     Returns
     -------

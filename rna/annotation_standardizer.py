@@ -108,11 +108,10 @@ class StandardOntology:
         NotImplementedError
             If **tissue** has no synonyms module.
         """
-        if tissue == "retina":
-            import yaml
-            from pathlib import Path
-            _syn_path = Path(__file__).parent / "tissue_ontologies" / "retina" / "synonyms.yaml"
-            return yaml.safe_load(_syn_path.read_text(encoding="utf-8"))
+        from rna.tissue_ontologies import load_synonyms
+        syns = load_synonyms(tissue)
+        if syns:
+            return syns
         raise NotImplementedError(f"No synonyms for tissue: {tissue}")
 
     @staticmethod
