@@ -12,9 +12,12 @@ Types: `feat` / `fix` / `docs` / `refactor` / `perf` / `test` / `chore`
 Scope: semantic name (e.g. `enrichment`), NOT step number (e.g. `09_enrichment`)
 Subject: imperative, lowercase, ≤72 chars. Body explains *why*, not *what*.
 
+**Commit scope.** Before each commit, review what changed in this session (`git diff --stat`, `git status`). Unless explicitly instructed otherwise, only stage and commit files that belong to *this session's work*. Do not revert, delete, or touch unrelated files.
+
 **Config access.** Use nested topic paths: `CFG.hvg.n_top_genes`, `CFG.clustering.cluster_selection_method`. `.py` configs are rejected — use `.yaml`.
 
 **Core scripts.** Step scripts under `rna/steps/`, `atac/steps/`, `spatial/steps/` must not be edited in place. Copy to `projects/{modality}/{GSE_ID}/` first.
+**Ad-hoc scripts.** One-off / dataset-specific analysis scripts under `adhoc/`. Not part of the pipeline, no compatibility guarantee — use once and discard.
 
 ## Running methods
 
