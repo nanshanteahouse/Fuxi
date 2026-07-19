@@ -217,6 +217,8 @@ Boundary decisions:
   unsure, ask the user.
 - If the user asks for a report on a past event (not the current session),
   produce it with the event date, not today's date.
+- After writing any report, update `notes/INDEX.md` to add the new entry
+  under the corresponding directory section.
 - If the notes/ topic classification itself changes, update this mapping.
 
 ## Notes are private — never commit
