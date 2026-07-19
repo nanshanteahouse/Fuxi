@@ -115,6 +115,14 @@ de:
   stage_pairwise: true
   # auto_switch_on_low_quality: true
 
+# ── Pseudobulk DE (PyDESeq2) ──
+# de.pseudobulk:
+#   sample_col: sample
+#   design: "~condition"
+#   contrast_column: condition
+#   contrast_treatment: treated
+#   contrast_baseline: control
+#   alpha: 0.05
 # ── Enrichment (uncomment to enable) ──
 # enrichment:
 #   run: true
