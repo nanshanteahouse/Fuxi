@@ -84,8 +84,6 @@ def run_pseudobulk_de(adata, cfg, log):
         groups_col=pb.celltype_col,
         layer=None,
         mode="sum",
-        min_cells=pb.min_cells_per_sample,
-        min_counts=1000,
     )
     log.info(
         "Pseudobulk output: %d samples × %d genes",
@@ -176,7 +174,17 @@ def run_pseudobulk_de(adata, cfg, log):
         stat.summary()
 
         if pb.lfc_shrink:
-            stat.lfc_shrink()
+            # Determine the LFC coefficient name for shrinkage
+            lfc_coeffs = [c for c in stat.LFC.columns
+                          if c != "Intercept"
+                          and c.startswith(pb.contrast_column)]
+            coeff = lfc_coeffs[0] if lfc_coeffs else None
+            if coeff:
+                stat.lfc_shrink(coeff=coeff)
+            else:
+                log.warning(
+                    "Could not determine LFC coefficient for lfc_shrink, skipping"
+                )
 
         results_df = stat.results_df.copy()
         results_df = results_df.reset_index().rename(
