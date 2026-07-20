@@ -333,6 +333,8 @@ python core/run_pipeline.py --modality rna --step 6 \
 
 > 💡 同时生成：标记基因热图（每类 top 5 基因）、已知标记基因点图。
 
+> 💡 **伪批量差异表达（PyDESeq2）**：作为 Wilcoxon 三层分析的替代方案，Step 07 也支持通过 `de.method: pseudobulk` 进行伪批量差异表达分析。该模式将单细胞计数按（样本 × 细胞类型）用 decoupler 聚合成伪样本，然后用 DESeq2（PyDESeq2）逐细胞类型进行统计严格的差异表达分析，输出 log2 倍数变化和校正 p 值。输出包括逐细胞类型的 CSV 表格和火山图。要求配置 `de.pseudobulk.sample_col`、`de.pseudobulk.contrast_column`，且每个条件至少 3 个重复样本。完整配置请参见 YAML 配置模板中的 `de.pseudobulk.*` 节。
+
 ### Step 08：轨迹分析（PAGA + DPT）
 
 **输入**：`04_clustered.h5ad`（通常使用） | **输出**：`05_final.h5ad`

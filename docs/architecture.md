@@ -208,7 +208,7 @@ fuxi/
 
 ## 3. Config system
 
-The ``Config`` Pydantic BaseModel (``core/config.py``) uses **20 topic sub-models** for clean separation:
+The ``Config`` Pydantic BaseModel (``core/config.py``) uses **21 topic sub-models** for clean separation:
 
 ```python
 cfg = Config()

@@ -333,6 +333,9 @@ Three layers of differential expression analysis:
 
 > 💡 Also generates: marker gene heatmaps (top 5 per group) and known-marker dotplots.
 
+> 💡 **Pseudobulk DE (PyDESeq2)**: As an alternative to the Wilcoxon three-layer approach, Step 07 also supports pseudobulk differential expression via `de.method: pseudobulk`. This mode aggregates single-cell counts to pseudo-samples by (sample × cell type) with decoupler, then runs DESeq2 per cell type for statistically rigorous DE with log2 fold change and adjusted p-values. Output: per-cell-type CSV tables and volcano plots. Requires `de.pseudobulk.sample_col`, `de.pseudobulk.contrast_column`, and at least 3 replicates per condition. See the `de.pseudobulk.*` section in your YAML config template for full settings.
+
+
 ### Step 08: Trajectory analysis (PAGA + DPT)
 
 **Input**: `04_clustered.h5ad` (typical) | **Output**: `05_final.h5ad`
