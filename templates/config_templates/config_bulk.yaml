@@ -1,0 +1,49 @@
+# ── Data format ──
+data_format: count_matrix
+
+# ── Modality ──
+modality: bulk
+
+# ── Data input ──
+data_input:
+  matrix_file: ""
+  # metadata_file: "{{METADATA_FILE}}"
+  # csv_sep: ","
+  # gene_symbol_column: ""
+
+# ── Dataset metadata ──
+tissue: "{{TISSUE}}"
+species: "{{SPECIES}}"
+expression_type: "raw_counts"
+# raw_counts | tpm | fpkm | cpm
+
+# ── Bulk-specific settings ──
+bulk:
+  design: "~condition"
+  # contrast_column: "condition"
+  # contrast_treatment: "treated"
+  # contrast_baseline: "control"
+  alpha: 0.05
+  lfc_shrink: true
+  normalization_method: "deseq2_median_ratios"
+  # min_counts_per_gene: 10
+  # min_samples_per_group: 2
+  # n_jobs: 0
+  # output_dir: ""
+  # batch_correct: false
+  # batch_column: "batch"
+
+# ── Enrichment ──
+enrichment:
+  run: true
+  method: both
+  gene_sets: [GO_Biological_Process_2023, KEGG_2021_Human]
+  organism: human
+
+# ── Execution ──
+execution:
+  n_jobs: 0
+  random_seed: 42
+  memory_policy: speed
+  # force_csr: true
+  # use_float32: true
