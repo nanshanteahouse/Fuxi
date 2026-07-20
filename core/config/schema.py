@@ -2,8 +2,8 @@
 """
 config.py — Fuxi (伏羲) 统一配置 (Pydantic v2)
 
-21 Pydantic BaseModel classes:
-  20 topic sub-models + 1 top-level Config
+22 Pydantic BaseModel classes:
+  21 topic sub-models + 1 top-level Config
 
 设计原则:
   - 所有参数集中在一个 Config(BaseModel) 中
@@ -45,6 +45,7 @@ class DataInputConfig(BaseModel):
     mtx_prefix: str = ""
     mtx_dir: str = ""
     matrix_file: str = ""
+    metadata_file: str = ""
     barcodes_file: str = ""
     features_file: str = ""
     csv_sep: Optional[str] = None
@@ -473,6 +474,26 @@ class AIConfig(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Sub-model 21 — BulkConfig
+# ═══════════════════════════════════════════════════════════════════════
+class BulkConfig(BaseModel):
+    """Bulk RNA-seq specific configuration fields."""
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    design: str = "~condition"
+    contrast_column: str = "condition"
+    contrast_treatment: str = ""
+    contrast_baseline: str = ""
+    alpha: float = 0.05
+    lfc_shrink: bool = True
+    normalization_method: str = "deseq2_median_ratios"
+    min_counts_per_gene: int = 10
+    min_samples_per_group: int = 2
+    n_jobs: int = 0
+    output_dir: str = ""
+    batch_correct: bool = False
+    batch_column: str = "batch"
+# ═══════════════════════════════════════════════════════════════════════
 # Top-level Config
 # ═══════════════════════════════════════════════════════════════════════
 class Config(BaseModel):
@@ -531,7 +552,7 @@ class Config(BaseModel):
     target_order: str = ""
 
     # ═══════════════════════════════════════════════════════════════════
-    # 21 个主题子模型
+    # 22 个主题子模型
     # ═══════════════════════════════════════════════════════════════════
     data_input: DataInputConfig = Field(default_factory=DataInputConfig)
     sample_meta: SampleMetaConfig = Field(default_factory=SampleMetaConfig)
@@ -553,6 +574,7 @@ class Config(BaseModel):
     atac: ATACConfig = Field(default_factory=ATACConfig)
     execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
     ai: AIConfig = Field(default_factory=AIConfig)
+    bulk: BulkConfig = Field(default_factory=BulkConfig)
 
 
     def model_post_init(self, __context):
@@ -603,6 +625,8 @@ class Config(BaseModel):
             sub.fragment_file = os.path.join(self.data_dir, sub.fragment_file)
         if sub.input_h5ad and not os.path.isabs(sub.input_h5ad):
             sub.input_h5ad = os.path.join(self.data_dir, sub.input_h5ad)
+        if sub.metadata_file and not os.path.isabs(sub.metadata_file):
+            sub.metadata_file = os.path.join(self.data_dir, sub.metadata_file)
 
         # Auto-fill mtx_dir and h5_dir from data_dir
         if not self.data_input.mtx_dir:
