@@ -182,10 +182,11 @@ def _de_heatmap(adata, sig_df, contrast_col, figure_dir, log):
         log.info("Generating top DEG heatmap...")
 
         # Get top 50 genes by padj
+        gene_col = "gene" if "gene" in sig_df.columns else sig_df.columns[0]
         if "padj" in sig_df.columns:
-            top_genes = sig_df.nsmallest(50, "padj")["gene"].tolist()
+            top_genes = sig_df.nsmallest(50, "padj")[gene_col].tolist()
         else:
-            top_genes = sig_df.head(50)["gene"].tolist()
+            top_genes = sig_df.head(50)[gene_col].tolist()
         n_top = len(top_genes)
 
         if n_top == 0:
@@ -255,10 +256,11 @@ def _top_genes_boxplot(adata, sig_df, contrast_col, figure_dir, log):
         log.info("Generating top gene boxplots...")
 
         # Get top 10 genes by padj
+        gene_col = "gene" if "gene" in sig_df.columns else sig_df.columns[0]
         if "padj" in sig_df.columns:
-            top_genes = sig_df.nsmallest(10, "padj")["gene"].tolist()
+            top_genes = sig_df.nsmallest(10, "padj")[gene_col].tolist()
         else:
-            top_genes = sig_df.head(10)["gene"].tolist()
+            top_genes = sig_df.head(10)[gene_col].tolist()
         n_top = len(top_genes)
 
         if n_top == 0:

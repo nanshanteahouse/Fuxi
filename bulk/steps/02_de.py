@@ -218,7 +218,7 @@ def main():
 
     # ── Filter significant ────────────────────────────────────────────
     alpha = bulk.alpha
-    sig_mask = results_df["padj"].dropna() < alpha
+    sig_mask = results_df["padj"].fillna(1) < alpha
     sig_df = results_df.loc[sig_mask].copy()
     n_sig = len(sig_df)
     n_total = len(results_df)
