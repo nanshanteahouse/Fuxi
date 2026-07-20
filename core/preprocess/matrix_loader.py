@@ -11,24 +11,24 @@ import sys
 from typing import Optional
 
 # Add repo root to sys.path (consistent with all step scripts)
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 
 from core.preprocess import format_detector as fd
-
 
 # ── Template mapping: format → template file ──────────────────────────
 
 TEMPLATE_MAP = {
-    '10X_h5':       'config_10X_h5.yaml',
-    '10X_mtx':      'config_10X_mtx.yaml',
-    'csv_matrix':   'config_csv_matrix.yaml',
-    'h5ad':         'config_10X_h5.yaml',       # reuse 10X_h5 template
-    '10x_fragments': 'config_fragments.yaml',
-    '10x_peak_h5':  'config_fragments.yaml',    # reuse ATAC template
+    "10X_h5": "config_10X_h5.yaml",
+    "10X_mtx": "config_10X_mtx.yaml",
+    "csv_matrix": "config_csv_matrix.yaml",
+    "h5ad": "config_10X_h5.yaml",  # reuse 10X_h5 template
+    "10x_fragments": "config_fragments.yaml",
+    "10x_peak_h5": "config_fragments.yaml",  # reuse ATAC template
     # ── Bulk entries ─────────────────────────────
-    'count_matrix': 'config_bulk.yaml',
-    'tpm_matrix':   'config_bulk.yaml',
-    'bulk_h5ad':    'config_bulk.yaml',
+    "count_matrix": "config_bulk.yaml",
+    "tpm_matrix": "config_bulk.yaml",
+    "bulk_h5ad": "config_bulk.yaml",
+}
 
 
 # ── Shared path helpers ──────────────────────────────────────────────
@@ -41,12 +41,12 @@ def _resolve_repo_root() -> str:
     So __file__'s dirname → up 2 = core → up 1 = repo root.
     """
     this_dir = os.path.dirname(os.path.abspath(__file__))  # .../core/preprocess
-    return os.path.dirname(os.path.dirname(this_dir))       # .../ (repo root)
+    return os.path.dirname(os.path.dirname(this_dir))  # .../ (repo root)
 
 
 def _resolve_template_dir() -> str:
     """Return the path to the templates/config_templates/ directory."""
-    return os.path.join(_resolve_repo_root(), 'templates', 'config_templates')
+    return os.path.join(_resolve_repo_root(), "templates", "config_templates")
 
 
 def _resolve_project_dir(modality: str, gse_id: str, output_dir: Optional[str] = None) -> str:
@@ -63,7 +63,7 @@ def _resolve_project_dir(modality: str, gse_id: str, output_dir: Optional[str] =
     """
     if output_dir:
         return os.path.join(output_dir, modality, gse_id)
-    return os.path.join(_resolve_repo_root(), 'projects', modality, gse_id)
+    return os.path.join(_resolve_repo_root(), "projects", modality, gse_id)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -71,38 +71,38 @@ def _resolve_project_dir(modality: str, gse_id: str, output_dir: Optional[str] =
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def _detect_primary_format(classification: dict, modality: str = '') -> str:
+def _detect_primary_format(classification: dict, modality: str = "") -> str:
     """Determine the primary data format from classification results.
 
     When *modality* is 'atac' and the classification matches both RNA and
     ATAC patterns, prefer the ATAC-specific format.
     """
-    if modality == 'atac':
-        if classification.get('fragment_dirs'):
-            return '10x_fragments'
-        if classification.get('tenx_peak_dirs'):
-            return '10x_peak_h5'
+    if modality == "atac":
+        if classification.get("fragment_dirs"):
+            return "10x_fragments"
+        if classification.get("tenx_peak_dirs"):
+            return "10x_peak_h5"
 
-    if classification.get('tenx_h5_dirs'):
-        return '10X_h5'
-    if classification.get('tenx_mtx_dirs'):
-        return '10X_mtx'
-    if classification.get('fragment_dirs'):
-        return '10x_fragments'
-    if classification.get('tenx_peak_dirs'):
-        return '10x_peak_h5'
-    if classification.get('h5ad_files'):
-        return 'h5ad'
-    if classification.get('csv_files'):
-        return 'csv_matrix'
-    return 'unknown'
+    if classification.get("tenx_h5_dirs"):
+        return "10X_h5"
+    if classification.get("tenx_mtx_dirs"):
+        return "10X_mtx"
+    if classification.get("fragment_dirs"):
+        return "10x_fragments"
+    if classification.get("tenx_peak_dirs"):
+        return "10x_peak_h5"
+    if classification.get("h5ad_files"):
+        return "h5ad"
+    if classification.get("csv_files"):
+        return "csv_matrix"
+    return "unknown"
 
 
 def _fill_template(template_text: str, replacements: dict) -> str:
     """Replace {{KEY}} placeholders in *template_text* with values from *replacements*."""
     result = template_text
     for key, value in replacements.items():
-        result = result.replace('{{' + key + '}}', str(value))
+        result = result.replace("{{" + key + "}}", str(value))
     return result
 
 
@@ -111,8 +111,9 @@ def _fill_template(template_text: str, replacements: dict) -> str:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def _post_process_yaml(config_path: str, paper_context: dict,
-                      inject: Optional[dict] = None) -> None:
+def _post_process_yaml(
+    config_path: str, paper_context: dict, inject: Optional[dict] = None
+) -> None:
     """Append paper-derived fields to a generated YAML config.
 
     Since the output is YAML (not Python), AST manipulation is no longer
@@ -131,17 +132,17 @@ def _post_process_yaml(config_path: str, paper_context: dict,
 
     # -- paper_context (existing behaviour) --
     if paper_context:
-        features = paper_context.get('features')
+        features = paper_context.get("features")
         if features is not None:
-            genes_yaml = ', '.join(repr(g) for g in list(features))
-            lines_to_append.append(f"marker:")
+            genes_yaml = ", ".join(repr(g) for g in list(features))
+            lines_to_append.append("marker:")
             lines_to_append.append(f"  marker_dict: {{extracted: [{genes_yaml}]}}")
 
-        if paper_context.get('is_nuclei'):
+        if paper_context.get("is_nuclei"):
             lines_to_append.append("qc:")
             lines_to_append.append("  is_nuclei: true")
 
-        for key in ('tissue_kb', 'tissue_ontology'):
+        for key in ("tissue_kb", "tissue_ontology"):
             val = paper_context.get(key)
             if val is not None:
                 lines_to_append.append(f"{key}: {repr(str(val))}")
@@ -154,27 +155,30 @@ def _post_process_yaml(config_path: str, paper_context: dict,
     if not lines_to_append:
         return
 
-    with open(config_path, 'a', encoding='utf-8') as f:
-        f.write('\n')
-        f.write('\n'.join(lines_to_append))
-        f.write('\n')
+    with open(config_path, "a", encoding="utf-8") as f:
+        f.write("\n")
+        f.write("\n".join(lines_to_append))
+        f.write("\n")
+
 
 # ═══════════════════════════════════════════════════════════════════════
 #  Phase 5: Config generation
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def generate_config(gse_id: str,
-                    modality: str,
-                    classification: dict,
-                    file_list: list[str],
-                    output_dir: str,
-                    data_root: Optional[str] = None,
-                    input_dir_override: Optional[str] = None,
-                    superseries_info: Optional[dict] = None,
-                    paper_context: Optional[dict] = None,
-                    dry_run: bool = False,
-                    force: bool = False) -> Optional[str]:
+def generate_config(
+    gse_id: str,
+    modality: str,
+    classification: dict,
+    file_list: list[str],
+    output_dir: str,
+    data_root: Optional[str] = None,
+    input_dir_override: Optional[str] = None,
+    superseries_info: Optional[dict] = None,
+    paper_context: Optional[dict] = None,
+    dry_run: bool = False,
+    force: bool = False,
+) -> Optional[str]:
     """Generate a config_GSE_ID.py file.
 
     Args:
@@ -205,68 +209,65 @@ def generate_config(gse_id: str,
         print(f"  [WARNING] Template not found: {template_path}")
         return None
 
-    with open(template_path, 'r', encoding='utf-8') as f:
+    with open(template_path, "r", encoding="utf-8") as f:
         template_text = f.read()
 
     # Collect file paths relative to the input directory
     gse_dir = input_dir_override or os.path.join(data_root, gse_id)
-    rel_files = [os.path.relpath(f, gse_dir) for f in file_list]
 
     # Gather replacements
     species = fd.guess_species(file_list)
-    if species == 'unknown' and superseries_info:
-        ncbi_species = superseries_info.get('species', '')
+    if species == "unknown" and superseries_info:
+        ncbi_species = superseries_info.get("species", "")
         if ncbi_species:
             species = fd._normalise_species(ncbi_species)
     tissue = fd.guess_tissue(file_list)
-    genome = fd.guess_genome(species) or 'hg38'
+    genome = fd.guess_genome(species) or "hg38"
 
     # Detect primary file paths
-    mtx_dir = ''
-    mtx_prefix = ''
-    h5_dir = ''
-    matrix_file = ''
-    barcodes_file = ''
-    features_file = ''
-    fragment_file = ''
+    mtx_dir = ""
+    mtx_prefix = ""
+    h5_dir = ""
+    matrix_file = ""
+    barcodes_file = ""
+    features_file = ""
+    fragment_file = ""
 
     # 10X MTX
-    for d, files in classification.get('tenx_mtx_dirs', {}).items():
-        mtx_dir = os.path.relpath(d, gse_dir) if os.path.isabs(d) else d
-        # Heuristic: strip trailing directory separator + common suffix
-        mtx_dir_norm = os.path.basename(mtx_dir.rstrip('/\\')) or mtx_dir
+    for d, files in classification.get("tenx_mtx_dirs", {}).items():
+        mtx_dir = os.path.relpath(d, gse_dir) if os.path.isabs(d) else d  # noqa: F841
         basenames = [os.path.basename(f) for f in files]
         # Find the common prefix before matrix/barcodes/features
         stripped = [fd.strip_known_suffix(b) for b in basenames]
         if stripped:
-            prefix = os.path.commonprefix(stripped).rstrip('_.-')
+            prefix = os.path.commonprefix(stripped).rstrip("_.-")
             if prefix:
                 mtx_prefix = prefix
         break
 
     # 10X H5
-    for d, files in classification.get('tenx_h5_dirs', {}).items():
-        h5_dir = os.path.relpath(d, gse_dir) if os.path.isabs(d) else d
+    for d, files in classification.get("tenx_h5_dirs", {}).items():
+        h5_dir = os.path.relpath(d, gse_dir) if os.path.isabs(d) else d  # noqa: F841
         break
 
     # CSV
-    for f in classification.get('csv_files', []):
+    for f in classification.get("csv_files", []):
         matrix_file = os.path.relpath(f, gse_dir) if os.path.isabs(f) else f
         break
-    for f in classification.get('metadata_files', []):
+    for f in classification.get("metadata_files", []):
         rf = os.path.relpath(f, gse_dir) if os.path.isabs(f) else f
         b = os.path.basename(rf).lower()
-        if 'barcode' in b:
+        if "barcode" in b:
             barcodes_file = rf
-        elif 'feature' in b or 'gene' in b:
+        elif "feature" in b or "gene" in b:
             features_file = rf
         elif not barcodes_file:
             barcodes_file = rf
 
     # ATAC fragments
-    for d, files in classification.get('fragment_dirs', {}).items():
+    for d, files in classification.get("fragment_dirs", {}).items():
         for f in files:
-            if 'fragment' in os.path.basename(f).lower():
+            if "fragment" in os.path.basename(f).lower():
                 fragment_file = os.path.relpath(f, gse_dir) if os.path.isabs(f) else f
                 break
         break
@@ -275,27 +276,27 @@ def generate_config(gse_id: str,
     expression_type = fd.detect_expression_type(classification, file_list)
 
     replacements = {
-        'MTX_PREFIX': mtx_prefix,
-        'MATRIX_FILE': matrix_file,
-        'BARCODES_FILE': barcodes_file,
-        'FEATURES_FILE': features_file,
-        'FRAGMENT_FILE': fragment_file,
-        'TISSUE': tissue,
-        'SPECIES': species,
-        'GENOME': genome,
-        'EXPRESSION_TYPE': expression_type,
+        "MTX_PREFIX": mtx_prefix,
+        "MATRIX_FILE": matrix_file,
+        "BARCODES_FILE": barcodes_file,
+        "FEATURES_FILE": features_file,
+        "FRAGMENT_FILE": fragment_file,
+        "TISSUE": tissue,
+        "SPECIES": species,
+        "GENOME": genome,
+        "EXPRESSION_TYPE": expression_type,
     }
 
     # Override heuristic values with paper_context where present
     if paper_context:
-        for key in ('species', 'tissue', 'expression_type', 'genome', 'assay_type'):
+        for key in ("species", "tissue", "expression_type", "genome", "assay_type"):
             if key in paper_context and paper_context[key] is not None:
                 replacements[key.upper()] = str(paper_context[key])
 
     filled = _fill_template(template_text, replacements)
 
     os.makedirs(output_dir, exist_ok=True)
-    config_path = os.path.join(output_dir, f'config_{gse_id}.yaml')
+    config_path = os.path.join(output_dir, f"config_{gse_id}.yaml")
 
     if dry_run:
         print(f"  [DRY-RUN] Would write: {config_path}")
@@ -303,10 +304,10 @@ def generate_config(gse_id: str,
 
     if os.path.exists(config_path) and not force:
         print(f"  [SKIP] Config already exists: {config_path}")
-        print(f"         Use --force to overwrite.")
+        print("         Use --force to overwrite.")
         return config_path
 
-    with open(config_path, 'w', encoding='utf-8') as f:
+    with open(config_path, "w", encoding="utf-8") as f:
         f.write(filled)
 
     # Post-process: append paper-derived fields (marker_dict, is_nuclei, etc.)

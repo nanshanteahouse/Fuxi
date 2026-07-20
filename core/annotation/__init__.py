@@ -5,12 +5,11 @@ across RNA, ATAC, and Spatial modalities.
 """
 
 from core.annotation.engine import run_unified_annotation
-from core.annotation.standardizer import StandardOntology, map_annotations
 from core.annotation.scoring import _normalize_gene_name
+from core.annotation.standardizer import StandardOntology
 
 __all__ = [
     "run_unified_annotation",
     "StandardOntology",
-    "map_annotations",
     "_normalize_gene_name",
 ]

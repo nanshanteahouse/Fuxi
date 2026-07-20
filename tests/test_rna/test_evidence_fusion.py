@@ -3,14 +3,14 @@
 import pytest
 
 from rna.utils.evidence_fusion import (
-    _is_transition_state,
     DiagnosticInfo,
-    fuse_all_clusters,
     FusionDecision,
+    _is_transition_state,
+    fuse_all_clusters,
 )
 
-
 # ── Public API ────────────────────────────────────────────────────────
+
 
 class TestEvidenceFusionImport:
     """Verify that evidence-fusion symbols are importable."""
@@ -25,6 +25,7 @@ class TestEvidenceFusionImport:
         fields = set(FusionDecision._fields)
         expected = {
             "cell_type",
+            "cell_category",
             "confidence",
             "score",
             "method",
@@ -98,7 +99,9 @@ class TestFuseAllClusters:
         }
         all_rules = {"0": None, "1": None}
         _, quality = fuse_all_clusters(
-            all_scores, all_rules, return_quality=True,
+            all_scores,
+            all_rules,
+            return_quality=True,
         )
         assert quality["total"] == 2
         assert quality["unknown"] == 0
@@ -107,6 +110,7 @@ class TestFuseAllClusters:
 
 
 # ── Private helper: _is_transition_state ──────────────────────────────
+
 
 class TestIsTransitionState:
     """Edge-case coverage for the transition-state detection function."""
