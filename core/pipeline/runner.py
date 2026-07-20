@@ -166,6 +166,28 @@ SPATIAL_CHECKPOINT_FILES = [
 
 SPATIAL_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5}
 
+# ═══════════════════════════════════════════════════════════════════════
+#  Bulk step registry
+# ═══════════════════════════════════════════════════════════════════════
+BULK_STEPS = [
+    ("00", "00_load.py",            "Load count matrix (CSV/TSV/h5ad) -> 00_raw.h5ad"),
+    ("01", "01_qc.py",              "Sample QC (library size, gene detection) -> 01_qc.h5ad"),
+    ("02", "02_de.py",              "DESeq2 normalization + DE -> 02_de.h5ad + CSVs + figures"),
+    ("03", "03_enrichment.py",      "GO/KEGG enrichment (GSEApy) -> tables/"),
+    ("04", "04_exploratory.py",     "PCA, heatmaps, volcano plots -> figures/"),
+    ("05", "05_batch.py",           "Batch correction (optional, pycombat) -> 05_batch_corrected.h5ad"),
+]
+
+BULK_CHECKPOINT_FILES = [
+    "00_raw.h5ad",           # step 00
+    "01_qc.h5ad",            # step 01
+    "02_de.h5ad",            # step 02
+    "",                      # step 03 (CSV output, no h5ad checkpoint)
+    "",                      # step 04 (figures output)
+    "05_batch_corrected.h5ad",# step 05 (optional)
+]
+
+BULK_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 5}
 
 # ═══════════════════════════════════════════════════════════════════════
 #  Modality dispatch
@@ -188,6 +210,12 @@ MODALITY_MAP = {
         "checkpoints": SPATIAL_CHECKPOINT_FILES,
         "write_checkpoints": SPATIAL_STEPS_WRITE_CHECKPOINT,
         "dir": "spatial",
+    },
+    "bulk": {
+        "steps": BULK_STEPS,
+        "checkpoints": BULK_CHECKPOINT_FILES,
+        "write_checkpoints": BULK_STEPS_WRITE_CHECKPOINT,
+        "dir": "bulk",
     },
 }
 
@@ -239,6 +267,15 @@ def _get_step_dependency(step: int, steps, checkpoints, modality: str = "rna") -
             10: checkpoints[5],  # CCI reads 05_annotated
             11: checkpoints[5],  # subcluster reads 05_annotated
             12: checkpoints[5],  # GRN reads 05_annotated
+        }
+        return deps.get(step, checkpoints[step - 1] if step > 0 else "")
+    if modality == "bulk":
+        deps = {
+            1: checkpoints[0],    # 01_qc reads raw
+            2: checkpoints[1],    # 02_de reads qc
+            3: checkpoints[2],    # 03_enrichment reads DE output
+            4: checkpoints[2],    # 04_exploratory reads DE output
+            5: checkpoints[1],    # 05_batch reads qc
         }
         return deps.get(step, checkpoints[step - 1] if step > 0 else "")
     # RNA dependencies
@@ -300,9 +337,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    parser.add_argument("--modality", type=str, choices=["rna", "atac", "spatial"],
+    parser.add_argument("--modality", type=str, choices=["rna", "atac", "spatial", "bulk"],
                         default="rna",
-                        help="Modality: rna (default), atac, spatial")
+                        help="Modality: rna (default), atac, spatial, bulk")
     group = parser.add_mutually_exclusive_group()
     group.add_argument("--steps", type=str,
                        help="Step range (e.g. 0-2) or list (e.g. 1,3,5)")
