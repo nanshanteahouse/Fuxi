@@ -8,12 +8,12 @@ from textual.widgets import Button, Header, Select, Footer, Static
 from core.pipeline.runner import MODALITY_MAP
 
 LOGO = "\n".join([
-    "  ███████╗██╗   ██╗██╗  ██╗██╗",
-    "  ██╔════╝██║   ██║╚██╗██╔╝██║",
-    "  █████╗  ██║   ██║ ╚███╔╝ ██║",
-    "  ██╔══╝  ██║   ██║ ██╔██╗ ██║",
-    "  ██║     ╚██████╔╝██╔╝ ██╗██║",
-    "  ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═╝",
+    "███████╗██╗   ██╗██╗  ██╗██╗",
+    "██╔════╝██║   ██║╚██╗██╔╝██║",
+    "█████╗  ██║   ██║ ╚███╔╝ ██║",
+    "██╔══╝  ██║   ██║ ██╔██╗ ██║",
+    "██║     ╚██████╔╝██╔╝ ██╗██║",
+    "╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═╝",
 ])
 
 class HomeScreen(Screen):
@@ -28,8 +28,8 @@ class HomeScreen(Screen):
 
     #home-content {
         width: auto;
-        max-width: 64;
-        min-width: 36;
+        max-width: 72;
+        min-width: 40;
         height: auto;
         overflow: hidden;
         margin: 1 2;
@@ -53,12 +53,12 @@ class HomeScreen(Screen):
     #home-divider {
         height: 1;
         background: $accent;
-        margin: 0 4 1 4;
+        margin: 0 2 1 2;
     }
 
     .home-card {
         border: solid $border;
-        padding: 1 2;
+        padding: 1 3;
         margin: 0;
     }
 
@@ -82,6 +82,7 @@ class HomeScreen(Screen):
 
     .home-card Button {
         margin: 0 1;
+        min-width: 14;
     }
     """
 
