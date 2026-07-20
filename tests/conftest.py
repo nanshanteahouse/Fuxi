@@ -2,11 +2,11 @@
 
 Any test file under ``tests/`` can then do::
 
-    from core.config import CFG
+    from core.config.schema import CFG
     from core.utils import resolve_config
-    from rna.utils.marker_scoring import score_cluster_against_kb
+    from core.annotation.scoring import score_cluster_against_kb
     from rna.utils.evidence_fusion import fuse_all_clusters
-    from rna.utils.cluster_evaluation import find_pareto_frontier
+    from core.cluster.evaluation import find_pareto_frontier
 
 without manual sys.path manipulation.
 """

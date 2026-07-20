@@ -58,7 +58,7 @@ def fake_file_list(tmp_path: Path) -> list[str]:
 def sample_config_source() -> str:
     """A minimal generated config source with a marker_dict placeholder."""
     return """import os
-from core.config import CFG
+from core.config.schema import CFG
 
 # Data format
 CFG.data_format = '10X_mtx'
