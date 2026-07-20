@@ -12,10 +12,11 @@
 4. [scRNA-seq pipeline in detail](#4-scrna-seq-pipeline-in-detail)
 5. [scATAC-seq pipeline in detail](#5-scatac-seq-pipeline-in-detail)
 6. [Spatial transcriptomics pipeline in detail](#6-spatial-transcriptomics-pipeline-in-detail)
-7. [Output files reference](#7-output-files-reference)
-8. [Practical tips](#8-practical-tips)
-9. [Configuration file deep-dive](#9-configuration-file-deep-dive)
-10. [FAQ](#10-faq)
+7. [Bulk RNA-seq pipeline in detail](#7-bulk-rna-seq-pipeline-in-detail)
+8. [Output files reference](#8-output-files-reference)
+9. [Practical tips](#9-practical-tips)
+10. [Configuration file deep-dive](#10-configuration-file-deep-dive)
+11. [FAQ](#11-faq)
 
 ---
 
@@ -91,6 +92,9 @@ python core/run_pipeline.py --modality atac --list
 
 # View all spatial transcriptomics pipeline steps
 python core/run_pipeline.py --modality spatial --list
+
+# View all bulk RNA-seq pipeline steps
+python core/run_pipeline.py --modality bulk --list
 ```
 
 You'll see output like this:
@@ -114,6 +118,9 @@ python core/run_pipeline.py --modality atac --config projects/atac/{dataset_id}/
 
 # Spatial transcriptomics full workflow (11 steps)
 python core/run_pipeline.py --modality spatial --config projects/spatial/{dataset_id}/config_{dataset_id}.yaml
+
+# Run the full bulk RNA-seq pipeline
+python core/run_pipeline.py --modality bulk --config projects/bulk/{dataset_id}/config_{dataset_id}.yaml
 ```
 
 The terminal shows real-time progress with timing for each step:
@@ -742,6 +749,52 @@ CFG.rna_marker_logfc_min = 0.0           # min logfoldchanges
 ```
 
 ---
+
+## 7. Bulk RNA-seq pipeline in detail
+
+The bulk RNA-seq pipeline analyzes gene expression from population-level
+RNA samples, not individual cells. It uses **PyDESeq2**, a pure-Python
+implementation of the industry-standard DESeq2 statistical framework for
+differential expression analysis.
+
+### Step flow
+```
+Raw counts → 00_load → 01_qc → 02_de → 03_enrichment → 04_exploratory
+                                    (optional 05_batch)
+```
+
+| Step | Name | What it does |
+|------|------|-------------|
+| 00 | Load data | Reads count/TPM matrices (CSV/TSV/h5ad) → 00_raw.h5ad |
+| 01 | Quality control | Sample-level QC: library size, gene detection rate, correlation heatmap → 01_qc.h5ad |
+| 02 | Differential expression | DESeq2 normalization + Wald test + LFC shrinkage → CSV tables + volcano/MA plots |
+| 03 | Enrichment analysis | GO/KEGG over-representation analysis + GSEA preranked analysis |
+| 04 | Exploratory analysis | PCA, sample clustering, heatmaps, expression boxplots |
+| 05 | Batch correction (optional) | ComBat batch correction for multi-batch studies |
+
+### Key concepts
+
+**How it differs from scRNA-seq:**
+
+| Feature | scRNA-seq (RNA) | Bulk RNA-seq |
+|---------|----------------|-------------|
+| Unit of analysis | Individual cells | Population samples |
+| Typical samples | 1,000-100,000 cells | 6-50 samples |
+| Main question | "What cell types are present?" | "Which genes are up/down between conditions?" |
+| Clustering | UMAP/tSNE on cells | PCA on samples |
+| DE method | Wilcoxon rank-sum | DESeq2 (negative binomial GLM) |
+| Doublet removal | Required | Not applicable |
+| Cell annotation | Required | Not applicable |
+
+### Configuration
+
+Key fields in `bulk:` section of config:
+- `design`: DESeq2 formula (e.g., `~condition`)
+- `contrast_column`: metadata column for comparison
+- `contrast_treatment` / `contrast_baseline`: comparison levels
+- `alpha`: significance threshold (default 0.05)
+- `lfc_shrink`: apply LFC shrinkage (default true)
+- `batch_correct`: enable optional step 05 (default false)
 
 ## 6. Output files reference
 

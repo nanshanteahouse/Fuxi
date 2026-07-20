@@ -279,7 +279,12 @@ python core/run_pipeline.py --modality rna --step 7 --cell-type "Müller Glia" \
 python core/run_pipeline.py --modality atac --config projects/atac/GSE00001/config_GSE00001.yaml
 ```
 
-### 5.3 多模态（multiome）数据集
+### 5.3 Bulk RNA-seq 全流程
+
+```bash
+python core/run_pipeline.py --modality bulk --config projects/bulk/GSE00001/config_GSE00001.yaml
+```
+### 5.4 多模态（multiome）数据集
 
 如果数据集同时包含 RNA 和 ATAC（如某个多模态数据集），预处理脚本会自动生成 **两份** config：
 
@@ -296,13 +301,13 @@ python core/run_pipeline.py --modality atac --config projects/atac/GSE00001/conf
 
 然后 ATAC Step 09 会自动发现 RNA 的结果并进行整合。
 
-### 5.4 断点续跑
+### 5.5 断点续跑
 
 ```bash
 python core/run_pipeline.py --modality rna --resume --config projects/rna/GSE00001/config_GSE00001.yaml
 ```
 
-### 5.5 只跑某一步
+### 5.6 只跑某一步
 
 ```bash
 # 列出所有步骤
@@ -312,7 +317,7 @@ python core/run_pipeline.py --modality rna --list
 python core/run_pipeline.py --modality rna --step 6 --config projects/rna/GSE00001/config_GSE00001.yaml
 ```
 
-### 5.6 完整工作流总结
+### 5.7 完整工作流总结
 
 ```
 1. 从 GEO 下载数据
@@ -350,7 +355,7 @@ python core/preprocess/preprocessor.py --help
 | `--dry-run` | 仅检测和报告，不写文件 | 检查效果时 |
 | `--force` | 覆盖已有文件 | 重新生成时 |
 | `--no-extract` | 跳过归档解压 | 文件已解压时 |
-| `--modality rna\|atac` | 强制指定模态 | 多模态数据集分开处理时 |
+| `--modality rna\|atac\|bulk` | 强制指定模态 | 多模态数据集分开处理时 |
 | `--output-dir /path/` | 指定输出目录 | 不想污染 `projects/` 目录时 |
 | `--verbose` / `-v` | 显示详细检测信息 | 排查问题时 |
 | `--quiet` / `-q` | 最简输出 | 批量处理时 |

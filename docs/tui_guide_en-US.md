@@ -71,7 +71,7 @@ The TUI has **6 screens**, accessible via keyboard shortcuts and the Home screen
 
 The first screen you see. It shows:
 
-- **Modality selector** (rna / atac / spatial) — changing this affects which steps and configs are shown throughout the TUI
+- **Modality selector** (rna / atac / spatial / bulk) — changing this affects which steps and configs are shown throughout the TUI
 - **Quick-launch buttons** — jump directly to Registry, Pipeline, or Results
 
 ---
@@ -90,7 +90,7 @@ Shows all papers and datasets registered in Fuxi.
 
 This is the **core workflow screen**:
 
-1. **Select modality** at the top (rna/atac/spatial)
+1. **Select modality** at the top (rna/atac/spatial/bulk)
 2. **Check steps**: Already-completed steps show green checkmarks
 3. **Select steps to run** by checking the boxes
 4. **Click "Run Selected Steps"** — the pipeline runs steps sequentially

@@ -12,10 +12,11 @@
 4. [scRNA-seq 管线详解](#4-scrna-seq-管线详解)
 5. [scATAC-seq 管线详解](#5-scatac-seq-管线详解)
 6. [空间转录组管线详解](#6-空间转录组管线详解)
-7. [结果文件说明](#7-结果文件说明)
-8. [常用运行技巧](#8-常用运行技巧)
-9. [配置文件详解](#9-配置文件详解)
-10. [常见问题（FAQ）](#10-常见问题faq)
+7. [Bulk RNA-seq 管线详解](#7-bulk-rna-seq-管线详解)
+8. [结果文件说明](#8-结果文件说明)
+9. [常用运行技巧](#9-常用运行技巧)
+10. [配置文件详解](#10-配置文件详解)
+11. [常见问题（FAQ）](#11-常见问题faq)
 
 ---
 
@@ -91,6 +92,9 @@ python core/run_pipeline.py --modality atac --list
 
 # 查看空间转录组管线的所有步骤
 python core/run_pipeline.py --modality spatial --list
+
+# 查看 Bulk RNA-seq 管线的所有步骤
+python core/run_pipeline.py --modality bulk --list
 ```
 
 你会看到类似这样的输出：
@@ -114,6 +118,9 @@ python core/run_pipeline.py --modality atac --config projects/atac/{数据集ID}
 
 # 空间转录组全流程（11 步）
 python core/run_pipeline.py --modality spatial --config projects/spatial/{数据集ID}/config_{数据集ID}.yaml
+
+# 运行 Bulk RNA-seq 全流程
+python core/run_pipeline.py --modality bulk --config projects/bulk/{数据集ID}/config_{数据集ID}.yaml
 ```
 
 运行过程中，终端会实时显示每一步的进度和耗时：
@@ -741,6 +748,52 @@ CFG.rna_marker_logfc_min = 0.0           # 最小 logfoldchanges
 ```
 
 ---
+
+## 7. Bulk RNA-seq 管线详解
+
+Bulk RNA-seq 管线分析的是**群体水平**的 RNA 样本，而不是单个细胞。它使用
+**PyDESeq2**（DESeq2 的纯 Python 实现），这是差异表达分析的工业标准
+统计框架。
+
+### 步骤流程
+```
+原始计数矩阵 → 00_load → 01_qc → 02_de → 03_enrichment → 04_exploratory
+                                       (可选 05_batch)
+```
+
+| 步骤 | 名称 | 功能 |
+|------|------|------|
+| 00 | 数据加载 | 读取计数/TPM 矩阵（CSV/TSV/h5ad）→ 00_raw.h5ad |
+| 01 | 质量控制 | 样本级 QC：文库大小、基因检出率、相关性热图 → 01_qc.h5ad |
+| 02 | 差异表达 | DESeq2 标准化 + Wald 检验 + LFC 收缩 → CSV 表格 + 火山图/MA 图 |
+| 03 | 富集分析 | GO/KEGG 超几何检验 + GSEA prerank 分析 |
+| 04 | 探索性分析 | PCA、样本聚类、热图、基因表达箱线图 |
+| 05 | 批次校正（可选） | ComBat 多批次校正 |
+
+### 核心概念
+
+**与 scRNA-seq 的区别：**
+
+| 特征 | scRNA-seq (RNA) | Bulk RNA-seq |
+|------|----------------|-------------|
+| 分析单位 | 单个细胞 | 群体样本 |
+| 典型样本数 | 1,000-100,000 个细胞 | 6-50 个样本 |
+| 主要问题 | "存在哪些细胞类型？" | "哪些基因在条件间差异表达？" |
+| 聚类 | 细胞间 UMAP/tSNE | 样本间 PCA |
+| DE 方法 | Wilcoxon 秩和检验 | DESeq2（负二项 GLM） |
+| 双细胞去除 | 必须 | 不适用 |
+| 细胞注释 | 必须 | 不适用 |
+
+### 配置
+
+`bulk:` 配置段的关键字段：
+- `design`: DESeq2 公式（如 `~condition`）
+- `contrast_column`: 用于比较的 metadata 列
+- `contrast_treatment` / `contrast_baseline`: 比较组别
+- `alpha`: 显著性阈值（默认 0.05）
+- `lfc_shrink`: 是否应用 LFC 收缩（默认 true）
+- `batch_correct`: 是否启用可选步骤 05（默认 false）
+
 ## 7. 结果文件说明
 
 管线运行完毕后，所有结果统一存放在数据集的 `results/` 目录下，按类型分为三个子目录：

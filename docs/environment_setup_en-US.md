@@ -156,6 +156,8 @@ pip install -r requirements/rna.txt
 
 # scATAC-seq only
 pip install -r requirements/atac.txt
+# Bulk RNA-seq only
+pip install -r requirements/bulk.txt
 ```
 
 This installs the required Python packages:
@@ -169,6 +171,7 @@ This installs the required Python packages:
 | **Batch correction** | `harmony-pytorch` | Remove batch effects between samples |
 | **Functional enrichment** | `gseapy` | GO / KEGG pathway enrichment analysis |
 | **scATAC-seq** | `snapatac2`, `macs3` | Single-cell ATAC analysis core |
+| **Bulk RNA-seq** | PyDESeq2, pycombat | Differential expression (DESeq2 in Python), batch correction |
 | **Multi-omics integration** | `muon`, `mudata` | Joint RNA + ATAC analysis |
 | **AI annotation** | `openai` | LLM-assisted cell type annotation |
 

@@ -156,6 +156,7 @@ pip install -r requirements/rna.txt
 
 # 仅安装 scATAC-seq
 pip install -r requirements/atac.txt
+pip install -r requirements/bulk.txt     # 仅 Bulk RNA-seq
 ```
 
 此命令会安装所有必要的 Python 包，包括：
@@ -169,6 +170,7 @@ pip install -r requirements/atac.txt
 | **批次校正** | `harmony-pytorch` | 去除样本间批次效应 |
 | **功能富集** | `gseapy` | GO / KEGG 通路富集分析 |
 | **scATAC-seq** | `snapatac2`, `macs3` | 单细胞 ATAC 分析核心 |
+| **Bulk RNA-seq** | PyDESeq2, pycombat | 差异表达分析（Python版DESeq2）、批次校正 |
 | **多组学整合** | `muon`, `mudata` | RNA + ATAC 联合分析 |
 | **AI 注释** | `openai` | 调用大语言模型辅助细胞类型注释 |
 

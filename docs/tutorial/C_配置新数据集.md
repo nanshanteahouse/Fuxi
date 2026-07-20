@@ -124,3 +124,36 @@ Fuxi 的默认参数经过了大量数据集调试，对于绝大多数 case 都
 > - 你下载了一个 GEO 数据集，预处理后生成了 config 文件。在运行 pipeline 之前，你至少需要确认哪三个概念性决策？
 > - `sample_map` 和 `stage_map` 有什么区别？如果设错了它们，会对下游分析产生什么具体影响？
 > - 什么情况下应该坚持跑完第一次再调整参数？什么情况下应该在跑之前就先修改默认值？
+
+## 7. Bulk RNA-seq 的特殊配置
+
+Bulk RNA-seq 管线使用 PyDESeq2 进行差异表达分析，因此配置结构与单细胞管线有很大不同：
+
+### 核心配置段
+
+```yaml
+bulk:
+  design: "~condition"          # DESeq2 设计公式
+  contrast_column: "condition"   # 用于比较的组别列
+  contrast_treatment: "treated"  # 处理组名称
+  contrast_baseline: "control"   # 对照组名称
+  alpha: 0.05                    # FDR 阈值
+  lfc_shrink: true               # LFC 收缩（减少低表达基因的假阳性）
+  normalization_method: "deseq2_median_ratios"
+  min_counts_per_gene: 10        # 低表达基因过滤
+  min_samples_per_group: 2       # 每组最少样本数
+  batch_correct: false           # 是否启用步骤 05 (ComBat)
+  batch_column: "batch"          # 批次效应列名
+```
+
+### 与单细胞的区别
+
+| 单细胞 | Bulk |
+|--------|------|
+| `hvg.n_top_genes` | 不适用（所有基因保留） |
+| `clustering.param_grid_resolutions` | 不适用（无聚类） |
+| `marker.marker_dict` | 不适用（无细胞注释） |
+| `trajectory.*` | 不适用（无轨迹推断） |
+| `cci.*` | 不适用（无细胞互作） |
+
+Bulk 管线只需要 `data_input`、`bulk`、`enrichment` 三个主题配置段即可运行。

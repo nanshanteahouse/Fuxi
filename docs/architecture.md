@@ -3,8 +3,8 @@
 ## Overview
 
 Fuxi is a modular, multi-omics single-cell analysis pipeline that unifies
-scRNA-seq (Scanpy), scATAC-seq (Snapatac2), and spatial transcriptomics
-(Squidpy) under a shared core infrastructure.  The pipeline follows a
+scRNA-seq (Scanpy), scATAC-seq (Snapatac2), spatial transcriptomics
+(Squidpy), and bulk RNA-seq (PyDESeq2) under a shared core infrastructure.  The pipeline follows a
 **layered decision architecture** in which each layer contributes
 increasingly confident evidence toward a final analytical result.
 
@@ -176,7 +176,7 @@ fuxi/
 │   ├── utils/             # safe_write, safe_plot, resolve_config, ...
 │   ├── ai_caller.py         # LLM calls with retry + caching
 │   ├── ai_prompts.py        # Annotation / interpretation templates
-│   ├── run_pipeline.py      # CLI dispatcher (--modality rna|atac|spatial)
+│   ├── run_pipeline.py      # CLI dispatcher (--modality rna|atac|spatial|bulk)
 │   ├── dataset_schema.py    # dataset.yaml Python model
 │   ├── dataset_detector.py  # Auto-detect modality from file patterns
 │   ├── path_validation.py   # Safe path traversal guards
@@ -201,6 +201,8 @@ fuxi/
 │   └── steps/               # 14 pipeline steps (snapatac2)
 ├── spatial/
 │   └── steps/               # 11 pipeline steps (squidpy)
+├── bulk/
+│   └── steps/             # 5+1 pipeline steps (PyDESeq2)
 ├── projects/                # Dataset-specific configs
 ├── tests/                   # Unified test suite
 └── templates/               # Config templates
@@ -216,6 +218,8 @@ cfg.modality = "rna"
 cfg.rna.n_top_genes = 4000       # RNA-specific
 cfg.atac.min_fragments = 1000    # ATAC-specific
 cfg.spatial.library_id = ""      # Spatial-specific
+cfg.modality = "bulk"             # Bulk RNA-seq mode
+cfg.bulk.design = "~condition"    # DESeq2 design formula
 ```
 
 Backward-compatible access via ``__getattr__``:

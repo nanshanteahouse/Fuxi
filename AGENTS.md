@@ -16,7 +16,7 @@ Subject: imperative, lowercase, ≤72 chars. Body explains *why*, not *what*.
 
 **Config access.** Use nested topic paths: `CFG.hvg.n_top_genes`, `CFG.clustering.cluster_selection_method`. `.py` configs are rejected — use `.yaml`.
 
-**Core scripts.** Step scripts under `rna/steps/`, `atac/steps/`, `spatial/steps/` must not be edited in place. Copy to `projects/{modality}/{GSE_ID}/` first.
+**Core scripts.** Step scripts under `rna/steps/`, `atac/steps/`, `spatial/steps/`, `bulk/steps/` must not be edited in place. Copy to `projects/{modality}/{GSE_ID}/` first.
 **Ad-hoc scripts.** One-off / dataset-specific analysis scripts under `adhoc/`. Not part of the pipeline, no compatibility guarantee — use once and discard.
 
 ## Running methods
@@ -36,11 +36,19 @@ Both modes use `--step N` to run one step at a time. The difference is whether t
 # List steps
 python core/run_pipeline.py --modality rna --list
 python core/run_pipeline.py --modality atac --list
+python core/run_pipeline.py --modality bulk --list
 
 # Run full pipeline / single step / resume
 python core/run_pipeline.py --modality rna --config projects/rna/<GSE_ID>/config_<GSE_ID>.yaml
 python core/run_pipeline.py --modality atac --step 0 --config ...
 python core/run_pipeline.py --modality rna --resume --config ...
+# Spatial
+python core/run_pipeline.py --modality spatial --step 0 --config ...
+
+# Bulk RNA-seq
+python core/run_pipeline.py --modality bulk --list
+python core/run_pipeline.py --modality bulk --config projects/bulk/<GSE_ID>/config_<GSE_ID>.yaml
+python core/run_pipeline.py --modality bulk --step 2 --config ...
 
 # Paper tools
 python core/paper/insights.py --pmid <PMID>       # AI paper interpretation
@@ -61,6 +69,7 @@ python core/pipeline/reproduce.py <paper_dir>           # reproduce a single pap
 | RNA steps | `rna/steps/` (13 steps: 00_load → 12_cell_interaction) |
 | ATAC steps | `atac/steps/` (14 steps: 00_load → 13_integrate) |
 | Spatial steps | `spatial/steps/` (11 steps: 00_load → 10_cell_interaction) |
+| Bulk steps | `bulk/steps/` (5+1 steps: 00_load → 04_exploratory, optional 05_batch) | PyDESeq2 |
 | Shared core | `core/` — sub-packages: ai/, annotation/, cluster/, config/, interaction/, kb/, paper/, pipeline/, preprocess/, utils/ |
 | Paper tools | `core/paper/` (insights.py, registry.py, converter.py, cross_paper.py) |
 | Methodology tools | `core/paper/insights.py --methodology`, `adhoc/migration_scripts/methodology_batch.py` |

@@ -276,7 +276,12 @@ python core/run_pipeline.py --modality rna --step 7 --cell-type "Müller Glia" \
 python core/run_pipeline.py --modality atac --config projects/atac/GSE00001/config_GSE00001.yaml
 ```
 
-### 5.3 Multiome (paired RNA + ATAC) datasets
+### 5.3 Full bulk RNA-seq workflow
+
+```bash
+python core/run_pipeline.py --modality bulk --config projects/bulk/GSE00001/config_GSE00001.yaml
+```
+### 5.4 Multiome (paired RNA + ATAC) datasets
 
 If your dataset contains both RNA and ATAC data, the preprocessor auto-generates **two** configs:
 
@@ -293,13 +298,13 @@ python core/run_pipeline.py --modality atac --config projects/atac/GSE00001/conf
 
 ATAC Step 09 will then auto-discover the RNA results for integration.
 
-### 5.4 Resume from checkpoint
+### 5.5 Resume from checkpoint
 
 ```bash
 python core/run_pipeline.py --modality rna --resume --config projects/rna/GSE00001/config_GSE00001.yaml
 ```
 
-### 5.5 Run a single step
+### 5.6 Run a single step
 
 ```bash
 # List available steps
@@ -309,7 +314,7 @@ python core/run_pipeline.py --modality rna --list
 python core/run_pipeline.py --modality rna --step 6 --config projects/rna/GSE00001/config_GSE00001.yaml
 ```
 
-### 5.6 Complete workflow summary
+### 5.7 Complete workflow summary
 
 ```
 1. Download data from GEO
@@ -347,7 +352,7 @@ python core/preprocess/preprocessor.py --help
 | `--dry-run` | Detect and report, write nothing | Preview before committing |
 | `--force` | Overwrite existing files | Re-generation |
 | `--no-extract` | Skip archive extraction | Files already extracted |
-| `--modality rna\|atac` | Force a specific modality | Multi-modal datasets, separate processing |
+| `--modality rna\|atac\|bulk` | Force a specific modality | Multi-modal datasets, separate processing |
 | `--output-dir /path/` | Custom output directory | Isolate output from `projects/` tree |
 | `--verbose` / `-v` | Show detailed detection info | Troubleshooting |
 | `--quiet` / `-q` | Minimal output | Batch processing |
