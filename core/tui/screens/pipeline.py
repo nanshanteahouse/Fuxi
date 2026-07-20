@@ -9,7 +9,7 @@ from datetime import datetime
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import Button, Footer, Header, Static
+from textual.widgets import Button, Footer, Header, Input, Static
 from textual.timer import Timer
 from textual.reactive import reactive
 
@@ -53,6 +53,13 @@ class PipelineRunnerScreen(Screen):
     def compose(self) -> ComposeResult:
         """Compose the screen layout."""
         yield Header()
+        with Horizontal(id="config-bar"):
+            yield Static("Config:", classes="config-label")
+            yield Input(
+                placeholder="Config file path …",
+                id="config_path_input",
+            )
+            yield Button("Browse", id="btn_browse_config", variant="primary")
         with Horizontal():
             # Left panel: Step selector
             with Vertical(id="selector-panel"):
@@ -78,6 +85,11 @@ class PipelineRunnerScreen(Screen):
 
     def on_mount(self) -> None:
         """Initialize the screen when mounted."""
+        # Sync modality from app (set by HomeScreen)
+        if hasattr(self.app, 'modality') and self.app.modality:
+            self.modality = self.app.modality
+        # Auto-populate config path from recent state
+        self._auto_populate_config()
         self._load_steps()
         self._update_status_bar()
 
@@ -86,14 +98,61 @@ class PipelineRunnerScreen(Screen):
         self._load_steps()
 
     def watch_config_path(self, old: str, new: str) -> None:
-        """Update checkpoint status when config path changes."""
+        """Update h5ad_dir and checkpoint status when config path changes."""
+        if new and os.path.isfile(new):
+            try:
+                from core.utils._config import resolve_config
+                cfg = resolve_config(new)
+                self.h5ad_dir = cfg.h5ad_dir
+            except Exception:
+                pass
         if new and self.h5ad_dir:
             self._update_checkpoint_status()
 
-    def watch_h5ad_dir(self, old: str, new: str) -> None:
-        """Update checkpoint status when h5ad_dir changes."""
-        if new and self.config_path:
-            self._update_checkpoint_status()
+    def _auto_populate_config(self) -> None:
+        """Auto-populate config_path from recent state or project scanning."""
+        import glob
+        # Try recent state first
+        try:
+            from core.tui.backends.state import load
+            state = load()
+            recent = state.get("recent_configs", [])
+            if recent and recent[0].get("modality") == self.modality:
+                path = recent[0].get("path", "")
+                if path and os.path.isfile(path):
+                    self.query_one("#config_path_input", Input).value = path
+                    self.config_path = path
+                    return
+        except Exception:
+            pass
+        # Scan projects directory
+        prefix = f"projects/{self.modality}/"
+        if os.path.isdir(prefix):
+            configs = sorted(glob.glob(f"{prefix}*/config_*.yaml"))
+            if configs:
+                # Pick first found
+                abs_path = os.path.abspath(configs[0])
+                self.query_one("#config_path_input", Input).value = abs_path
+                self.config_path = abs_path
+
+    def _browse_config(self) -> None:
+        """Handle Browse button — cycle through available configs."""
+        import glob
+        prefix = f"projects/{self.modality}/"
+        configs = sorted(glob.glob(f"{prefix}*/config_*.yaml"))
+        if not configs:
+            self.app.notify("No configs found", severity="warning")
+            return
+        current = self.config_path
+        try:
+            idx = configs.index(os.path.relpath(current)) if current else -1
+        except ValueError:
+            idx = -1
+        next_idx = (idx + 1) % len(configs)
+        abs_path = os.path.abspath(configs[next_idx])
+        self.query_one("#config_path_input", Input).value = abs_path
+        self.config_path = abs_path
+        self.app.notify(f"Config: {os.path.basename(abs_path)}")
 
     def _load_steps(self) -> None:
         """Load step definitions for the current modality."""
@@ -140,6 +199,8 @@ class PipelineRunnerScreen(Screen):
             self.action_run_selected_steps()
         elif event.button.id == "stop_button":
             self.action_stop_run()
+        elif event.button.id == "btn_browse_config":
+            self._browse_config()
 
     def watch_run_active(self, old: bool, new: bool) -> None:
         """Update UI state when running status changes."""
@@ -332,17 +393,36 @@ class PipelineRunnerScreen(Screen):
         layout: vertical;
     }
 
+    #config-bar {
+        height: 3;
+        padding: 0 1;
+        background: $bg-medium;
+        border-bottom: solid $border;
+    }
+
+    #config-bar > .config-label {
+        width: 8;
+        content-align: left middle;
+        color: $text-secondary;
+        text-style: bold;
+    }
+
+    #config-bar > #config_path_input {
+        width: 1fr;
+        margin: 0 1;
+    }
+
     #selector-panel {
         width: 40%;
         height: 1fr;
+        overflow: hidden;
         border-right: solid $border;
     }
-
     #log-panel {
         width: 60%;
         height: 1fr;
+        overflow: hidden;
     }
-
     .panel-header {
         height: 2;
         content-align: left middle;
@@ -395,10 +475,10 @@ class PipelineRunnerScreen(Screen):
     }
 
     LogPanel {
-        height: 2fr;
+        height: 1fr;
     }
 
     ProgressTracker {
-        height: auto;
+        height: 4;
     }
     """

@@ -230,6 +230,7 @@ class ConfigEditorScreen(Screen):
         self._config: Config | None = None
         self._config_path: str | None = None
         # Introspect once — pure, no I/O
+        self._last_status = ""
         self._fields: dict[str, FieldInfo] = get_config_fields()
         # Group by section for compose ordering
         self._section_keys: dict[str, list[str]] = {}
@@ -552,11 +553,24 @@ class ConfigEditorScreen(Screen):
             raw = widget.value.strip()
             widget_type = field_to_widget_type(field_info, field_name=key)
 
-            if widget_type == "integer":
+            if widget_type in ("integer",):
                 return int(raw) if raw else field_info.default
-            if widget_type == "float":
+            if widget_type in ("float",):
                 return float(raw) if raw else field_info.default
-            # text / password
+            # text / password — handle bool & list round-trips
+            if field_info.annotation is bool or raw.lower() in ("true", "false"):
+                return raw.lower() == "true"
+            if get_origin(field_info.annotation) is list:
+                if raw:
+                    stripped = raw.strip()
+                    if stripped.startswith('[') and stripped.endswith(']'):
+                        try:
+                            return ast.literal_eval(stripped)
+                        except (ValueError, SyntaxError):
+                            pass
+                    items = [item.strip().strip("\"'") for item in stripped.split(",") if item.strip()]
+                    return items
+                return field_info.default or []
             return raw
 
         if isinstance(widget, Switch):
@@ -590,7 +604,8 @@ class ConfigEditorScreen(Screen):
             return
 
         # Re-load from disk after the editor exits
-        self._do_load(self._config_path)
+        # Re-load from disk after the editor exits
+        self._on_load()
 
     # ── input validation ───────────────────────────────────────────────────
 
@@ -631,7 +646,7 @@ class ConfigEditorScreen(Screen):
             # Clear transient validation messages from status bar
             # (only if the current status starts with "Validation")
             status_bar = self.query_one("#status-bar", Static)
-            if status_bar.renderable.startswith("[red]Validation"):
+            if self._last_status.startswith("[red]Validation"):
                 self._update_status(
                     f"Loaded: {self._config_path}" if self._config_path else "Ready."
                 )
@@ -643,5 +658,6 @@ class ConfigEditorScreen(Screen):
         try:
             bar = self.query_one("#status-bar", Static)
             bar.update(message)
+            self._last_status = message
         except Exception:
             logger.debug("Failed to update status bar", exc_info=True)

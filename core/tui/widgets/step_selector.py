@@ -316,8 +316,8 @@ class StepSelector(Widget):
     def on_click(self, event) -> None:
         """Handle click on step rows to toggle selection."""
         # Check if a step row was clicked
-        if hasattr(event.target, "_step_idx"):
-            step_idx = event.target._step_idx
+        if hasattr(event.widget, "_step_idx"):
+            step_idx = event.widget._step_idx
             self._toggle_selection(step_idx)
             event.stop()
 

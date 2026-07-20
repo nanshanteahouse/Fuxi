@@ -592,6 +592,18 @@ class Config(BaseModel):
             else:
                 self.data_dir = base
 
+        # Resolve individual data files relative to data_dir
+        if sub.matrix_file and not os.path.isabs(sub.matrix_file):
+            sub.matrix_file = os.path.join(self.data_dir, sub.matrix_file)
+        if sub.barcodes_file and not os.path.isabs(sub.barcodes_file):
+            sub.barcodes_file = os.path.join(self.data_dir, sub.barcodes_file)
+        if sub.features_file and not os.path.isabs(sub.features_file):
+            sub.features_file = os.path.join(self.data_dir, sub.features_file)
+        if sub.fragment_file and not os.path.isabs(sub.fragment_file):
+            sub.fragment_file = os.path.join(self.data_dir, sub.fragment_file)
+        if sub.input_h5ad and not os.path.isabs(sub.input_h5ad):
+            sub.input_h5ad = os.path.join(self.data_dir, sub.input_h5ad)
+
         # Auto-fill mtx_dir and h5_dir from data_dir
         if not self.data_input.mtx_dir:
             self.data_input.mtx_dir = self.data_dir

@@ -41,7 +41,7 @@ class FuxiTUI(App):
         return variables
 
     BINDINGS = [
-        Binding("ctrl+h", "switch_screen('home')", "Home", priority=True),
+        Binding("f1", "switch_screen('home')", "Home", priority=True),
         Binding("ctrl+r", "switch_screen('registry')", "Registry", priority=True),
         Binding("ctrl+p", "switch_screen('pipeline')", "Pipeline", priority=True),
         Binding("ctrl+e", "switch_screen('results')", "Results", priority=True),

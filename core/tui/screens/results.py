@@ -28,6 +28,7 @@ class ResultsSummaryScreen(Screen):
     Displays QC reports, marker genes, enrichment results, and a summary
     overview in tabbed panels with a config selector on the left.
     """
+    id = "results"
 
     SCREEN_ID = "results"
     TITLE = "Results Summary"

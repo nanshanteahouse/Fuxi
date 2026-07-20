@@ -360,7 +360,7 @@ def main():
         print(f"[run] Set BLAS/OpenMP threads to {CFG.execution.n_jobs} via env vars")
 
     # ── Resolve paths ────────────────────────────────────────────────
-    scripts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', mod["dir"], 'steps')
+    scripts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', mod["dir"], 'steps')
 
     # ── ATAC: auto-discover RNA h5ad for Step 09 integration ─────────
     if args.modality == "atac" and not getattr(CFG, 'rna_h5ad', ''):

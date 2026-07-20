@@ -359,9 +359,21 @@ class DataManagementScreen(Screen):
                 return
 
             for idx, file_info in enumerate(files):
-                filename = file_info.get("filename", "")
-                size = file_info.get("size", "")
-                file_type = file_info.get("type", "unknown")
+                filename = file_info.get("name", "")
+                size = file_info.get("size_human", "")
+                # Infer file type from extension
+                ext = os.path.splitext(filename)[1].lower()
+                if ext in (".gz",):
+                    ext2 = os.path.splitext(os.path.splitext(filename)[0])[1].lower()
+                    file_type = ext2 + ext if ext2 else ext
+                elif ext in (".csv", ".tsv"):
+                    file_type = ext
+                elif ext in (".h5", ".h5ad"):
+                    file_type = ext
+                elif ext in (".mtx",):
+                    file_type = ext
+                else:
+                    file_type = ext.lstrip(".") or "unknown"
                 table.add_row(
                     "[ ]",  # Select checkbox
                     filename[:50],  # Truncate long filenames
