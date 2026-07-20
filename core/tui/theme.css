@@ -1,0 +1,430 @@
+/* Fuxi TUI Dark Theme - Textual CSS */
+/* Scientific/bioinformatics theme with dark blue/purple background and coral accent */
+/* NOTE: All colors are hard-coded because Textual 8.2 does not support
+   user-defined CSS variables. Built-in vars like $accent, $error, $warning,
+   $success ARE supported and used where applicable. */
+
+/* ========== SCREEN ========== */
+Screen {
+    background: #1a1a2e;
+    color: #e0e0e0;
+}
+
+/* ========== HEADER ========== */
+Header {
+    background: #16213e;
+    color: #e0e0e0;
+    text-align: center;
+    padding: 0 1;
+    border-bottom: solid $accent;
+}
+
+Header.-tall {
+    height: 5;
+}
+
+/* ========== FOOTER ========== */
+Footer {
+    background: #16213e;
+    color: #a0a0a0;
+    padding: 0 1;
+    border-top: solid #2a2a4a;
+    text-style: italic;
+}
+
+/* ========== DATA TABLE ========== */
+DataTable {
+    background: #1a1a2e;
+    border: solid #2a2a4a;
+}
+
+DataTable > DataTableHeader {
+    background: #0f3460;
+    color: #e0e0e0;
+    text-style: bold;
+}
+
+DataTable > DataTableHeader > DataTableHeaderCell {
+    background: #0f3460;
+    color: #e0e0e0;
+    padding: 0 1;
+    border-right: solid #2a2a4a;
+}
+
+DataTable > DataTableHeader > DataTableHeaderCell:hover {
+    background: $accent;
+    color: white;
+}
+
+DataTable > DataTableHeader > DataTableHeaderCell.-cursor {
+    background: #2a2a4a;
+}
+
+DataTable > DataTableRow {
+    background: #1a1a2e;
+    color: #e0e0e0;
+}
+
+DataTable > DataTableRow:hover {
+    background: #2a2a4a;
+}
+
+DataTable > DataTableRow.-cursor {
+    background: #0f3460;
+    color: $accent;
+    text-style: bold;
+}
+
+DataTable > DataTableRow:even {
+    background: #16213e;
+}
+
+DataTable > DataTableRow:even:hover {
+    background: #2a2a4a;
+}
+
+DataTable > DataTableRow:even.-cursor {
+    background: #0f3460;
+}
+
+DataTable > DataTableCell {
+    padding: 0 1;
+    border-right: solid #3a3a5a;
+}
+
+DataTable > DataTableCell:first-child {
+    border-left: solid #3a3a5a;
+}
+
+/* ========== BUTTON ========== */
+Button {
+    background: $accent;
+    color: white;
+    text-style: bold;
+    padding: 0 2;
+    border: solid $accent;
+}
+
+Button:hover {
+    background: #ff6b6b;
+    color: white;
+    border: solid #ff6b6b;
+}
+
+Button:focus {
+    background: #ff6b6b;
+    color: white;
+    border: solid white;
+}
+
+Button:disabled {
+    background: #0f3460;
+    color: #6e7681;
+    border: solid #2a2a4a;
+}
+
+Button.-success {
+    background: $success;
+    border: solid $success;
+}
+
+Button.-success:hover {
+    background: #3db892;
+}
+
+Button.-warning {
+    background: $warning;
+    color: #1a1a2e;
+    border: solid $warning;
+}
+
+Button.-warning:hover {
+    background: #ffe066;
+}
+
+Button.-error {
+    background: $error;
+    border: solid $error;
+}
+
+Button.-error:hover {
+    background: #ec7063;
+}
+
+/* ========== INPUT ========== */
+Input {
+    background: #16213e;
+    color: #e0e0e0;
+    border: solid #2a2a4a;
+    padding: 0 1;
+}
+
+Input:focus {
+    background: #1a1a2e;
+    border: solid $accent;
+}
+
+Input.-placeholder {
+    color: #6e7681;
+    text-style: italic;
+}
+
+/* ========== SELECT ========== */
+Select {
+    background: #16213e;
+    color: #e0e0e0;
+    border: solid #2a2a4a;
+    padding: 0 1;
+}
+
+Select:focus {
+    background: #1a1a2e;
+    border: solid $accent;
+}
+
+Select > SelectCurrent {
+    background: #16213e;
+    color: #e0e0e0;
+}
+
+Select > SelectOverlay {
+    background: #16213e;
+    border: solid $accent;
+    color: #e0e0e0;
+}
+
+Select > SelectOverlay > SelectOption:hover {
+    background: #2a2a4a;
+    text-style: bold;
+}
+
+Select > SelectOverlay > SelectOption.-cursor {
+    background: $accent;
+    color: white;
+}
+
+/* ========== PROGRESS BAR ========== */
+ProgressBar {
+    background: #0f3460;
+    color: #6e7681;
+    border: solid #2a2a4a;
+}
+
+ProgressBar > ProgressBarUpdate {
+    background: $accent;
+    color: white;
+    text-style: bold;
+}
+
+ProgressBar > ProgressBarTotal {
+    background: #1a1a2e;
+    color: #6e7681;
+}
+
+ProgressBar.-success > ProgressBarUpdate {
+    background: $success;
+}
+
+ProgressBar.-warning > ProgressBarUpdate {
+    background: $warning;
+    color: #1a1a2e;
+}
+
+ProgressBar.-error > ProgressBarUpdate {
+    background: $error;
+}
+
+/* ========== RICH LOG ========== */
+RichLog {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    border: solid #2a2a4a;
+}
+
+RichLog > ScrollbarContainer {
+    background: #1a1a2e;
+}
+
+RichLog > RichLogText {
+    background: #1a1a2e;
+    color: #e0e0e0;
+}
+
+RichLog > RichLogText > Text {
+    background: #1a1a2e;
+    color: #e0e0e0;
+}
+
+RichLog > RichLogText > Text.-log-level-info {
+    color: #3498db;
+    text-style: bold;
+}
+
+RichLog > RichLogText > Text.-log-level-success {
+    color: $success;
+    text-style: bold;
+}
+
+RichLog > RichLogText > Text.-log-level-warning {
+    color: $warning;
+    text-style: bold;
+}
+
+RichLog > RichLogText > Text.-log-level-error {
+    color: $error;
+    text-style: bold;
+}
+
+RichLog > RichLogText > Text.-log-level-debug {
+    color: #6e7681;
+    text-style: italic;
+}
+
+/* ========== TABBED CONTENT ========== */
+TabbedContent {
+    background: #1a1a2e;
+    border: solid #2a2a4a;
+}
+
+TabbedContent > ContentSwitcher {
+    background: #16213e;
+    border-bottom: solid #2a2a4a;
+}
+
+TabbedContent > ContentSwitcher > Tab {
+    background: #16213e;
+    color: #a0a0a0;
+    padding: 0 2;
+    border-right: solid #2a2a4a;
+}
+
+TabbedContent > ContentSwitcher > Tab:hover {
+    background: #2a2a4a;
+    color: #e0e0e0;
+}
+
+TabbedContent > ContentSwitcher > Tab.-active {
+    background: #1a1a2e;
+    color: $accent;
+    text-style: bold;
+    border-bottom: solid $accent;
+}
+
+TabbedContent > ContentSwitcher > Tab:focus {
+    background: #2a2a4a;
+    border: solid $accent;
+}
+
+/* ========== STATIC ========== */
+Static {
+    color: #e0e0e0;
+    background: transparent;
+}
+
+Static.-label {
+    color: #a0a0a0;
+    text-style: bold;
+}
+
+Static.-description {
+    color: #6e7681;
+    text-style: italic;
+}
+
+Static.-header {
+    color: $accent;
+    text-style: bold;
+}
+
+Static.-success {
+    color: $success;
+    text-style: bold;
+}
+
+Static.-warning {
+    color: $warning;
+    text-style: bold;
+}
+
+Static.-error {
+    color: $error;
+    text-style: bold;
+}
+
+/* ========== LIST VIEW ========== */
+ListView {
+    background: #1a1a2e;
+    border: solid #2a2a4a;
+}
+
+ListView > ListViewList {
+    background: #1a1a2e;
+}
+
+ListView > ListViewList > ListItem {
+    background: #1a1a2e;
+    color: #e0e0e0;
+    padding: 0 1;
+}
+
+ListView > ListViewList > ListItem:hover {
+    background: #2a2a4a;
+}
+
+ListView > ListViewList > ListItem.-cursor {
+    background: #0f3460;
+    color: $accent;
+    text-style: bold;
+}
+
+ListView > ListViewList > ListItem.-selected {
+    background: $accent;
+    color: white;
+    text-style: bold;
+}
+
+/* ========== SCROLLBAR ========== */
+Scrollbar {
+    background: #0f0f1a;
+}
+
+Scrollbar > ScrollbarGutter {
+    background: #0f0f1a;
+}
+
+Scrollbar > ScrollbarGutter > ScrollbarThumb {
+    background: #4a4a6a;
+}
+
+Scrollbar > ScrollbarGutter > ScrollbarThumb:hover {
+    background: $accent;
+}
+
+
+/* ========== GENERAL STYLING ========== */
+Static.-keybinding {
+    background: #0f3460;
+    color: $accent;
+    padding: 0 1;
+    border: solid $accent;
+    text-style: bold;
+}
+
+Static > ProgressBar {
+    margin: 0 1;
+}
+
+
+/* ========== PSEUDO-CLASSES ========== */
+*:focus {
+    outline: none;
+}
+
+*:disabled {
+    background: #0f3460;
+    color: #6e7681;
+    opacity: 0.7;
+}
+
+/* border-subtitle intentionally omitted — Textual 8.2 does not support
+   the border-subtitle shorthand for DataTable/RichLog */

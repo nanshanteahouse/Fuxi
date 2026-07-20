@@ -7,17 +7,17 @@ field-to-topic mapping for config migration.
 from core.config.schema import (
     Config,
     DataInputConfig,
-    QCConfig,
-    HvgConfig,
-    ClusteringConfig,
+    QCSettings,
+    HVGSettings,
+    ClusteringSettings,
     SILHOUETTE_SAMPLE_THRESHOLD,
 )
 
 __all__ = [
     "Config",
     "DataInputConfig",
-    "QCConfig",
-    "HvgConfig",
-    "ClusteringConfig",
+    "QCSettings",
+    "HVGSettings",
+    "ClusteringSettings",
     "SILHOUETTE_SAMPLE_THRESHOLD",
 ]

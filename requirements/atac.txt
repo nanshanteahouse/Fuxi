@@ -19,3 +19,4 @@ polars>=1.0
 #   pyranges          基因组区间运算
 #   scvi-tools        深度整合/注释
 #   cellrank          命运轨迹
+textual>=2.0.0

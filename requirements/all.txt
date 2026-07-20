@@ -7,3 +7,4 @@
 -r atac.txt
 -r spatial.txt
 -r paper.txt
+textual>=2.0.0

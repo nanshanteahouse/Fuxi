@@ -7,6 +7,7 @@ Any test file under ``tests/`` can then do::
     from core.annotation.scoring import score_cluster_against_kb
     from rna.utils.evidence_fusion import fuse_all_clusters
     from core.cluster.evaluation import find_pareto_frontier
+    from core.paper.registry import load_master_registry
 
 without manual sys.path manipulation.
 """

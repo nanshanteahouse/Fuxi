@@ -17,3 +17,4 @@ statsmodels>=0.14
 igraph>=1.0
 # 可选 (懒加载，缺失不报错):
 #   mygene            rna/utils/cell_interaction.py Ensembl→symbol 转换
+textual>=2.0.0
