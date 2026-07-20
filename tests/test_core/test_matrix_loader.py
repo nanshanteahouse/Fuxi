@@ -16,7 +16,7 @@ import pytest
 from pytest import MonkeyPatch
 
 # Paths — use a known template directory
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _TEMPLATE_DIR = _REPO_ROOT / "templates" / "config_templates"
 
 

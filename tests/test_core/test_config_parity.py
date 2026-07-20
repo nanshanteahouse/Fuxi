@@ -387,7 +387,7 @@ execution:
     def test_yaml_template_round_trip(self) -> None:
         """Loading the 10X H5 template YAML works."""
         template_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
             "templates",
             "config_templates",
             "config_10X_h5.yaml",

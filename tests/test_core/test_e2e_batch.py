@@ -10,7 +10,7 @@ import scanpy as sc
 import harmonypy  # harmony integration (no torch)
 from scipy.sparse import csr_matrix
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 from rna.utils.batch_diagnostics import (
     diagnose_batch_candidates,

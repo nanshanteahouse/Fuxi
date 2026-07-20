@@ -40,7 +40,7 @@ from core.ai.prompts import (
 
 # ── Fixture paths ────────────────────────────────────────────────────────────
 
-FIXTURE_DIR = Path(__file__).parent / "fixtures"
+FIXTURE_DIR = Path(__file__).parent.parent / "fixtures"
 PMC_FIXTURE = FIXTURE_DIR / "pmc6814749.xml"
 PAPERS_DIR = Path("projects/papers")
 MENON_MD = PAPERS_DIR / "2019_Menon_NatCommun_Human-Retina-AMD-Atlas.md"

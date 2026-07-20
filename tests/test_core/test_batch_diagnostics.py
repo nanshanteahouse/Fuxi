@@ -20,7 +20,7 @@ from scipy.sparse import csr_matrix
 from sklearn.decomposition import PCA
 
 # Ensure repo root is in path (redundant with conftest.py but explicit)
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
