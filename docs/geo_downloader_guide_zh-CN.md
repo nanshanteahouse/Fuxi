@@ -477,7 +477,7 @@ tmux attach -t geo_download
 
 ## 8. Registry 联动
 
-下载完成后，下载器会自动更新 **Master Registry**（`core/registry.py` 管理的统一登记表）。
+下载完成后，下载器会自动更新 **Master Registry**（`core/paper/registry.py` 管理的统一登记表）。
 
 ### 8.1 自动联动路径
 

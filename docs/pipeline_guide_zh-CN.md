@@ -109,7 +109,7 @@ Fuxi — RNA-seq pipeline step list
 # scRNA-seq 全流程（13 步，从数据加载到细胞互作分析）
 python core/run_pipeline.py --modality rna --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 
-# scATAC-seq 全流程（10 步）
+# scATAC-seq 全流程（14 步）
 python core/run_pipeline.py --modality atac --config projects/atac/{数据集ID}/config_{数据集ID}.yaml
 
 # 空间转录组全流程（11 步）
@@ -135,7 +135,7 @@ python core/run_pipeline.py --modality spatial --config projects/spatial/{数据
 [run] Step timing summary:
   [00]    45.2s  Load raw data → 00_raw.h5ad
   ...
-  [Total] 1845.3s  10 steps total
+  [Total] 1845.3s  14 steps total
 ```
 
 ### 3.3 检查点与断点续跑
@@ -485,7 +485,7 @@ CFG.cci_adjacency_types = []      # 连接类型白名单
 
 ## 5. scATAC-seq 管线详解
 
-scATAC-seq 管线包含 10 个步骤（编号 00-09），数据依次流转：
+scATAC-seq 管线包含 14 个步骤（编号 00-13），数据依次流转：
 
 ```
 原始数据 → 00_load → 01_qc → 02_process → 03_cluster
@@ -1247,8 +1247,8 @@ python core/run_pipeline.py --modality spatial --config projects/spatial/{数据
 
 ```bash
 # 预览所有论文的复现状态
-python core/run_reproduce.py --all --dry-run
+python core/pipeline/reproduce.py --all --dry-run
 
 # 复现单篇论文
-python core/run_reproduce.py projects/papers/<paper_dir>/
+python core/pipeline/reproduce.py projects/papers/<paper_dir>/
 ```

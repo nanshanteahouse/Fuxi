@@ -20,7 +20,7 @@ decision.  It is a 5-layer decision engine with strict priority ordering.
 
 | Module | Role |
 |--------|------|
-| ``rna/utils/marker_scoring.py`` | Layer 1–2: statistical + similarity scoring |
+| ``core/annotation/scoring.py`` | Layer 1–2: statistical + similarity scoring |
 | ``rna/utils/evidence_fusion.py`` | Layer 3–5: rule engine + fusion + AI arbitration |
 
 ### The 5 layers (evaluated in priority order)
@@ -67,7 +67,7 @@ evidence.  The scoring engine uses:
    same class + different order = 0.8, different class = 0.6–0.9).
 
 ```python
-# rna/utils/marker_scoring.py — score construction
+# core/annotation/scoring.py — score construction
 final_score = hypergeometric_score * conf_mult
 if target_class:
     p_weight = phylogenetic_weight(source_cls, target_class, ...)
@@ -121,7 +121,7 @@ When no layer produces a confident result, the cluster is classified as
 ### Caller
 
 The fusion engine is invoked from ``rna/steps/05_annotate_major.py``
-(and ``rna/annotation_engine.py``) via:
+(and ``core/annotation/engine.py``) via:
 
 ```python
 decision = fuse_evidence(
@@ -172,7 +172,7 @@ decisions, quality = fuse_all_clusters(
 ```
 fuxi/
 ├── core/                    # Shared infrastructure
-│   ├── config.py            # Unified Config + nested modality configs
+│   ├── config/schema.py     # Unified Config + nested modality configs
 │   ├── utils/             # safe_write, safe_plot, resolve_config, ...
 │   ├── ai_caller.py         # LLM calls with retry + caching
 │   ├── ai_prompts.py        # Annotation / interpretation templates
@@ -198,7 +198,7 @@ fuxi/
 │   ├── annotation_engine.py # Cross-module annotation API
 │   └── ortholog.py          # Gene name conversion (Ensembl ↔ symbol)
 ├── atac/
-│   └── steps/               # 10 pipeline steps (snapatac2)
+│   └── steps/               # 14 pipeline steps (snapatac2)
 ├── spatial/
 │   └── steps/               # 11 pipeline steps (squidpy)
 ├── projects/                # Dataset-specific configs
@@ -208,7 +208,7 @@ fuxi/
 
 ## 3. Config system
 
-The ``Config`` Pydantic BaseModel (``core/config.py``) uses **21 topic sub-models** for clean separation:
+The ``Config`` Pydantic BaseModel (``core/config/schema.py``) uses **21 topic sub-models** for clean separation:
 
 ```python
 cfg = Config()

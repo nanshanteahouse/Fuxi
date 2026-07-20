@@ -109,7 +109,7 @@ Fuxi — RNA-seq pipeline step list
 # scRNA-seq full workflow (13 steps, from scratch to cell-cell interaction)
 python core/run_pipeline.py --modality rna --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 
-# scATAC-seq full workflow (10 steps)
+# scATAC-seq full workflow (14 steps)
 python core/run_pipeline.py --modality atac --config projects/atac/{dataset_id}/config_{dataset_id}.yaml
 
 # Spatial transcriptomics full workflow (11 steps)
@@ -135,7 +135,7 @@ The terminal shows real-time progress with timing for each step:
 [run] Step timing summary:
   [00]    45.2s  Load raw data → 00_raw.h5ad
   ...
-  [Total] 1845.3s  10 steps total
+  [Total] 1845.3s  14 steps total
 ```
 
 ### 3.3 Checkpoints and resume
@@ -486,7 +486,7 @@ Since spatial CCI already enforces physical proximity via `cci_spatial_distance`
 
 ## 5. scATAC-seq pipeline in detail
 
-The scATAC-seq pipeline has 10 steps (numbered 00–09), with data flowing sequentially:
+The scATAC-seq pipeline has 14 steps (numbered 00–13), with data flowing sequentially:
 
 ```
 Raw data → 00_load → 01_qc → 02_process → 03_cluster
@@ -1251,8 +1251,8 @@ Automatically generate pipeline configs from paper insights and run the pipeline
 
 ```bash
 # Preview reproducibility for all papers
-python core/run_reproduce.py --all --dry-run
+python core/pipeline/reproduce.py --all --dry-run
 
 # Reproduce a single paper
-python core/run_reproduce.py projects/papers/<paper_dir>/
+python core/pipeline/reproduce.py projects/papers/<paper_dir>/
 ```

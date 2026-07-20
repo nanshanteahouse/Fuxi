@@ -41,28 +41,29 @@ python core/run_pipeline.py --modality atac --step 0 --config ...
 python core/run_pipeline.py --modality rna --resume --config ...
 
 # Paper tools
-python core/paper_insights.py --pmid <PMID>       # AI paper interpretation
-python core/paper_insights.py --pmid <PMID> --methodology  # + methodology patterns
-python core/methodology_batch.py                          # batch methodology backfill
-python -m core.registry report               # print summary
-python -m core.registry verify              # check registry consistency
-python -m core.registry register --gse GSE164044  # register GSE → PMID link
-python -m core.registry find-orphans        # list orphan datasets
-python core/run_reproduce.py --all --dry-run       # preview reproducibility
-python core/run_reproduce.py <paper_dir>           # reproduce a single paper
+python core/paper/insights.py --pmid <PMID>       # AI paper interpretation
+python core/paper/insights.py --pmid <PMID> --methodology  # + methodology patterns
+python adhoc/migration_scripts/methodology_batch.py          # batch methodology backfill
+python -m core.paper.registry report               # print summary
+python -m core.paper.registry verify              # check registry consistency
+python -m core.paper.registry register --gse GSE123456  # register GSE → PMID link
+python -m core.paper.registry find-orphans        # list orphan datasets
+python core/pipeline/reproduce.py --all --dry-run       # preview reproducibility
+python core/pipeline/reproduce.py <paper_dir>           # reproduce a single paper
+```
 
 ### Key paths
 
 | Module | Location |
 |--------|----------|
 | RNA steps | `rna/steps/` (13 steps: 00_load → 12_cell_interaction) |
-| ATAC steps | `atac/steps/` (10 steps: 00_load → 09_integrate) |
+| ATAC steps | `atac/steps/` (14 steps: 00_load → 13_integrate) |
 | Spatial steps | `spatial/steps/` (11 steps: 00_load → 10_cell_interaction) |
-| Shared core | `core/` (config, utils, ai_caller, preprocess) |
-| Paper tools | `core/paper_insights.py`, `core/registry.py`, `core/run_reproduce.py` |
-| Methodology tools | `core/methodology_batch.py`, `core/paper_insights.py --methodology` |
-| Project configs | `projects/{modality}/{GSE_ID}/config_*.yaml` |
-| Config templates | `templates/config_templates/*.yaml` |
+| Shared core | `core/` — sub-packages: ai/, annotation/, cluster/, config/, interaction/, kb/, paper/, pipeline/, preprocess/, utils/ |
+| Paper tools | `core/paper/` (insights.py, registry.py, converter.py, cross_paper.py) |
+| Methodology tools | `core/paper/insights.py --methodology`, `adhoc/migration_scripts/methodology_batch.py` |
+| Knowledge base | `core/kb/` (tissue ontologies, marker validation, adjacency) |
+| Ad-hoc scripts | `adhoc/` (one-off migration, ortholog processing, dataset-specific analysis) |
 | Brainstorming | `projects/notebook/` (methodology_ideas, keywords, etc.) |
 
 ### Dataset & Paper lookup
@@ -74,10 +75,10 @@ use targeted queries first rather than scanning the entire registry.
 
 ```bash
 # Check a single GSE — shows registration, data, config, pipeline status
-python -m core.registry status --gse GSE164044
+python -m core.paper.registry status --gse GSE123456
 
 # Check a paper and all its linked datasets
-python -m core.registry status --pmid 31493975
+python -m core.paper.registry status --pmid 31493975
 ```
 
 This is the **primary entry point** for any exact GSE or PMID query.
@@ -88,9 +89,9 @@ prevented the "not registered" misdiagnosis described earlier.
 
 ```bash
 # Search by keyword in title, author, journal, year, PMID, slug
-python -m core.registry list-papers --query "retina development"
-python -m core.registry list-papers --query "author:Norrie"
-python -m core.registry list-papers --query "2024"
+python -m core.paper.registry list-papers --query "retina development"
+python -m core.paper.registry list-papers --query "author:Norrie"
+python -m core.paper.registry list-papers --query "2024"
 ```
 
 Use `list-papers` when the user gives a vague description (no exact PMID/GSE).
@@ -99,9 +100,9 @@ Once narrowed to a candidate, use `status --pmid` for the full picture.
 #### 3. Global registry commands
 
 ```bash
-python -m core.registry report          # summary counts
-python -m core.registry verify          # consistency check
-python -m core.registry find-orphans    # orphan datasets
+python -m core.paper.registry report          # summary counts
+python -m core.paper.registry verify          # consistency check
+python -m core.paper.registry find-orphans    # orphan datasets
 ```
 
 #### 4. Decision tree from `status` output
@@ -112,23 +113,23 @@ python -m core.registry find-orphans    # orphan datasets
 | Data downloaded + no config | Generate config via `core/preprocess/` or copy from `templates/config_templates/` |
 | Data not downloaded | Download data (GEO) then repeat status check |
 | Not registered | `register --gse <GSE>` or `register --pmid <PMID>` first |
-| PMID not in registry | `python core/paper_insights.py --pmid <PMID>` then register |
+| PMID not in registry | `python core/paper/insights.py --pmid <PMID>` then register |
 
 #### 5. Registration
 
 ```bash
-python -m core.registry register --gse GSE164044              # GSE → PMID auto-link
-python -m core.registry register --gse GSE164044 --dry-run    # preview first
-python -m core.registry register --pmid 31493975              # paper → GSE linkage
+python -m core.paper.registry register --gse GSE123456              # GSE → PMID auto-link
+python -m core.paper.registry register --gse GSE123456 --dry-run    # preview first
+python -m core.paper.registry register --pmid 31493975              # paper → GSE linkage
 ```
 
 #### 6. Programmatic query (for scripts / advanced use)
 
 ```python
-from core.registry import load_master_registry
+from core.paper.registry import load_master_registry
 reg = load_master_registry()
 reg.get_dataset_links("41578023")     # paper → datasets
-reg.get_paper_links("GSE118614")      # dataset → papers
+reg.get_paper_links("GSE123456")      # dataset → papers
 reg.get_paper(paper_id="41578023")    # by PMID/slug
 reg.find_orphans()
 
@@ -146,12 +147,12 @@ The framework captures 5 dimensions:
 
 ```bash
 # Single paper
-python core/paper_insights.py --pmid <PMID> --methodology
+python core/paper/insights.py --pmid <PMID> --methodology
 
 # Batch backfill all registered papers
-python core/methodology_batch.py
-python core/methodology_batch.py --dry-run    # preview first
-python core/methodology_batch.py --workers 8  # custom concurrency
+python adhoc/migration_scripts/methodology_batch.py
+python adhoc/migration_scripts/methodology_batch.py --dry-run    # preview first
+python adhoc/migration_scripts/methodology_batch.py --workers 8  # custom concurrency
 
 # Read methodology_patterns from insights.yaml
 python -c "import yaml; d=yaml.safe_load(open('projects/papers/<paper>/insights.yaml')); print(d.get('methodology_patterns', {}).get('archetype', {})"
@@ -168,7 +169,7 @@ python -c "import yaml; d=yaml.safe_load(open('projects/papers/<paper>/insights.
 - Every step must prepend repo root to `sys.path`
 - Config: `.yaml` + `resolve_config()` → Pydantic v2; `.py` rejected
 - `data_root()` requires `FUXI_DATA_ROOT` env var
-- Import pattern: `from core.utils import ...`, `from core.ai_caller import ...`
+- Import pattern: `from core.utils import ...`, `from core.ai.caller import ...`
 
 ## Session report generation
 

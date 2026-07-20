@@ -63,7 +63,7 @@ pip install -r requirements/paper.txt
 ### 3.1 最基本用法：通过 PMID
 
 ```bash
-python core/paper_insights.py --pmid 31269016 --force
+python core/paper/insights.py --pmid 31269016 --force
 ```
 
 这会自动：
@@ -78,7 +78,7 @@ python core/paper_insights.py --pmid 31269016 --force
 ### 3.2 通过本地 XML
 
 ```bash
-python core/paper_insights.py --xml tests/fixtures/pmc6814749.xml --force
+python core/paper/insights.py --xml tests/fixtures/pmc6814749.xml --force
 ```
 
 完全离线，零网络请求。
@@ -86,20 +86,20 @@ python core/paper_insights.py --xml tests/fixtures/pmc6814749.xml --force
 ### 3.3 通过 PDF
 
 ```bash
-python core/paper_insights.py --pdf paper.pdf --force
+python core/paper/insights.py --pdf paper.pdf --force
 ```
 
 ### 3.4 自动回退（默认行为）
 
 ```bash
 # 尝试 PMC → 不在 PMC? PubMed → 再失败 → PDF → 最后尝试 .md
-python core/paper_insights.py --pmid 31269016 --pdf paper.pdf --source auto
+python core/paper/insights.py --pmid 31269016 --pdf paper.pdf --source auto
 ```
 
 ### 3.5 .md 文件
 
 ```bash
-python core/paper_insights.py projects/papers/2019_Menon_NatCommun_Human-Retina-AMD-Atlas.md --force
+python core/paper/insights.py projects/papers/2019_Menon_NatCommun_Human-Retina-AMD-Atlas.md --force
 ```
 
 直接传入 `.md` 文件即可。
@@ -111,9 +111,9 @@ python core/paper_insights.py projects/papers/2019_Menon_NatCommun_Human-Retina-
 ### 4.1 PmcXmlSource — PMC XML（推荐）
 
 ```bash
-python core/paper_insights.py --pmid 31653841    # PubMed ID
-python core/paper_insights.py --doi 10.1038/s41467-019-12780-8  # DOI
-python core/paper_insights.py --xml local.xml     # 本地 XML 文件
+python core/paper/insights.py --pmid 31653841    # PubMed ID
+python core/paper/insights.py --doi 10.1038/s41467-019-12780-8  # DOI
+python core/paper/insights.py --xml local.xml     # 本地 XML 文件
 ```
 
 **优点**：结构精确（`<sec>` 分节、`<fig>` 分图标签），无文本粘连，不含格式噪声。  
@@ -122,7 +122,7 @@ python core/paper_insights.py --xml local.xml     # 本地 XML 文件
 ### 4.2 PubmedSource — PubMed 元数据（PMC 回退）
 
 ```bash
-python core/paper_insights.py --pmid 32467236    # 论文不在 PMC 也可注册
+python core/paper/insights.py --pmid 32467236    # 论文不在 PMC 也可注册
 ```
 
 当论文未收录于 PMC 时自动启用。通过 NCBI E-utilities 获取权威 bibliographic 元数据（title、journal、year、first_author、pmid、doi）和摘要文本。
@@ -133,7 +133,7 @@ python core/paper_insights.py --pmid 32467236    # 论文不在 PMC 也可注册
 
 ```bash
 pip install -r requirements/paper.txt
-python core/paper_insights.py --pdf paper.pdf --force
+python core/paper/insights.py --pdf paper.pdf --force
 ```
 
 **优点**：质量远超 markitdown（54/100 vs 14/100），单 pip 安装。  
@@ -142,7 +142,7 @@ python core/paper_insights.py --pdf paper.pdf --force
 ### 4.4 MarkdownSource — .md 文件
 
 ```bash
-python core/paper_insights.py paper.md --force
+python core/paper/insights.py paper.md --force
 ```
 
 直接支持 `.md` 文件输入。
@@ -290,29 +290,29 @@ python -m core.registry reset-gse GSE12345           # 重置数据集状态
 
 ```bash
 # 预览预览全部论文
-python core/run_reproduce.py --all --dry-run
+python core/pipeline/reproduce.py --all --dry-run
 
 # 复现单篇论文
-python core/run_reproduce.py projects/papers/2019_Menon_Nature_Com_.../
+python core/pipeline/reproduce.py projects/papers/2019_Menon_Nature_Com_.../
 
 # 只跑某个指定 GSE
-python core/run_reproduce.py projects/papers/.../ --gse GSE107618
+python core/pipeline/reproduce.py projects/papers/.../ --gse GSE107618
 ```
 
 ### 6.3 完整工作流：PMID → 复现
 
 ```bash
 # Step 1: 解读论文
-python core/paper_insights.py --pmid 31269016
+python core/paper/insights.py --pmid 31269016
 
 # Step 2: 构建注册表
 python -m core.registry report
 
 # Step 3: 预览可复现性
-python core/run_reproduce.py --all --dry-run
+python core/pipeline/reproduce.py --all --dry-run
 
 # Step 4: 实际复现（需先下载 GEO 数据到 projects/{modality}/{GSE_ID}/）
-python core/run_reproduce.py projects/papers/<paper_dir>/
+python core/pipeline/reproduce.py projects/papers/<paper_dir>/
 ```
 
 已有手动配置的数据集不会被覆盖（`force=False` 默认行为）。
@@ -326,8 +326,8 @@ python core/run_reproduce.py projects/papers/<paper_dir>/
 ### Q1: --pmid 报错 "PMC full-text not available"
 
 ```bash
-python core/paper_insights.py --pdf paper.pdf --force  # 回退到 PDF
-python core/paper_insights.py paper.md --force          # 或使用旧 .md
+python core/paper/insights.py --pdf paper.pdf --force  # 回退到 PDF
+python core/paper/insights.py paper.md --force          # 或使用旧 .md
 ```
 
 ### Q2: PDF 转换报错 "pymupdf4llm not installed"
@@ -347,7 +347,7 @@ ls projects/papers/*/
 ### Q4: 如何强制重新解读已有论文？
 
 ```bash
-python core/paper_insights.py --pmid 31269016 --force
+python core/paper/insights.py --pmid 31269016 --force
 ```
 
 ### Q5: AI 解读的可信度如何？

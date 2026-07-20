@@ -254,7 +254,7 @@ ai:
 | `tissue_kb` | 🟢 Recommended | If your tissue (e.g. `retina`) has a KB, set this to skip marker curation |
 | AI settings | 🟢 Recommended | Uncomment and fill in API key for LLM-assisted annotation |
 
-> 💡 **KB-first mode**: If a tissue knowledge base exists under `rna/tissue_ontologies/`, simply set `tissue_kb: retina` instead of filling in `marker_dict`. KB mode is more accurate than simple gene scoring.
+> 💡 **KB-first mode**: If a tissue knowledge base exists under `core/kb/`, simply set `tissue_kb: retina` instead of filling in `marker_dict`. KB mode is more accurate than simple gene scoring.
 
 
 ## 5. After generation: running the full pipeline

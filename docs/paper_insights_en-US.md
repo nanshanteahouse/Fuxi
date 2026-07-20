@@ -63,7 +63,7 @@ Not installing `pymupdf4llm` does not affect core functionality; PMC XML and Pub
 ### 3.1 Basic: via PMID
 
 ```bash
-python core/paper_insights.py --pmid 31269016 --force
+python core/paper/insights.py --pmid 31269016 --force
 ```
 
 This automatically:
@@ -78,7 +78,7 @@ The first run caches the PMC XML under `projects/papers/{paper_name}/`; subseque
 ### 3.2 Via Local XML
 
 ```bash
-python core/paper_insights.py --xml tests/fixtures/pmc6814749.xml --force
+python core/paper/insights.py --xml tests/fixtures/pmc6814749.xml --force
 ```
 
 Fully offline, zero network requests.
@@ -86,20 +86,20 @@ Fully offline, zero network requests.
 ### 3.3 Via PDF
 
 ```bash
-python core/paper_insights.py --pdf paper.pdf --force
+python core/paper/insights.py --pdf paper.pdf --force
 ```
 
 ### 3.4 Auto Fallback (default behavior)
 
 ```bash
 # Try PMC → not in PMC? PubMed → PDF → .md
-python core/paper_insights.py --pmid 31269016 --pdf paper.pdf --source auto
+python core/paper/insights.py --pmid 31269016 --pdf paper.pdf --source auto
 ```
 
 ### 3.5 .md files
 
 ```bash
-python core/paper_insights.py projects/papers/2019_Menon_NatCommun_Human-Retina-AMD-Atlas.md --force
+python core/paper/insights.py projects/papers/2019_Menon_NatCommun_Human-Retina-AMD-Atlas.md --force
 ```
 
 Pass the `.md` file directly.
@@ -111,9 +111,9 @@ Pass the `.md` file directly.
 ### 4.1 PmcXmlSource — PMC XML (recommended)
 
 ```bash
-python core/paper_insights.py --pmid 31653841    # PubMed ID
-python core/paper_insights.py --doi 10.1038/s41467-019-12780-8  # DOI
-python core/paper_insights.py --xml local.xml     # Local XML file
+python core/paper/insights.py --pmid 31653841    # PubMed ID
+python core/paper/insights.py --doi 10.1038/s41467-019-12780-8  # DOI
+python core/paper/insights.py --xml local.xml     # Local XML file
 ```
 
 **Pros**: Structurally precise (`<sec>` sections, `<fig>` labels), no text gluing, no formatting noise.  
@@ -122,7 +122,7 @@ python core/paper_insights.py --xml local.xml     # Local XML file
 ### 4.2 PubmedSource — PubMed metadata (PMC fallback)
 
 ```bash
-python core/paper_insights.py --pmid 32467236    # Works even if paper is not in PMC
+python core/paper/insights.py --pmid 32467236    # Works even if paper is not in PMC
 ```
 
 Automatically enabled when a paper is not archived in PMC. Fetches authoritative bibliographic metadata (title, journal, year, first author, PMID, DOI) and abstract text via NCBI E-utilities.
@@ -133,7 +133,7 @@ Automatically enabled when a paper is not archived in PMC. Fetches authoritative
 
 ```bash
 pip install -r requirements/paper.txt
-python core/paper_insights.py --pdf paper.pdf --force
+python core/paper/insights.py --pdf paper.pdf --force
 ```
 
 **Pros**: Far better quality than markitdown (54/100 vs 14/100), single pip install.  
@@ -143,7 +143,7 @@ python core/paper_insights.py --pdf paper.pdf --force
 
 
 ```bash
-python core/paper_insights.py paper.md --force
+python core/paper/insights.py paper.md --force
 ```
 
 Supports `.md` files directly.
@@ -291,29 +291,29 @@ python -m core.registry reset-gse GSE12345           # Reset dataset status
 
 ```bash
 # Preview reproducibility for all papers
-python core/run_reproduce.py --all --dry-run
+python core/pipeline/reproduce.py --all --dry-run
 
 # Reproduce a single paper
-python core/run_reproduce.py projects/papers/2019_Menon_Nature_Com_.../
+python core/pipeline/reproduce.py projects/papers/2019_Menon_Nature_Com_.../
 
 # Target a specific GSE only
-python core/run_reproduce.py projects/papers/.../ --gse GSE107618
+python core/pipeline/reproduce.py projects/papers/.../ --gse GSE107618
 ```
 
 ### 6.3 Complete workflow: PMID → Reproduction
 
 ```bash
 # Step 1: Interpret paper
-python core/paper_insights.py --pmid 31269016
+python core/paper/insights.py --pmid 31269016
 
 # Step 2: Build registry
 python -m core.registry report
 
 # Step 3: Preview reproducibility
-python core/run_reproduce.py --all --dry-run
+python core/pipeline/reproduce.py --all --dry-run
 
 # Step 4: Reproduce (requires GEO data downloaded to projects/{modality}/{GSE_ID}/)
-python core/run_reproduce.py projects/papers/<paper_dir>/
+python core/pipeline/reproduce.py projects/papers/<paper_dir>/
 ```
 
 Existing manually-configured datasets are never overwritten (`force=False` by default).
@@ -325,8 +325,8 @@ Existing manually-configured datasets are never overwritten (`force=False` by de
 ### Q1: --pmid fails with "PMC full-text not available"
 
 ```bash
-python core/paper_insights.py --pdf paper.pdf --force  # fall back to PDF
-python core/paper_insights.py paper.md --force          # or use existing .md
+python core/paper/insights.py --pdf paper.pdf --force  # fall back to PDF
+python core/paper/insights.py paper.md --force          # or use existing .md
 ```
 
 ### Q2: PDF conversion fails with "pymupdf4llm not installed"
@@ -346,7 +346,7 @@ ls projects/papers/*/
 ### Q4: How do I force re-interpretation of a paper?
 
 ```bash
-python core/paper_insights.py --pmid 31269016 --force
+python core/paper/insights.py --pmid 31269016 --force
 ```
 
 ### Q5: How trustworthy is AI interpretation?

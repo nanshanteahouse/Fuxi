@@ -4,15 +4,15 @@
 
 ## Overview
 
-Fuxi is a unified monorepo for single-cell multi-omics analysis, merging the previously separate `scRNAseq_pipeline` (Scanpy-based) and `ATACseq_pipeline` (Snapatac2-based) into a single codebase with a shared core infrastructure.
+Fuxi is a unified monorepo for single-cell multi-omics analysis — scRNA-seq (Scanpy), scATAC-seq (Snapatac2), Spatial (Squidpy). Python 3.14+ on WSL2.
 
 ### Supported Modalities
 
 | Modality | Engine | Steps | Status |
 |----------|--------|:-----:|:------:|
-| `rna` | Scanpy 1.10+ | 13 (00-12) | ✅ Production |
-| `atac` | Snapatac2 2.9 | 10 (00-09) | ✅ Production |
-| `spatial` | Squidpy 1.8+ | 11 (00-10) | ✅ Production |
+| `rna` | Scanpy 1.10+ | 13 (00-12) | Production |
+| `atac` | Snapatac2 2.9 | 14 (00-13) | Production |
+| `spatial` | Squidpy 1.8+ | 11 (00-10) | Production |
 
 ### Supported Input Formats
 
@@ -26,35 +26,54 @@ Fuxi is a unified monorepo for single-cell multi-omics analysis, merging the pre
 | 10X Fragments (fragments.tsv.gz) | `10x_fragments` | ATAC | `config_fragments.yaml` |
 | 10X Visium (SpaceRanger output) | `visium` | Spatial | `config_visium.yaml` |
 
-**R / Seurat formats (.rds, .qs)** — not natively supported. Use the companion tool [r2h5ad](https://github.com/nanshanteahouse/r2h5ad) to convert RDS/QS files to h5ad before loading with `data_format = "h5ad"`:
+**R / Seurat formats (.rds, .qs)** — not natively supported. Use the companion tool [r2h5ad](https://github.com/nanshanteahouse/r2h5ad) to convert RDS/QS files to h5ad before loading with `data_format = "h5ad"`.
 
 ### Architecture
 
 ```
 fuxi/
-├── core/              # Shared infrastructure
-│   ├── prompts/       # LLM prompt templates (YAML)
-│   ├── preprocess/    # Format detection → extraction → config generation
-│   ├── ai_prompts.py  # Prompt imports + annotation build functions
-│   ├── ai_caller.py   # Unified LLM API with retry + caching
-│   ├── config.py      # Unified Config dataclass (Pydantic v2)
-│   ├── run_pipeline.py# CLI dispatcher for all modalities
-│   ├── paper_insights.py  # AI-assisted paper metadata + methodology extraction
-│   ├── paper_converter.py # PMC XML / PDF → structured markdown
-│   ├── registry.py    # Paper ↔ dataset unified registry
-│   └── methodology_batch.py  # Parallel methodology pattern backfill
-├── rna/               # scRNA-seq module (13 steps)
-├── atac/              # scATAC-seq module (10 steps)
-├── spatial/           # Spatial transcriptomics module (11 steps)
-├── projects/          # Project-specific data (gitignored)
-│   ├── papers/        # Paper insights + NCBI XML
-│   ├── notebook/      # Agent-driven brainstorming notes
-│   ├── rna/           # RNA dataset configs
-│   ├── atac/          # ATAC dataset configs
-│   └── spatial/       # Spatial dataset configs
-├── tests/             # Unified test suite
-├── templates/         # Config templates + schemas
-└── docs/              # Pipeline & architecture docs
+├── core/                  # Shared infrastructure (zero modality dependencies)
+│   ├── ai/                # LLM caller + prompt templates (YAML)
+│   ├── annotation/        # Cell-type annotation engine + standardizer + marker scoring
+│   ├── cluster/           # Grid-search clustering + parameter evaluation
+│   ├── config/            # Unified Pydantic Config + dataset schema
+│   ├── interaction/       # Cell-cell interaction (CCI) utilities
+│   ├── kb/                # Tissue knowledge base (markers, adjacency, pathways)
+│   ├── paper/             # Paper insights, registry, converter, cross-paper analysis
+│   ├── pipeline/          # Pipeline runner, anatomy, enrichment, GRN, reproducibility
+│   ├── preprocess/        # Format detection → archive extraction → config generation
+│   ├── utils/             # I/O, logging, path resolution, validation, performance
+│   ├── run_pipeline.py    # CLI entry point (thin wrapper → pipeline/runner.py)
+│   ├── downsample.py      # Cell downsampling (anndata-agnostic)
+│   ├── geo_downloader.py  # GEO dataset downloader
+│   ├── kb_validator.py    # Marker validation against tissue KB
+│   ├── cross_dataset_meta.py  # Cross-dataset meta-analysis
+│   └── dataset_detector.py    # Auto-detect modality from file patterns
+│
+├── rna/                   # scRNA-seq module (13 steps)
+│   ├── steps/             # 00_load → 12_cell_interaction
+│   ├── utils/             # RNA-specific utilities (hierarchy, evidence_fusion, etc.)
+│   └── ortholog.py        # Cross-species gene mapping
+│
+├── atac/                  # scATAC-seq module (14 steps)
+│   └── steps/             # 00_load → 13_integrate
+│
+├── spatial/               # Spatial transcriptomics module (11 steps)
+│   └── steps/             # 00_load → 10_cell_interaction
+│
+├── adhoc/                 # One-off / dataset-specific scripts (use once and discard)
+│   ├── migration_scripts/ # Config/kb/methodology migration tools
+│   └── ortholog_scripts/  # Ortholog data processing scripts
+│
+├── projects/              # Project-specific data (gitignored)
+│   ├── papers/            # Paper insights + NCBI XML
+│   ├── notebook/          # Agent-driven brainstorming notes
+│   ├── rna/               # RNA dataset configs
+│   ├── atac/              # ATAC dataset configs
+│   └── spatial/           # Spatial dataset configs
+├── tests/                 # Unified test suite
+├── templates/             # Config templates + schemas
+└── docs/                  # Pipeline & architecture docs
 ```
 
 ## Quick Start
@@ -146,18 +165,21 @@ ai:
 
 | Module | Purpose |
 |--------|---------|
-| `core/utils.py` | I/O, logging, config resolution, AnnData validation, marker loading |
-| `core/ai_caller.py` | Unified LLM API with retry, thinking mode, disk caching |
-| `core/ai_prompts.py` | Prompt imports from YAML + annotation build functions |
-| `core/prompts/` | LLM prompt templates stored as YAML (7 prompt groups) |
-| `core/config.py` | Unified Config dataclass (Pydantic v2) for all modalities |
-| `core/run_pipeline.py` | CLI with `--modality rna|atac|spatial` dispatch |
-| `core/paper_insights.py` | AI-driven paper metadata, figures, methods, and methodology extraction |
-| `core/paper_converter.py` | PMC XML / PDF → structured markdown |
-| `core/registry.py` | Paper ↔ dataset master registry (44 papers, 69 datasets) |
-| `core/methodology_batch.py` | Parallel methodology pattern backfill (ThreadPoolExecutor) |
-| `core/dataset_schema.py` | Python model for dataset.yaml |
+| `core/ai/` | LLM API (caller.py) + prompt templates (prompts.py + templates/) |
+| `core/annotation/` | Cell-type annotation engine, name standardizer, marker scoring |
+| `core/cluster/` | Grid-search clustering + multi-metric parameter evaluation |
+| `core/config/` | Unified Pydantic v2 Config (schema.py) + dataset.yaml model |
+| `core/interaction/` | Cell-cell interaction via LIANA+ (RNA permutation + Spatial bivariate) |
+| `core/kb/` | Tissue knowledge base: markers, adjacency, pathway relevance |
+| `core/paper/` | Paper insights, registry, PMC converter, cross-paper analysis |
+| `core/pipeline/` | CLI runner, anatomy loading, enrichment, GRN, reproducibility |
 | `core/preprocess/` | Format detection, archive extraction, config generation |
+| `core/utils/` | I/O, logging, path resolution, config resolution, validation, perf |
+| `core/downsample.py` | Cell downsampling (random, stratified, per-sample capping) |
+| `core/kb_validator.py` | Empirical marker validation against tissue knowledge base |
+| `core/geo_downloader.py` | GEO dataset downloader from NCBI |
+| `rna/utils/` | RNA-specific: hierarchy builder, evidence fusion, pseudobulk DE, sex detection |
+| `adhoc/` | One-off migration, ortholog processing, dataset-specific analysis |
 
 ## Citation
 

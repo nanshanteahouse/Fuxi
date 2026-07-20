@@ -50,7 +50,7 @@ Fuxi 目前内置的 Knowledge Base 只覆盖了**视网膜**组织。如果你�
 - **KB 模式不可用**（因为没有对应组织的 KB）
 - 需要手动设置 `CFG.marker_dict` 来定义已知标记基因
 
-如果你的组织在 `rna/tissue_ontologies/` 中有 KB 目录，只需设置 `CFG.tissue_kb = "retina"`，`marker_dict` 会被自动替换。
+如果你的组织在 `core/kb/` 中有 KB 目录，只需设置 `CFG.tissue_kb = "retina"`，`marker_dict` 会被自动替换。
 
 ### 5. scRNA-seq 还是 snRNA-seq？
 

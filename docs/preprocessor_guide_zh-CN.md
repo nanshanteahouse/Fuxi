@@ -257,7 +257,7 @@ ai:
 | `tissue_kb` | 🟢 推荐 | 如为 `retina`/`hypothalamus`，设为对应的 KB 名称即可跳过 marker_dict |
 | AI 设置 | 🟢 推荐 | 取消注释 AI 段落，填入 API Key |
 
-> 💡 **KB 模式优先**：如果你的组织在 `rna/tissue_ontologies/` 下有对应知识库，只需设置 `CFG.tissue_kb = "retina"` 即可跳过 `marker_dict`。KB 模式比简单打分准确度更高。
+> 💡 **KB 模式优先**：如果你的组织在 `core/kb/` 下有对应知识库，只需设置 `CFG.tissue_kb = "retina"` 即可跳过 `marker_dict`。KB 模式比简单打分准确度更高。
 
 
 ## 5. 生成文件后：如何运行完整 Pipeline
