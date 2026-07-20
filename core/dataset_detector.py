@@ -57,7 +57,7 @@ _MODALITY_TO_KEY = {
     'scRNA-seq': 'rna',
     'scATAC-seq': 'atac',
     'spatial_transcriptomics': 'spatial',
-    'bulk_RNA_seq': 'rna',
+    'bulk_RNA_seq': 'bulk',
 }
 
 def detect_modality_from_files(file_list: list[str]) -> dict:

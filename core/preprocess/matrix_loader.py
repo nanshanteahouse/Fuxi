@@ -25,7 +25,10 @@ TEMPLATE_MAP = {
     'h5ad':         'config_10X_h5.yaml',       # reuse 10X_h5 template
     '10x_fragments': 'config_fragments.yaml',
     '10x_peak_h5':  'config_fragments.yaml',    # reuse ATAC template
-}
+    # ── Bulk entries ─────────────────────────────
+    'count_matrix': 'config_bulk.yaml',
+    'tpm_matrix':   'config_bulk.yaml',
+    'bulk_h5ad':    'config_bulk.yaml',
 
 
 # ── Shared path helpers ──────────────────────────────────────────────
