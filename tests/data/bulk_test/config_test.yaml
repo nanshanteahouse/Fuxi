@@ -1,0 +1,27 @@
+modality: bulk
+data_format: count_matrix
+data_dir: "."
+data_input:
+  matrix_file: "counts.csv"
+  metadata_file: "metadata.csv"
+tissue: test
+species: human
+expression_type: raw_counts
+
+bulk:
+  design: "~condition"
+  contrast_column: "condition"
+  contrast_treatment: "treated"
+  contrast_baseline: "control"
+  alpha: 0.05
+  lfc_shrink: true
+  normalization_method: deseq2_median_ratios
+  min_counts_per_gene: 10
+  min_samples_per_group: 2
+
+enrichment:
+  run: false
+
+execution:
+  n_jobs: 1
+  random_seed: 42
