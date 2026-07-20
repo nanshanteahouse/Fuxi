@@ -49,6 +49,11 @@ fuxi/
 │   ├── kb_validator.py    # Marker validation against tissue KB
 │   ├── cross_dataset_meta.py  # Cross-dataset meta-analysis
 │   └── dataset_detector.py    # Auto-detect modality from file patterns
+│   ├── tui/                # Textual-based Terminal UI (v2.x)
+│   │   ├── backends/        # Async wrappers for registry/download/pipeline/config
+│   │   ├── screens/         # 6 screens (home, registry, pipeline, results, data mgmt, config editor)
+│   │   └── widgets/         # 4 reusable widgets (config selector, step selector, progress, log)
+
 │
 ├── rna/                   # scRNA-seq module (13 steps)
 │   ├── steps/             # 00_load → 12_cell_interaction

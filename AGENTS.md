@@ -28,6 +28,8 @@ Both modes use `--step N` to run one step at a time. The difference is whether t
 **Auto mode** — Execute steps sequentially with default settings. After each step, report progress and continue. User can interrupt at any point (Ctrl+C). Suitable for familiar datasets or batch reproduction.
 
 **Interactive mode** — Execute `--step N` one at a time. After each step, present results, ask questions, offer options, and wait for confirmation before proceeding. Suitable for exploratory analysis or new datasets.
+**TUI mode** — Launch the unified terminal interface: `python -m core.tui`. Keyboard-navigable dashboard with registry browser, pipeline runner, config editor, and results viewer. Ideal for project exploration and batch management.
+
 
 
 ```bash
@@ -65,6 +67,7 @@ python core/pipeline/reproduce.py <paper_dir>           # reproduce a single pap
 | Knowledge base | `core/kb/` (tissue ontologies, marker validation, adjacency) |
 | Ad-hoc scripts | `adhoc/` (one-off migration, ortholog processing, dataset-specific analysis) |
 | Brainstorming | `projects/notebook/` (methodology_ideas, keywords, etc.) |
+| TUI | `core/tui/` (7 backends, 6 screens, 4 widgets) — `python -m core.tui` |
 
 ### Dataset & Paper lookup
 
