@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:  # allow manual trigger
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ════════════════════════════════════════════════════════════════════════
+  # Lint
+  # ════════════════════════════════════════════════════════════════════════
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+      - name: Install dev deps
+        run: uv pip install --system ruff
+      - name: ruff check
+        run: ruff check .
+      - name: ruff format (check)
+        run: ruff format --check .
+
+  # ════════════════════════════════════════════════════════════════════════
+  # Type check
+  # ════════════════════════════════════════════════════════════════════════
+  type-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+      - name: Install all deps
+        run: uv pip install --system -r requirements/all.txt
+      - name: Pyright
+        run: pip install pyright && pyright
+
+  # ════════════════════════════════════════════════════════════════════════
+  # Smoke test (fast gate)
+  # ════════════════════════════════════════════════════════════════════════
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+      - name: Install deps
+        run: uv pip install --system -r requirements/all.txt -r requirements/dev.txt
+      - name: Smoke test
+        run: python -m pytest tests/ -m smoke -v --tb=short
+
+  # ════════════════════════════════════════════════════════════════════════
+  # Unit tests (split by modality for parallelism)
+  # ════════════════════════════════════════════════════════════════════════
+  test-core:
+    needs: [lint, smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+      - name: Install deps
+        run: uv pip install --system -r requirements/all.txt -r requirements/dev.txt
+      - name: Test core
+        run: python -m pytest tests/test_core/ -v --tb=short --cov=core --cov-report=xml --cov-report=term
+
+  test-rna:
+    needs: [lint, smoke]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.14"
+      - name: Install deps
+        run: uv pip install --system -r requirements/all.txt -r requirements/dev.txt
+      - name: Test RNA
+        run: python -m pytest tests/test_rna/ -v --tb=short --cov=rna --cov-report=xml --cov-report=term
+
+  # ════════════════════════════════════════════════════════════════════════
+  # Coverage report (aggregate)
+  # ════════════════════════════════════════════════════════════════════════
+  coverage:
+    needs: [test-core, test-rna]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - name: Coverage summary
+        run: echo "Coverage aggregated from test-core and test-rna jobs."

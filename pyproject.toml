@@ -7,11 +7,51 @@ testpaths = ["tests"]
 pythonpath = ["."]
 minversion = "7.0"
 addopts = "-v --tb=short"
+markers = [
+    "smoke: fast gate-keeping test (no data, no network, <3s each)",
+]
 asyncio_mode = "auto"
 filterwarnings = [
     "error",
     'ignore::DeprecationWarning:pkg_resources.*',
 ]
+
 [tool.ruff]
-target-version = "py312"
+target-version = "py313"
 line-length = 99
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "F",     # pyflakes
+    "I",     # isort (import ordering)
+    "N",     # pep8-naming
+    "W",     # pycodestyle warnings
+]
+ignore = [
+    "E501",  # line-too-long (handled by formatter)
+]
+exclude = [
+    "notes/",
+    "projects/",
+    "adhoc/",
+    ".venv/",
+    "__pycache__/",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["core", "rna", "atac", "spatial", "bulk"]
+
+[tool.coverage.run]
+source = ["core", "rna", "atac", "spatial", "bulk"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "assert False",
+]
