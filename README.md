@@ -13,6 +13,7 @@ Fuxi is a unified monorepo for single-cell multi-omics analysis — scRNA-seq (S
 | `rna` | Scanpy 1.10+ | 13 (00-12) | Production |
 | `atac` | Snapatac2 2.9 | 14 (00-13) | Production |
 | `spatial` | Squidpy 1.8+ | 11 (00-10) | Production |
+| `bulk` | PyDESeq2 | 5 (+1) | Beta |
 
 ### Supported Input Formats
 
@@ -25,6 +26,8 @@ Fuxi is a unified monorepo for single-cell multi-omics analysis — scRNA-seq (S
 | Preprocessed TSV (metadata cols + expression) | `preprocessed` | RNA | `config_preprocessed.yaml` |
 | 10X Fragments (fragments.tsv.gz) | `10x_fragments` | ATAC | `config_fragments.yaml` |
 | 10X Visium (SpaceRanger output) | `visium` | Spatial | `config_visium.yaml` |
+| CSV/TSV count matrix | `count_matrix` | Bulk | `config_bulk.yaml` |
+| CSV/TSV TPM matrix | `tpm_matrix` | Bulk | `config_bulk.yaml` |
 
 **R / Seurat formats (.rds, .qs)** — not natively supported. Use the companion tool [r2h5ad](https://github.com/nanshanteahouse/r2h5ad) to convert RDS/QS files to h5ad before loading with `data_format = "h5ad"`.
 
@@ -65,6 +68,9 @@ fuxi/
 │
 ├── spatial/               # Spatial transcriptomics module (11 steps)
 │   └── steps/             # 00_load → 10_cell_interaction
+|
+├── bulk/                  # Bulk RNA-seq module (5+1 steps)
+│   └── steps/             # 00_load → 04_exploratory + optional 05_batch
 │
 ├── adhoc/                 # One-off / dataset-specific scripts (use once and discard)
 │   ├── migration_scripts/ # Config/kb/methodology migration tools
