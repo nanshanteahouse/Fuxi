@@ -18,7 +18,7 @@ import pandas as pd
 import scanpy as sc
 import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import linkage, dendrogram
-from core.grn_tissue import compute_tf_relevance
+from core.pipeline.grn import compute_tf_relevance
 
 
 def build_pseudobulk(adata, group_col: str, use_raw: bool = True, log=None) -> pd.DataFrame:
@@ -335,7 +335,7 @@ def main():
     if getattr(CFG.grn, 'use_kb_relevance', False):
         tissue = getattr(CFG, 'tissue', '') or ''
         if tissue and tissue != "unknown":
-            from rna.tissue_ontologies import load_all_kb_markers
+            from core.kb import load_all_kb_markers
             kb_markers = load_all_kb_markers(tissue)
             if kb_markers:
                 log.info("Loaded %d KB markers for tissue '%s'", len(kb_markers), tissue)

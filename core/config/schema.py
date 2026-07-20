@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field, ConfigDict
 # is available to the pipeline without manual sourcing.
 from dotenv import load_dotenv
 
-_env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.env')
+_env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), '.env')
 if os.path.isfile(_env_path):
     load_dotenv(_env_path)
 

@@ -36,7 +36,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 from core.preprocess import format_detector as fd
 from core.preprocess import archive_extractor as ae
 from core.preprocess import superseries_detector as ssd
-from core.dataset_schema import (
+from core.config.dataset import (
     DatasetMeta, ModalityEntry, SampleEntry, FileEntry, Comparison,
     Resources, PipelineStatus, Meta, save_dataset,
 )
@@ -414,7 +414,7 @@ def run_preprocess(gse_id: Optional[str] = None,
                     print(f"  [SKIP] {child_gse}: no matching files found")
                 continue
 
-            # Create sibling directory: e.g. E:/neurobiology/GSE133382/
+            # Create sibling directory: e.g. /data/neurobiology/GSE123456/
             child_data_dir = os.path.join(data_parent, child_gse)
             os.makedirs(child_data_dir, exist_ok=True)
 

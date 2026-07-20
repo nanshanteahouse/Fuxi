@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 from anndata import AnnData
 
-from core.clustering import (
+from core.cluster.grid_search import (
     grid_search_clustering,
     select_best_params,
     umap_sweep,
@@ -342,7 +342,7 @@ class TestUmapSweep:
         """_noop_umap_fn returns whatever is in adata.obsm['X_umap']."""
         expected = np.random.RandomState(42).normal(size=(100, 2))
         mock_adata.obsm["X_umap"] = expected
-        from core.clustering import _noop_umap_fn
+        from core.cluster.grid_search import _noop_umap_fn
 
         result = _noop_umap_fn(mock_adata)
         np.testing.assert_array_equal(result, expected)

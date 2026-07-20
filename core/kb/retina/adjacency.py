@@ -29,7 +29,7 @@ Bidirectional or symmetric contacts are listed with the most physiologically
 relevant direction.
 
 Cell type names follow the canonical keys defined in
-``rna/tissue_ontologies/retina/synonyms.py``.
+``core/kb/retina/synonyms.py``.
 """
 
 from typing import List, Tuple, Dict

@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
-from core.run_reproduce import (
+from core.pipeline.reproduce import (
     REPRODUCE_TIMEOUT,
     _detect_modality,
     _extract_geo_ids,
@@ -20,7 +20,7 @@ from core.run_reproduce import (
     run_reproduce,
 )
 
-from core.dataset_schema import (
+from core.config.dataset import (
     DatasetMeta,
     load_dataset,
     save_dataset,
@@ -236,7 +236,7 @@ class TestRunPipelineForGse:
 
     def test_experiment_group_param(self, tmp_path: Path) -> None:
         """Passing ExperimentGroup should not error (stored for W2.4)."""
-        from core.registry import ExperimentGroup, DatasetStatus
+        from core.paper.registry import ExperimentGroup, DatasetStatus
 
         config_path = self._make_config(tmp_path, "rna")
         eg = ExperimentGroup(
@@ -741,7 +741,7 @@ class TestCLI:
         ) as mock_load, patch(
             "core.run_reproduce.Path.is_dir", return_value=True
         ):
-            from core.run_reproduce import main
+            from core.pipeline.reproduce import main
 
             # We need to patch sys.argv
             test_args = ["run_reproduce.py", "--all", "--dry-run"]

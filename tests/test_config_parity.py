@@ -10,7 +10,7 @@ import os
 import pytest
 import yaml
 
-from core.config import Config
+from core.config.schema import Config
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -6,8 +6,8 @@ from typing import Optional
 
 import yaml
 
-from core.config import Config
-from core.dataset_schema import load_dataset
+from core.config.schema import Config
+from core.config.dataset import load_dataset
 
 
 # ── Dataset.yaml helpers ───────────────────────────────────────────

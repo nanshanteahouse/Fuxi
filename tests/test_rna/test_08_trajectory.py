@@ -28,7 +28,7 @@ gene_trends = trajectory.gene_trends
 _select_pseudotime_correlated = trajectory._select_pseudotime_correlated
 
 
-from core.config import Config
+from core.config.schema import Config
 
 # ── Test helpers ──────────────────────────────────────────────────────────
 

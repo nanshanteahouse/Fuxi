@@ -13,7 +13,7 @@ import pandas as pd
 
 from core.utils import safe_write
 from core.preprocess.format_detector import guess_genome
-from rna.utils.cell_interaction import format_cci_results
+from core.interaction.cell_interaction import format_cci_results
 
 
 # ── W1-01: safe_write WSL ────────────────────────────────────────────────

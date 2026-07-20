@@ -98,7 +98,7 @@ def find_rna_marker_csv(cfg=None, dataset_id: str = None, log=None) -> Optional[
     if dataset_id is None and cfg is not None:
         ref = getattr(cfg, 'rna_ref', '')
         if ref and not os.path.sep in ref and '/' not in ref:
-            dataset_id = ref   # bare ID like "GSE235585"
+            dataset_id = ref   # bare ID like "GSE123456"
     if dataset_id is None and cfg is not None:
         proj = getattr(cfg, 'project_dir', '')
         if proj:

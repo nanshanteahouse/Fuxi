@@ -2,13 +2,13 @@
 
 Import the unified retina KB directly::
 
-    from rna.tissue_ontologies.retina import retina_expert_kb
+    from core.kb.retina import retina_expert_kb
 
 The KB is built at import time by merging curated source publications.
 
 Validation::
 
-    from rna.tissue_ontologies.validate import validate_kb
+    from core.kb.validate import validate_kb
     is_ok, errors = validate_kb(retina_expert_kb)
 """
 

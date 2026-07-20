@@ -18,7 +18,7 @@ core/registry.py — 五域统一论文登记表 (Master Registry)
     reg = load_master_registry()
     for ds_id, role in reg.get_dataset_links("41578023"):
         print(ds_id, role)
-    for pmid, role in reg.get_paper_links("GSE118614"):
+    for pmid, role in reg.get_paper_links("GSE123456"):
         print(pmid, role)
     orphans = reg.find_orphans()
 """
@@ -451,7 +451,7 @@ class MasterRegistry(BaseModel):
                         ),
                         "source": ds_id,
                     })
-            # 子模态已下载但顶层标记未下载（如 GSE277326）
+            # 子模态已下载但顶层标记未下载（如 GSE123456）
             if ds.status == "data_not_downloaded" and ds.modalities:
                 downloaded_mods = [
                     m for m, mi in ds.modalities.items()
@@ -1371,7 +1371,7 @@ def main() -> None:
 
     p_register = sub.add_parser("register", help="注册论文/数据集（--pmid | --gse | --xml | --pdf）")
     p_register.add_argument("--pmid", default=None, help="PubMed ID (NCBI 自动下载)")
-    p_register.add_argument("--gse", default=None, help="GEO 数据集 ID (如 GSE164044)")
+    p_register.add_argument("--gse", default=None, help="GEO 数据集 ID (如 GSE123456)")
     p_register.add_argument("--paper-dir", default=None, help="已有 paper 目录 (含 insights.yaml)")
     p_register.add_argument("--xml", dest="xml_path", default=None, help="本地 PMC XML 文件路径")
     p_register.add_argument("--pdf", default=None, help="PDF 文件路径 (pymupdf4llm → md → LLM)")
@@ -1379,7 +1379,7 @@ def main() -> None:
     p_register.add_argument("--download", action="store_true",
                             help="Auto-download GSE datasets from NCBI GEO after paper import.")
     p_register.add_argument("--datasets", default=None,
-                            help="只注册指定 GSE（逗号分隔，如 GSE87064,GSE164044）")
+                            help="只注册指定 GSE（逗号分隔，如 GSE123456,GSE123457）")
     p_register.add_argument("--all", dest="register_all", action="store_true",
                             help="注册论文中全部 GEO 数据集（跳过交互确认）")
 
@@ -1393,7 +1393,7 @@ def main() -> None:
                         help="Auto-download GSE datasets from NCBI GEO after paper import.")
 
     p_status = sub.add_parser("status", help="Check GSE/PMID comprehensive status")
-    p_status.add_argument("--gse", default=None, help="GEO dataset ID (e.g. GSE164044)")
+    p_status.add_argument("--gse", default=None, help="GEO dataset ID (e.g. GSE123456)")
     p_status.add_argument("--pmid", default=None, help="PubMed ID (e.g. 31493975)")
 
     p_list = sub.add_parser("list-papers", help="Search registered papers by keyword")

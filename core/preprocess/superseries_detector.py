@@ -198,7 +198,7 @@ def _ncbi_esearch(accession: str) -> Optional[str]:
     the numeric database UID. This function performs the lookup.
 
     Args:
-        accession: GEO accession (e.g. 'GSE137400').
+        accession: GEO accession (e.g. 'GSE123456').
 
     Returns:
         Numeric UID string (e.g. '200137400'), or None on failure.
@@ -351,7 +351,7 @@ def _collect_gse_accessions_from_filenames(file_list: list[str]) -> set[str]:
 
     When a SuperSeries' data files are placed flat in one directory (no
     sub-directory structure), each file's name often contains its own sub-series
-    GSE accession, e.g. 'GSE133382_AtlasRGCs_CountMatrix.csv.gz'.
+    GSE accession, e.g. 'GSE123456_AtlasRGCs_CountMatrix.csv.gz'.
 
     Returns:
         A set of unique GSE accession strings found in filenames.
@@ -375,13 +375,13 @@ def detect_subseries_from_filenames(file_list: list[str],
     accession.  This catches the common GEO pattern where a SuperSeries
     directory contains files named like::
 
-        GSE133382_CountMatrix.csv.gz
-        GSE137398_ONCRGCs_control_count_mat.csv.gz
-        GSE137828_Actinomycin_RGCs_count_matrix.csv.gz
+        GSE123456_CountMatrix.csv.gz
+        GSE123457_SampleControl_count_mat.csv.gz
+        GSE123458_Treatment_count_matrix.csv.gz
 
     Args:
         file_list:  All file paths in the dataset directory.
-        parent_gse: The parent SuperSeries accession (e.g. 'GSE137400').
+        parent_gse: The parent SuperSeries accession (e.g. 'GSE123456').
 
     Returns:
         A sorted list of sub-series GSE accessions found.

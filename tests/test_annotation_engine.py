@@ -113,7 +113,7 @@ import logging
 from unittest.mock import patch
 
 import pandas as pd
-from rna.utils.marker_scoring import Score
+from core.annotation.scoring import Score
 
 
 def _make_zero_scores(n_clusters: int = 5) -> dict:
@@ -171,7 +171,7 @@ def _check_zero_scores_and_retry_wrapper(
 
     Avoids circular-import issues at module level by importing only when called.
     """
-    from rna.annotation_engine import _check_zero_scores_and_retry
+    from core.annotation.engine import _check_zero_scores_and_retry
     return _check_zero_scores_and_retry(
         kb, all_scores, marker_df, clusters, species,
         target_class, target_order, tissue_kb, logger,
@@ -192,7 +192,7 @@ def test_T4_case_insensitive_retry_succeeds() -> None:
 
     # Mock score_cluster_against_kb to return hits on retry
     with patch(
-        "rna.utils.marker_scoring.score_cluster_against_kb",
+        "core.annotation.scoring.score_cluster_against_kb",
         return_value={"CT": Score(0.85, 0.001, "hypergeometric", 2, False)}
     ):
         result_scores, total_hits, n_clusters = _check_zero_scores_and_retry_wrapper(
@@ -227,7 +227,7 @@ def test_T4_case_insensitive_skip_when_already_matching() -> None:
     logger = _make_logger()
 
     # Patch score_cluster_against_kb to track if it gets called
-    with patch("rna.utils.marker_scoring.score_cluster_against_kb") as mock_sc:
+    with patch("core.annotation.scoring.score_cluster_against_kb") as mock_sc:
         result_scores, total_hits, n_clusters = _check_zero_scores_and_retry_wrapper(
             kb, all_scores, marker_df, clusters, species="human",
             target_class="", target_order="", tissue_kb="test_kb",
@@ -252,7 +252,7 @@ def test_T4_zero_score_warning_fires() -> None:
 
     # Mock score_cluster_against_kb to return ZERO hits (retry doesn't help)
     with patch(
-        "rna.utils.marker_scoring.score_cluster_against_kb",
+        "core.annotation.scoring.score_cluster_against_kb",
         return_value={"CT": Score(0.0, 1.0, "none", 0, False)}
     ):
         logger = logging.getLogger("test_T4_warning")
@@ -286,7 +286,7 @@ def test_T4_kb_dict_not_mutated() -> None:
     logger = _make_logger()
 
     with patch(
-        "rna.utils.marker_scoring.score_cluster_against_kb",
+        "core.annotation.scoring.score_cluster_against_kb",
         return_value={"CT": Score(0.85, 0.001, "hypergeometric", 2, False)}
     ):
         _check_zero_scores_and_retry_wrapper(

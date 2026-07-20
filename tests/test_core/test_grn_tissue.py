@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from core.grn_tissue import compute_tf_relevance
+from core.pipeline.grn import compute_tf_relevance
 
 
 # ======================================================================

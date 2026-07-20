@@ -267,8 +267,8 @@ def main():
 
     if CFG.ai.enabled and CFG.ai.subcluster:
         try:
-            from core.ai_prompts import build_annotation_prompt
-            from core.ai_caller import ai_query
+            from core.ai.prompts import build_annotation_prompt
+            from core.ai.caller import ai_query
 
             log.info("Running AI subcluster re-annotation...")
             sys_prompt, user_prompt = build_annotation_prompt(

@@ -33,8 +33,8 @@ _repo_root = os.path.dirname(_script_dir)
 if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)
 
-from rna.tissue_ontologies import load_kb                   # noqa: E402
-from rna.utils.marker_scoring import _normalize_gene_name   # noqa: E402
+from core.kb import load_kb                   # noqa: E402
+from core.annotation.scoring import _normalize_gene_name   # noqa: E402
 
 # Threshold: at least 30% of cells must express a marker for it to validate
 DEFAULT_PCT_THRESHOLD: float = 0.3
@@ -72,7 +72,7 @@ class KbValidator:
 
         if use_ontology:
             try:
-                from rna.annotation_standardizer import StandardOntology
+                from core.annotation.standardizer import StandardOntology
                 self.ontology = StandardOntology(tissue)
             except (ImportError, NotImplementedError, ValueError):
                 _log.info("StandardOntology unavailable for '%s' — direct matching only", tissue)
@@ -231,7 +231,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--h5ad", required=True, type=str,
-        help="Path to annotated .h5ad file (e.g. projects/rna/GSE107618/results/h5ad/05_annotated.h5ad)",
+        help="Path to annotated .h5ad file (e.g. projects/rna/GSE123456/results/h5ad/05_annotated.h5ad)",
     )
     p.add_argument(
         "--annotation", default="cell_type", type=str,
@@ -350,7 +350,7 @@ def update_yaml_audit(
         DataFrame from ``KbValidator.validate()`` with columns
         ``cell_type, gene, tier, validated, pct_expressed, mean_expression``.
     dataset_id : str
-        Dataset identifier (e.g. "GSE107618") to record in ``expression_validated``.
+        Dataset identifier (e.g. "GSE123456") to record in ``expression_validated``.
     """
     import yaml
     from datetime import date

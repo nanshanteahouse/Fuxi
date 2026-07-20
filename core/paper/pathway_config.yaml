@@ -1,0 +1,72 @@
+# ──────────────────────────────────────────────────────────────────────
+#  Pathway Gene Set Definitions
+#  ──────────────────────────────────────────────────────────────────────
+#  Each top-level key is a pathway name, containing named gene sets.
+#  The optional `order` key controls display order in pivot tables.
+#  The `tf_list` key lists transcription factors to extract from GRN tables.
+#
+#  To add a new pathway, add a new top-level section:
+#
+#    WNT_signaling:
+#      synthesis: [WNT3A, WNT5A, ...]
+#      receptors: [FZD1, FZD2, LRP5, LRP6]
+#      targets:   [MYC, CCND1, AXIN2]
+#      tf_list: [TCF7, TCF7L1, TCF7L2, LEF1]
+# ──────────────────────────────────────────────────────────────────────
+
+RA_signaling:
+  gene_sets:
+    synthesis:
+      label: "RA Synthesis"
+      genes: ["ALDH1A1", "ALDH1A2", "ALDH1A3"]
+    degradation:
+      label: "RA Degradation"
+      genes: ["CYP26A1", "CYP26B1", "CYP26C1"]
+    transport_binding:
+      label: "RA Transport/Binding"
+      genes: ["STRA6", "RBP1", "RBP2", "RBP4", "CRABP1", "CRABP2"]
+    receptors:
+      label: "RA Nuclear Receptors"
+      genes: ["RARA", "RARB", "RARG", "RXRA", "RXRB", "RXRG"]
+    co_regulators:
+      label: "RA Co-regulators"
+      genes: ["NR2F1", "NR2F2"]
+    downstream_opsins:
+      label: "Opsin Genes (RA targets)"
+      genes: ["OPN1SW", "OPN1MW", "OPN1LW", "RHO"]
+    cone_fate:
+      label: "Cone Fate Markers"
+      genes: ["THRB", "ARR3", "PCP4", "MYL4"]
+    rod_fate:
+      label: "Rod Fate Markers"
+      genes: ["NRL", "NR2E3", "GNAT1"]
+  # Individual genes to track (not grouped)
+  individual_genes:
+    - OPN1SW
+    - OPN1MW
+    - OPN1LW
+    - RHO
+  # TFs for GRN activity extraction
+  tf_list:
+    - RARA
+    - RARB
+    - RARG
+    - RXRA
+    - RXRB
+    - RXRG
+    - NR2F1
+    - NR2F2
+    - THRA
+    - THRB
+    - OTX2
+    - CRX
+    - NRL
+    - NEUROD1
+    - ASCL1
+    - ATOH7
+    - ONECUT1
+  # Comparison metrics (derived from individual genes)
+  comparison_metrics:
+    ML_opsin_ratio:
+      label: "M/L opsin ratio"
+      formula: "(OPN1MW + OPN1LW) / (OPN1SW + OPN1MW + OPN1LW + RHO)"

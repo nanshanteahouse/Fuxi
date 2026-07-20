@@ -1,13 +1,16 @@
-"""rna.steps — cross-modality re-exports for spatial/ATAC pipelines.
+"""rna.steps — cross-modality re-exports for spatial pipeline.
 
-The RNA step modules have numeric-starting filenames (e.g. 05_annotate_major.py)
+The RNA step modules have numeric-starting filenames (e.g. 09_enrichment.py)
 that cannot be imported by name via ``importlib.import_module()``.  We load them
 by file path via ``importlib.util`` and re-export the symbols needed by other
 modalities.
 
+Note: ``unified_annotate`` has been moved to ``core.annotation.engine``.
+Use ``from core.annotation.engine import run_unified_annotation`` directly.
+
 Usage::
 
-    from rna.steps import unified_annotate, run_ora, run_prerank
+    from rna.steps import run_ora, run_prerank
 """
 
 import os, sys, importlib.util
@@ -22,14 +25,6 @@ def _load_step_module(filename: str, mod_name: str):
     spec.loader.exec_module(mod)
     return mod
 
-
-# ── Annotation (Step 05) ────────────────────────────────────────────────────
-_annotate = _load_step_module("05_annotate_major.py", "rna.steps._05_annotate_major")
-
-# Name expected by spatial/steps/05_annotate.py (backward compat)
-_run_unified_annotation = _annotate.unified_annotate
-# Preferred name for new code
-unified_annotate = _annotate.unified_annotate
 
 
 # ── Enrichment (Step 09) ────────────────────────────────────────────────────

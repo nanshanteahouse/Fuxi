@@ -386,7 +386,7 @@ def format_cci_results(
 
     # ── Apply anatomical adjacency filter (v4.0+) ──
     if adjacency is not None and adjacency_mode != "off":
-        from core.anatomy import filter_cci_by_adjacency
+        from core.pipeline.anatomy import filter_cci_by_adjacency
         lr_res = filter_cci_by_adjacency(
             lr_res, adjacency, mode=adjacency_mode,
             adjacency_types=[],   # empty = all types pass

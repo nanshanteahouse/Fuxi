@@ -51,7 +51,7 @@ import networkx as nx
 _REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO))
 
-from rna.tissue_ontologies import load_kb
+from core.kb import load_kb
 
 
 # ── Defaults ────────────────────────────────────────────────────────

@@ -18,7 +18,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from core.supplement_parser import SupplementTableParser  # noqa: E402
+from core.paper.supplement import SupplementTableParser  # noqa: E402
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Paths to real xlsx files

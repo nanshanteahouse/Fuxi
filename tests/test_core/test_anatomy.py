@@ -12,8 +12,8 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from core.anatomy import load_adjacency as load_adj, filter_cci_by_adjacency
-from rna.tissue_ontologies import load_adjacency as load_tissue_adj
+from core.pipeline.anatomy import load_adjacency as load_adj, filter_cci_by_adjacency
+from core.kb import load_adjacency as load_tissue_adj
 
 
 # ======================================================================

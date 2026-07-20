@@ -25,8 +25,8 @@ from typing import Any
 
 import yaml
 
-# Add repo root so cross_paper/ and core/ are importable
-_repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Add repo root so core/ is importable
+_repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)
 

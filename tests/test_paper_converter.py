@@ -20,19 +20,19 @@ from unittest.mock import patch
 
 import pytest
 
-from core.paper_converter import (
+from core.paper.converter import (
     clean_text,
     PaperSource,
     PmcXmlSource,
     MarkdownSource,
     Pymupdf4llmSource,
 )
-from core.paper_insights import (
+from core.paper.insights import (
     PaperInsights, _parse_filename_meta,
     _extract_geo_ids, _extract_data_access,
     _extract_key_methods, _extract_methods_summary,
 )
-from core.ai_prompts import (
+from core.ai.prompts import (
     PAPER_META_SYSTEM_PROMPT,
     PAPER_FIGURE_SYSTEM_PROMPT,
     PAPER_METHODS_SYSTEM_PROMPT,
@@ -273,7 +273,7 @@ class TestPymupdf4llmSource:
     def test_class_importable(self) -> None:
         """Class can be imported without ImportError from module level."""
         # Import succeeds at module top; instantiation is what fails
-        from core.paper_converter import Pymupdf4llmSource as Cls  # noqa: F811
+        from core.paper.converter import Pymupdf4llmSource as Cls  # noqa: F811
         assert Cls is not None
 
     def test_instantiation_raises_import_error(self) -> None:

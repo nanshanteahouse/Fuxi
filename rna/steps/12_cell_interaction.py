@@ -54,7 +54,7 @@ def export_results(lr_res, top_df, CFG, log):
 
 def plot_heatmap(top_df, CFG, log):
     """Heatmap of top interaction scores (source→target cell type pairs)."""
-    from rna.utils.cell_interaction import format_cci_results
+    from core.interaction.cell_interaction import format_cci_results
 
     fig_dir = os.path.join(CFG.figure_dir, "12_cell_interaction")
     os.makedirs(fig_dir, exist_ok=True)
@@ -222,7 +222,7 @@ def main():
         log.info("n_jobs=0 → auto-detected %d cores", n_jobs)
 
     # ── Load anatomical adjacency (v4.0+) ────────────────────────────
-    from core.anatomy import load_adjacency
+    from core.pipeline.anatomy import load_adjacency
     adj_tissue = getattr(CFG.cci, "tissue", "") or CFG.tissue
     adj_file = getattr(CFG.cci, "adjacency_file", "")
     adjacency_df = load_adjacency(tissue=adj_tissue, custom_file=adj_file, log=log)
@@ -234,7 +234,7 @@ def main():
         )
 
     # ── Run CCI permutation testing ─────────────────────────────────────
-    from rna.utils.cell_interaction import (
+    from core.interaction.cell_interaction import (
         ensure_gene_symbols,
         run_cci_permutation,
         format_cci_results,

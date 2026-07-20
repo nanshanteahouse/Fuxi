@@ -11,12 +11,12 @@ downsample.py — 细胞降采样核心逻辑 (config-driven + 手动 CLI 共同
 """
 
 import numpy as np
-import scanpy as sc
+from anndata import AnnData
 import scipy.sparse as sp
 import pandas as pd
 
 
-def _check_sample_col(adata: sc.AnnData, sample_key: str, log) -> str | None:
+def _check_sample_col(adata: AnnData, sample_key: str, log) -> str | None:
     """查找可用的样本分组列。返回实际使用的列名或 None。"""
     if sample_key and sample_key in adata.obs:
         return sample_key
@@ -27,8 +27,8 @@ def _check_sample_col(adata: sc.AnnData, sample_key: str, log) -> str | None:
     return None
 
 
-def downsample_random(adata: sc.AnnData, target: int, rng: np.random.RandomState,
-                      log) -> sc.AnnData:
+def downsample_random(adata: AnnData, target: int, rng: np.random.RandomState,
+                      log) -> AnnData:
     """完全随机采样 target 个细胞。"""
     n_cells = adata.n_obs
     if target >= n_cells:
@@ -40,8 +40,8 @@ def downsample_random(adata: sc.AnnData, target: int, rng: np.random.RandomState
     return adata[idx].copy()
 
 
-def downsample_stratified(adata: sc.AnnData, target: int, sample_key: str,
-                          rng: np.random.RandomState, log) -> sc.AnnData:
+def downsample_stratified(adata: AnnData, target: int, sample_key: str,
+                          rng: np.random.RandomState, log) -> AnnData:
     """按样本分层采样，保持各样本比例。"""
     n_cells = adata.n_obs
     if target >= n_cells:
@@ -79,8 +79,8 @@ def downsample_stratified(adata: sc.AnnData, target: int, sample_key: str,
     return adata[idx].copy()
 
 
-def downsample_max_per_sample(adata: sc.AnnData, max_per: int, sample_key: str,
-                              rng: np.random.RandomState, log) -> sc.AnnData:
+def downsample_max_per_sample(adata: AnnData, max_per: int, sample_key: str,
+                              rng: np.random.RandomState, log) -> AnnData:
     """每个样本最多保留 max_per 个细胞。"""
     counts = adata.obs[sample_key].value_counts()
     log.info("Capping per sample, max %d cells per sample", max_per)
@@ -104,7 +104,7 @@ def downsample_max_per_sample(adata: sc.AnnData, max_per: int, sample_key: str,
     return adata[idx].copy()
 
 
-def estimate_memory_gb(adata: sc.AnnData) -> float:
+def estimate_memory_gb(adata: AnnData) -> float:
     """粗略估计 AnnData 在内存中的大小 (GB)。"""
     total = 0.0
     if hasattr(adata, 'X') and adata.X is not None:
@@ -142,7 +142,7 @@ def estimate_memory_gb(adata: sc.AnnData) -> float:
     return total / (1024 ** 3)
 
 
-def filter_by_config(adata: sc.AnnData, cfg, logger) -> sc.AnnData:
+def filter_by_config(adata: AnnData, cfg, logger) -> AnnData:
     """根据 config 设置过滤细胞 (sample_keep / obs_filter)。
 
     Args:
@@ -171,7 +171,7 @@ def filter_by_config(adata: sc.AnnData, cfg, logger) -> sc.AnnData:
         adata = adata[mask.values].copy()
         logger.info("obs_filter filter: %d → %d cells", n_before, adata.n_obs)
     return adata
-def downsample_by_config(adata: sc.AnnData, cfg, logger) -> sc.AnnData:
+def downsample_by_config(adata: AnnData, cfg, logger) -> AnnData:
     """根据 config 设置对 adata 降采样。作为 pipeline 内联调用入口。
 
     Args:

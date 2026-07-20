@@ -1,9 +1,9 @@
 """
-tissue_ontologies/validate.py — Tissue-agnostic KB validation routines.
+core/kb/validate.py — Tissue-agnostic KB validation routines.
 
 Usage::
 
-    from rna.tissue_ontologies.validate import validate_kb
+    from core.kb.validate import validate_kb
 
     is_valid, errors = validate_kb(kb)
     if not is_valid:
@@ -38,7 +38,7 @@ def validate_kb(kb: Dict[str, Any]) -> Tuple[bool, List[str]]:
     Parameters
     ----------
     kb : dict
-        The KB produced by :func:`tissue_ontologies.merge.build_final_kb`.
+        The KB produced by :func:`core.kb.merge.build_final_kb`.
 
     Returns
     -------

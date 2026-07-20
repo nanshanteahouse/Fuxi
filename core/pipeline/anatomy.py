@@ -104,7 +104,7 @@ def load_adjacency(
     if tissue:
         try:
             # Lazy import to avoid circular dependency
-            from rna.tissue_ontologies import load_adjacency as _load_tissue_adj
+            from core.kb import load_adjacency as _load_tissue_adj
 
             df = _load_tissue_adj(tissue)
             if df is None or df.empty:
@@ -122,7 +122,7 @@ def load_adjacency(
             return df
         except (ImportError, AttributeError):
             logger.warning(
-                "rna.tissue_ontologies.load_adjacency() is not available yet "
+                "core.kb.load_adjacency() is not available yet "
                 "for tissue '%s'. Returning empty DataFrame.",
                 tissue,
             )

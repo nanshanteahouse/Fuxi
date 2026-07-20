@@ -117,7 +117,7 @@ def _pre_normalize_cell_type(name: str) -> str:
 def _standardize_cell_type(name: str) -> tuple[str, str, str]:
     """Standardize a cell type name via StandardOntology."""
     try:
-        from rna.annotation_standardizer import StandardOntology  # noqa: PLC0415
+        from core.annotation.standardizer import StandardOntology  # noqa: PLC0415
 
         onto = StandardOntology("retina")
         pre_norm = _pre_normalize_cell_type(name)

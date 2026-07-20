@@ -31,7 +31,7 @@ ai_prompts.py — AI 注释与解读的提示词模板（RNA + ATAC 统一）
 import json
 import os
 
-from core.prompts._loader import load_prompt
+from core.ai.templates._loader import load_prompt
 
 # ═══════════════════════════════════════════════════════════════════════
 #  scRNA-seq — 聚类注释提示词

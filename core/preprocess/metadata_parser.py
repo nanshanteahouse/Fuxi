@@ -18,7 +18,7 @@ from typing import Optional
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 
 from core.preprocess import format_detector as fd
-from core.dataset_schema import (
+from core.config.dataset import (
     DatasetMeta, ModalityEntry, SampleEntry, FileEntry,
     Resources, PipelineStatus, Meta, save_dataset,
 )

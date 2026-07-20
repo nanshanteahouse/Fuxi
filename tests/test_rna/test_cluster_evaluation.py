@@ -7,7 +7,7 @@ import pytest
 
 from unittest.mock import MagicMock, patch
 
-from rna.utils.cluster_evaluation import (
+from core.cluster.evaluation import (
     select_best_params,
     select_best_umap_params,
     _compute_stability,
@@ -146,7 +146,7 @@ class TestSelectBestParams:
         assert method == "manual"
 
 
-from core.config import Config
+from core.config.schema import Config
 
 class TestSelectBestUmapParams:
     """Numerical assertions for select_best_umap_params."""

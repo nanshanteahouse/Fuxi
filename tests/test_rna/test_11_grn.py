@@ -32,7 +32,7 @@ top_variable_tfs = grn.top_variable_tfs
 export_results = grn.export_results
 
 
-from core.config import Config
+from core.config.schema import Config
 
 # ======================================================================
 #  top_variable_tfs tests

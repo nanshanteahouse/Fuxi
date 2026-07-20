@@ -2,7 +2,7 @@
 
 Usage::
 
-    from rna.tissue_ontologies import load_kb
+    from core.kb import load_kb
     kb = load_kb("retina")
 """
 

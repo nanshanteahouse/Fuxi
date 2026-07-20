@@ -99,8 +99,8 @@ def ai_annotate(adata, CFG, log):
         log.info("Marker genes saved: %s", marker_csv)
 
         # Build prompt
-        from core.ai_prompts import build_annotation_prompt
-        from core.ai_caller import ai_query
+        from core.ai.prompts import build_annotation_prompt
+        from core.ai.caller import ai_query
 
         tissue = CFG.tissue
         species = CFG.species
@@ -255,7 +255,7 @@ def main():
         if CFG.tissue_kb:
             log.info("Unified KB mode - tissue_kb='%s'", CFG.tissue_kb)
             try:
-                from rna.annotation_engine import run_unified_annotation as run_unified
+                from core.annotation.engine import run_unified_annotation as run_unified
                 annot_result = run_unified(adata, CFG, log)
             except Exception as e:
                 log.warning("Unified KB annotation failed: %s", e)

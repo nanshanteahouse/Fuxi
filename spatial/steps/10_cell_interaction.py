@@ -219,7 +219,7 @@ def main():
         adata.obs["cci_label"] = adata.obs[group_col].astype(str)
 
     # ── Load anatomical adjacency (v4.0+) ────────────────────────────
-    from core.anatomy import load_adjacency
+    from core.pipeline.anatomy import load_adjacency
     adj_tissue = getattr(CFG.cci, "tissue", "") or CFG.tissue
     adj_file = getattr(CFG.cci, "adjacency_file", "")
     adjacency_df = load_adjacency(tissue=adj_tissue, custom_file=adj_file, log=log)
@@ -231,7 +231,7 @@ def main():
         )
 
     # ── Run CCI spatial analysis ────────────────────────────────────────
-    from rna.utils.cell_interaction import (
+    from core.interaction.cell_interaction import (
         ensure_gene_symbols,
         run_cci_spatial,
         format_cci_results,

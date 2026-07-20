@@ -70,8 +70,8 @@ def main():
     annotations = {}
     if CFG.ai.enabled and CFG.ai.ai_annotation:
         try:
-            from core.ai_caller import ai_query
-            from core.ai_prompts import ATAC_ANNOTATION_SYSTEM_PROMPT, ATAC_ANNOTATION_USER_PROMPT_TEMPLATE
+            from core.ai.caller import ai_query
+            from core.ai.prompts import ATAC_ANNOTATION_SYSTEM_PROMPT, ATAC_ANNOTATION_USER_PROMPT_TEMPLATE
             log.info("AI annotation...")
             user_prompt = ATAC_ANNOTATION_USER_PROMPT_TEMPLATE.format(
                 tissue=CFG.tissue,

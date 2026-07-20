@@ -1,0 +1,61 @@
+# ──────────────────────────────────────────────────────────────────────
+#  Dataset Registry
+#  ──────────────────────────────────────────────────────────────────────
+#  Each entry links a dataset to its pipeline output h5ad and metadata.
+#
+#  To add a new dataset, add a new entry under `datasets:`.
+#  Paths are relative to the project root (or absolute).
+# ──────────────────────────────────────────────────────────────────────
+
+datasets:
+  - label: "Wohl2026_PCW8"
+    paper: "Wohlschlegel 2026"
+    h5ad: "projects/rna/GSE310245/results/h5ad_pcw8_multiome/05_annotated.h5ad"
+    grn_table: "projects/rna/GSE310245/results/tables_pcw8_multiome/11_grn/tf_activity_per_cell_type.csv"
+    cell_type_col: "cell_type"
+    condition_label: "PCW8 fetal retina (Peripheral+Central)"
+    split_col: "sample"
+    condition_map:
+      GSM9292434_SCR205: "PCW8_Peripheral"   # nasal peripheral
+      GSM9292436_SCR206: "PCW8_Central"      # temporal central
+    metadata:
+      species: "human"
+      stage: "PCW8"
+      region: "macula+periphery"
+
+  - label: "Wohl2026_D140"
+    paper: "Wohlschlegel 2026"
+    h5ad: "projects/rna/GSE310245/results/h5ad_d140_rs/05_annotated.h5ad"
+    grn_table: "projects/rna/GSE310245/results/tables_d140_rs/11_grn/tf_activity_per_cell_type.csv"
+    cell_type_col: "cell_type"
+    condition_label: "D140 retinospheres (CTRL+WIN)"
+    split_col: "sample"
+    condition_map:
+      GSM9567287_SCR264_ctrl: "D140_CTRL"
+      GSM9567288_SCR265_WIN: "D140_WIN"
+    metadata:
+      species: "human"
+      stage: "D140 organoid"
+      region: "foveal 3D culture"
+
+  - label: "Zuo2024_Dev"
+    paper: "Zuo 2024"
+    h5ad: "projects/rna/GSE246169/results/h5ad/05_annotated.h5ad"
+    grn_table: "projects/rna/GSE246169/results/tables/11_grn/tf_activity_per_cell_type.csv"
+    cell_type_col: "cell_type"
+    condition_label: "PCW 8-23 developing retina"
+    split_col: "sample"
+    condition_map:
+      GSM7864384_d59_fetal: "PCW8_Fetal"
+      GSM7864386_d76c_fetal: "PCW10_Central"
+      GSM7864388_d76p_fetal: "PCW10_Peripheral"
+      GSM7864397_repro_supplement_retinosphere_control: "Organoid_CTRL"
+      GSM7864395_repro_supplement_retinosphere_ascl1_notch: "Organoid_ASCL1+NOTCH"
+      GSM7864396_repro_supplement_retinosphere_ascl1: "Organoid_ASCL1"
+      GSM7864393_repro_retinosphere_ascl1: "Retinosphere_ASCL1"
+      GSM7864394_repro_retinosphere_gfp: "Retinosphere_GFP"
+      GSM7864392_repro_organoids_gfp: "Organoid_GFP"
+      GSM7864390_repro_organoids_ascl1: "Organoid_ASCL1_Early"
+    metadata:
+      species: "human"
+      stage: "PCW8-23"

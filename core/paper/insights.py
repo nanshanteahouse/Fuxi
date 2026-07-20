@@ -29,8 +29,8 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from core.ai_caller import ai_query
-from core.ai_prompts import (
+from core.ai.caller import ai_query
+from core.ai.prompts import (
     PAPER_META_SYSTEM_PROMPT,
     PAPER_META_USER_TEMPLATE,
     PAPER_FIGURE_SYSTEM_PROMPT,
@@ -41,8 +41,8 @@ from core.ai_prompts import (
     PAPER_METHODOLOGY_USER_TEMPLATE,
 )
 
-from core.paper_converter import PaperSource, PmcXmlSource, MarkdownSource, Pymupdf4llmSource
-from core.paper_converter import PaperSource, PmcXmlSource, MarkdownSource, Pymupdf4llmSource, PubmedSource
+from core.paper.converter import PaperSource, PmcXmlSource, MarkdownSource, Pymupdf4llmSource
+from core.paper.converter import PaperSource, PmcXmlSource, MarkdownSource, Pymupdf4llmSource, PubmedSource
 logger = logging.getLogger(__name__)
 
 # -- Section / figure regex patterns --------------------------------------------

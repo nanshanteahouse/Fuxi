@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from core.enrichment_tissue import (
+from core.pipeline.enrichment import (
     cluster_redundant_pathways,
     compute_pathway_relevance,
     filter_enrichment_by_tissue,
@@ -381,7 +381,7 @@ class TestIntegrationRetina:
 
     def test_integration_retina_pathway_relevance(self) -> None:
         """Retina pathway relevance dict has expected keys and sizes."""
-        from rna.tissue_ontologies import load_pathway_relevance
+        from core.kb import load_pathway_relevance
 
         pr = load_pathway_relevance("retina")
 

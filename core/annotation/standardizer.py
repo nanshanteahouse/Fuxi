@@ -21,7 +21,7 @@ import os
 from typing import Any
 
 import logging
-# Add project root so imports (tissue_ontologies) resolve correctly
+# Add core/ so core.kb, core.annotation.scoring resolve correctly
 # in both pip-installed and standalone usage.
 _script_dir = os.path.dirname(os.path.abspath(__file__))
 _project_root = os.path.dirname(_script_dir)
@@ -108,7 +108,7 @@ class StandardOntology:
         NotImplementedError
             If **tissue** has no synonyms module.
         """
-        from rna.tissue_ontologies import load_synonyms
+        from core.kb import load_synonyms
         syns = load_synonyms(tissue)
         if syns:
             return syns
@@ -133,7 +133,7 @@ class StandardOntology:
         NotImplementedError
             If the tissue KB is not available.
         """
-        from rna.tissue_ontologies import load_kb
+        from core.kb import load_kb
         try:
             return load_kb(tissue)
         except ValueError as exc:
@@ -441,7 +441,7 @@ class StandardOntology:
         """
         # Resolve thresholds: explicit args > CFG > built-in defaults
         try:
-            from core.config import CFG
+            from core.config.schema import CFG
             _top_n = (
                 top_n if top_n is not None
                 else getattr(CFG, 'marker_validation_n_top_genes', 15)
@@ -463,7 +463,7 @@ class StandardOntology:
         # shares hahn2023 human-style markers that have low overlap)
         if species:
             try:
-                from rna.utils.marker_scoring import _species_matches
+                from core.annotation.scoring import _species_matches
                 _is_cross = not (
                     _species_matches(species, ["Homo sapiens"])
                     or _species_matches(species, ["Mus musculus"])

@@ -14,9 +14,9 @@ Integration points:
 
 Usage::
 
-    python core/geo_downloader.py --gse GSE118614
-    python core/geo_downloader.py --gse GSE118614 --dry-run
-    python core/geo_downloader.py --gse GSE118614 --skip-soft
+    python core/geo_downloader.py --gse GSE123456
+    python core/geo_downloader.py --gse GSE123456 --dry-run
+    python core/geo_downloader.py --gse GSE123456 --skip-soft
 """
 
 from __future__ import annotations
@@ -143,8 +143,8 @@ def _gse_nnn(gse_id: str) -> str:
     """Convert GSE accession to NCBI directory pattern.
 
     NCBI groups series by prefix: everything except the last 3 digits → ``nnn``.
-    ``GSE107618`` → ``GSE107nnn``  (6-digit, prefix=107)
-    ``GSE81905``  → ``GSE81nnn``   (5-digit, prefix=81)
+    ``GSE123456`` → ``GSE123nnn``  (6-digit, prefix=107)
+    ``GSE12345``  → ``GSE12nnn``   (5-digit, prefix=81)
     """
     m = re.match(r'GSE(\d+)', gse_id.upper())
     if not m:
@@ -315,7 +315,7 @@ def fetch_soft_metadata(gse_id: str) -> dict:
     """Download and parse SOFT.gz metadata for a GEO series.
 
     Args:
-        gse_id: GEO accession ID (e.g. ``GSE118614``).
+        gse_id: GEO accession ID (e.g. ``GSE123456``).
 
     Returns:
         Structured metadata dict. See :func:`_parse_soft_metadata`
@@ -725,7 +725,7 @@ def enrich_dataset_from_soft(
         True if any enrichment was applied.
     """
     try:
-        from core.registry import (
+        from core.paper.registry import (
             load_master_registry,
             save_master_registry,
             InsightStatus,
@@ -821,11 +821,11 @@ def update_registry_after_download(
         ``True`` if the registry was updated.
     """
     try:
-        from core.registry import (
+        from core.paper.registry import (
             load_master_registry,
             save_master_registry,
             DatasetStatus,
-        )
+)
     except ImportError:
         log.warning("Cannot import core.registry — skipping status update")
         return False
@@ -874,15 +874,15 @@ def _build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""\
 Examples:
-  python core/geo_downloader.py --gse GSE118614
-  python core/geo_downloader.py --gse GSE118614 --dry-run
-  python core/geo_downloader.py --gse GSE118614 --skip-soft --force
-  python core/geo_downloader.py --gse GSE118614 --data-root /mnt/e/data
+  python core/geo_downloader.py --gse GSE123456
+  python core/geo_downloader.py --gse GSE123456 --dry-run
+  python core/geo_downloader.py --gse GSE123456 --skip-soft --force
+  python core/geo_downloader.py --gse GSE123456 --data-root /mnt/e/data
 """,
     )
     parser.add_argument(
         "--gse", type=str, required=True,
-        help="GEO accession ID (e.g., GSE118614)",
+        help="GEO accession ID (e.g., GSE123456)",
     )
     parser.add_argument(
         "--data-root", type=str, default=None,

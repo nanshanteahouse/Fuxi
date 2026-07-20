@@ -22,7 +22,7 @@ from scipy.sparse import issparse
 from typing import Optional, List, Tuple
 from scipy.stats import spearmanr
 from statsmodels.stats.multitest import multipletests
-from rna.tissue_ontologies import load_kb
+from core.kb import load_kb
 
 def recompute_neighbors(adata, CFG, log):
     """确保邻居图和 UMAP 存在"""

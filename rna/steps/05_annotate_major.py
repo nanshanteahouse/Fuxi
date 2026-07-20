@@ -207,14 +207,14 @@ def ai_annotate(adata, CFG, logger, std=None):
     logger.info("Annotation context: tissue=%s, species=%s", tissue, species)
 
     # ── d. 构建提示词 ─────────────────────────────────────────────────
-    from core.ai_prompts import build_annotation_prompt
+    from core.ai.prompts import build_annotation_prompt
     stages_present = sorted(adata.obs['stage'].unique().tolist()) if 'stage' in adata.obs else []
     extra_context = f"Developmental stages: {stages_present}" if stages_present else ""
     kb_candidates = std.get_candidates() if std else None
     sys_prompt, user_prompt = build_annotation_prompt(adata, tissue, species, precomputed_rank=True, extra_context=extra_context, compact=compact, kb_candidates=kb_candidates)
 
     # ── e. 调用 LLM ───────────────────────────────────────────────────
-    from core.ai_caller import ai_query
+    from core.ai.caller import ai_query
     logger.info("Requesting cell type annotation from LLM (model=%s)...", CFG.ai.model)
     try:
         response = ai_query(sys_prompt, user_prompt, cfg=CFG.ai)
@@ -346,7 +346,7 @@ def ai_annotate(adata, CFG, logger, std=None):
 
 
 
-from rna.annotation_engine import run_unified_annotation as unified_annotate
+from core.annotation.engine import run_unified_annotation as unified_annotate
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -420,7 +420,7 @@ def main():
     standardizer = getattr(CFG, 'tissue_ontology', None) or CFG.tissue_kb
     std = None
     if standardizer:
-        from rna.annotation_standardizer import StandardOntology
+        from core.annotation.standardizer import StandardOntology
         try:
             std = StandardOntology(standardizer)
             log.info("Annotation Standardizer active for tissue: %s", standardizer)

@@ -14,12 +14,12 @@ Output: 04_clustered.h5ad
 import sys, os, time, argparse
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
 from core.utils import setup_logger, resolve_config, safe_write
-from core.clustering import grid_search_clustering, select_best_params
+from core.cluster.grid_search import grid_search_clustering, select_best_params
 import numpy as np
 import snapatac2 as snap
 from sklearn.metrics import silhouette_score
 from joblib import Parallel, delayed
-from core.config import SILHOUETTE_SAMPLE_THRESHOLD
+from core.config.schema import SILHOUETTE_SAMPLE_THRESHOLD
 
 
 # ---------------------------------------------------------------------------

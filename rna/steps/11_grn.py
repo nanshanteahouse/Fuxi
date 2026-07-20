@@ -23,8 +23,8 @@ import pandas as pd
 import scanpy as sc
 import matplotlib.pyplot as plt
 from scipy.cluster.hierarchy import linkage, dendrogram
-from rna.tissue_ontologies import load_all_kb_markers
-from core.grn_tissue import compute_tf_relevance
+from core.kb import load_all_kb_markers
+from core.pipeline.grn import compute_tf_relevance
 
 
 def build_pseudobulk(adata, group_col: str, use_raw: bool = True, log: object = None) -> pd.DataFrame:

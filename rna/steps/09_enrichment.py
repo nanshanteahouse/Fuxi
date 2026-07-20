@@ -375,17 +375,17 @@ def save_results(
     do_kb = getattr(CFG.enrichment, 'use_kb_relevance', False)
 
     if tissue_mode != 'off' or do_redundancy or do_kb:
-        from core.enrichment_tissue import (
+        from core.pipeline.enrichment import (
             compute_pathway_relevance,
             cluster_redundant_pathways,
             filter_enrichment_by_tissue,
-        )
+)
 
         # 加载 KB markers
         kb_markers = None
         if do_kb and CFG.tissue:
             try:
-                from rna.tissue_ontologies import load_kb
+                from core.kb import load_kb
                 kb = load_kb(CFG.tissue)
                 kb_markers = set()
                 for ct, entry in kb.items():
@@ -400,7 +400,7 @@ def save_results(
         pathway_blacklist = list(getattr(CFG.enrichment, 'tissue_pathways_blacklist', []))
         if do_kb and CFG.tissue:
             try:
-                from rna.tissue_ontologies import load_pathway_relevance
+                from core.kb import load_pathway_relevance
                 pr = load_pathway_relevance(CFG.tissue)
                 if pr:
                     if not getattr(CFG.enrichment, 'tissue_pathways_whitelist', []):
@@ -721,7 +721,7 @@ def main():
                 system_prompt = "You are an expert computational biologist interpreting scRNA-seq enrichment results."
                 user_prompt = f"Enrichment results summary:\n{json.dumps(summary_data, indent=2)}\n\nProvide biological interpretation: key pathways, cross-cell-type patterns, and testable hypotheses."
 
-                from core.ai_caller import ai_query
+                from core.ai.caller import ai_query
                 interpretation = ai_query(system_prompt, user_prompt, cfg=CFG.ai)
 
                 interp_path = os.path.join(CFG.table_dir, "09_enrichment", "ai_interpretation.txt")

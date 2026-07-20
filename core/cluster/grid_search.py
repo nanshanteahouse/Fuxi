@@ -41,7 +41,7 @@ from typing import Any
 import numpy as np
 
 # Re-export the existing Pareto selection logic — no duplication.
-from rna.utils.cluster_evaluation import select_best_params, _compute_stability, _compute_cluster_coherence  # noqa: F401
+from core.cluster.evaluation import select_best_params, _compute_stability, _compute_cluster_coherence  # noqa: F401
 
 # ---------------------------------------------------------------------------
 #  Public API

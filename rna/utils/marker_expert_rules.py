@@ -147,7 +147,7 @@ def apply_expert_rules(
     # Build a fast lookup: gene_name -> logfoldchanges.
     # Normalise gene names to strip Macaca _p/_n/.digit suffixes so KB
     # rule conditions (which use canonical human symbols) match correctly.
-    from rna.utils.marker_scoring import _normalize_gene_name
+    from core.annotation.scoring import _normalize_gene_name
     marker_map: Dict[str, float] = {}
     for _, row in de_subset.iterrows():
         gene_name = _normalize_gene_name(str(row["names"]))

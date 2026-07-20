@@ -83,7 +83,7 @@ def _check_zero_scores_and_retry(
 
     if needs_global_retry or needs_per_cluster_retry:
         import copy
-        from rna.utils.marker_scoring import score_cluster_against_kb
+        from core.annotation.scoring import score_cluster_against_kb
 
         # Build uppercased KB deepcopy once; reused by both retry passes.
         kb_copy = copy.deepcopy(kb)
@@ -242,7 +242,7 @@ def run_unified_annotation(adata, CFG, logger):
     logger.info("Marker genes saved: %s", marker_csv)
 
     # ── c. Load KB ────────────────────────────────────────────────────────
-    from rna.tissue_ontologies import load_kb
+    from core.kb import load_kb
     try:
         kb = load_kb(CFG.tissue_kb)
     except Exception as exc:
@@ -260,7 +260,7 @@ def run_unified_annotation(adata, CFG, logger):
                 CFG.tissue_kb, n_types, n_rules)
 
     # ── d. Full marker scoring + expert rules per cluster ─────────────────
-    from rna.utils.marker_scoring import (
+    from core.annotation.scoring import (
         score_cluster_against_kb,
         annotate_all_clusters,
         detect_low_quality_cluster,
@@ -422,8 +422,8 @@ def run_unified_annotation(adata, CFG, logger):
         )
 
         # Unconstrained annotations require build_annotation_prompt import here
-        from core.ai_prompts import build_annotation_prompt, build_hierarchical_annotation_prompt
-        from core.ai_caller import ai_query
+        from core.ai.prompts import build_annotation_prompt, build_hierarchical_annotation_prompt
+        from core.ai.caller import ai_query
 
         unconstrained = getattr(CFG.ai, 'unconstrained_annotation', False)
 

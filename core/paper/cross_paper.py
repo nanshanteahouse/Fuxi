@@ -199,9 +199,9 @@ class CrossPaperAnalyzer:
         -------
         CrossPaperAnalyzer
         """
-        from cross_paper import load_yaml
+        from core.paper.cross_paper_init import load_yaml
 
-        repo_root = Path(__file__).resolve().parent.parent
+        repo_root = Path(__file__).resolve().parent.parent.parent
 
         def _resolve(p: str) -> str:
             path = Path(p)

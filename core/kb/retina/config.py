@@ -1,7 +1,7 @@
 """
 retina/config.py — Retina-specific configuration for the tissue ontology engine.
 
-Provides constants consumed by :mod:`rna.tissue_ontologies.merge` to build
+Provides constants consumed by :mod:`core.kb.merge` to build
 the unified retina expert knowledge base.
 """
 

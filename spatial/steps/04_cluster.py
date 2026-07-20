@@ -24,9 +24,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.metrics import silhouette_score
-from core.clustering import grid_search_clustering, select_best_params
-from core.config import SILHOUETTE_SAMPLE_THRESHOLD
-from rna.utils.cluster_evaluation import select_best_umap_params
+from core.cluster.grid_search import grid_search_clustering, select_best_params
+from core.config.schema import SILHOUETTE_SAMPLE_THRESHOLD
+from core.cluster.evaluation import select_best_umap_params
 
 
 def main():
@@ -141,7 +141,7 @@ def main():
             r['silhouette_score'] = r.pop('score')
 
     # ═══ Multi-metric enrichment ═══
-    from rna.utils.cluster_evaluation import _detect_granularity
+    from core.cluster.evaluation import _detect_granularity
     granularity = _detect_granularity(results_summary)
     log.info("Granularity classification: %s", granularity)
 
@@ -149,7 +149,7 @@ def main():
 
     if granularity == "subtype" and adata.raw is not None:
         _de_gated_selected = True
-        from rna.utils.cluster_evaluation import _select_de_gated
+        from core.cluster.evaluation import _select_de_gated
         log.info("Granularity=subtype \u2014 using DE-gated resolution selection (bypassing enrichment)")
         n_clusters, resolution, cluster_key, reason_str = _select_de_gated(
             results_summary, adata,
@@ -175,7 +175,7 @@ def main():
                         "Falling back to multi-metric enrichment.")
 
         # ── Multi-metric enrichment (for multi_metric selection method) ──
-        from rna.utils.cluster_evaluation import _compute_stability, _compute_cluster_coherence, _compute_splitting_gain
+        from core.cluster.evaluation import _compute_stability, _compute_cluster_coherence, _compute_splitting_gain
         import logging as _logging
         _log_enrich = _logging.getLogger(__name__)
 

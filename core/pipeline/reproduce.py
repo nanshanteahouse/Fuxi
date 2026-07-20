@@ -14,7 +14,7 @@ CLI Usage::
     python core/run_reproduce.py projects/papers/<paper_dir>
     python core/run_reproduce.py --all
     python core/run_reproduce.py projects/papers/<paper_dir> --dry-run
-    python core/run_reproduce.py --gse GSE107618
+    python core/run_reproduce.py --gse GSE123456
 """
 
 from __future__ import annotations
@@ -39,8 +39,8 @@ import yaml
 
 import logging
 
-from core.dataset_schema import update_pipeline_status
-from core.registry import (
+from core.config.dataset import update_pipeline_status
+from core.paper.registry import (
     DatasetStatus, ExperimentGroup, MasterRegistry, PaperEntry,
     _dict_to_exp_group, detect_modality,
     load_master_registry, save_master_registry,
@@ -109,7 +109,7 @@ def _run_pipeline_for_gse(
     """Run the full pipeline for one GSE dataset as a subprocess.
 
     Args:
-        gse_id:           GEO accession ID (e.g. ``GSE107618``).
+        gse_id:           GEO accession ID (e.g. ``GSE123456``).
         config_path:      Absolute path to the pipeline config file.
         modality:         Explicit modality override. When ``None`` (default),
                           auto-detect from the config file for backward compat.
@@ -442,7 +442,7 @@ def _build_parser() -> argparse.ArgumentParser:
             "  python core/run_reproduce.py projects/papers/<paper_dir>\n"
             "  python core/run_reproduce.py --all\n"
             "  python core/run_reproduce.py --all --dry-run\n"
-            "  python core/run_reproduce.py --gse GSE107618\n"
+            "  python core/run_reproduce.py --gse GSE123456\n"
         ),
     )
     parser.add_argument(

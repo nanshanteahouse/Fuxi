@@ -1,5 +1,5 @@
 """
-tissue_ontologies/merge.py — Tissue-agnostic KB merge engine.
+core/kb/merge.py — Tissue-agnostic KB merge engine.
 
 Loads all source YAML files from a ``sources/`` directory, merges their markers
 with consensus scoring, detects conflicts, resolves them, and emits a unified KB
@@ -7,10 +7,10 @@ dict consumable by ``marker_scoring.py``.
 
 Usage::
 
-    from rna.tissue_ontologies.merge import build_tissue_kb
-    kb = build_tissue_kb("rna/tissue_ontologies/retina/sources",
+    from core.kb.merge import build_tissue_kb
+    kb = build_tissue_kb("core/kb/retina/sources",
                          type_aliases={"Retinal_Ganglion_Cell": "RGC"},
-                         hierarchy_yaml_path="rna/tissue_ontologies/retina/hierarchy.yaml")
+                         hierarchy_yaml_path="core/kb/retina/hierarchy.yaml")
 """
 
 import logging

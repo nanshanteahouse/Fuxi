@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from rna.utils.marker_scoring import (
+from core.annotation.scoring import (
     score_cluster_against_kb,
     Score,
     detect_low_quality_cluster,
