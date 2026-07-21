@@ -44,9 +44,9 @@ hvg:
   flavor: seurat_v3
   # use_regress_out: false
 
-# ── Batch correction / Harmony ──
-harmony:
-  use_harmony: true
+# ── Batch correction / Integration ──
+integration:
+  method: harmony
   batch_key: age
   max_iter: 20
 
@@ -56,6 +56,16 @@ harmony:
   # thresholds backed by scIB benchmarking
   gini_batch_threshold: 0.3
   gini_biology_threshold: 0.6
+
+  # -- scVI (deep generative model, method: scvi) --
+  scvi:
+    n_latent: 30
+    n_layers: 2
+    n_hidden: 128
+    max_epochs: 400
+    batch_key: sample
+    use_gpu: true
+    train_size: 0.9
 
 # ── PCA ──
 pca:
