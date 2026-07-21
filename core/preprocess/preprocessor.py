@@ -20,37 +20,34 @@ preprocessor.py — Fuxi 预处理管线
     python core/preprocess/preprocessor.py --gse GSE12345 --query-ncbi --verbose
 """
 
-import sys
-import os
-import time
-import json
-import shutil
-import glob as glob_mod
 import argparse
+import os
+import shutil
+import sys
+import time
 from datetime import datetime
 from typing import Optional
 
 # Add repo root to sys.path (consistent with all step scripts)
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 
-from core.preprocess import format_detector as fd
-from core.preprocess import archive_extractor as ae
-from core.preprocess import superseries_detector as ssd
 from core.config.dataset import (
-    DatasetMeta, ModalityEntry, SampleEntry, FileEntry, Comparison,
-    Resources, PipelineStatus, Meta, save_dataset,
+    DatasetMeta,
+    Meta,
+    ModalityEntry,
+    PipelineStatus,
+    Resources,
+    save_dataset,
 )
-
-
+from core.preprocess import archive_extractor as ae
+from core.preprocess import format_detector as fd
+from core.preprocess import superseries_detector as ssd
 from core.preprocess.matrix_loader import (
-    TEMPLATE_MAP,
     _detect_primary_format,
-    _fill_template,
     _resolve_project_dir,
     generate_config,
 )
 from core.preprocess.metadata_parser import (
-    _resolve_input_dir,
     generate_dataset_yaml,
 )
 
@@ -58,35 +55,35 @@ from core.preprocess.metadata_parser import (
 #  Phase 3: Modality detection
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def _infer_modality(classification: dict) -> str:
     """Infer the primary modality from classification results.
 
     Returns 'rna', 'atac', 'spatial', or 'multiome'.
     """
     has_rna = bool(
-        classification.get('tenx_h5_dirs') or
-        classification.get('tenx_mtx_dirs') or
-        classification.get('h5ad_files') or
-        classification.get('csv_files')
+        classification.get("tenx_h5_dirs")
+        or classification.get("tenx_mtx_dirs")
+        or classification.get("h5ad_files")
+        or classification.get("csv_files")
     )
-    has_atac = bool(
-        classification.get('fragment_dirs') or
-        classification.get('tenx_peak_dirs')
-    )
+    has_atac = bool(classification.get("fragment_dirs") or classification.get("tenx_peak_dirs"))
     if has_rna and has_atac:
-        return 'multiome'
+        return "multiome"
     if has_atac:
-        return 'atac'
+        return "atac"
     # Default to RNA for h5ad / CSV cases
-    return 'rna'
+    return "rna"
 
 
 # ═══════════════════════════════════════════════════════════════════════
 #  Main entry point
 # ═══════════════════════════════════════════════════════════════════════
 
-def _group_files_by_accession(file_list: list[str],
-                               child_accessions: list[str]) -> dict[str, list[str]]:
+
+def _group_files_by_accession(
+    file_list: list[str], child_accessions: list[str]
+) -> dict[str, list[str]]:
     """Group *file_list* into per-accession buckets using filename patterns.
 
     Delegates to ``superseries_detector.group_files_by_accession()``, which
@@ -95,16 +92,18 @@ def _group_files_by_accession(file_list: list[str],
     return ssd.group_files_by_accession(file_list, child_accessions)
 
 
-def _generate_parent_dataset_yaml(gse_id: str,
-                                   superseries_info: dict,
-                                   classification: dict,
-                                   file_list: list[str],
-                                   output_dir: str,
-                                   data_root: Optional[str],
-                                   input_dir_override: Optional[str] = None,
-                                   dry_run: bool = False,
-                                   force: bool = False,
-                                   ncbi_assay_type: Optional[str] = None) -> Optional[str]:
+def _generate_parent_dataset_yaml(
+    gse_id: str,
+    superseries_info: dict,
+    classification: dict,
+    file_list: list[str],
+    output_dir: str,
+    data_root: Optional[str],
+    input_dir_override: Optional[str] = None,
+    dry_run: bool = False,
+    force: bool = False,
+    ncbi_assay_type: Optional[str] = None,
+) -> Optional[str]:
     """Generate a parent-level dataset.yaml for a SuperSeries.
 
     This YAML serves as an index/placeholder — it records the SuperSeries
@@ -115,8 +114,8 @@ def _generate_parent_dataset_yaml(gse_id: str,
     Returns the path to the generated file, or None.
     """
     species = fd.guess_species(file_list)
-    if species == 'unknown' and superseries_info:
-        ncbi_species = superseries_info.get('species', '')
+    if species == "unknown" and superseries_info:
+        ncbi_species = superseries_info.get("species", "")
         if ncbi_species:
             species = fd._normalise_species(ncbi_species)
     species_key = species  # already normalised by guess_species()
@@ -127,36 +126,38 @@ def _generate_parent_dataset_yaml(gse_id: str,
 
     # Determine base dir for path computation
     if input_dir_override:
-        gse_dir = os.path.abspath(input_dir_override)
+        os.path.abspath(input_dir_override)
     elif data_root:
-        gse_dir = os.path.join(data_root, gse_id)
+        os.path.join(data_root, gse_id)
     else:
-        gse_dir = os.path.dirname(file_list[0]) if file_list else '.'
+        os.path.dirname(file_list[0]) if file_list else "."
 
     # Modality entry: placeholder
     modality_entry = ModalityEntry(
-        name='SuperSeries',
-        status='placeholder',
+        name="SuperSeries",
+        status="placeholder",
         format=data_format,
         file_count=len(file_list),
     )
 
     # Build subseries list
     subseries = []
-    for child_acc in superseries_info.get('child_accessions', []):
-        subseries.append({
-            'id': child_acc,
-            'title': '',
-            'modality': 'scRNA-seq',
-        })
+    for child_acc in superseries_info.get("child_accessions", []):
+        subseries.append(
+            {
+                "id": child_acc,
+                "title": "",
+                "modality": "scRNA-seq",
+            }
+        )
 
     ds = DatasetMeta(
         id=gse_id,
-        type='SuperSeries',
-        title=superseries_info.get('title', ''),
-        species=species if species != 'unknown' else 'homo_sapiens',
-        species_key=species_key if species_key != 'unknown' else 'human',
-        tissue=tissue if tissue != 'unknown' else None,
+        type="SuperSeries",
+        title=superseries_info.get("title", ""),
+        species=species if species != "unknown" else "homo_sapiens",
+        species_key=species_key if species_key != "unknown" else "human",
+        tissue=tissue if tissue != "unknown" else None,
         modalities=[modality_entry],
         samples=[],
         subseries=subseries,
@@ -167,13 +168,13 @@ def _generate_parent_dataset_yaml(gse_id: str,
         ),
         meta=Meta(
             created=datetime.now().isoformat(),
-            generated_by='fuxi_preprocess',
+            generated_by="fuxi_preprocess",
             pipeline_status=PipelineStatus(),
         ),
     )
 
     os.makedirs(output_dir, exist_ok=True)
-    yaml_path = os.path.join(output_dir, 'dataset.yaml')
+    yaml_path = os.path.join(output_dir, "dataset.yaml")
 
     if dry_run:
         print(f"    [DRY-RUN] Would write: {yaml_path}")
@@ -187,19 +188,22 @@ def _generate_parent_dataset_yaml(gse_id: str,
     print(f"    Written: {yaml_path}")
     return yaml_path
 
-def run_preprocess(gse_id: Optional[str] = None,
-                   input_dir: Optional[str] = None,
-                   dataset_name: Optional[str] = None,
-                   data_root: Optional[str] = None,
-                   paper_context: Optional[dict] = None,
-                   query_ncbi: bool = False,
-                   dry_run: bool = False,
-                   force: bool = False,
-                   no_extract: bool = False,
-                   modality: Optional[str] = None,
-                   output_dir: Optional[str] = None,
-                   verbose: bool = False,
-                   quiet: bool = False) -> int:
+
+def run_preprocess(
+    gse_id: Optional[str] = None,
+    input_dir: Optional[str] = None,
+    dataset_name: Optional[str] = None,
+    data_root: Optional[str] = None,
+    paper_context: Optional[dict] = None,
+    query_ncbi: bool = False,
+    dry_run: bool = False,
+    force: bool = False,
+    no_extract: bool = False,
+    modality: Optional[str] = None,
+    output_dir: Optional[str] = None,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> int:
     """Run the full preprocessing pipeline on a dataset directory.
 
     Two calling conventions are supported:
@@ -238,27 +242,29 @@ def run_preprocess(gse_id: Optional[str] = None,
         if dataset_name:
             gse_id = dataset_name
         else:
-            gse_id = os.path.basename(gse_dir.rstrip('/\\')) or 'unknown_dataset'
+            gse_id = os.path.basename(gse_dir.rstrip("/\\")) or "unknown_dataset"
     elif gse_id is not None:
         # GEO mode — gse_id under data_root
         if data_root is None:
             try:
                 from core.utils import data_root as get_data_root
+
                 data_root = get_data_root()
             except RuntimeError as e:
                 print(f"[ERROR] {e}", file=sys.stderr)
                 return 1
         gse_dir = os.path.join(data_root, gse_id)
     else:
-        print("[ERROR] Either --gse or --input-dir must be provided.",
-              file=sys.stderr)
+        print("[ERROR] Either --gse or --input-dir must be provided.", file=sys.stderr)
         return 1
 
     if not os.path.isdir(gse_dir):
         print(f"[ERROR] Directory not found: {gse_dir}", file=sys.stderr)
         if gse_id and not input_dir:
-            print(f"        Make sure FUXI_DATA_ROOT is set correctly and "
-                  f"the dataset is downloaded.", file=sys.stderr)
+            print(
+                "        Make sure FUXI_DATA_ROOT is set correctly and the dataset is downloaded.",
+                file=sys.stderr,
+            )
         return 1
 
     t_start = time.time()
@@ -275,21 +281,20 @@ def run_preprocess(gse_id: Optional[str] = None,
         if not quiet:
             print("[Phase 1] Scanning for archives...")
         all_files_before = ae.collect_file_tree(gse_dir)
-        archives = fd.classify_files_by_format(all_files_before)['archives']
+        archives = fd.classify_files_by_format(all_files_before)["archives"]
 
         if archives:
             if not quiet:
                 print(f"  Found {len(archives)} archive(s)")
             archive_results = ae.extract_all_archives(archives, verbose=verbose)
-            errors = [r for r in archive_results if r['status'] == 'error']
+            errors = [r for r in archive_results if r["status"] == "error"]
             for err in errors:
                 print(f"  [WARNING] Extraction failed: {err['error']}", file=sys.stderr)
 
             # Second pass: check for nested archives in extraction dirs
             second_pass_files = ae.collect_file_tree(gse_dir)
-            second_archives = fd.classify_files_by_format(second_pass_files)['archives']
-            new_archives = [(p, f) for p, f in second_archives
-                           if (p, f) not in archives]
+            second_archives = fd.classify_files_by_format(second_pass_files)["archives"]
+            new_archives = [(p, f) for p, f in second_archives if (p, f) not in archives]
             if new_archives:
                 if not quiet:
                     print(f"  Second pass: {len(new_archives)} nested archive(s) found")
@@ -297,9 +302,12 @@ def run_preprocess(gse_id: Optional[str] = None,
 
             # Third pass (cap at 3)
             third_pass_files = ae.collect_file_tree(gse_dir)
-            third_archives = fd.classify_files_by_format(third_pass_files)['archives']
-            newest = [(p, f) for p, f in third_archives
-                     if (p, f) not in archives and (p, f) not in new_archives]
+            third_archives = fd.classify_files_by_format(third_pass_files)["archives"]
+            newest = [
+                (p, f)
+                for p, f in third_archives
+                if (p, f) not in archives and (p, f) not in new_archives
+            ]
             if newest:
                 if not quiet:
                     print(f"  Third pass: {len(newest)} deeply nested archive(s)")
@@ -326,13 +334,13 @@ def run_preprocess(gse_id: Optional[str] = None,
         gse_id=gse_id,
         query_ncbi_flag=query_ncbi,
     )
-    if superseries_info.get('is_superseries'):
-        method = superseries_info.get('detected_by', 'unknown')
+    if superseries_info.get("is_superseries"):
+        method = superseries_info.get("detected_by", "unknown")
         if not quiet:
             print(f"  SuperSeries detected (via {method}).")
-            if superseries_info.get('subseries_dirs'):
+            if superseries_info.get("subseries_dirs"):
                 print(f"  Subseries dirs: {', '.join(superseries_info['subseries_dirs'])}")
-            if superseries_info.get('child_accessions'):
+            if superseries_info.get("child_accessions"):
                 print(f"  Child accessions: {', '.join(superseries_info['child_accessions'])}")
     else:
         if not quiet:
@@ -361,22 +369,22 @@ def run_preprocess(gse_id: Optional[str] = None,
         print(f"  Inferred modality: {detected_modality}")
 
     # ── Extract assay_type from NCBI metadata ─────────────────────────
-    ncbi_assay_type = superseries_info.get('assay_type')
+    ncbi_assay_type = superseries_info.get("assay_type")
     # Multiome special case: 10x Multiome is nucleus-based
-    if ncbi_assay_type is None and detected_modality == 'multiome':
-        ncbi_assay_type = 'snRNAseq'
+    if ncbi_assay_type is None and detected_modality == "multiome":
+        ncbi_assay_type = "snRNAseq"
         if not quiet:
-            print(f"  [INFO] Multiome detected — auto-set assay_type=snRNAseq")
+            print("  [INFO] Multiome detected — auto-set assay_type=snRNAseq")
 
     # List unsupported files
-    unsupported = classification.get('unsupported', [])
+    unsupported = classification.get("unsupported", [])
     if unsupported:
         print(f"  [WARNING] {len(unsupported)} unsupported format(s):", file=sys.stderr)
         for f in unsupported[:10]:
             print(f"    - {os.path.relpath(f, gse_dir)}", file=sys.stderr)
 
     # List unmatched files
-    unmatched = classification.get('unmatched', [])
+    unmatched = classification.get("unmatched", [])
     if unmatched:
         if verbose:
             print(f"  Unmatched files ({len(unmatched)}):")
@@ -386,8 +394,8 @@ def run_preprocess(gse_id: Optional[str] = None,
             print(f"  {len(unmatched)} unmatched file(s) (use -v for details)")
 
     # ── Resolve output modalities ────────────────────────────────────────
-    if detected_modality == 'multiome':
-        modalities_out = ['rna', 'atac']
+    if detected_modality == "multiome":
+        modalities_out = ["rna", "atac"]
     else:
         modalities_out = [detected_modality]
 
@@ -395,17 +403,17 @@ def run_preprocess(gse_id: Optional[str] = None,
     if not quiet:
         print()
 
-    if superseries_info.get('is_superseries'):
+    if superseries_info.get("is_superseries"):
         # ── Flat layout: move files → sibling dirs, then generate ────────
         if not quiet:
             print("[Phase 4/5] SuperSeries: organising child accessions...")
-        child_accs = superseries_info.get('child_accessions', [])
+        child_accs = superseries_info.get("child_accessions", [])
 
         # Group files by child accession using filename patterns
         file_groups = ssd.group_files_by_accession(all_files, child_accs)
 
         # Parent dir for sibling child dirs (= same level as gse_dir)
-        data_parent = os.path.dirname(gse_dir.rstrip('/\\'))
+        data_parent = os.path.dirname(gse_dir.rstrip("/\\"))
 
         for child_gse in child_accs:
             child_files = file_groups.get(child_gse, [])
@@ -450,8 +458,8 @@ def run_preprocess(gse_id: Optional[str] = None,
             # Per-child format classification on the new location
             child_classification = fd.classify_files_by_format(child_abs_files)
             child_modality = modality or _infer_modality(child_classification)
-            if child_modality == 'multiome':
-                child_modalities = ['rna', 'atac']
+            if child_modality == "multiome":
+                child_modalities = ["rna", "atac"]
             else:
                 child_modalities = [child_modality]
 
@@ -460,7 +468,7 @@ def run_preprocess(gse_id: Optional[str] = None,
                 generate_dataset_yaml(
                     gse_id=child_gse,
                     modality=child_mod,
-                    superseries_info={'is_superseries': False},
+                    superseries_info={"is_superseries": False},
                     classification=child_classification,
                     file_list=child_abs_files,
                     output_dir=child_data_dir,
@@ -548,12 +556,16 @@ def run_preprocess(gse_id: Optional[str] = None,
         print(f"\n{'=' * 60}")
         print(f"[Summary] {gse_id}")
         print(f"{'=' * 60}")
-        print(f"  Type:         {'SuperSeries' if superseries_info.get('is_superseries') else 'SingleAccession'}")
+        print(
+            f"  Type:         {'SuperSeries' if superseries_info.get('is_superseries') else 'SingleAccession'}"
+        )
         print(f"  Modality:     {detected_modality}")
         print(f"  Data format:  {_detect_primary_format(classification, detected_modality)}")
-        print(f"  Species:      {fd.guess_species(all_files) if fd.guess_species(all_files) != 'unknown' else fd._normalise_species(superseries_info.get('species', 'unknown'))}")
+        print(
+            f"  Species:      {fd.guess_species(all_files) if fd.guess_species(all_files) != 'unknown' else fd._normalise_species(superseries_info.get('species', 'unknown'))}"
+        )
         print(f"  Tissue:       {fd.guess_tissue(all_files)}")
-        extracted = sum(1 for r in archive_results if r['status'] in ('extracted', 'skipped'))
+        extracted = sum(1 for r in archive_results if r["status"] in ("extracted", "skipped"))
         if extracted:
             print(f"  Archives:     {extracted} processed")
         if unsupported:
@@ -562,12 +574,14 @@ def run_preprocess(gse_id: Optional[str] = None,
             print(f"  Unmatched:    {len(unmatched)} file(s)")
         print(f"  Elapsed:      {elapsed:.1f}s")
         if not dry_run:
-            print(f"\n  Generated:")
-            if superseries_info.get('is_superseries'):
-                data_parent = os.path.dirname(gse_dir.rstrip('/\\'))
-                for child_gse in superseries_info.get('child_accessions', []):
+            print("\n  Generated:")
+            if superseries_info.get("is_superseries"):
+                data_parent = os.path.dirname(gse_dir.rstrip("/\\"))
+                for child_gse in superseries_info.get("child_accessions", []):
                     child_dir = os.path.join(data_parent, child_gse)
-                    print(f"    {os.path.join(child_dir, 'dataset.yaml')}  (files moved to {child_dir}/)")
+                    print(
+                        f"    {os.path.join(child_dir, 'dataset.yaml')}  (files moved to {child_dir}/)"
+                    )
                     for mod in modalities_out:
                         out_dir = _resolve_project_dir(mod, child_gse, output_dir)
                         print(f"    {os.path.join(out_dir, 'config_' + child_gse + '.yaml')}")
@@ -577,22 +591,26 @@ def run_preprocess(gse_id: Optional[str] = None,
                     out_dir = _resolve_project_dir(mod, gse_id, output_dir)
                     print(f"    {os.path.join(out_dir, 'dataset.yaml')}")
                     print(f"    {os.path.join(out_dir, 'config_' + gse_id + '.yaml')}")
-        print(f"\n  Next steps:")
-        if superseries_info.get('is_superseries'):
-            print(f"    Each sub-series is an independent project. Review and edit")
-            print(f"    the generated configs, then run each separately, e.g.:")
-            for child_gse in superseries_info.get('child_accessions', []):
+        print("\n  Next steps:")
+        if superseries_info.get("is_superseries"):
+            print("    Each sub-series is an independent project. Review and edit")
+            print("    the generated configs, then run each separately, e.g.:")
+            for child_gse in superseries_info.get("child_accessions", []):
                 for mod in modalities_out:
                     cfg_path = os.path.join(
                         _resolve_project_dir(mod, child_gse, output_dir),
-                        f'config_{child_gse}.yaml',
+                        f"config_{child_gse}.yaml",
                     )
-                    print(f"       python core/run_pipeline.py --modality {mod} --config {cfg_path}")
+                    print(
+                        f"       python core/run_pipeline.py --modality {mod} --config {cfg_path}"
+                    )
         else:
-            print(f"    1. Review and edit the generated files")
-            print(f"    2. Run the pipeline:")
+            print("    1. Review and edit the generated files")
+            print("    2. Run the pipeline:")
             for mod in modalities_out:
-                cfg_path = os.path.join(_resolve_project_dir(mod, gse_id, output_dir), f'config_{gse_id}.yaml')
+                cfg_path = os.path.join(
+                    _resolve_project_dir(mod, gse_id, output_dir), f"config_{gse_id}.yaml"
+                )
                 print(f"       python core/run_pipeline.py --modality {mod} --config {cfg_path}")
         print()
 
@@ -603,10 +621,11 @@ def run_preprocess(gse_id: Optional[str] = None,
 #  CLI
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Fuxi Pre-Processing Pipeline — Prepare downloaded GEO data "
-                    "for pipeline execution.",
+        "for pipeline execution.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -622,62 +641,80 @@ Examples:
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
-        '--gse', type=str,
-        help='GEO accession ID (e.g., GSE12345). Requires FUXI_DATA_ROOT to be set.',
+        "--gse",
+        type=str,
+        help="GEO accession ID (e.g., GSE12345). Requires FUXI_DATA_ROOT to be set.",
     )
     group.add_argument(
-        '--input-dir', type=str,
-        help='Direct path to the dataset directory. '
-             'Use when there is no GEO accession (lab data, non-GEO source).',
+        "--input-dir",
+        type=str,
+        help="Direct path to the dataset directory. "
+        "Use when there is no GEO accession (lab data, non-GEO source).",
     )
     parser.add_argument(
-        '--name', type=str, default=None,
-        help='Dataset identifier when using --input-dir '
-             '(default: basename of --input-dir).',
-    )
-    parser.add_argument(
-        '--data-root', type=str, default=None,
-        help='Override FUXI_DATA_ROOT (default: from environment variable)',
-    )
-    parser.add_argument(
-        '--query-ncbi', action='store_true',
-        help='Query NCBI E-utilities for SuperSeries metadata (requires internet)',
-    )
-    parser.add_argument(
-        '--dry-run', action='store_true',
-        help='Detect and report only, no files written',
-    )
-    parser.add_argument(
-        '--force', action='store_true',
-        help='Overwrite existing dataset.yaml and config files',
-    )
-    parser.add_argument(
-        '--no-extract', action='store_true',
-        help='Skip archive extraction (assume already extracted)',
-    )
-    parser.add_argument(
-        '--modality', type=str, choices=['rna', 'atac', 'spatial', 'multiome'],
+        "--name",
+        type=str,
         default=None,
-        help='Force a specific modality (default: auto-detect)',
+        help="Dataset identifier when using --input-dir (default: basename of --input-dir).",
     )
     parser.add_argument(
-        '--output-dir', type=str, default=None,
-        help='Override output base directory '
-             '(default: <repo>/projects/{modality}/{GSE_ID}/). '
-             'Use to direct output to a temp location for review.',
+        "--data-root",
+        type=str,
+        default=None,
+        help="Override FUXI_DATA_ROOT (default: from environment variable)",
     )
     parser.add_argument(
-        '--download', action='store_true',
-        help='Auto-download GSE data from NCBI GEO before preprocessing '
-             '(requires wget or curl; uses FUXI_DATA_ROOT).',
+        "--query-ncbi",
+        action="store_true",
+        help="Query NCBI E-utilities for SuperSeries metadata (requires internet)",
     )
     parser.add_argument(
-        '--verbose', '-v', action='store_true',
-        help='Verbose output (show all detected files)',
+        "--dry-run",
+        action="store_true",
+        help="Detect and report only, no files written",
     )
     parser.add_argument(
-        '--quiet', '-q', action='store_true',
-        help='Minimal output (errors only)',
+        "--force",
+        action="store_true",
+        help="Overwrite existing dataset.yaml and config files",
+    )
+    parser.add_argument(
+        "--no-extract",
+        action="store_true",
+        help="Skip archive extraction (assume already extracted)",
+    )
+    parser.add_argument(
+        "--modality",
+        type=str,
+        choices=["rna", "atac", "spatial", "multiome"],
+        default=None,
+        help="Force a specific modality (default: auto-detect)",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help="Override output base directory "
+        "(default: <repo>/projects/{modality}/{GSE_ID}/). "
+        "Use to direct output to a temp location for review.",
+    )
+    parser.add_argument(
+        "--download",
+        action="store_true",
+        help="Auto-download GSE data from NCBI GEO before preprocessing "
+        "(requires wget or curl; uses FUXI_DATA_ROOT).",
+    )
+    parser.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Verbose output (show all detected files)",
+    )
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Minimal output (errors only)",
     )
 
     args = parser.parse_args()
@@ -700,5 +737,5 @@ Examples:
     sys.exit(exit_code)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

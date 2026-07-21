@@ -30,18 +30,17 @@ Safety:
   - Incremental SHA-256 (64KB chunks) — safe for large archives.
 """
 
-import os
-import sys
-import json
+import bz2
+import gzip
 import hashlib
+import json
+import os
 import shutil
+import sys
 import tarfile
 import zipfile
-import gzip
-import bz2
 from datetime import datetime
 from typing import Optional
-
 
 # ── Checksum helpers ──────────────────────────────────────────────────
 
@@ -51,7 +50,7 @@ _CHUNK_SIZE = 64 * 1024  # 64 KB
 def compute_sha256(filepath: str) -> str:
     """Compute SHA-256 hash of a file (streaming, safe for large files)."""
     h = hashlib.sha256()
-    with open(filepath, 'rb') as f:
+    with open(filepath, "rb") as f:
         while True:
             chunk = f.read(_CHUNK_SIZE)
             if not chunk:
@@ -63,8 +62,8 @@ def compute_sha256(filepath: str) -> str:
 def _sentinel_path(archive_path: str) -> str:
     """Return the path of the sentinel file for an archive."""
     archive_name = os.path.basename(archive_path)
-    parent = os.path.dirname(archive_path) or '.'
-    return os.path.join(parent, f'.extracted_{archive_name}.json')
+    parent = os.path.dirname(archive_path) or "."
+    return os.path.join(parent, f".extracted_{archive_name}.json")
 
 
 def _should_skip(archive_path: str, verbose: bool = False) -> bool:
@@ -73,10 +72,10 @@ def _should_skip(archive_path: str, verbose: bool = False) -> bool:
     if not os.path.exists(sentinel):
         return False
     try:
-        with open(sentinel, 'r') as f:
+        with open(sentinel, "r") as f:
             data = json.load(f)
         current = compute_sha256(archive_path)
-        if data.get('checksum') == current:
+        if data.get("checksum") == current:
             return True
         if verbose:
             print(f"  Checksum changed for {os.path.basename(archive_path)} — re-extracting")
@@ -89,34 +88,36 @@ def _write_sentinel(archive_path: str, extract_dir: str, file_count: int) -> Non
     """Write extraction sentinel file."""
     sentinel = _sentinel_path(archive_path)
     data = {
-        'archive_path': os.path.basename(archive_path),
-        'checksum': compute_sha256(archive_path),
-        'extracted_at': datetime.now().isoformat(),
-        'extract_dir': os.path.basename(extract_dir),
-        'file_count': file_count,
+        "archive_path": os.path.basename(archive_path),
+        "checksum": compute_sha256(archive_path),
+        "extracted_at": datetime.now().isoformat(),
+        "extract_dir": os.path.basename(extract_dir),
+        "file_count": file_count,
     }
-    with open(sentinel, 'w') as f:
+    with open(sentinel, "w") as f:
         json.dump(data, f, indent=2)
 
 
 # ── Extraction destination ────────────────────────────────────────────
+
 
 def _extract_dest_dir(archive_path: str) -> str:
     """Compute the sibling extraction directory for an archive.
 
     Example: 'GSE12345_RAW.tar.gz' → 'GSE12345/RAW_extracted/'
     """
-    parent = os.path.dirname(archive_path) or '.'
+    parent = os.path.dirname(archive_path) or "."
     stem = os.path.basename(archive_path)
     # Remove all known archive extensions
-    for ext in ('.tar.gz', '.tgz', '.tar.bz2', '.tar.xz', '.tar', '.zip', '.gz', '.bz2'):
+    for ext in (".tar.gz", ".tgz", ".tar.bz2", ".tar.xz", ".tar", ".zip", ".gz", ".bz2"):
         if stem.lower().endswith(ext):
-            stem = stem[:-len(ext)]
+            stem = stem[: -len(ext)]
             break
-    return os.path.join(parent, f'{stem}_extracted')
+    return os.path.join(parent, f"{stem}_extracted")
 
 
 # ── Tar extraction ────────────────────────────────────────────────────
+
 
 def _extract_tar(archive_path: str, dest_dir: str, mode: str) -> int:
     """Extract a tar archive. Returns count of extracted files."""
@@ -126,13 +127,13 @@ def _extract_tar(archive_path: str, dest_dir: str, mode: str) -> int:
     # Python 3.12+ has filter='data'; older versions need manual check
     if sys.version_info >= (3, 12):
         with tarfile.open(archive_path, mode=mode) as tf:
-            tf.extractall(path=dest_dir, filter='data')
+            tf.extractall(path=dest_dir, filter="data")
             count = len(tf.getmembers())
     else:
         with tarfile.open(archive_path, mode=mode) as tf:
             for member in tf.getmembers():
                 # Path traversal check
-                if member.name.startswith('/') or '..' in member.name.split('/'):
+                if member.name.startswith("/") or ".." in member.name.split("/"):
                     print(f"  [WARNING] Skipping unsafe path: {member.name}")
                     continue
                 try:
@@ -146,14 +147,15 @@ def _extract_tar(archive_path: str, dest_dir: str, mode: str) -> int:
 
 # ── Zip extraction ────────────────────────────────────────────────────
 
+
 def _extract_zip(archive_path: str, dest_dir: str) -> int:
     """Extract a zip archive. Returns count of extracted files."""
     os.makedirs(dest_dir, exist_ok=True)
     count = 0
-    with zipfile.ZipFile(archive_path, 'r') as zf:
+    with zipfile.ZipFile(archive_path, "r") as zf:
         for member in zf.infolist():
             # Path traversal check
-            if member.filename.startswith('/') or '..' in member.filename.split('/'):
+            if member.filename.startswith("/") or ".." in member.filename.split("/"):
                 print(f"  [WARNING] Skipping unsafe path: {member.filename}")
                 continue
             try:
@@ -166,18 +168,19 @@ def _extract_zip(archive_path: str, dest_dir: str) -> int:
 
 # ── Single-file gzip / bzip2 ──────────────────────────────────────────
 
+
 def _extract_gzip_single(archive_path: str, dest_dir: str) -> int:
     """Decompress a single .gz file into dest_dir (without .gz suffix)."""
     os.makedirs(dest_dir, exist_ok=True)
     basename = os.path.basename(archive_path)
-    if basename.lower().endswith('.gz'):
+    if basename.lower().endswith(".gz"):
         out_name = basename[:-3]
     else:
-        out_name = basename + '.decompressed'
+        out_name = basename + ".decompressed"
     out_path = os.path.join(dest_dir, out_name)
     try:
-        with gzip.open(archive_path, 'rb') as f_in:
-            with open(out_path, 'wb') as f_out:
+        with gzip.open(archive_path, "rb") as f_in:
+            with open(out_path, "wb") as f_out:
                 shutil.copyfileobj(f_in, f_out)
     except gzip.BadGzipFile as e:
         raise ValueError(f"Not a valid gzip file: {archive_path}") from e
@@ -188,14 +191,14 @@ def _extract_bzip2_single(archive_path: str, dest_dir: str) -> int:
     """Decompress a single .bz2 file into dest_dir (without .bz2 suffix)."""
     os.makedirs(dest_dir, exist_ok=True)
     basename = os.path.basename(archive_path)
-    if basename.lower().endswith('.bz2'):
+    if basename.lower().endswith(".bz2"):
         out_name = basename[:-4]
     else:
-        out_name = basename + '.decompressed'
+        out_name = basename + ".decompressed"
     out_path = os.path.join(dest_dir, out_name)
     try:
-        with bz2.open(archive_path, 'rb') as f_in:
-            with open(out_path, 'wb') as f_out:
+        with bz2.open(archive_path, "rb") as f_in:
+            with open(out_path, "wb") as f_out:
                 shutil.copyfileobj(f_in, f_out)
     except Exception as e:
         raise ValueError(f"Not a valid bzip2 file: {archive_path}") from e
@@ -205,16 +208,16 @@ def _extract_bzip2_single(archive_path: str, dest_dir: str) -> int:
 # ── Main extraction dispatcher ────────────────────────────────────────
 
 EXTRACTION_MODES: dict[str, str] = {
-    'tar.gz':  'r:gz',
-    'tar.bz2': 'r:bz2',
-    'tar.xz':  'r:xz',
-    'tar':     'r',
+    "tar.gz": "r:gz",
+    "tar.bz2": "r:bz2",
+    "tar.xz": "r:xz",
+    "tar": "r",
 }
 
 
-def extract_archive(archive_path: str, fmt: str,
-                    dest_dir: Optional[str] = None,
-                    verbose: bool = False) -> dict:
+def extract_archive(
+    archive_path: str, fmt: str, dest_dir: Optional[str] = None, verbose: bool = False
+) -> dict:
     """Extract a single archive.
 
     Args:
@@ -238,13 +241,13 @@ def extract_archive(archive_path: str, fmt: str,
             print(f"  Skipping (already extracted): {os.path.basename(archive_path)}")
         # Read file_count from sentinel
         sentinel = _sentinel_path(archive_path)
-        with open(sentinel, 'r') as f:
+        with open(sentinel, "r") as f:
             data = json.load(f)
         return {
-            'status': 'skipped',
-            'dest_dir': os.path.dirname(archive_path) or '.',
-            'file_count': data.get('file_count', 0),
-            'error': None,
+            "status": "skipped",
+            "dest_dir": os.path.dirname(archive_path) or ".",
+            "file_count": data.get("file_count", 0),
+            "error": None,
         }
 
     if verbose:
@@ -254,27 +257,27 @@ def extract_archive(archive_path: str, fmt: str,
         if fmt in EXTRACTION_MODES:
             mode = EXTRACTION_MODES[fmt]
             count = _extract_tar(archive_path, dest_dir, mode)
-        elif fmt == 'zip':
+        elif fmt == "zip":
             count = _extract_zip(archive_path, dest_dir)
-        elif fmt == 'gzip_single':
+        elif fmt == "gzip_single":
             count = _extract_gzip_single(archive_path, dest_dir)
-        elif fmt == 'bzip2_single':
+        elif fmt == "bzip2_single":
             count = _extract_bzip2_single(archive_path, dest_dir)
         else:
             return {
-                'status': 'error',
-                'dest_dir': dest_dir,
-                'file_count': 0,
-                'error': f'Unknown format: {fmt}',
+                "status": "error",
+                "dest_dir": dest_dir,
+                "file_count": 0,
+                "error": f"Unknown format: {fmt}",
             }
 
         _write_sentinel(archive_path, dest_dir, count)
 
         result = {
-            'status': 'extracted',
-            'dest_dir': dest_dir,
-            'file_count': count,
-            'error': None,
+            "status": "extracted",
+            "dest_dir": dest_dir,
+            "file_count": count,
+            "error": None,
         }
         if verbose:
             print(f"    Done: {count} files extracted")
@@ -282,15 +285,14 @@ def extract_archive(archive_path: str, fmt: str,
 
     except Exception as e:
         return {
-            'status': 'error',
-            'dest_dir': dest_dir,
-            'file_count': 0,
-            'error': str(e),
+            "status": "error",
+            "dest_dir": dest_dir,
+            "file_count": 0,
+            "error": str(e),
         }
 
 
-def extract_all_archives(archive_list: list[tuple[str, str]],
-                         verbose: bool = False) -> list[dict]:
+def extract_all_archives(archive_list: list[tuple[str, str]], verbose: bool = False) -> list[dict]:
     """Extract all archives in *archive_list*.
 
     Args:
@@ -317,10 +319,9 @@ def collect_file_tree(root_dir: str) -> list[str]:
     all_files = []
     for dirpath, dirnames, filenames in os.walk(root_dir):
         # Exclude hidden directories and extraction directories
-        dirnames[:] = [d for d in dirnames
-                       if not d.startswith('.')]
+        dirnames[:] = [d for d in dirnames if not d.startswith(".")]
         for fname in filenames:
-            if fname.startswith('.') or fname.startswith('.extracted_'):
+            if fname.startswith(".") or fname.startswith(".extracted_"):
                 continue
             all_files.append(os.path.join(dirpath, fname))
     return all_files

@@ -14,34 +14,36 @@ and return classification results. No side effects. No I/O beyond what
 the caller provides.
 """
 
+import logging
 import os
 import re
-from collections import defaultdict
-from typing import Optional
 import statistics
+from collections import defaultdict
+from typing import Dict, Optional
+
 import pandas as pd
-import logging
+
 log = logging.getLogger(__name__)
 
 # ── Archive format patterns ─────────────────────────────────────────
 # Ordered so that compound extensions match before their components
 # (e.g. .tar.gz before .gz alone).
 ARCHIVE_PATTERNS = [
-    (re.compile(r'\.tar\.gz$',  re.IGNORECASE), 'tar.gz'),
-    (re.compile(r'\.tgz$',      re.IGNORECASE), 'tar.gz'),
-    (re.compile(r'\.tar\.bz2$', re.IGNORECASE), 'tar.bz2'),
-    (re.compile(r'\.tar\.xz$',  re.IGNORECASE), 'tar.xz'),
-    (re.compile(r'\.tar$',      re.IGNORECASE), 'tar'),
-    (re.compile(r'\.zip$',      re.IGNORECASE), 'zip'),
-    (re.compile(r'\.gz$',       re.IGNORECASE), 'gzip_single'),
-    (re.compile(r'\.bz2$',      re.IGNORECASE), 'bzip2_single'),
+    (re.compile(r"\.tar\.gz$", re.IGNORECASE), "tar.gz"),
+    (re.compile(r"\.tgz$", re.IGNORECASE), "tar.gz"),
+    (re.compile(r"\.tar\.bz2$", re.IGNORECASE), "tar.bz2"),
+    (re.compile(r"\.tar\.xz$", re.IGNORECASE), "tar.xz"),
+    (re.compile(r"\.tar$", re.IGNORECASE), "tar"),
+    (re.compile(r"\.zip$", re.IGNORECASE), "zip"),
+    (re.compile(r"\.gz$", re.IGNORECASE), "gzip_single"),
+    (re.compile(r"\.bz2$", re.IGNORECASE), "bzip2_single"),
 ]
 
 # ── Unsupported format patterns (cannot handle with stdlib) ─────────
 UNSUPPORTED_PATTERNS = [
-    re.compile(r'\.7z$',   re.IGNORECASE),
-    re.compile(r'\.rar$',  re.IGNORECASE),
-    re.compile(r'\.tar\.Z$', re.IGNORECASE),
+    re.compile(r"\.7z$", re.IGNORECASE),
+    re.compile(r"\.rar$", re.IGNORECASE),
+    re.compile(r"\.tar\.Z$", re.IGNORECASE),
 ]
 
 # ── 10X MTX directory co-occurrence set ─────────────────────────────
@@ -49,81 +51,94 @@ UNSUPPORTED_PATTERNS = [
 # We check whether basenames *end with* any of these patterns (handles
 # prefixed filenames like "<GEO_ID>_retina_aggr_10_matrix.mtx.gz").
 TENX_MTX_SUFFIXES = [
-    '_matrix.mtx.gz', '_matrix.mtx',
-    '_counts.mtx.gz', '_counts.mtx',
-    '_barcodes.tsv.gz', '_barcodes.tsv', '_barcodes.csv.gz', '_barcodes.csv',
-    '_features.tsv.gz', '_features.tsv', '_features.csv.gz', '_features.csv',
-    '_genes.tsv.gz', '_genes.tsv', '_genes.csv.gz', '_genes.csv',
-    '_gene_names.txt.gz', '_gene_names.txt',
-    '_sample_annotations.tsv.gz', '_sample_annotations.txt.gz',
+    "_matrix.mtx.gz",
+    "_matrix.mtx",
+    "_counts.mtx.gz",
+    "_counts.mtx",
+    "_barcodes.tsv.gz",
+    "_barcodes.tsv",
+    "_barcodes.csv.gz",
+    "_barcodes.csv",
+    "_features.tsv.gz",
+    "_features.tsv",
+    "_features.csv.gz",
+    "_features.csv",
+    "_genes.tsv.gz",
+    "_genes.tsv",
+    "_genes.csv.gz",
+    "_genes.csv",
+    "_gene_names.txt.gz",
+    "_gene_names.txt",
+    "_sample_annotations.tsv.gz",
+    "_sample_annotations.txt.gz",
 ]
 TENX_MTX_MIN_MATCH = 2
 
 # ── TSV-based count matrix identifiers ───────────────────────────────
 # Datasets where each GSM sample is a single cell-by-gene TSV/CSV file.
-CSV_MATRIX_EXTENSIONS = {'.csv', '.csv.gz', '.tsv', '.tsv.gz', '.txt', '.txt.gz'}
+CSV_MATRIX_EXTENSIONS = {".csv", ".csv.gz", ".tsv", ".tsv.gz", ".txt", ".txt.gz"}
 
 # ── 10X H5 identifiers ──────────────────────────────────────────────
 # Directory-level patterns: any file whose basename *ends with* one of
 # these substrings signals 10X HDF5 format.
-TENX_H5_SUFFIXES = ['_filtered_feature_bc_matrix.h5', '_raw_feature_bc_matrix.h5']
+TENX_H5_SUFFIXES = ["_filtered_feature_bc_matrix.h5", "_raw_feature_bc_matrix.h5"]
 
 # ── 10X ATAC peak identifiers ───────────────────────────────────────
-TENX_PEAK_SUFFIXES = ['_filtered_peak_bc_matrix.h5']
-TENX_PEAK_FILES = {'peaks.bed', 'singlecell.csv'}
+TENX_PEAK_SUFFIXES = ["_filtered_peak_bc_matrix.h5"]
+TENX_PEAK_FILES = {"peaks.bed", "singlecell.csv"}
 TENX_PEAK_MIN_MATCH = 2
 
 # ── ATAC fragment identifiers ───────────────────────────────────────
-FRAGMENT_SUFFIXES = ['_fragments.tsv.gz', '_fragments.tsv']
+FRAGMENT_SUFFIXES = ["_fragments.tsv.gz", "_fragments.tsv"]
 
 # ── Known suffixes for stripping when deriving sample names ─────────
 KNOWN_SUFFIXES = [
-    '_filtered_feature_bc_matrix.h5',
-    '_raw_feature_bc_matrix.h5',
-    '_filtered_peak_bc_matrix.h5',
-    '_fragments.tsv.gz',
-    '_fragments.tsv',
-    '_counts.csv.gz',
-    '_counts.csv',
-    '_count_mat.csv.gz',
-    '_TPM.csv.gz',
-    '_atac_fragments.tsv.gz',
-    '_barcodes.tsv.gz',
-    '_barcodes.tsv',
-    '_features.tsv.gz',
-    '_features.tsv',
-    '_genes.tsv.gz',
-    '_genes.tsv',
-    '_matrix.mtx.gz',
-    '_matrix.mtx',
-    '_metadata.csv',
-    '_metadata.csv.gz',
-    '_barcodes.csv',
-    '_barcodes.csv.gz',
-    '_series_matrix.txt.gz',
-    '_series_matrix.txt',
+    "_filtered_feature_bc_matrix.h5",
+    "_raw_feature_bc_matrix.h5",
+    "_filtered_peak_bc_matrix.h5",
+    "_fragments.tsv.gz",
+    "_fragments.tsv",
+    "_counts.csv.gz",
+    "_counts.csv",
+    "_count_mat.csv.gz",
+    "_TPM.csv.gz",
+    "_atac_fragments.tsv.gz",
+    "_barcodes.tsv.gz",
+    "_barcodes.tsv",
+    "_features.tsv.gz",
+    "_features.tsv",
+    "_genes.tsv.gz",
+    "_genes.tsv",
+    "_matrix.mtx.gz",
+    "_matrix.mtx",
+    "_metadata.csv",
+    "_metadata.csv.gz",
+    "_barcodes.csv",
+    "_barcodes.csv.gz",
+    "_series_matrix.txt.gz",
+    "_series_matrix.txt",
 ]
 
 # ── GEO-specific patterns ───────────────────────────────────────────
-GEO_SERIES_MATRIX_RE = re.compile(r'GSE\d+_series_matrix', re.IGNORECASE)
-GSE_DIR_RE = re.compile(r'^GSE\d+$')
+GEO_SERIES_MATRIX_RE = re.compile(r"GSE\d+_series_matrix", re.IGNORECASE)
+GSE_DIR_RE = re.compile(r"^GSE\d+$")
 
 # ── Species keyword hints in filenames ──────────────────────────────
 SPECIES_KEYWORDS = [
-    (['human', 'homo_sapiens', 'Hs_', 'GRCh38', 'hg38', 'hgnc'], 'homo_sapiens'),
-    (['mouse', 'mus_musculus', 'Mm_', 'GRCm38', 'GRCm39', 'mm10', 'mgi'], 'mus_musculus'),
-    (['rat', 'rattus'], 'rattus_norvegicus'),
-    (['zebrafish', 'danio', 'DRerio'], 'danio_rerio'),
-    (['cow', 'bos_taurus', 'cattle'], 'bos_taurus'),
-    (['pig', 'sus_scrofa'], 'sus_scrofa'),
-    (['macaque', 'rhesus', 'macaca'], 'macaca_mulatta'),
-    (['marmoset', 'callithrix'], 'callithrix_jacchus'),
-    (['ferret', 'mustela'], 'mustela_putorius_furo'),
-    (['sheep', 'ovis_aries'], 'ovis_aries'),
-    (['chicken', 'gallus'], 'gallus_gallus'),
-    (['xenopus', 'tropicalis'], 'xenopus_tropicalis'),
-    (['drosophila', 'melanogaster', 'dm6'], 'drosophila_melanogaster'),
-    (['c_elegans', 'elegans', 'ce11', 'WBcel'], 'caenorhabditis_elegans'),
+    (["human", "homo_sapiens", "Hs_", "GRCh38", "hg38", "hgnc"], "homo_sapiens"),
+    (["mouse", "mus_musculus", "Mm_", "GRCm38", "GRCm39", "mm10", "mgi"], "mus_musculus"),
+    (["rat", "rattus"], "rattus_norvegicus"),
+    (["zebrafish", "danio", "DRerio"], "danio_rerio"),
+    (["cow", "bos_taurus", "cattle"], "bos_taurus"),
+    (["pig", "sus_scrofa"], "sus_scrofa"),
+    (["macaque", "rhesus", "macaca"], "macaca_mulatta"),
+    (["marmoset", "callithrix"], "callithrix_jacchus"),
+    (["ferret", "mustela"], "mustela_putorius_furo"),
+    (["sheep", "ovis_aries"], "ovis_aries"),
+    (["chicken", "gallus"], "gallus_gallus"),
+    (["xenopus", "tropicalis"], "xenopus_tropicalis"),
+    (["drosophila", "melanogaster", "dm6"], "drosophila_melanogaster"),
+    (["c_elegans", "elegans", "ce11", "WBcel"], "caenorhabditis_elegans"),
 ]
 
 
@@ -131,10 +146,20 @@ SPECIES_KEYWORDS = [
 # These are pipeline-readable compressed data files, not general-purpose
 # archives to extract.  Exclude them from the 'gzip_single' archive category.
 _GZ_DATA_SUFFIXES = {
-    '.mtx.gz', '.tsv.gz', '.csv.gz', '.txt.gz', '.bed.gz', '.narrowPeak.gz',
-    '.broadPeak.gz', '.gff.gz', '.gtf.gz', '.fastq.gz', '.fq.gz',
-    '.tbi.gz', '.h5.gz',
-    '.bam.gz',  # questionable but encountered
+    ".mtx.gz",
+    ".tsv.gz",
+    ".csv.gz",
+    ".txt.gz",
+    ".bed.gz",
+    ".narrowPeak.gz",
+    ".broadPeak.gz",
+    ".gff.gz",
+    ".gtf.gz",
+    ".fastq.gz",
+    ".fq.gz",
+    ".tbi.gz",
+    ".h5.gz",
+    ".bam.gz",  # questionable but encountered
 }
 
 
@@ -149,7 +174,7 @@ def is_archive(filepath: str) -> Optional[str]:
     for pattern, fmt in ARCHIVE_PATTERNS:
         if pattern.search(basename):
             # Exclude gzip-compressed data files from archive classification
-            if fmt == 'gzip_single':
+            if fmt == "gzip_single":
                 basename_lower = basename.lower()
                 for data_sfx in _GZ_DATA_SUFFIXES:
                     if basename_lower.endswith(data_sfx):
@@ -199,9 +224,9 @@ def detect_10x_peak_directory(dir_files: list[str]) -> bool:
     """Return True if *dir_files* contain 10X ATAC peak markers."""
     basenames = {os.path.basename(f) for f in dir_files}
     # Check suffixed peak H5 files
-    peak_h5_hits = sum(1 for b in basenames
-                       for sfx in TENX_PEAK_SUFFIXES
-                       if b.lower().endswith(sfx.lower()))
+    peak_h5_hits = sum(
+        1 for b in basenames for sfx in TENX_PEAK_SUFFIXES if b.lower().endswith(sfx.lower())
+    )
     other_hits = len(basenames & TENX_PEAK_FILES)
     return (peak_h5_hits + other_hits) >= TENX_PEAK_MIN_MATCH
 
@@ -232,9 +257,10 @@ def _sniff_preprocessed_columns(filepath: str, n_rows: int = 100) -> Optional[in
     if not text:
         return None
     import io
+
     try:
         df = None
-        for sep_char in ('\t', ','):
+        for sep_char in ("\t", ","):
             df = pd.read_csv(io.StringIO(text), sep=sep_char)
             if df.shape[1] > 1:
                 break
@@ -249,12 +275,12 @@ def _sniff_preprocessed_columns(filepath: str, n_rows: int = 100) -> Optional[in
     # Classify each column: metadata (M) or expression (E)
     classifications = []
     for col in df.columns:
-        numeric = pd.to_numeric(df[col], errors='coerce')
+        numeric = pd.to_numeric(df[col], errors="coerce")
         numeric_ratio = numeric.notna().sum() / n_sample
 
         if numeric_ratio < 0.5:
             # Mostly non-numeric → metadata
-            classifications.append('M')
+            classifications.append("M")
         else:
             # Numeric column: check if it might be integer-encoded metadata
             non_na = numeric.dropna()
@@ -268,32 +294,31 @@ def _sniff_preprocessed_columns(filepath: str, n_rows: int = 100) -> Optional[in
 
             if is_small_int:
                 # Integer-coded categorical metadata (e.g. cluster labels)
-                classifications.append('M')
+                classifications.append("M")
             else:
                 unique_ratio = numeric.nunique() / n_sample
                 if unique_ratio < 0.5:
                     # Low cardinality numeric → categorical metadata
-                    classifications.append('M')
+                    classifications.append("M")
                 else:
                     # High cardinality numeric → expression
-                    classifications.append('E')
+                    classifications.append("E")
     # Find boundary: first column classified as expression
-    first_E = None
+    first_e = None
     for i, c in enumerate(classifications):
-        if c == 'E':
-            first_E = i
+        if c == "E":
+            first_e = i
             break
 
-    if first_E is None or first_E == 0:
+    if first_e is None or first_e == 0:
         # No metadata or first col already expression
         return None
 
     # Need at least 2 expression columns
-    if len(classifications) - first_E < 2:
+    if len(classifications) - first_e < 2:
         return None
 
-    return first_E
-
+    return first_e
 
 
 def is_geo_series_matrix(filepath: str) -> bool:
@@ -326,18 +351,18 @@ def classify_files_by_format(file_list: list[str]) -> dict:
         }
     """
     result = {
-        'archives': [],
-        'unsupported': [],
-        'tenx_mtx_dirs': defaultdict(list),
-        'tenx_h5_dirs': defaultdict(list),
-        'tenx_peak_dirs': defaultdict(list),
-        'fragment_dirs': defaultdict(list),
-        'h5ad_files': [],
-        'csv_files': [],
-        'preprocessed_dirs': defaultdict(list),
-        'series_matrix_files': [],
-        'metadata_files': [],
-        'unmatched': [],
+        "archives": [],
+        "unsupported": [],
+        "tenx_mtx_dirs": defaultdict(list),
+        "tenx_h5_dirs": defaultdict(list),
+        "tenx_peak_dirs": defaultdict(list),
+        "fragment_dirs": defaultdict(list),
+        "h5ad_files": [],
+        "csv_files": [],
+        "preprocessed_dirs": defaultdict(list),
+        "series_matrix_files": [],
+        "metadata_files": [],
+        "unmatched": [],
     }
 
     # First pass: identify archives and unsupported files
@@ -345,32 +370,32 @@ def classify_files_by_format(file_list: list[str]) -> dict:
     for f in file_list:
         arc_fmt = is_archive(f)
         if arc_fmt:
-            result['archives'].append((f, arc_fmt))
+            result["archives"].append((f, arc_fmt))
             continue
         unsup = is_unsupported(f)
         if unsup:
-            result['unsupported'].append(f)
+            result["unsupported"].append(f)
             continue
         non_archive_files.append(f)
 
     # Second pass: group by directory for co-occurrence detection
     dir_groups = defaultdict(list)
     for f in non_archive_files:
-        d = os.path.dirname(f) or '.'
+        d = os.path.dirname(f) or "."
         dir_groups[d].append(f)
 
     for dirpath, files in dir_groups.items():
         if detect_10x_mtx_directory(files):
-            result['tenx_mtx_dirs'][dirpath].extend(files)
+            result["tenx_mtx_dirs"][dirpath].extend(files)
             continue
         if detect_10x_h5_directory(files):
-            result['tenx_h5_dirs'][dirpath].extend(files)
+            result["tenx_h5_dirs"][dirpath].extend(files)
             continue
         if detect_10x_peak_directory(files):
-            result['tenx_peak_dirs'][dirpath].extend(files)
+            result["tenx_peak_dirs"][dirpath].extend(files)
             continue
         if detect_fragment_file(files):
-            result['fragment_dirs'][dirpath].extend(files)
+            result["fragment_dirs"][dirpath].extend(files)
             continue
     # Third pass: directory-level csv_matrix detection — if >=3 files in a dir
     # are unused .tsv.gz / .csv.gz / .txt.gz files that are NOT archives and NOT
@@ -383,73 +408,104 @@ def classify_files_by_format(file_list: list[str]) -> dict:
         for f in files:
             b = os.path.basename(f).lower()
             ext_match = any(
-                b.endswith(ext) for ext in ('.csv', '.csv.gz', '.tsv', '.tsv.gz', '.txt', '.txt.gz')
+                b.endswith(ext)
+                for ext in (".csv", ".csv.gz", ".tsv", ".tsv.gz", ".txt", ".txt.gz")
             )
             if not ext_match:
                 continue
             # Exclude known metadata/files already classified
-            if detect_10x_mtx_directory([f]) or detect_10x_h5_directory([f]) or detect_fragment_file([f]):
+            if (
+                detect_10x_mtx_directory([f])
+                or detect_10x_h5_directory([f])
+                or detect_fragment_file([f])
+            ):
                 continue
             if is_archive(f) or is_unsupported(f):
                 continue
             candidates.append(f)
         if len(candidates) >= 3:
-            result['csv_files'].extend(candidates)
+            result["csv_files"].extend(candidates)
             continue
         # If not enough for csv_matrix, try preprocessed detection
         # (embedded metadata columns sniffed from file content)
         if len(candidates) >= 1:
             sniffed = _sniff_preprocessed_columns(candidates[0])
             if sniffed is not None and sniffed >= 1:
-                log.debug("Detected preprocessed format in %s (%d meta cols)",
-                           dirpath, sniffed)
-                result['preprocessed_dirs'][dirpath] = candidates
+                log.debug("Detected preprocessed format in %s (%d meta cols)", dirpath, sniffed)
+                result["preprocessed_dirs"][dirpath] = candidates
                 continue
 
         # Classify remaining files individually
 
     # Convert defaultdicts to plain dicts
-    for key in ('tenx_mtx_dirs', 'tenx_h5_dirs', 'tenx_peak_dirs', 'fragment_dirs', 'preprocessed_dirs'):
+    for key in (
+        "tenx_mtx_dirs",
+        "tenx_h5_dirs",
+        "tenx_peak_dirs",
+        "fragment_dirs",
+        "preprocessed_dirs",
+    ):
         result[key] = dict(result[key])
 
     return result
 
 
-def _classify_single_file(filepath: str, result: dict, dirpath: str = '') -> None:
+def _classify_single_file(filepath: str, result: dict, dirpath: str = "") -> None:
     """Classify a single file that wasn't part of a directory-level pattern."""
     basename = os.path.basename(filepath).lower()
 
-    if basename.endswith('.h5ad'):
-        result['h5ad_files'].append(filepath)
-    elif basename.endswith('.csv') or basename.endswith('.csv.gz') or basename.endswith('.tsv') or basename.endswith('.tsv.gz') or basename.endswith('.txt') or basename.endswith('.txt.gz'):
+    if basename.endswith(".h5ad"):
+        result["h5ad_files"].append(filepath)
+    elif (
+        basename.endswith(".csv")
+        or basename.endswith(".csv.gz")
+        or basename.endswith(".tsv")
+        or basename.endswith(".tsv.gz")
+        or basename.endswith(".txt")
+        or basename.endswith(".txt.gz")
+    ):
         # Special: if it's the ONLY file-like material in the dir + looks
         # like count data, classify as csv_matrix rather than metadata.
-        if 'metadata' in basename or 'barcodes' in basename or 'meta' in basename or 'sample_annotation' in basename:
-            result['metadata_files'].append(filepath)
+        if (
+            "metadata" in basename
+            or "barcodes" in basename
+            or "meta" in basename
+            or "sample_annotation" in basename
+        ):
+            result["metadata_files"].append(filepath)
         elif is_geo_series_matrix(filepath):
-            result['series_matrix_files'].append(filepath)
-        elif 'count' in basename or 'tpm' in basename or 'expr' in basename or 'matrix' in basename or 'gene' in basename:
-            result['csv_files'].append(filepath)
-        elif basename.endswith('.txt.gz') and ('barcode' in basename or 'raw' in basename):
-            result['metadata_files'].append(filepath)
+            result["series_matrix_files"].append(filepath)
+        elif (
+            "count" in basename
+            or "tpm" in basename
+            or "expr" in basename
+            or "matrix" in basename
+            or "gene" in basename
+        ):
+            result["csv_files"].append(filepath)
+        elif basename.endswith(".txt.gz") and ("barcode" in basename or "raw" in basename):
+            result["metadata_files"].append(filepath)
         else:
-            result['metadata_files'].append(filepath)
+            result["metadata_files"].append(filepath)
     elif is_geo_series_matrix(filepath):
-        result['series_matrix_files'].append(filepath)
-    elif basename.endswith('.h5') and not basename.endswith('.h5ad'):
+        result["series_matrix_files"].append(filepath)
+    elif basename.endswith(".h5") and not basename.endswith(".h5ad"):
         # Check if it's a 10X H5 file with a sample prefix
         if _basename_ends_with_any(basename, TENX_H5_SUFFIXES):
-            d = os.path.dirname(filepath) or '.'
-            result['tenx_h5_dirs'].setdefault(d, []).append(filepath)
+            d = os.path.dirname(filepath) or "."
+            result["tenx_h5_dirs"].setdefault(d, []).append(filepath)
         else:
-            result['unmatched'].append(filepath)
-    elif basename.endswith('.bed') or basename.endswith('.bed.gz'):
-        result['metadata_files'].append(filepath)
-    elif basename.endswith('.gz') and not any(basename.endswith(s) for s in ('.csv.gz', '.tsv.gz', '.txt.gz', '.bed.gz', '.mtx.gz', '.tbi.gz', '.h5.gz')):
+            result["unmatched"].append(filepath)
+    elif basename.endswith(".bed") or basename.endswith(".bed.gz"):
+        result["metadata_files"].append(filepath)
+    elif basename.endswith(".gz") and not any(
+        basename.endswith(s)
+        for s in (".csv.gz", ".tsv.gz", ".txt.gz", ".bed.gz", ".mtx.gz", ".tbi.gz", ".h5.gz")
+    ):
         # gzip file with unknown content — could be a fragment file backup etc.
-        result['unmatched'].append(filepath)
+        result["unmatched"].append(filepath)
     else:
-        result['unmatched'].append(filepath)
+        result["unmatched"].append(filepath)
 
 
 def strip_known_suffix(filename: str) -> str:
@@ -459,17 +515,17 @@ def strip_known_suffix(filename: str) -> str:
     """
     for suffix in KNOWN_SUFFIXES:
         if filename.lower().endswith(suffix.lower()):
-            return filename[:-len(suffix)]
+            return filename[: -len(suffix)]
     # Also try stripping .gz and re-checking
-    if filename.lower().endswith('.gz'):
+    if filename.lower().endswith(".gz"):
         inner = filename[:-3]
         for suffix in KNOWN_SUFFIXES:
             if inner.lower().endswith(suffix.lower()):
-                return inner[:-len(suffix)]
+                return inner[: -len(suffix)]
     # Strip common extensions
-    for ext in ('.csv', '.tsv', '.txt', '.gz', '.h5', '.h5ad', '.mtx', '.bed'):
+    for ext in (".csv", ".tsv", ".txt", ".gz", ".h5", ".h5ad", ".mtx", ".bed"):
         if filename.lower().endswith(ext):
-            return filename[:-len(ext)]
+            return filename[: -len(ext)]
     return filename
 
 
@@ -534,12 +590,12 @@ def group_files_by_sample(file_list: list[str]) -> dict[str, list[str]]:
         else:
             basenames_stripped = [strip_known_suffix(os.path.basename(f)) for f in files]
             common = os.path.commonprefix(basenames_stripped)
-            common = common.rstrip('_.- ')
+            common = common.rstrip("_.- ")
             if common and len(common) >= 3:
                 samples.setdefault(common, []).extend(files)
             else:
                 # Use directory name as group id
-                dir_key = os.path.basename(dirname.rstrip('/\\')) or dirname
+                dir_key = os.path.basename(dirname.rstrip("/\\")) or dirname
                 samples.setdefault(dir_key, []).extend(files)
 
     return dict(samples)
@@ -562,53 +618,54 @@ def _scan_file_head(filepath: str, n_lines: int = 200) -> str:
     Returns '' silently on any error (bad gzip, binary content, etc.).
     """
     import gzip as _gzip
+
     try:
-        if filepath.lower().endswith('.gz'):
-            with _gzip.open(filepath, 'rt', encoding='utf-8', errors='replace') as fh:
+        if filepath.lower().endswith(".gz"):
+            with _gzip.open(filepath, "rt", encoding="utf-8", errors="replace") as fh:
                 lines = []
                 for i, line in enumerate(fh):
                     if i >= n_lines:
                         break
                     lines.append(line)
-                return '\n'.join(lines)
+                return "\n".join(lines)
         else:
-            with open(filepath, 'r', encoding='utf-8', errors='replace') as fh:
+            with open(filepath, "r", encoding="utf-8", errors="replace") as fh:
                 lines = []
                 for i, line in enumerate(fh):
                     if i >= n_lines:
                         break
                     lines.append(line)
-                return '\n'.join(lines)
+                return "\n".join(lines)
     except Exception:
-        return ''
+        return ""
 
 
 def _sniff_species_from_text(text: str) -> Optional[str]:
     """Scan free text for known species names (common name / Latin binomial)."""
     import re as _re
+
     lower = text.lower()
-    _BINOMIAL_MAP: list[tuple[_re.Pattern, str]] = [
-        (_re.compile(r'homo\s+sapiens', _re.IGNORECASE), 'homo_sapiens'),
-        (_re.compile(r'mus\s+musculus', _re.IGNORECASE), 'mus_musculus'),
-        (_re.compile(r'rattus\s+norvegicus', _re.IGNORECASE), 'rattus_norvegicus'),
-        (_re.compile(r'danio\s+rerio', _re.IGNORECASE), 'danio_rerio'),
-        (_re.compile(r'bos\s+taurus', _re.IGNORECASE), 'bos_taurus'),
-        (_re.compile(r'sus\s+scrofa', _re.IGNORECASE), 'sus_scrofa'),
-        (_re.compile(r'macaca\s+mulatta', _re.IGNORECASE), 'macaca_mulatta'),
-        (_re.compile(r'callithrix\s+jacchus', _re.IGNORECASE), 'callithrix_jacchus'),
-        (_re.compile(r'gallus\s+gallus', _re.IGNORECASE), 'gallus_gallus'),
-        (_re.compile(r'drosophila\s+melanogaster', _re.IGNORECASE), 'drosophila_melanogaster'),
-        (_re.compile(r'caenorhabditis\s+elegans', _re.IGNORECASE), 'caenorhabditis_elegans'),
-        (_re.compile(r'xenopus\s+tropicalis', _re.IGNORECASE), 'xenopus_tropicalis'),
+    _binomial_map: list[tuple[_re.Pattern, str]] = [
+        (_re.compile(r"homo\s+sapiens", _re.IGNORECASE), "homo_sapiens"),
+        (_re.compile(r"mus\s+musculus", _re.IGNORECASE), "mus_musculus"),
+        (_re.compile(r"rattus\s+norvegicus", _re.IGNORECASE), "rattus_norvegicus"),
+        (_re.compile(r"danio\s+rerio", _re.IGNORECASE), "danio_rerio"),
+        (_re.compile(r"bos\s+taurus", _re.IGNORECASE), "bos_taurus"),
+        (_re.compile(r"sus\s+scrofa", _re.IGNORECASE), "sus_scrofa"),
+        (_re.compile(r"macaca\s+mulatta", _re.IGNORECASE), "macaca_mulatta"),
+        (_re.compile(r"callithrix\s+jacchus", _re.IGNORECASE), "callithrix_jacchus"),
+        (_re.compile(r"gallus\s+gallus", _re.IGNORECASE), "gallus_gallus"),
+        (_re.compile(r"drosophila\s+melanogaster", _re.IGNORECASE), "drosophila_melanogaster"),
+        (_re.compile(r"caenorhabditis\s+elegans", _re.IGNORECASE), "caenorhabditis_elegans"),
+        (_re.compile(r"xenopus\s+tropicalis", _re.IGNORECASE), "xenopus_tropicalis"),
     ]
-    for pattern, species in _BINOMIAL_MAP:
+    for pattern, species in _binomial_map:
         if pattern.search(lower):
             return species
     return None
 
 
-def guess_species(file_list: list[str],
-                  content_scan: bool = True) -> str:
+def guess_species(file_list: list[str], content_scan: bool = True) -> str:
     """Guess species from filenames AND optionally from file contents.
 
     1.  Filename keyword heuristics (fast, always tried).
@@ -628,22 +685,22 @@ def guess_species(file_list: list[str],
        prefer the normalised form.
     """
     # Layer 1: filename heuristics
-    all_names = ' '.join(os.path.basename(f) for f in file_list).lower()
+    all_names = " ".join(os.path.basename(f) for f in file_list).lower()
     for keywords, species_underscored in SPECIES_KEYWORDS:
         for kw in keywords:
             if kw.lower() in all_names:
                 return _normalise_species(species_underscored)
 
     if not content_scan:
-        return 'unknown'
+        return "unknown"
 
     # Layer 2: content scan (metadata / series matrix files)
     for fpath in file_list:
         bn = os.path.basename(fpath).lower()
-        if not (bn.endswith(('.csv', '.tsv', '.txt', '.csv.gz', '.tsv.gz', '.txt.gz'))):
+        if not (bn.endswith((".csv", ".tsv", ".txt", ".csv.gz", ".tsv.gz", ".txt.gz"))):
             continue
         # Skip pure barcode-only files (very unlikely to carry species info)
-        if bn.endswith(('.mtx', '.mtx.gz', '.h5', '.h5ad')):
+        if bn.endswith((".mtx", ".mtx.gz", ".h5", ".h5ad")):
             continue
         text = _scan_file_head(fpath, n_lines=200)
         if not text:
@@ -652,7 +709,7 @@ def guess_species(file_list: list[str],
         if species:
             return _normalise_species(species)
 
-    return 'unknown'
+    return "unknown"
 
 
 # ── Species name normalisation ──────────────────────────────────────
@@ -662,67 +719,65 @@ def guess_species(file_list: list[str],
 # _SPECIES_SYNONYMS in rna/utils/marker_scoring.py.
 _SPECIES_NORMALISE: Dict[str, str] = {
     # Human
-    "homo_sapiens":    "human",
-    "Homo sapiens":    "human",
+    "homo_sapiens": "human",
+    "Homo sapiens": "human",
     # Mouse
-    "mus_musculus":    "mouse",
-    "Mus musculus":    "mouse",
+    "mus_musculus": "mouse",
+    "Mus musculus": "mouse",
     # Rat
-    "rattus_norvegicus":     "rat",
-    "Rattus norvegicus":     "rat",
+    "rattus_norvegicus": "rat",
+    "Rattus norvegicus": "rat",
     # Zebrafish
-    "danio_rerio":     "zebrafish",
-    "Danio rerio":     "zebrafish",
+    "danio_rerio": "zebrafish",
+    "Danio rerio": "zebrafish",
     # Cow
-    "bos_taurus":      "cow",
-    "Bos taurus":      "cow",
+    "bos_taurus": "cow",
+    "Bos taurus": "cow",
     # Pig
-    "sus_scrofa":      "pig",
-    "Sus scrofa":      "pig",
+    "sus_scrofa": "pig",
+    "Sus scrofa": "pig",
     # Macaque (rhesus)
-    "macaca_mulatta":   "macaque",
-    "Macaca mulatta":   "macaque",
+    "macaca_mulatta": "macaque",
+    "Macaca mulatta": "macaque",
     # Marmoset
-    "callithrix_jacchus":   "marmoset",
-    "Callithrix jacchus":   "marmoset",
+    "callithrix_jacchus": "marmoset",
+    "Callithrix jacchus": "marmoset",
     # Chicken
-    "gallus_gallus":   "chicken",
-    "Gallus gallus":   "chicken",
+    "gallus_gallus": "chicken",
+    "Gallus gallus": "chicken",
     # Fruit fly
-    "drosophila_melanogaster":   "drosophila",
-    "Drosophila melanogaster":   "drosophila",
+    "drosophila_melanogaster": "drosophila",
+    "Drosophila melanogaster": "drosophila",
     # Worm
-    "caenorhabditis_elegans":    "c_elegans",
-    "Caenorhabditis elegans":    "c_elegans",
+    "caenorhabditis_elegans": "c_elegans",
+    "Caenorhabditis elegans": "c_elegans",
     # Frog
-    "xenopus_tropicalis":  "frog",
-    "Xenopus tropicalis":  "frog",
+    "xenopus_tropicalis": "frog",
+    "Xenopus tropicalis": "frog",
     # Macaca fascicularis (cynomolgus) — also maps to macaque
-    "Macaca fascicularis":  "macaque",
+    "Macaca fascicularis": "macaque",
     # Ictidomys tridecemlineatus
-    "Ictidomys tridecemlineatus":  "squirrel",
+    "Ictidomys tridecemlineatus": "squirrel",
     # Anolis sagrei
-    "Anolis sagrei":  "lizard",
+    "Anolis sagrei": "lizard",
     # Monodelphis domestica
-    "Monodelphis domestica":  "opossum",
+    "Monodelphis domestica": "opossum",
     # Didelphis marsupialis
-    "Didelphis marsupialis":  "opossum",
+    "Didelphis marsupialis": "opossum",
     # Tupaia chinensis
-    "Tupaia chinensis":  "tree_shrew",
+    "Tupaia chinensis": "tree_shrew",
     # Tupaia belangeri
-    "Tupaia belangeri":  "tree_shrew",
-    # Callithrix jacchus (already normalised above; just in case)
-    "Callithrix jacchus":  "marmoset",
+    "Tupaia belangeri": "tree_shrew",
     # Mustela putorius furo
-    "Mustela putorius furo":  "ferret",
+    "Mustela putorius furo": "ferret",
     # Ovis aries
-    "Ovis aries":  "sheep",
+    "Ovis aries": "sheep",
     # Peromyscus maniculatus
-    "Peromyscus maniculatus":  "peromyscus",
+    "Peromyscus maniculatus": "peromyscus",
     # Rhabdomys pumilio
-    "Rhabdomys pumilio":  "rhabdomys",
+    "Rhabdomys pumilio": "rhabdomys",
     # Petromyzon marinus
-    "Petromyzon marinus":  "lamprey",
+    "Petromyzon marinus": "lamprey",
 }
 
 
@@ -742,35 +797,53 @@ def guess_tissue(file_list: list[str]) -> str:
     Returns a tissue name string or 'unknown'.
     """
     known_tissues = [
-        'retina', 'brain', 'liver', 'heart', 'kidney', 'lung',
-        'muscle', 'skin', 'intestine', 'pancreas', 'spleen',
-        'thymus', 'testis', 'ovary', 'bone_marrow', 'blood',
-        'hypothalamus', 'cortex', 'cerebellum', 'hippocampus',
-        'rpe', 'optic_nerve', 'spinal_cord',
+        "retina",
+        "brain",
+        "liver",
+        "heart",
+        "kidney",
+        "lung",
+        "muscle",
+        "skin",
+        "intestine",
+        "pancreas",
+        "spleen",
+        "thymus",
+        "testis",
+        "ovary",
+        "bone_marrow",
+        "blood",
+        "hypothalamus",
+        "cortex",
+        "cerebellum",
+        "hippocampus",
+        "rpe",
+        "optic_nerve",
+        "spinal_cord",
     ]
-    all_names = ' '.join(os.path.basename(f) for f in file_list).lower()
+    all_names = " ".join(os.path.basename(f) for f in file_list).lower()
     for tissue in known_tissues:
         if tissue in all_names:
             return tissue
-    return 'unknown'
+    return "unknown"
 
 
 def guess_genome(species: str) -> str:
     """Return a reference genome identifier for a given species name."""
     _map = {
-        'human':           'hg38',
-        'mouse':           'mm10',
-        'rat':             'rn6',
-        'zebrafish':       'danRer11',
-        'cow':             'bosTau9',
-        'pig':             'susScr11',
-        'macaque':         'rheMac10',
-        'chicken':         'galGal6',
-        'drosophila':      'dm6',
-        'c_elegans':       'ce11',
-        'frog':            'xenTro10',
+        "human": "hg38",
+        "mouse": "mm10",
+        "rat": "rn6",
+        "zebrafish": "danRer11",
+        "cow": "bosTau9",
+        "pig": "susScr11",
+        "macaque": "rheMac10",
+        "chicken": "galGal6",
+        "drosophila": "dm6",
+        "c_elegans": "ce11",
+        "frog": "xenTro10",
     }
-    return _map.get(species, '')
+    return _map.get(species, "")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -780,26 +853,27 @@ def guess_genome(species: str) -> str:
 # Keyword hints in filenames and content to infer whether the data is
 # raw-count or normalised (TPM, FPKM, CPM, log1p).
 _EXPRESSION_KEYWORDS: list[tuple[re.Pattern, str]] = [
-    (re.compile(r'\bTPM\b', re.IGNORECASE), 'TPM'),
-    (re.compile(r'\bFPKM\b', re.IGNORECASE), 'FPKM'),
-    (re.compile(r'\bRPKM\b', re.IGNORECASE), 'FPKM'),          # treat RPKM ≈ FPKM
-    (re.compile(r'\bCPM\b', re.IGNORECASE), 'CPM'),
-    (re.compile(r'\blog1p\b', re.IGNORECASE), 'log1p_counts'),
-    (re.compile(r'\blog2\s*\(?\s*cpm', re.IGNORECASE), 'log1p_counts'),  # log2(cpm+1) ≈ log1p
-    (re.compile(r'\bnormalized\s+counts?\b', re.IGNORECASE), 'log1p_counts'),
+    (re.compile(r"\bTPM\b", re.IGNORECASE), "TPM"),
+    (re.compile(r"\bFPKM\b", re.IGNORECASE), "FPKM"),
+    (re.compile(r"\bRPKM\b", re.IGNORECASE), "FPKM"),  # treat RPKM ≈ FPKM
+    (re.compile(r"\bCPM\b", re.IGNORECASE), "CPM"),
+    (re.compile(r"\blog1p\b", re.IGNORECASE), "log1p_counts"),
+    (re.compile(r"\blog2\s*\(?\s*cpm", re.IGNORECASE), "log1p_counts"),  # log2(cpm+1) ≈ log1p
+    (re.compile(r"\bnormalized\s+counts?\b", re.IGNORECASE), "log1p_counts"),
     # Delimiter-separated variants — match TPM/FPKM/CPM/log1p surrounded by
     # `.` / `_` / start-of-string / end-of-string.
     # Examples: "Merge.TPM.csv", "TPM_normalized.tsv.gz", "expr_TPM_counts"
-    (re.compile(r'(?:[._]|^)TPM(?:[._]|$)', re.IGNORECASE), 'TPM'),
-    (re.compile(r'(?:[._]|^)FPKM(?:[._]|$)', re.IGNORECASE), 'FPKM'),
-    (re.compile(r'(?:[._]|^)RPKM(?:[._]|$)', re.IGNORECASE), 'FPKM'),
-    (re.compile(r'(?:[._]|^)CPM(?:[._]|$)', re.IGNORECASE), 'CPM'),
-    (re.compile(r'(?:[._]|^)log1p(?:[._]|$)', re.IGNORECASE), 'log1p_counts'),
+    (re.compile(r"(?:[._]|^)TPM(?:[._]|$)", re.IGNORECASE), "TPM"),
+    (re.compile(r"(?:[._]|^)FPKM(?:[._]|$)", re.IGNORECASE), "FPKM"),
+    (re.compile(r"(?:[._]|^)RPKM(?:[._]|$)", re.IGNORECASE), "FPKM"),
+    (re.compile(r"(?:[._]|^)CPM(?:[._]|$)", re.IGNORECASE), "CPM"),
+    (re.compile(r"(?:[._]|^)log1p(?:[._]|$)", re.IGNORECASE), "log1p_counts"),
 ]
 
 
-def detect_expression_type(classification: dict, file_list: list[str],
-                           scan_contents: bool = True) -> str:
+def detect_expression_type(
+    classification: dict, file_list: list[str], scan_contents: bool = True
+) -> str:
     """Detect the expression data type for RNA datasets.
 
     Strategy:
@@ -811,25 +885,25 @@ def detect_expression_type(classification: dict, file_list: list[str],
     Returns one of: "raw_counts", "TPM", "FPKM", "CPM", "log1p_counts".
     """
     primary = _detect_primary_format_for_expression(
-        classification.get('tenx_h5_dirs', {}),
-        classification.get('tenx_mtx_dirs', {}),
-        classification.get('csv_files', []),
+        classification.get("tenx_h5_dirs", {}),
+        classification.get("tenx_mtx_dirs", {}),
+        classification.get("csv_files", []),
     )
 
     # ── Layer 0: 10X native formats are always raw_counts ──
-    if primary in ('10X_h5', '10X_mtx'):
-        return 'raw_counts'
+    if primary in ("10X_h5", "10X_mtx"):
+        return "raw_counts"
 
     # ── Layer 1: filenames ──
-    all_basenames = ' '.join(os.path.basename(f) for f in file_list)
+    all_basenames = " ".join(os.path.basename(f) for f in file_list)
     for pattern, exp_type in _EXPRESSION_KEYWORDS:
         if pattern.search(all_basenames):
             return exp_type
 
     # ── Layer 2: content scan — peek into the first candidate matrix file ──
-    if scan_contents and primary == 'csv_matrix':
+    if scan_contents and primary == "csv_matrix":
         # Look at all csv_files (not just the first) for expression keywords
-        for fpath in classification.get('csv_files', [])[:5]:
+        for fpath in classification.get("csv_files", [])[:5]:
             text = _scan_file_head(fpath, n_lines=50)
             if not text:
                 continue
@@ -838,27 +912,28 @@ def detect_expression_type(classification: dict, file_list: list[str],
                     return exp_type
             # Heuristic: if every value in the first data row is integer,
             # it's likely raw counts; if decimal (0.5 / 1e-6 style), likely TPM/CPM
-            lines = text.strip().split('\n')
+            lines = text.strip().split("\n")
             if len(lines) >= 2:
                 vals = _extract_numeric_values(lines[1])
                 if vals and all(v == int(v) for v in vals):
-                    return 'raw_counts'
+                    return "raw_counts"
                 if vals and any(v < 1.0 and v > 0 for v in vals):
                     # Distinguish CPM from TPM using median: CPM values tend
                     # to have a higher central tendency than TPM values.
                     if statistics.median(vals) > 1.0:
-                        return 'CPM'
-                    return 'TPM'  # best guess for small positive floats
+                        return "CPM"
+                    return "TPM"  # best guess for small positive floats
 
     # ── Fallback ──
-    return 'raw_counts'
+    return "raw_counts"
 
 
 def _extract_numeric_values(line: str, max_vals: int = 30) -> list[float]:
     """Extract numeric values from a CSV/TSV line (skipping the first column
     which is usually a gene name)."""
     import re as _re
-    parts = _re.split(r'[,\t]', line)
+
+    parts = _re.split(r"[,\t]", line)
     vals = []
     for p in parts[1:]:  # skip first (gene name)
         try:
@@ -868,13 +943,12 @@ def _extract_numeric_values(line: str, max_vals: int = 30) -> list[float]:
     return vals[:max_vals]
 
 
-def _detect_primary_format_for_expression(tenx_h5: dict, tenx_mtx: dict,
-                                           csv_files: list) -> str:
+def _detect_primary_format_for_expression(tenx_h5: dict, tenx_mtx: dict, csv_files: list) -> str:
     """Minimal duplicate of _detect_primary_format scoped for RNA detection."""
     if tenx_h5:
-        return '10X_h5'
+        return "10X_h5"
     if tenx_mtx:
-        return '10X_mtx'
+        return "10X_mtx"
     if csv_files:
-        return 'csv_matrix'
-    return 'unknown'
+        return "csv_matrix"
+    return "unknown"

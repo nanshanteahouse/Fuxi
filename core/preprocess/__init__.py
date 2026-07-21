@@ -13,8 +13,16 @@ CLI:
     python core/preprocess/preprocessor.py --gse GSE12345
 """
 
-from .preprocessor import run_preprocess, main
-from .metadata_parser import generate_dataset_yaml, _resolve_input_dir
-from .matrix_loader import generate_config, _detect_primary_format, TEMPLATE_MAP
+from .matrix_loader import TEMPLATE_MAP, _detect_primary_format, generate_config
+from .metadata_parser import _resolve_input_dir, generate_dataset_yaml
+from .preprocessor import main, run_preprocess
 
-__all__ = ['run_preprocess', 'main', 'generate_dataset_yaml', 'generate_config']
+__all__ = [
+    "run_preprocess",
+    "main",
+    "generate_dataset_yaml",
+    "generate_config",
+    "TEMPLATE_MAP",
+    "_detect_primary_format",
+    "_resolve_input_dir",
+]

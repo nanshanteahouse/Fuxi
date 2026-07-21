@@ -24,34 +24,34 @@ it requires internet access and adds ~2s latency.  Results from the NCBI
 API are cached for 24 hours in ``~/.fuxi/cache/ncbi_{accession}.json``.
 """
 
-import os
-import re
 import gzip
 import json
+import os
+import re
 import time
 from datetime import datetime, timezone
 from typing import Optional
-from urllib.request import Request, urlopen
 from urllib.error import URLError
-
+from urllib.request import Request, urlopen
 
 # ── Constants ─────────────────────────────────────────────────────────
 
-_GSE_DIR_RE = re.compile(r'^GSE\d+$')
-_GSE_FILE_RE = re.compile(r'(?:^|[\W_]+)(GSE\d+)(?=[\W_]|$)')
+_GSE_DIR_RE = re.compile(r"^GSE\d+$")
+_GSE_FILE_RE = re.compile(r"(?:^|[\W_]+)(GSE\d+)(?=[\W_]|$)")
 _SERIES_RELATION_RE = re.compile(
-    r'!Series_relation\s*=\s*Super[Ss]eries\s+(?:of|is|:)\s*(.*)',
+    r"!Series_relation\s*=\s*Super[Ss]eries\s+(?:of|is|:)\s*(.*)",
     re.IGNORECASE,
 )
 _SERIES_TYPE_RE = re.compile(
-    r'!Series_type\s*=\s*(.*)',
+    r"!Series_type\s*=\s*(.*)",
     re.IGNORECASE,
 )
-_CACHE_DIR = os.path.expanduser('~/.fuxi/cache')
+_CACHE_DIR = os.path.expanduser("~/.fuxi/cache")
 _CACHE_TTL_SECONDS = 86400  # 24 hours
 
 
 # ── Strategy 1: Directory structure ───────────────────────────────────
+
 
 def detect_subseries_dirs(root_dir: str) -> list[str]:
     """Scan *root_dir* for immediate subdirectories named like GEO accessions.
@@ -71,35 +71,36 @@ def detect_subseries_dirs(root_dir: str) -> list[str]:
 
 # ── Strategy 2: Series Matrix parsing ─────────────────────────────────
 
+
 def _read_first_lines(filepath: str, n: int = 500) -> str:
     """Read the first *n* lines of a file (handles .gz transparently).
 
     Returns '' if the file cannot be read or is not valid gzip.
     """
-    if filepath.lower().endswith('.gz'):
+    if filepath.lower().endswith(".gz"):
         try:
-            with gzip.open(filepath, 'rt', encoding='utf-8', errors='replace') as f:
+            with gzip.open(filepath, "rt", encoding="utf-8", errors="replace") as f:
                 lines = []
                 for i, line in enumerate(f):
                     if i >= n:
                         break
                     lines.append(line)
-                return '\n'.join(lines)
+                return "\n".join(lines)
         except (gzip.BadGzipFile, OSError, EOFError):
-            return ''
+            return ""
         except Exception:
-            return ''
+            return ""
     else:
         try:
-            with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
+            with open(filepath, "r", encoding="utf-8", errors="replace") as f:
                 lines = []
                 for i, line in enumerate(f):
                     if i >= n:
                         break
                     lines.append(line)
-                return '\n'.join(lines)
+                return "\n".join(lines)
         except (UnicodeDecodeError, OSError):
-            return ''
+            return ""
 
 
 def parse_series_matrix(filepath: str) -> Optional[dict]:
@@ -118,23 +119,23 @@ def parse_series_matrix(filepath: str) -> Optional[dict]:
     child_accessions: list[str] = []
     series_type: Optional[str] = None
 
-    for line in text.split('\n'):
+    for line in text.split("\n"):
         m = _SERIES_RELATION_RE.search(line)
         if m:
             is_super = True
             # Extract accession IDs from the rest of the line
             rest = m.group(1)
-            child_accessions.extend(re.findall(r'GSE\d+', rest))
+            child_accessions.extend(re.findall(r"GSE\d+", rest))
 
         m2 = _SERIES_TYPE_RE.search(line)
         if m2:
             series_type = m2.group(1).strip().strip('"')
 
-    if is_super or series_type == 'SuperSeries':
+    if is_super or series_type == "SuperSeries":
         return {
-            'is_superseries': True,
-            'series_type': series_type,
-            'child_accessions': child_accessions,
+            "is_superseries": True,
+            "series_type": series_type,
+            "child_accessions": child_accessions,
         }
 
     return None
@@ -150,17 +151,18 @@ def detect_from_series_matrix_files(file_list: list[str]) -> Optional[dict]:
     for f in file_list:
         if is_geo_series_matrix(f):
             result = parse_series_matrix(f)
-            if result and result.get('is_superseries'):
+            if result and result.get("is_superseries"):
                 return result
     return None
 
 
 # ── Strategy 3: NCBI E-utilities API ──────────────────────────────────
 
+
 def _ncbi_cache_path(accession: str) -> str:
     """Return the cache file path for an NCBI API response."""
     os.makedirs(_CACHE_DIR, exist_ok=True)
-    return os.path.join(_CACHE_DIR, f'ncbi_{accession}.json')
+    return os.path.join(_CACHE_DIR, f"ncbi_{accession}.json")
 
 
 def _ncbi_cached(accession: str) -> Optional[dict]:
@@ -169,9 +171,9 @@ def _ncbi_cached(accession: str) -> Optional[dict]:
     if not os.path.exists(cache_path):
         return None
     try:
-        with open(cache_path, 'r') as f:
+        with open(cache_path, "r") as f:
             data = json.load(f)
-        timestamp = data.get('_cached_at', '')
+        timestamp = data.get("_cached_at", "")
         if timestamp:
             cached_time = datetime.fromisoformat(timestamp)
             age = (datetime.now(timezone.utc) - cached_time).total_seconds()
@@ -185,9 +187,9 @@ def _ncbi_cached(accession: str) -> Optional[dict]:
 def _ncbi_save_cache(accession: str, data: dict) -> None:
     """Save an NCBI API response to disk cache."""
     cache_path = _ncbi_cache_path(accession)
-    data['_cached_at'] = datetime.now(timezone.utc).isoformat()
+    data["_cached_at"] = datetime.now(timezone.utc).isoformat()
     os.makedirs(os.path.dirname(cache_path), exist_ok=True)
-    with open(cache_path, 'w') as f:
+    with open(cache_path, "w") as f:
         json.dump(data, f, indent=2)
 
 
@@ -204,15 +206,15 @@ def _ncbi_esearch(accession: str) -> Optional[str]:
         Numeric UID string (e.g. '200137400'), or None on failure.
     """
     url = (
-        'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
-        f'?db=gds&term={accession}[Accession]&retmode=json'
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+        f"?db=gds&term={accession}[Accession]&retmode=json"
     )
     req = Request(url)
-    req.add_header('User-Agent', 'Fuxi/1.0 (single-cell pipeline; academic use)')
+    req.add_header("User-Agent", "Fuxi/1.0 (single-cell pipeline; academic use)")
     try:
         with urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode())
-        uid_list = data.get('esearchresult', {}).get('idlist', [])
+        uid_list = data.get("esearchresult", {}).get("idlist", [])
         if uid_list:
             return uid_list[0]
     except (URLError, json.JSONDecodeError, OSError):
@@ -230,18 +232,17 @@ def _ncbi_esummary(uid: str) -> Optional[dict]:
         The entry dict from esummary result, or None on failure.
     """
     url = (
-        'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi'
-        f'?db=gds&id={uid}&retmode=json'
+        f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=gds&id={uid}&retmode=json"
     )
     req = Request(url)
-    req.add_header('User-Agent', 'Fuxi/1.0 (single-cell pipeline; academic use)')
+    req.add_header("User-Agent", "Fuxi/1.0 (single-cell pipeline; academic use)")
     try:
         with urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode())
-        result = data.get('result', {})
+        result = data.get("result", {})
         return result.get(uid) or result
     except (URLError, json.JSONDecodeError, OSError) as e:
-        return {'_error': str(e)}
+        return {"_error": str(e)}
 
 
 def _ncbi_elink_superseries(uid: str) -> Optional[list[str]]:
@@ -254,18 +255,18 @@ def _ncbi_elink_superseries(uid: str) -> Optional[list[str]]:
         A list of child accession IDs (GSE strings), or None on failure.
     """
     url = (
-        'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi'
-        f'?dbfrom=gds&db=gds&linkname=gds_gds_superseries&id={uid}&retmode=json'
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi"
+        f"?dbfrom=gds&db=gds&linkname=gds_gds_superseries&id={uid}&retmode=json"
     )
     req = Request(url)
-    req.add_header('User-Agent', 'Fuxi/1.0 (single-cell pipeline; academic use)')
+    req.add_header("User-Agent", "Fuxi/1.0 (single-cell pipeline; academic use)")
     try:
         with urlopen(req, timeout=15) as resp:
             data = json.loads(resp.read().decode())
         ids = []
-        for linkset in data.get('linksets', []):
-            for link in linkset.get('linksetdbs', []):
-                ids.extend(link.get('links', []))
+        for linkset in data.get("linksets", []):
+            for link in linkset.get("linksetdbs", []):
+                ids.extend(link.get("links", []))
         return ids
     except (URLError, json.JSONDecodeError, OSError):
         return None
@@ -301,10 +302,10 @@ def query_ncbi(accession: str) -> Optional[dict]:
 
     time.sleep(0.34)
     entry = _ncbi_esummary(uid)
-    if entry is None or '_error' in entry:
+    if entry is None or "_error" in entry:
         return None
 
-    entry_type = entry.get('entrytype', '')
+    entry_type = entry.get("entrytype", "")
 
     # Query elink to detect SuperSeries via child-series links.
     # This is the only reliable indicator: regular Series return no children;
@@ -317,12 +318,12 @@ def query_ncbi(accession: str) -> Optional[dict]:
         # Batch-resolve child UIDs to GSE accessions via esummary
         child_uids = [str(c) for c in children]
         time.sleep(0.34)
-        child_data = _ncbi_esummary(','.join(child_uids))
-        if child_data and '_error' not in child_data:
+        child_data = _ncbi_esummary(",".join(child_uids))
+        if child_data and "_error" not in child_data:
             # When batch-queried, the result dict has UID keys
             for cuid in child_uids:
                 ce = child_data.get(cuid, {})
-                acc = ce.get('accession', '')
+                acc = ce.get("accession", "")
                 if acc and acc not in child_accessions:
                     child_accessions.append(acc)
         # Fallback: just use what we got
@@ -332,12 +333,12 @@ def query_ncbi(accession: str) -> Optional[dict]:
     is_super = len(child_accessions) > 0
 
     result = {
-        'is_superseries': is_super,
-        'entry_type': entry_type,
-        'child_accessions': child_accessions,
-        'title': entry.get('title', ''),
-        'summary': entry.get('summary', ''),
-        'species': entry.get('taxon', ''),
+        "is_superseries": is_super,
+        "entry_type": entry_type,
+        "child_accessions": child_accessions,
+        "title": entry.get("title", ""),
+        "summary": entry.get("summary", ""),
+        "species": entry.get("taxon", ""),
     }
 
     _ncbi_save_cache(accession, result)
@@ -345,6 +346,7 @@ def query_ncbi(accession: str) -> Optional[dict]:
 
 
 # ── Strategy 4: Filename patterns ────────────────────────────────────────
+
 
 def _collect_gse_accessions_from_filenames(file_list: list[str]) -> set[str]:
     """Scan filenames for embedded GSE accession numbers.
@@ -367,8 +369,7 @@ def _collect_gse_accessions_from_filenames(file_list: list[str]) -> set[str]:
     return accessions
 
 
-def detect_subseries_from_filenames(file_list: list[str],
-                                    parent_gse: str) -> list[str]:
+def detect_subseries_from_filenames(file_list: list[str], parent_gse: str) -> list[str]:
     """Detect sub-series by scanning filenames for GSE accessions.
 
     Looks for GSE numbers embedded in filenames that differ from the parent
@@ -393,8 +394,9 @@ def detect_subseries_from_filenames(file_list: list[str],
     return sorted(set(children))
 
 
-def group_files_by_accession(file_list: list[str],
-                             child_accessions: list[str]) -> dict[str, list[str]]:
+def group_files_by_accession(
+    file_list: list[str], child_accessions: list[str]
+) -> dict[str, list[str]]:
     """Group files by their embedded sub-series accession.
 
     Each file is assigned to the first matching GSE accession found in
@@ -426,11 +428,12 @@ def group_files_by_accession(file_list: list[str],
     # Remove empty groups
     groups = {k: v for k, v in groups.items() if v}
     if unmatched:
-        groups['_unmatched'] = unmatched
+        groups["_unmatched"] = unmatched
     return groups
 
 
 # ── Assay type classification ─────────────────────────────────────
+
 
 def _classify_assay_type(title: str, summary: str) -> str | None:
     """Classify single-cell assay type from title and summary text.
@@ -448,51 +451,51 @@ def _classify_assay_type(title: str, summary: str) -> str | None:
         "ambiguous"  — both snRNA-seq and scRNA-seq keywords detected.
         None          — neither keyword group matched.
     """
-    text = (title + ' ' + summary).lower()
+    text = (title + " " + summary).lower()
 
     # High-confidence snRNA-seq patterns (1 point each)
-    HIGH_SN = [
-        r'\bsn(?:rna)?[-\s]*(?:seq|rnaseq)\b',
-        r'\bsingle[-\s]?nucleus\b',
-        r'\bsingle[-\s]?nuclei\b',
-        r'\bsnuc[-\s]?seq\b',
+    high_sn = [
+        r"\bsn(?:rna)?[-\s]*(?:seq|rnaseq)\b",
+        r"\bsingle[-\s]?nucleus\b",
+        r"\bsingle[-\s]?nuclei\b",
+        r"\bsnuc[-\s]?seq\b",
     ]
     # Medium-confidence snRNA-seq patterns (0.5 point each)
-    MED_SN = [
-        r'\bnuclear[-\s]?(?:suspension|prep|isolat|extract)',
+    med_sn = [
+        r"\bnuclear[-\s]?(?:suspension|prep|isolat|extract)",
     ]
     # High-confidence scRNA-seq patterns (1 point each)
-    HIGH_SC = [
-        r'\bsc(?:rna)?[-\s]*(?:seq|rnaseq)\b',
-        r'\bwhole[-\s]?cell\b',
-        r'\bsingle[-\s]?cell[-\s]rna\b',
+    high_sc = [
+        r"\bsc(?:rna)?[-\s]*(?:seq|rnaseq)\b",
+        r"\bwhole[-\s]?cell\b",
+        r"\bsingle[-\s]?cell[-\s]rna\b",
     ]
 
     score_sn = 0.0
-    for pat in HIGH_SN:
+    for pat in high_sn:
         score_sn += len(re.findall(pat, text)) * 1.0
-    for pat in MED_SN:
+    for pat in med_sn:
         score_sn += len(re.findall(pat, text)) * 0.5
 
     score_sc = 0.0
-    for pat in HIGH_SC:
+    for pat in high_sc:
         score_sc += len(re.findall(pat, text)) * 1.0
 
     if score_sn >= 1 and score_sc >= 1:
-        return 'ambiguous'
+        return "ambiguous"
     if score_sn >= 1:
-        return 'snRNAseq'
+        return "snRNAseq"
     if score_sc >= 1:
-        return 'scRNAseq'
+        return "scRNAseq"
     return None
 
 
 # ── Top-level detection orchestrator ──────────────────────────────────
 
-def detect_superseries(root_dir: str,
-                       file_list: list[str],
-                       gse_id: str,
-                       query_ncbi_flag: bool = False) -> dict:
+
+def detect_superseries(
+    root_dir: str, file_list: list[str], gse_id: str, query_ncbi_flag: bool = False
+) -> dict:
     """Run all SuperSeries detection strategies and return a combined result.
 
     Args:
@@ -512,71 +515,71 @@ def detect_superseries(root_dir: str,
         }
     """
     result: dict = {
-        'is_superseries': False,
-        'detected_by': None,
-        'subseries_dirs': [],
-        'child_accessions': [],
-        'title': '',
-        'summary': '',
-        'species': '',
-        'assay_type': None,
+        "is_superseries": False,
+        "detected_by": None,
+        "subseries_dirs": [],
+        "child_accessions": [],
+        "title": "",
+        "summary": "",
+        "species": "",
+        "assay_type": None,
     }
 
     # Strategy 1: Directory structure
     subseries_dirs = detect_subseries_dirs(root_dir)
     if subseries_dirs:
-        result['is_superseries'] = True
-        result['detected_by'] = 'dirs'
-        result['subseries_dirs'] = subseries_dirs
+        result["is_superseries"] = True
+        result["detected_by"] = "dirs"
+        result["subseries_dirs"] = subseries_dirs
 
     # Strategy 2: Series Matrix files
     matrix_result = detect_from_series_matrix_files(file_list)
     if matrix_result:
-        result['is_superseries'] = True
-        if not result['detected_by']:
-            result['detected_by'] = 'series_matrix'
-        existing = set(result['child_accessions'])
-        for acc in matrix_result.get('child_accessions', []):
+        result["is_superseries"] = True
+        if not result["detected_by"]:
+            result["detected_by"] = "series_matrix"
+        existing = set(result["child_accessions"])
+        for acc in matrix_result.get("child_accessions", []):
             if acc not in existing:
-                result['child_accessions'].append(acc)
+                result["child_accessions"].append(acc)
 
     # Strategy 3: NCBI API (opt-in)
     if query_ncbi_flag:
         ncbi_result = query_ncbi(gse_id)
         if ncbi_result:
-            if ncbi_result.get('is_superseries'):
-                result['is_superseries'] = True
-                if not result['detected_by']:
-                    result['detected_by'] = 'ncbi'
-            result['title'] = result['title'] or ncbi_result.get('title', '')
-            result['summary'] = result['summary'] or ncbi_result.get('summary', '')
-            result['species'] = result.get('species') or ncbi_result.get('species', '')
-            existing = set(result['child_accessions'])
-            for acc in ncbi_result.get('child_accessions', []):
+            if ncbi_result.get("is_superseries"):
+                result["is_superseries"] = True
+                if not result["detected_by"]:
+                    result["detected_by"] = "ncbi"
+            result["title"] = result["title"] or ncbi_result.get("title", "")
+            result["summary"] = result["summary"] or ncbi_result.get("summary", "")
+            result["species"] = result.get("species") or ncbi_result.get("species", "")
+            existing = set(result["child_accessions"])
+            for acc in ncbi_result.get("child_accessions", []):
                 if acc not in existing:
-                    result['child_accessions'].append(acc)
+                    result["child_accessions"].append(acc)
 
     # Strategy 4: Filename patterns — scan for GSE\d+ in filenames
     # Only activate if the SuperSeries isn't already confirmed by other means
     # AND the parent gse_id is known.  This catches the flat-file pattern
     # where a SuperSeries directory contains files named with their sub-series
     # accession numbers.
-    if gse_id and not result['is_superseries']:
+    if gse_id and not result["is_superseries"]:
         filename_children = detect_subseries_from_filenames(file_list, gse_id)
         if len(filename_children) >= 2:
             # Require at least 2 distinct child GSEs to avoid false positives
             # from self-references or accidental filename patterns
-            result['is_superseries'] = True
-            result['detected_by'] = 'filenames'
-            existing = set(result['child_accessions'])
+            result["is_superseries"] = True
+            result["detected_by"] = "filenames"
+            existing = set(result["child_accessions"])
             for acc in filename_children:
                 if acc not in existing:
-                    result['child_accessions'].append(acc)
+                    result["child_accessions"].append(acc)
 
     # Classify assay type from title/summary (if available)
-    result['assay_type'] = _classify_assay_type(
-        result.get('title', ''), result.get('summary', ''),
+    result["assay_type"] = _classify_assay_type(
+        result.get("title", ""),
+        result.get("summary", ""),
     )
-
 
     return result
