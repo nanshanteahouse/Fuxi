@@ -19,14 +19,15 @@ config.py — Fuxi (伏羲) 统一配置 (Pydantic v2)
 import os
 from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field, ConfigDict
-
 # ── Auto-load .env from repo root ────────────────────────────────────
 # This runs before any data_root() call, so FUXI_DATA_ROOT in .env
 # is available to the pipeline without manual sourcing.
 from dotenv import load_dotenv
+from pydantic import BaseModel, ConfigDict, Field
 
-_env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), '.env')
+_env_path = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"
+)
 if os.path.isfile(_env_path):
     load_dotenv(_env_path)
 
@@ -40,6 +41,7 @@ SILHOUETTE_SAMPLE_THRESHOLD: int = 10000
 # ═══════════════════════════════════════════════════════════════════════
 class DataInputConfig(BaseModel):
     """RNA / ATAC data input paths and format settings."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     mtx_prefix: str = ""
@@ -49,8 +51,8 @@ class DataInputConfig(BaseModel):
     barcodes_file: str = ""
     features_file: str = ""
     csv_sep: Optional[str] = None
-    csv_decimal: str = '.'
-    gene_symbol_column: str = ''
+    csv_decimal: str = "."
+    gene_symbol_column: str = ""
     input_h5ad: str = ""
     backed: str = ""
     h5_file_pattern: str = "*filtered_feature_bc_matrix.h5"
@@ -58,7 +60,7 @@ class DataInputConfig(BaseModel):
     fragment_file: str = ""
     # ── Preprocessed (embedded metadata columns) format ──
     file_pattern: str = "*.tsv.gz"
-    separator: str = ""          # empty = auto-detect (tab vs comma)
+    separator: str = ""  # empty = auto-detect (tab vs comma)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -66,6 +68,7 @@ class DataInputConfig(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class SampleMetaConfig(BaseModel):
     """Sample / stage metadata mapping."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     sample_map: Dict[int, str] = Field(default_factory=dict)
@@ -81,6 +84,7 @@ class SampleMetaConfig(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class QCSettings(BaseModel):
     """Quality control thresholds."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     min_genes: int = 500
@@ -104,6 +108,7 @@ class QCSettings(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class ScrubletSettings(BaseModel):
     """Doublet detection (Scrublet) settings."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     run: bool = True
@@ -120,6 +125,7 @@ class ScrubletSettings(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class NormalizationSettings(BaseModel):
     """Normalization, cell-cycle regression, sex detection."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     normalize_target_sum: float = 1e4
@@ -134,6 +140,7 @@ class NormalizationSettings(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class HVGSettings(BaseModel):
     """Highly variable gene selection."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     n_top_genes: int = 4000
@@ -147,6 +154,7 @@ class HVGSettings(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class PCASettings(BaseModel):
     """Principal component analysis settings."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     n_pcs_full: int = 100
@@ -158,6 +166,7 @@ class PCASettings(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class HarmonySettings(BaseModel):
     """Harmony batch correction settings."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     use_harmony: bool = True
@@ -167,7 +176,7 @@ class HarmonySettings(BaseModel):
     diagnose: bool = True
     diagnose_report: bool = True
     diagnose_exclude_patterns: list[str] = Field(
-        default_factory=lambda: ['*leiden*', '*cell_type*', '*annotation*', '*annotated*']
+        default_factory=lambda: ["*leiden*", "*cell_type*", "*annotation*", "*annotated*"]
     )
     gini_batch_threshold: float = 0.3
     gini_biology_threshold: float = 0.6
@@ -179,25 +188,26 @@ class HarmonySettings(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class ClusteringSettings(BaseModel):
     """Clustering, UMAP, and parameter grid search settings."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     n_neighbors: int = 30
-    leiden_resolutions: List[float] = Field(
-        default_factory=lambda: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
-    )
+    leiden_resolutions: List[float] = Field(default_factory=lambda: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
     param_grid_n_neighbors: list = Field(default_factory=lambda: [15, 20, 30])
     param_grid_resolutions: list = Field(default_factory=lambda: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
     leiden_flavor: str = "igraph"
     best_resolution: float = 1.0
     best_n_neighbors: int = 0
     cluster_selection_method: Optional[str] = "multi_metric"
-    multi_metric_weights: dict = Field(default_factory=lambda: {
-        "silhouette": 0.2,
-        "stability": 0.2,
-        "cluster_coherence": 0.3,
-        "splitting_gain": 0.2,
-        "kb_annotatable_rate": 0.1
-    })
+    multi_metric_weights: dict = Field(
+        default_factory=lambda: {
+            "silhouette": 0.2,
+            "stability": 0.2,
+            "cluster_coherence": 0.3,
+            "splitting_gain": 0.2,
+            "kb_annotatable_rate": 0.1,
+        }
+    )
     multi_metric_n_stability_seeds: int = 5
     multi_metric_adaptive_resolution: bool = True
     multi_metric_coverage_ratio_threshold: float = 1.5
@@ -217,6 +227,7 @@ class ClusteringSettings(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class MarkerSettings(BaseModel):
     """Cell-type marker / annotation settings."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     marker_dict: Dict[str, List[str]] = Field(default_factory=dict)
@@ -240,6 +251,7 @@ class MarkerSettings(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class DESettings(BaseModel):
     """Differential expression analysis settings."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     method: str = "wilcoxon"
@@ -248,13 +260,15 @@ class DESettings(BaseModel):
     logfc_cutoff: float = 0.25
     stage_pairwise: bool = True
     auto_switch_on_low_quality: bool = False
-    pseudobulk: PseudobulkDESettings = Field(default_factory=lambda: PseudobulkDESettings())
+    pseudobulk: "PseudobulkDESettings" = Field(default_factory=lambda: PseudobulkDESettings())
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Sub-model 11b — PseudobulkDESettings (nested under de)
 # ═══════════════════════════════════════════════════════════════════════
 class PseudobulkDESettings(BaseModel):
     """Pseudobulk differential expression via PyDESeq2."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     celltype_col: str = "cell_type"
@@ -276,6 +290,7 @@ class PseudobulkDESettings(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class TrajectorySettings(BaseModel):
     """Pseudotime / trajectory analysis settings."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     root_cell_types: List[str] = Field(default_factory=list)
@@ -293,14 +308,17 @@ class TrajectorySettings(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class EnrichmentSettings(BaseModel):
     """Gene-set enrichment analysis settings."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     run: bool = True
     method: str = "both"
-    gene_sets: list = Field(default_factory=lambda: [
-        'GO_Biological_Process_2023',
-        'KEGG_2021_Human',
-    ])
+    gene_sets: list = Field(
+        default_factory=lambda: [
+            "GO_Biological_Process_2023",
+            "KEGG_2021_Human",
+        ]
+    )
     organism: str = "human"
     n_top_genes: int = 200
     pval_cutoff: float = 0.05
@@ -324,6 +342,7 @@ class EnrichmentSettings(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class GRNSettings(BaseModel):
     """Gene regulatory network analysis settings."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     run: bool = True
@@ -342,6 +361,7 @@ class GRNSettings(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class CCISettings(BaseModel):
     """Cell-cell interaction analysis settings."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     run: bool = True
@@ -363,6 +383,7 @@ class CCISettings(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class DownsampleSettings(BaseModel):
     """Downsampling and subset filtering settings."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     target: Optional[int] = None
@@ -379,6 +400,7 @@ class DownsampleSettings(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class SpatialConfig(BaseModel):
     """Spatial transcriptomics platform and processing settings."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     platform: str = "visium"
@@ -400,6 +422,7 @@ class SpatialConfig(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class ATACConfig(BaseModel):
     """ATAC-specific configuration fields."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     genome: str = "hg38"
@@ -431,6 +454,7 @@ class ATACConfig(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class ExecutionConfig(BaseModel):
     """Execution environment settings."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     n_jobs: int = 0
@@ -452,6 +476,7 @@ class ExecutionConfig(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class AIConfig(BaseModel):
     """AI / LLM configuration — all AI features controlled here."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     enabled: bool = False
@@ -478,6 +503,7 @@ class AIConfig(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 class BulkConfig(BaseModel):
     """Bulk RNA-seq specific configuration fields."""
+
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     design: str = "~condition"
@@ -493,6 +519,8 @@ class BulkConfig(BaseModel):
     output_dir: str = ""
     batch_correct: bool = False
     batch_column: str = "batch"
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Top-level Config
 # ═══════════════════════════════════════════════════════════════════════
@@ -576,7 +604,6 @@ class Config(BaseModel):
     ai: AIConfig = Field(default_factory=AIConfig)
     bulk: BulkConfig = Field(default_factory=BulkConfig)
 
-
     def model_post_init(self, __context):
         """Resolve relative paths after construction.
 
@@ -586,13 +613,17 @@ class Config(BaseModel):
         base = self.project_dir if self.project_dir else os.path.dirname(os.path.abspath(__file__))
 
         # Treat '.' as "not set" for mtx_dir
-        if self.data_input.mtx_dir == '.':
+        if self.data_input.mtx_dir == ".":
             self.data_input.mtx_dir = ""
 
         # Resolve top-level relative paths to absolute
         for attr in (
-            "data_dir", "results_dir", "h5ad_dir",
-            "figure_dir", "table_dir", "log_dir",
+            "data_dir",
+            "results_dir",
+            "h5ad_dir",
+            "figure_dir",
+            "table_dir",
+            "log_dir",
         ):
             val = getattr(self, attr)
             if val and not os.path.isabs(val):
@@ -607,7 +638,7 @@ class Config(BaseModel):
 
         # Auto-resolve data_dir from FUXI_DATA_ROOT when empty
         if not self.data_dir:
-            _data_root = os.environ.get('FUXI_DATA_ROOT') or os.environ.get('SCRNA_DATA_ROOT')
+            _data_root = os.environ.get("FUXI_DATA_ROOT") or os.environ.get("SCRNA_DATA_ROOT")
             if _data_root:
                 dataset_id = os.path.basename(self.project_dir or base)
                 self.data_dir = os.path.join(_data_root, dataset_id)
@@ -638,10 +669,10 @@ class Config(BaseModel):
         ds = self.downsample
         if ds.sample_keep or (ds.obs_filter and ds.obs_filter.strip()):
             suffix = ds.subset_suffix if ds.subset_suffix else "_subset"
-            self.h5ad_dir = self.h5ad_dir.rstrip('/\\') + suffix
-            self.figure_dir = self.figure_dir.rstrip('/\\') + suffix
-            self.table_dir = self.table_dir.rstrip('/\\') + suffix
-            self.log_dir = self.log_dir.rstrip('/\\') + suffix
+            self.h5ad_dir = self.h5ad_dir.rstrip("/\\") + suffix
+            self.figure_dir = self.figure_dir.rstrip("/\\") + suffix
+            self.table_dir = self.table_dir.rstrip("/\\") + suffix
+            self.log_dir = self.log_dir.rstrip("/\\") + suffix
             print(f"[Config] Subset active → output dir suffix: '{suffix}'")
 
         # tissue_kb auto-inference from tissue

@@ -11,28 +11,29 @@ downsample.py — 细胞降采样核心逻辑 (config-driven + 手动 CLI 共同
 """
 
 import numpy as np
-from anndata import AnnData
-import scipy.sparse as sp
 import pandas as pd
+import scipy.sparse as sp
+from anndata import AnnData
 
 
 def _check_sample_col(adata: AnnData, sample_key: str, log) -> str | None:
     """查找可用的样本分组列。返回实际使用的列名或 None。"""
     if sample_key and sample_key in adata.obs:
         return sample_key
-    for candidate in ['sample', 'Sample', 'samples', 'batch', 'Batch', 'stage', 'Stage']:
+    for candidate in ["sample", "Sample", "samples", "batch", "Batch", "stage", "Stage"]:
         if candidate in adata.obs:
             log.info("Using '%s' as group column ('%s' not found)", candidate, sample_key)
             return candidate
     return None
 
 
-def downsample_random(adata: AnnData, target: int, rng: np.random.RandomState,
-                      log) -> AnnData:
+def downsample_random(adata: AnnData, target: int, rng: np.random.RandomState, log) -> AnnData:
     """完全随机采样 target 个细胞。"""
     n_cells = adata.n_obs
     if target >= n_cells:
-        log.info("target_total (%d) >= current cell count (%d), no downsampling needed", target, n_cells)
+        log.info(
+            "target_total (%d) >= current cell count (%d), no downsampling needed", target, n_cells
+        )
         return adata
     idx = rng.choice(n_cells, size=target, replace=False)
     idx.sort()
@@ -40,12 +41,15 @@ def downsample_random(adata: AnnData, target: int, rng: np.random.RandomState,
     return adata[idx].copy()
 
 
-def downsample_stratified(adata: AnnData, target: int, sample_key: str,
-                          rng: np.random.RandomState, log) -> AnnData:
+def downsample_stratified(
+    adata: AnnData, target: int, sample_key: str, rng: np.random.RandomState, log
+) -> AnnData:
     """按样本分层采样，保持各样本比例。"""
     n_cells = adata.n_obs
     if target >= n_cells:
-        log.info("target_total (%d) >= current cell count (%d), no downsampling needed", target, n_cells)
+        log.info(
+            "target_total (%d) >= current cell count (%d), no downsampling needed", target, n_cells
+        )
         return adata
 
     counts = adata.obs[sample_key].value_counts()
@@ -75,12 +79,15 @@ def downsample_stratified(adata: AnnData, target: int, sample_key: str,
 
     idx = np.concatenate(indices)
     idx.sort()
-    log.info("Stratified sampling: %d → %d cells (%.1f%%)", n_cells, len(idx), 100 * len(idx) / n_cells)
+    log.info(
+        "Stratified sampling: %d → %d cells (%.1f%%)", n_cells, len(idx), 100 * len(idx) / n_cells
+    )
     return adata[idx].copy()
 
 
-def downsample_max_per_sample(adata: AnnData, max_per: int, sample_key: str,
-                              rng: np.random.RandomState, log) -> AnnData:
+def downsample_max_per_sample(
+    adata: AnnData, max_per: int, sample_key: str, rng: np.random.RandomState, log
+) -> AnnData:
     """每个样本最多保留 max_per 个细胞。"""
     counts = adata.obs[sample_key].value_counts()
     log.info("Capping per sample, max %d cells per sample", max_per)
@@ -92,7 +99,13 @@ def downsample_max_per_sample(adata: AnnData, max_per: int, sample_key: str,
         n_sample = len(sample_idx)
         if n_sample > max_per:
             chosen = rng.choice(sample_idx, size=max_per, replace=False)
-            log.info("  Sample %s: %d → %d (truncated %d)", sample_name, n_sample, max_per, n_sample - max_per)
+            log.info(
+                "  Sample %s: %d → %d (truncated %d)",
+                sample_name,
+                n_sample,
+                max_per,
+                n_sample - max_per,
+            )
         else:
             chosen = sample_idx
             log.info("  Sample %s: %d (unchanged)", sample_name, n_sample)
@@ -100,46 +113,51 @@ def downsample_max_per_sample(adata: AnnData, max_per: int, sample_key: str,
 
     idx = np.concatenate(indices)
     idx.sort()
-    log.info("Capped sampling: %d → %d cells (%.1f%%)", adata.n_obs, len(idx), 100 * len(idx) / adata.n_obs)
+    log.info(
+        "Capped sampling: %d → %d cells (%.1f%%)",
+        adata.n_obs,
+        len(idx),
+        100 * len(idx) / adata.n_obs,
+    )
     return adata[idx].copy()
 
 
 def estimate_memory_gb(adata: AnnData) -> float:
     """粗略估计 AnnData 在内存中的大小 (GB)。"""
     total = 0.0
-    if hasattr(adata, 'X') and adata.X is not None:
+    if hasattr(adata, "X") and adata.X is not None:
         if sp.issparse(adata.X):
             total += adata.X.data.nbytes + adata.X.indices.nbytes + adata.X.indptr.nbytes
         else:
             total += adata.X.nbytes
     for col in adata.obs.columns:
         dtype = adata.obs[col].dtype
-        if dtype == object:
+        if pd.api.types.is_object_dtype(dtype):
             continue
-        total += adata.obs[col].values.nbytes if hasattr(adata.obs[col].values, 'nbytes') else 0
+        total += adata.obs[col].values.nbytes if hasattr(adata.obs[col].values, "nbytes") else 0
     for col in adata.var.columns:
         dtype = adata.var[col].dtype
-        if dtype == object:
+        if pd.api.types.is_object_dtype(dtype):
             continue
-        total += adata.var[col].values.nbytes if hasattr(adata.var[col].values, 'nbytes') else 0
-    if hasattr(adata, 'layers'):
+        total += adata.var[col].values.nbytes if hasattr(adata.var[col].values, "nbytes") else 0
+    if hasattr(adata, "layers"):
         for layer_name in adata.layers.keys():
             layer = adata.layers[layer_name]
             if sp.issparse(layer):
                 total += layer.data.nbytes + layer.indices.nbytes + layer.indptr.nbytes
             elif layer is not None:
                 total += layer.nbytes
-    if hasattr(adata, 'obsm'):
+    if hasattr(adata, "obsm"):
         for key in adata.obsm.keys():
             arr = adata.obsm[key]
-            if hasattr(arr, 'nbytes'):
+            if hasattr(arr, "nbytes"):
                 total += arr.nbytes
-    if hasattr(adata, 'varm'):
+    if hasattr(adata, "varm"):
         for key in adata.varm.keys():
             arr = adata.varm[key]
-            if hasattr(arr, 'nbytes'):
+            if hasattr(arr, "nbytes"):
                 total += arr.nbytes
-    return total / (1024 ** 3)
+    return total / (1024**3)
 
 
 def filter_by_config(adata: AnnData, cfg, logger) -> AnnData:
@@ -152,25 +170,29 @@ def filter_by_config(adata: AnnData, cfg, logger) -> AnnData:
     Returns:
         过滤后的 AnnData（如果没有过滤条件则返回原始对象）。
     """
-    sample_keep = getattr(cfg.downsample, 'sample_keep', None) or []
-    obs_filter = getattr(cfg.downsample, 'obs_filter', None) or ''
+    sample_keep = getattr(cfg.downsample, "sample_keep", None) or []
+    obs_filter = getattr(cfg.downsample, "obs_filter", None) or ""
 
     if not sample_keep and not obs_filter:
         return adata
 
     if sample_keep:
         n_before = adata.n_obs
-        adata = adata[adata.obs['sample'].isin(sample_keep)].copy()
+        adata = adata[adata.obs["sample"].isin(sample_keep)].copy()
         logger.info("sample_keep filter: %d → %d cells", n_before, adata.n_obs)
 
     if obs_filter:
         n_before = adata.n_obs
         mask = adata.obs.eval(obs_filter)
         if not isinstance(mask, pd.Series):
-            mask = adata.obs.apply(lambda row: eval(obs_filter, {"__builtins__": {}}, dict(row)), axis=1)
+            mask = adata.obs.apply(
+                lambda row: eval(obs_filter, {"__builtins__": {}}, dict(row)), axis=1
+            )
         adata = adata[mask.values].copy()
         logger.info("obs_filter filter: %d → %d cells", n_before, adata.n_obs)
     return adata
+
+
 def downsample_by_config(adata: AnnData, cfg, logger) -> AnnData:
     """根据 config 设置对 adata 降采样。作为 pipeline 内联调用入口。
 
@@ -181,31 +203,31 @@ def downsample_by_config(adata: AnnData, cfg, logger) -> AnnData:
     Returns:
         降采样后的 AnnData（如果 target 未设置或无需采样则返回原始对象）。
     """
-    target = getattr(cfg, 'downsample_target', None)
+    target = getattr(cfg, "downsample_target", None)
     if target is None or target >= adata.n_obs:
         return adata
 
-    strategy = getattr(cfg, 'downsample_strategy', 'stratified')
-    seed = getattr(cfg, 'downsample_random_seed', 42)
+    strategy = getattr(cfg, "downsample_strategy", "stratified")
+    seed = getattr(cfg, "downsample_random_seed", 42)
     rng = np.random.RandomState(seed)
-    sample_key = _check_sample_col(adata, 'sample', logger)
+    sample_key = _check_sample_col(adata, "sample", logger)
     n_before = adata.n_obs
 
     logger.info("Downsampling: target=%d, strategy=%s, seed=%d", target, strategy, seed)
-    if strategy == 'random':
+    if strategy == "random":
         adata = downsample_random(adata, target, rng, logger)
-    elif strategy == 'stratified':
-        adata = downsample_stratified(adata, target, sample_key or 'sample', rng, logger)
-    elif strategy == 'max_per_sample':
-        max_per = getattr(cfg, 'downsample_max_per_sample', 5000)
-        adata = downsample_max_per_sample(adata, max_per, sample_key or 'sample', rng, logger)
+    elif strategy == "stratified":
+        adata = downsample_stratified(adata, target, sample_key or "sample", rng, logger)
+    elif strategy == "max_per_sample":
+        max_per = getattr(cfg, "downsample_max_per_sample", 5000)
+        adata = downsample_max_per_sample(adata, max_per, sample_key or "sample", rng, logger)
 
     # 可选 float32 节省内存
-    if getattr(cfg, 'use_float32', False):
+    if getattr(cfg, "use_float32", False):
         if sp.issparse(adata.X):
-            adata.X = adata.X.astype('float32', copy=False)
+            adata.X = adata.X.astype("float32", copy=False)
         else:
-            adata.X = adata.X.astype('float32')
+            adata.X = adata.X.astype("float32")
         logger.info("X precision converted to float32")
 
     logger.info("Downsampled: %d → %d cells", n_before, adata.n_obs)

@@ -5,12 +5,12 @@ field-to-topic mapping for config migration.
 """
 
 from core.config.schema import (
+    SILHOUETTE_SAMPLE_THRESHOLD,
+    ClusteringSettings,
     Config,
     DataInputConfig,
-    QCSettings,
     HVGSettings,
-    ClusteringSettings,
-    SILHOUETTE_SAMPLE_THRESHOLD,
+    QCSettings,
 )
 
 __all__ = [

@@ -13,10 +13,9 @@ dataset_detector.py — 自动检测数据组学类型
     python -m core.dataset_detector $FUXI_DATA_ROOT/ --all
 """
 
+import json
 import os
 import sys
-import json
-import glob as glob_mod
 from collections import defaultdict
 from typing import Optional
 
@@ -24,41 +23,39 @@ from typing import Optional
 # (pattern, (modality_name, format_name))
 MODALITY_PATTERNS = [
     # scRNA-seq
-    ('filtered_feature_bc_matrix.h5',    ('scRNA-seq', '10X_h5')),
-    ('features.tsv',                      ('scRNA-seq', 'features')),
-    ('matrix.mtx',                        ('scRNA-seq', '10X_mtx')),
-    ('count.*mat.*csv',                   ('scRNA-seq', 'csv_matrix')),
-    ('_rna_',                             ('scRNA-seq', '10X_h5')),
-    ('filtered_feature_bc_matrix',        ('scRNA-seq', '10X_mtx')),
-    ('gene_names.txt',                    ('scRNA-seq', 'genes')),
-    ('sample_annotations',                ('scRNA-seq', 'metadata')),
-
+    ("filtered_feature_bc_matrix.h5", ("scRNA-seq", "10X_h5")),
+    ("features.tsv", ("scRNA-seq", "features")),
+    ("matrix.mtx", ("scRNA-seq", "10X_mtx")),
+    ("count.*mat.*csv", ("scRNA-seq", "csv_matrix")),
+    ("_rna_", ("scRNA-seq", "10X_h5")),
+    ("filtered_feature_bc_matrix", ("scRNA-seq", "10X_mtx")),
+    ("gene_names.txt", ("scRNA-seq", "genes")),
+    ("sample_annotations", ("scRNA-seq", "metadata")),
     # scATAC-seq
-    ('fragments.tsv',                     ('scATAC-seq', 'fragments')),
-    ('filtered_peak_bc_matrix',           ('scATAC-seq', '10X_peak_h5')),
-    ('_atac_',                            ('scATAC-seq', 'fragments')),
-    ('per_barcode_metrics',               ('scATAC-seq', 'metrics')),
-    ('peak_annotation',                   ('scATAC-seq', 'annotation')),
-
+    ("fragments.tsv", ("scATAC-seq", "fragments")),
+    ("filtered_peak_bc_matrix", ("scATAC-seq", "10X_peak_h5")),
+    ("_atac_", ("scATAC-seq", "fragments")),
+    ("per_barcode_metrics", ("scATAC-seq", "metrics")),
+    ("peak_annotation", ("scATAC-seq", "annotation")),
     # Spatial
-    ('spatial',                           ('spatial_transcriptomics', 'visium')),
-    ('visium',                            ('spatial_transcriptomics', 'visium')),
-    ('tissue_hires_image',                ('spatial_transcriptomics', 'visium')),
-    ('tissue_lowres_image',               ('spatial_transcriptomics', 'visium')),
-    ('scalefactors_json',                 ('spatial_transcriptomics', 'visium')),
-
+    ("spatial", ("spatial_transcriptomics", "visium")),
+    ("visium", ("spatial_transcriptomics", "visium")),
+    ("tissue_hires_image", ("spatial_transcriptomics", "visium")),
+    ("tissue_lowres_image", ("spatial_transcriptomics", "visium")),
+    ("scalefactors_json", ("spatial_transcriptomics", "visium")),
     # Bulk RNA-seq
-    ('_bulk_',                            ('bulk_RNA_seq', 'tsv_counts')),
-    ('counts.txt',                        ('bulk_RNA_seq', 'tsv_counts')),
-    ('tpm.csv',                           ('bulk_RNA_seq', 'tpm_matrix')),
+    ("_bulk_", ("bulk_RNA_seq", "tsv_counts")),
+    ("counts.txt", ("bulk_RNA_seq", "tsv_counts")),
+    ("tpm.csv", ("bulk_RNA_seq", "tpm_matrix")),
 ]
 
 _MODALITY_TO_KEY = {
-    'scRNA-seq': 'rna',
-    'scATAC-seq': 'atac',
-    'spatial_transcriptomics': 'spatial',
-    'bulk_RNA_seq': 'bulk',
+    "scRNA-seq": "rna",
+    "scATAC-seq": "atac",
+    "spatial_transcriptomics": "spatial",
+    "bulk_RNA_seq": "bulk",
 }
+
 
 def detect_modality_from_files(file_list: list[str]) -> dict:
     """根据文件名列表推断组学类型。
@@ -89,7 +86,7 @@ def scan_directory(directory: str) -> dict:
     all_files = []
     for root, dirs, files in os.walk(directory):
         for f in files:
-            if f.startswith('.') or f == 'dataset.yaml':
+            if f.startswith(".") or f == "dataset.yaml":
                 continue
             full_path = os.path.join(root, f)
             rel_path = os.path.relpath(full_path, directory)
@@ -103,8 +100,8 @@ def scan_directory(directory: str) -> dict:
     for f in all_files:
         # Extract sample prefix (everything before the second underscore or before _atac/_rna_)
         fname = os.path.basename(f)
-        parts = fname.split('_')
-        sample_id = '_'.join(parts[:2]) if len(parts) >= 2 else parts[0]
+        parts = fname.split("_")
+        sample_id = "_".join(parts[:2]) if len(parts) >= 2 else parts[0]
         samples[sample_id].append(f)
 
     # Calculate sizes
@@ -125,12 +122,14 @@ def scan_directory(directory: str) -> dict:
                 if pattern.lower() in fname and mod == modality:
                     fmt = f
                     break
-        modality_summary.append({
-            "name": modality,
-            "format": fmt,
-            "file_count": len(files),
-            "total_size_gb": round(total_size / 1e9, 2),
-        })
+        modality_summary.append(
+            {
+                "name": modality,
+                "format": fmt,
+                "file_count": len(files),
+                "total_size_gb": round(total_size / 1e9, 2),
+            }
+        )
 
     unmatched = [f for f in all_files if f not in matched_files]
 
@@ -139,6 +138,7 @@ def scan_directory(directory: str) -> dict:
         "samples": [{"id": sid, "files": flist} for sid, flist in sorted(samples.items())],
         "unmatched_files": unmatched,
     }
+
 
 def _guess_modality(files):
     for f in files:
@@ -161,16 +161,16 @@ def generate_skeleton(directory: str, geo_id: Optional[str] = None) -> str:
 
     lines = [
         f"id: {geo_id}",
-        f"title: \"\"",
+        'title: ""',
         'species: ""',
-        f"tissue: unknown",
+        "tissue: unknown",
         "",
         "modalities:",
     ]
 
     for m in result["modalities"]:
         lines.append(f"  - name: {m['name']}")
-        lines.append(f"    status: downloaded")
+        lines.append("    status: downloaded")
         lines.append(f"    format: {m['format']}")
         lines.append(f"    file_count: {m['file_count']}")
         lines.append(f"    total_size_gb: {m['total_size_gb']}")
@@ -179,16 +179,16 @@ def generate_skeleton(directory: str, geo_id: Optional[str] = None) -> str:
     lines.append("samples:")
     for s in result["samples"]:
         lines.append(f"  - id: {s['id']}")
-        lines.append(f"    label: \"\"")
+        lines.append('    label: ""')
         modality = _guess_modality(s["files"])
         for f in s["files"]:
             lines.append(f"    {modality}:")
             lines.append(f"      - file: {f}")
-            lines.append(f"        format: auto")
+            lines.append("        format: auto")
 
     lines.append("")
     lines.append("meta:")
-    lines.append("  created: \"\"")
+    lines.append('  created: ""')
     lines.append("  generated_by: auto_detect")
     lines.append("  pipeline_status: {}")
 
@@ -216,7 +216,7 @@ def main():
                 print(f"{'=' * 60}")
                 print(f"  Modalities: {[m['name'] for m in result['modalities']]}")
                 print(f"  Samples: {len(result['samples'])}")
-                if result['unmatched_files']:
+                if result["unmatched_files"]:
                     print(f"  Unmatched: {len(result['unmatched_files'])} files")
                 if generate:
                     skeleton = generate_skeleton(full, entry)

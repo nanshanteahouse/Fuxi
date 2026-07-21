@@ -35,24 +35,22 @@ from __future__ import annotations
 
 import argparse
 import sys
-import os
+from collections import Counter
 from pathlib import Path
-from collections import Counter, defaultdict
-from typing import Iterable, Optional
+from typing import Optional
 
-import pandas as pd
-import numpy as np
-from scipy.sparse import csr_matrix
-from sklearn.preprocessing import normalize
-from sklearn.metrics.pairwise import cosine_similarity
 import networkx as nx
+import numpy as np
+import pandas as pd
+from scipy.sparse import csr_matrix
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import normalize
 
 # ── Repo root discovery ─────────────────────────────────────────────
 _REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO))
 
-from core.kb import load_kb
-
+from core.kb import load_kb  # noqa: E402
 
 # ── Defaults ────────────────────────────────────────────────────────
 DEFAULT_MODALITY = "rna"
@@ -66,8 +64,7 @@ def _load_kb_markers() -> dict[str, set]:
     """Load the retina KB and return ``{cell_type: set(marker_genes)}``."""
     kb = load_kb("retina")
     kb_types = {
-        k for k in kb
-        if not k.startswith("_") and k != "expert_rules" and isinstance(kb[k], dict)
+        k for k in kb if not k.startswith("_") and k != "expert_rules" and isinstance(kb[k], dict)
     }
     kb_markers: dict[str, set] = {}
     for ct in kb_types:
@@ -80,6 +77,7 @@ def _load_kb_markers() -> dict[str, set]:
 
 
 # ── Dataset discovery ───────────────────────────────────────────────
+
 
 def discover_datasets(
     project_dir: Path = DEFAULT_PROJECT_DIR,
@@ -108,9 +106,7 @@ def discover_datasets(
         # Main tables dir
         main_tables = results_dir / "tables"
         if (main_tables / "cell_type_annotations.csv").exists():
-            datasets.append(
-                (gse_dir.name, main_tables, f"{gse_dir.name} {modality}")
-            )
+            datasets.append((gse_dir.name, main_tables, f"{gse_dir.name} {modality}"))
 
         # Subset tables dirs (e.g. tables_pcw8_multiome)
         for sub_dir in sorted(results_dir.iterdir()):
@@ -119,13 +115,12 @@ def discover_datasets(
             if sub_dir.name.startswith("tables"):
                 if (sub_dir / "cell_type_annotations.csv").exists():
                     subset_id = f"{gse_dir.name}_{sub_dir.name.replace('tables_', '')}"
-                    datasets.append(
-                        (subset_id, sub_dir, f"{gse_dir.name}/{sub_dir.name}")
-                    )
+                    datasets.append((subset_id, sub_dir, f"{gse_dir.name}/{sub_dir.name}"))
     return datasets
 
 
 # ── Cluster loading ─────────────────────────────────────────────────
+
 
 def load_clusters(
     datasets: list[tuple[str, Path, str]],
@@ -148,8 +143,10 @@ def load_clusters(
             continue
 
         ann = pd.read_csv(ann_f)
-        mdf = pd.read_csv(m_f) if m_f.exists() else (
-            pd.read_csv(g_f) if g_f.exists() else pd.DataFrame()
+        mdf = (
+            pd.read_csv(m_f)
+            if m_f.exists()
+            else (pd.read_csv(g_f) if g_f.exists() else pd.DataFrame())
         )
         if mdf.empty:
             print(f"  SKIP {ds_id}: no marker file")
@@ -203,6 +200,7 @@ def load_clusters(
 
 # ── Vectorization ───────────────────────────────────────────────────
 
+
 def compute_idf_vectors(
     all_clusters: dict[str, dict],
 ) -> tuple[np.ndarray, list[str], dict[str, float]]:
@@ -234,12 +232,13 @@ def compute_idf_vectors(
             rows.append(i)
             cols.append(g2i[g])
 
-    X = csr_matrix((data, (rows, cols)), shape=(n, m))
-    X_norm = normalize(X, norm="l2", axis=1)
-    return X_norm, names, idf
+    x = csr_matrix((data, (rows, cols)), shape=(n, m))
+    x_norm = normalize(x, norm="l2", axis=1)
+    return x_norm, names, idf
 
 
 # ── Community detection ──────────────────────────────────────────────
+
 
 def detect_communities(
     sim: np.ndarray,
@@ -247,25 +246,27 @@ def detect_communities(
     threshold: float = COSINE_THRESHOLD,
 ) -> list[set[int]]:
     """Build similarity graph and detect communities (Louvain)."""
-    G = nx.Graph()
+    g = nx.Graph()
     for i in range(len(names)):
-        G.add_node(i)
+        g.add_node(i)
     for i in range(len(names)):
         for j in range(i + 1, len(names)):
             if sim[i, j] >= threshold:
-                G.add_edge(i, j, weight=float(sim[i, j]))
+                g.add_edge(i, j, weight=float(sim[i, j]))
 
-    if G.number_of_edges() == 0:
+    if g.number_of_edges() == 0:
         return []
 
     try:
         from networkx.algorithms.community import louvain_communities
-        return list(louvain_communities(G, weight="weight", seed=42))
+
+        return list(louvain_communities(g, weight="weight", seed=42))
     except Exception:
-        return list(nx.connected_components(G))
+        return list(nx.connected_components(g))
 
 
 # ── KB matching ──────────────────────────────────────────────────────
+
 
 def match_kb_markers(
     markers: set,
@@ -282,6 +283,7 @@ def match_kb_markers(
 
 
 # ── Main analysis ────────────────────────────────────────────────────
+
 
 def analyze(
     all_clusters: dict[str, dict],
@@ -321,13 +323,13 @@ def analyze(
             "cluster_names": names,
         }
 
-    X_norm, names, idf = compute_idf_vectors(all_clusters)
+    x_norm, names, idf = compute_idf_vectors(all_clusters)
 
     # Cosine similarity
-    S = cosine_similarity(X_norm)
+    s = cosine_similarity(x_norm)
 
     # Communities
-    comms = detect_communities(S, names, cos_threshold)
+    comms = detect_communities(s, names, cos_threshold)
 
     # Characterize
     results: list[dict] = []
@@ -343,7 +345,8 @@ def analyze(
         dom = ctc.most_common(1)[0][0]
         pur = ctc[dom] / len(cts)
         unks = [
-            c for c in cc
+            c
+            for c in cc
             if c["cell_type"].lower() in ("unknown", "uncertain")
             or c["diagnostic"] in ("no_kb_match", "true_unknown")
         ]
@@ -362,26 +365,25 @@ def analyze(
         else:
             nov = "LOW_PURITY"
 
-        results.append({
-            "id": f"C{ci:02d}",
-            "size": len(comm),
-            "n_datasets": nd,
-            "datasets": sorted(ds),
-            "dominant": dom,
-            "purity": pur,
-            "ct_distribution": dict(ctc),
-            "n_unknown": nu,
-            "kb_best": kh,
-            "kb_overlap": ko,
-            "novelty": nov,
-            "top_markers": sorted(
-                am, key=lambda g: idf.get(g, 0), reverse=True
-            )[:15],
-            "members": [
-                (c["dataset"], c["cluster_id"], c["cell_type"], c["confidence"])
-                for c in cc
-            ],
-        })
+        results.append(
+            {
+                "id": f"C{ci:02d}",
+                "size": len(comm),
+                "n_datasets": nd,
+                "datasets": sorted(ds),
+                "dominant": dom,
+                "purity": pur,
+                "ct_distribution": dict(ctc),
+                "n_unknown": nu,
+                "kb_best": kh,
+                "kb_overlap": ko,
+                "novelty": nov,
+                "top_markers": sorted(am, key=lambda g: idf.get(g, 0), reverse=True)[:15],
+                "members": [
+                    (c["dataset"], c["cluster_id"], c["cell_type"], c["confidence"]) for c in cc
+                ],
+            }
+        )
     results.sort(key=lambda r: (-r["n_datasets"], -r["n_unknown"], -r["purity"], -r["size"]))
 
     # KB consistency
@@ -396,11 +398,7 @@ def analyze(
             del kb_consistency[ct]
             continue
         idxs = [names.index(m) for m in mems]
-        sims = [
-            S[idxs[i], idxs[j]]
-            for i in range(len(idxs))
-            for j in range(i + 1, len(idxs))
-        ]
+        sims = [s[idxs[i], idxs[j]] for i in range(len(idxs)) for j in range(i + 1, len(idxs))]
         ds_list = sorted(set(all_clusters[m]["dataset"] for m in mems))
         kb_consistency[ct] = {
             "n_clusters": len(mems),
@@ -416,12 +414,13 @@ def analyze(
         "communities": results,
         "kb_consistency": kb_consistency,
         "summary": dict(summary),
-        "similarity_matrix": S,
+        "similarity_matrix": s,
         "cluster_names": names,
     }
 
 
 # ── CLI ──────────────────────────────────────────────────────────────
+
 
 def print_report(result: dict) -> None:
     """Print a human-readable analysis report."""
@@ -430,8 +429,10 @@ def print_report(result: dict) -> None:
     summary = result["summary"]
 
     print("\n" + "=" * 80)
-    print(f"COMPLETED: {result['similarity_matrix'].shape[0]} clusters, "
-          f"{len(communities)} communities")
+    print(
+        f"COMPLETED: {result['similarity_matrix'].shape[0]} clusters, "
+        f"{len(communities)} communities"
+    )
     print("=" * 80)
 
     for r in communities:
@@ -444,8 +445,9 @@ def print_report(result: dict) -> None:
             f"\n{flag} {r['id']} ds={r['n_datasets']} n={r['size']} "
             f"pur={r['purity']:.2f} unk={r['n_unknown']} {r['novelty']}"
         )
-        print(f"   ds={r['datasets']}  ct={r['dominant']}  "
-              f"kb={r['kb_best']}(ov={r['kb_overlap']})")
+        print(
+            f"   ds={r['datasets']}  ct={r['dominant']}  kb={r['kb_best']}(ov={r['kb_overlap']})"
+        )
         print(f"   top: {', '.join(r['top_markers'][:10])}")
         ms = "; ".join(f"{d}/{c}={t}" for d, c, t, _ in r["members"][:6])
         print(f"   members: {ms}")
@@ -471,11 +473,11 @@ def print_report(result: dict) -> None:
     if novel:
         print("\n--- NOVEL CANDIDATES ---")
         for r in novel:
+            print(f"\n  🆕 {r['id']}: {r['n_datasets']} ds, {r['n_unknown']} unknowns")
             print(
-                f"\n  🆕 {r['id']}: {r['n_datasets']} ds, {r['n_unknown']} unknowns"
+                f"     KB: {r['kb_best']}(ov={r['kb_overlap']})  "
+                f"markers: {', '.join(r['top_markers'][:12])}"
             )
-            print(f"     KB: {r['kb_best']}(ov={r['kb_overlap']})  "
-                  f"markers: {', '.join(r['top_markers'][:12])}")
             for d, c, t, conf in r["members"]:
                 print(f"       {d}/c{c}: {t} ({conf})")
     else:
@@ -485,10 +487,9 @@ def print_report(result: dict) -> None:
 
 # ── CLI entry point ────────────────────────────────────────────────
 
+
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Cross-dataset meta-clustering analysis engine"
-    )
+    parser = argparse.ArgumentParser(description="Cross-dataset meta-clustering analysis engine")
     parser.add_argument(
         "--project-dir",
         type=str,
@@ -526,8 +527,10 @@ def main() -> None:
 
     print(f"Project: {project_dir}")
     print(f"Modality: {modality}")
-    print(f"Parameters: top_markers={args.top_markers}, "
-          f"min_datasets={args.min_datasets}, cos_threshold={args.cos_threshold}")
+    print(
+        f"Parameters: top_markers={args.top_markers}, "
+        f"min_datasets={args.min_datasets}, cos_threshold={args.cos_threshold}"
+    )
 
     # Discover
     print("\n=== Discovering datasets ===")

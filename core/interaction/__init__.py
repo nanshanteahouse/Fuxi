@@ -5,10 +5,10 @@ Provides LIANA+ wrappers for RNA (permutation) and Spatial (bivariate) CCI analy
 
 from core.interaction.cell_interaction import (
     ensure_gene_symbols,
+    format_cci_results,
     load_lr_database,
     run_cci_permutation,
     run_cci_spatial,
-    format_cci_results,
 )
 
 __all__ = [

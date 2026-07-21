@@ -127,9 +127,7 @@ def compute_consensus_level(source_count: int) -> str:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def _normalize_type_key(
-    key: str, type_aliases: Optional[Dict[str, str]] = None
-) -> str:
+def _normalize_type_key(key: str, type_aliases: Optional[Dict[str, str]] = None) -> str:
     """Map a source-internal type key to the canonical KB name.
 
     Parameters
@@ -222,11 +220,11 @@ def merge_markers(
                 _register_marker(entry["add"], gene, src_id)
 
             # Refine
-            for gene, refine_data in (marker_data.get('refine') or {}).items():
-                entry['refine'].setdefault(gene, []).append(refine_data)
+            for gene, refine_data in (marker_data.get("refine") or {}).items():
+                entry["refine"].setdefault(gene, []).append(refine_data)
 
             # Negative markers (union across sources)
-            neg = marker_data.get('negative_markers') or []
+            neg = marker_data.get("negative_markers") or []
             if isinstance(neg, list):
                 entry["negative_markers"].update(neg)
 
@@ -234,11 +232,11 @@ def merge_markers(
             entry["species"].update(src["meta"].get("species", []))
 
         # ── Novel types ───────────────────────────────────────────
-        for nt in src.get('novel_types', []):
+        for nt in src.get("novel_types", []):
             if isinstance(nt, str):
                 nt_name = nt
             else:
-                nt_name = nt.get('name', '') if isinstance(nt, dict) else ''
+                nt_name = nt.get("name", "") if isinstance(nt, dict) else ""
             if not nt_name:
                 continue
 
@@ -265,20 +263,18 @@ def merge_markers(
             if src_order:
                 entry["orders"].add(src_order)
             if isinstance(nt, dict):
-                if nt.get('parent'):
-                    entry['parent'] = nt['parent']
+                if nt.get("parent"):
+                    entry["parent"] = nt["parent"]
                 # Novel-type markers go into 'add' (they are novel per definition)
-                for gene in nt.get('markers', []):
-                    _register_marker(entry['add'], gene, src_id)
-                for sp in nt.get('species', []):
-                    entry['species'].add(sp)
+                for gene in nt.get("markers", []):
+                    _register_marker(entry["add"], gene, src_id)
+                for sp in nt.get("species", []):
+                    entry["species"].add(sp)
 
     return merged
 
 
-def _register_marker(
-    dest: Dict[str, Dict[str, Any]], gene: str, src_id: str
-) -> None:
+def _register_marker(dest: Dict[str, Dict[str, Any]], gene: str, src_id: str) -> None:
     """Register *src_id* as a source for *gene* in *dest*.
 
     *dest* is one of the ``"confirm"`` or ``"add"`` sub-dicts inside a
@@ -336,9 +332,7 @@ def detect_conflicts(
             canonical = _normalize_type_key(raw_key, type_aliases)
             for tier in ("confirm", "add"):
                 for gene in marker_data.get(tier) or {}:
-                    gene_type_map.setdefault(gene, {}).setdefault(canonical, set()).add(
-                        src_id
-                    )
+                    gene_type_map.setdefault(gene, {}).setdefault(canonical, set()).add(src_id)
 
     cross_type: List[Dict[str, Any]] = []
     for gene, type_map in gene_type_map.items():
@@ -402,8 +396,7 @@ def resolve_conflicts(
                 {
                     **c,
                     "resolution": (
-                        f"Prefer '{c['type_a']['cell_type']}' "
-                        f"({n_a}/{total} sources vs {n_b})"
+                        f"Prefer '{c['type_a']['cell_type']}' ({n_a}/{total} sources vs {n_b})"
                     ),
                 }
             )
@@ -412,8 +405,7 @@ def resolve_conflicts(
                 {
                     **c,
                     "resolution": (
-                        f"Prefer '{c['type_b']['cell_type']}' "
-                        f"({n_b}/{total} sources vs {n_a})"
+                        f"Prefer '{c['type_b']['cell_type']}' ({n_b}/{total} sources vs {n_a})"
                     ),
                 }
             )
@@ -437,9 +429,7 @@ def resolve_conflicts(
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def _rule_dedup_key(
-    rule: Dict[str, Any], type_aliases: Optional[Dict[str, str]] = None
-) -> str:
+def _rule_dedup_key(rule: Dict[str, Any], type_aliases: Optional[Dict[str, str]] = None) -> str:
     """Deterministic string key for a rule (condition + action).
 
     Normalises the action through *type_aliases* so that rules with
@@ -478,9 +468,7 @@ def merge_rules(
         for rule in src.get("expert_rules", []):
             # Normalize action through type aliases
             rule_normalized = dict(rule)
-            rule_normalized["action"] = _normalize_type_key(
-                rule.get("action", ""), type_aliases
-            )
+            rule_normalized["action"] = _normalize_type_key(rule.get("action", ""), type_aliases)
             key = _rule_dedup_key(rule_normalized, type_aliases)
             existing_priority = seen.get(key, {}).get("priority", 999)
             if key not in seen or rule_normalized.get("priority", 999) < existing_priority:
@@ -576,8 +564,7 @@ def build_final_kb(
             n_extra = len(refine_list) - 1
             if n_extra > 0:
                 merged_refine["note"] = (
-                    first.get("note", "")
-                    + f" (refined by {n_extra + 1} source(s))"
+                    first.get("note", "") + f" (refined by {n_extra + 1} source(s))"
                 )
             refine_out[gene] = merged_refine
 
@@ -594,11 +581,15 @@ def build_final_kb(
         # Resolve class/order — use most common; fall back to sorted list
         classes_list = sorted(type_data.get("classes", set()))
         orders_list = sorted(type_data.get("orders", set()))
-        resolved_class = classes_list[0] if len(classes_list) == 1 else (
-            ", ".join(classes_list) if classes_list else ""
+        resolved_class = (
+            classes_list[0]
+            if len(classes_list) == 1
+            else (", ".join(classes_list) if classes_list else "")
         )
-        resolved_order = orders_list[0] if len(orders_list) == 1 else (
-            ", ".join(orders_list) if orders_list else ""
+        resolved_order = (
+            orders_list[0]
+            if len(orders_list) == 1
+            else (", ".join(orders_list) if orders_list else "")
         )
 
         all_classes.update(classes_list)
@@ -673,10 +664,11 @@ def build_tissue_kb(
     # Optionally build hierarchy
     if hierarchy_yaml_path and os.path.isfile(hierarchy_yaml_path):
         from rna.utils.hierarchy import (
-            load_hierarchy_yaml,
             build_hierarchy,
             compute_private_markers,
+            load_hierarchy_yaml,
         )
+
         cfg = load_hierarchy_yaml(hierarchy_yaml_path)
         build_hierarchy(kb, cfg)
         compute_private_markers(kb, cfg)

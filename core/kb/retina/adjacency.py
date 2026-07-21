@@ -32,16 +32,14 @@ Cell type names follow the canonical keys defined in
 ``core/kb/retina/synonyms.py``.
 """
 
-from typing import List, Tuple, Dict
+from typing import Dict, List, Tuple
 
 ADJACENCY_TYPES: Dict[str, str] = {
     "synaptic": (
-        "Chemical synapse — direct neurotransmitter release from presynaptic "
-        "to postsynaptic cell"
+        "Chemical synapse — direct neurotransmitter release from presynaptic to postsynaptic cell"
     ),
     "gap_junction": (
-        "Electrical synapse / gap junction — direct intercellular ion flow "
-        "via connexin channels"
+        "Electrical synapse / gap junction — direct intercellular ion flow via connexin channels"
     ),
     "physical": (
         "Direct physical contact not mediated by a classical synapse "
@@ -49,7 +47,7 @@ ADJACENCY_TYPES: Dict[str, str] = {
     ),
     "ensheathment": (
         "Glial wrapping or support — the source glial cell ensheaths or "
-        "surrounds the target neuron (e.g., Mu\"ller glia endfeet)"
+        'surrounds the target neuron (e.g., Mu"ller glia endfeet)'
     ),
     "modulatory": (
         "Indirect modulation — ephaptic, volume-transmission, or feedback "
@@ -70,30 +68,26 @@ ADJACENCY: List[Tuple[str, str, str]] = [
     ("Horizontal_Cell", "Bipolar_Cell", "modulatory"),
     ("Horizontal_Cell", "Rod_Photoreceptor", "modulatory"),
     ("Horizontal_Cell", "Cone_Photoreceptor", "modulatory"),
-
     # ═══════════════════════════════════════════════════════════════════════
     # Inner Plexiform Layer (IPL) — bipolar cell → amacrine / RGC
     # ═══════════════════════════════════════════════════════════════════════
     ("Bipolar_Cell", "RGC", "synaptic"),
     ("Bipolar_Cell", "Amacrine_Cell", "synaptic"),
-    ("Amacrine_Cell", "Bipolar_Cell", "synaptic"),          # feedback inhibition
-    ("Amacrine_Cell", "RGC", "synaptic"),                   # feedforward inhibition
-    ("Amacrine_Cell", "Amacrine_Cell", "synaptic"),         # lateral inhibition
-
+    ("Amacrine_Cell", "Bipolar_Cell", "synaptic"),  # feedback inhibition
+    ("Amacrine_Cell", "RGC", "synaptic"),  # feedforward inhibition
+    ("Amacrine_Cell", "Amacrine_Cell", "synaptic"),  # lateral inhibition
     # ═══════════════════════════════════════════════════════════════════════
     # Rod Pathway — via AII amacrine cells
     # ═══════════════════════════════════════════════════════════════════════
-    ("Bipolar_Cell", "Amacrine_Cell", "synaptic"),          # Rod BC → AII AC
-    ("Amacrine_Cell", "Bipolar_Cell", "gap_junction"),      # AII AC → ON Cone BC
-    ("Amacrine_Cell", "Bipolar_Cell", "synaptic"),          # AII AC → OFF Cone BC (glycinergic)
-
+    ("Bipolar_Cell", "Amacrine_Cell", "synaptic"),  # Rod BC → AII AC
+    ("Amacrine_Cell", "Bipolar_Cell", "gap_junction"),  # AII AC → ON Cone BC
+    ("Amacrine_Cell", "Bipolar_Cell", "synaptic"),  # AII AC → OFF Cone BC (glycinergic)
     # ═══════════════════════════════════════════════════════════════════════
     # Non-neuronal contacts — RPE, glia, vasculature, immune
     # ═══════════════════════════════════════════════════════════════════════
     # RPE-photoreceptor outer segment physical apposition
     ("RPE", "Rod_Photoreceptor", "physical"),
     ("RPE", "Cone_Photoreceptor", "physical"),
-
     # Mu"ller glia ensheathment of all major retinal neurons
     ("Muller_Glia", "Rod_Photoreceptor", "ensheathment"),
     ("Muller_Glia", "Cone_Photoreceptor", "ensheathment"),
@@ -101,14 +95,11 @@ ADJACENCY: List[Tuple[str, str, str]] = [
     ("Muller_Glia", "RGC", "ensheathment"),
     ("Muller_Glia", "Amacrine_Cell", "ensheathment"),
     ("Muller_Glia", "Horizontal_Cell", "ensheathment"),
-
     # Blood-retina barrier
     ("Vascular_Endothelial", "Pericyte", "physical"),
-
     # Microglia — synaptic pruning and immune surveillance
     ("Microglia", "RGC", "modulatory"),
     ("Microglia", "Amacrine_Cell", "modulatory"),
-
     # Astrocyte — perivascular and nerve-fiber-layer ensheathment
     ("Astrocyte", "RGC", "ensheathment"),
 ]

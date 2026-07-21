@@ -13,7 +13,7 @@ Validation::
 """
 
 from ..merge import build_tissue_kb
-from .config import TYPE_ALIASES, SOURCES_DIR, HIERARCHY_PATH
+from .config import HIERARCHY_PATH, SOURCES_DIR, TYPE_ALIASES
 
 # ── Build KB once at import time ────────────────────────────────────
 retina_expert_kb = build_tissue_kb(

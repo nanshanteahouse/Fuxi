@@ -36,12 +36,15 @@ from __future__ import annotations
 import itertools
 from collections.abc import Callable, Sequence
 from typing import Any
-from typing import Any
 
 import numpy as np
 
 # Re-export the existing Pareto selection logic — no duplication.
-from core.cluster.evaluation import select_best_params, _compute_stability, _compute_cluster_coherence  # noqa: F401
+from core.cluster.evaluation import (  # noqa: F401
+    _compute_cluster_coherence,
+    _compute_stability,
+    select_best_params,
+)
 
 # ---------------------------------------------------------------------------
 #  Public API
@@ -265,9 +268,7 @@ def _grid_search_serial(
         for combo in combos:
             params = dict(zip(param_names, combo))
             merged = {**fixed_kwargs, **params}
-            _try_one_combo(
-                adata, clusterer, evaluation_fn, params, merged, results
-            )
+            _try_one_combo(adata, clusterer, evaluation_fn, params, merged, results)
         return
 
     # --- grouped case ---
@@ -303,12 +304,17 @@ def _grid_search_serial(
         if n_jobs > 1 and len(group_combos) > 1:
             # Parallel: each resolution is independent within the shared graph
             _eval_one = _make_combo_evaluator(
-                adata, clusterer, evaluation_fn, param_names, group_merged,
+                adata,
+                clusterer,
+                evaluation_fn,
+                param_names,
+                group_merged,
             )
             try:
                 from joblib import Parallel, delayed
+
                 n_workers = min(n_jobs, len(group_combos))
-                group_results = Parallel(n_jobs=n_workers, backend='threading')(
+                group_results = Parallel(n_jobs=n_workers, backend="threading")(
                     delayed(_eval_one)(combo) for combo in group_combos
                 )
                 results.extend([r for r in group_results if r is not None])
@@ -318,14 +324,24 @@ def _grid_search_serial(
                     params = dict(zip(param_names, combo))
                     merged = {**group_merged, **params}
                     _try_one_combo(
-                        adata, clusterer, evaluation_fn, params, merged, results,
+                        adata,
+                        clusterer,
+                        evaluation_fn,
+                        params,
+                        merged,
+                        results,
                     )
         else:
             for combo in group_combos:
                 params = dict(zip(param_names, combo))
                 merged = {**group_merged, **params}
                 _try_one_combo(
-                    adata, clusterer, evaluation_fn, params, merged, results,
+                    adata,
+                    clusterer,
+                    evaluation_fn,
+                    params,
+                    merged,
+                    results,
                 )
 
 
@@ -377,6 +393,7 @@ def _make_combo_evaluator(
     clusterer (which writes to a distinct obs column via key_added) and
     returns the result without mutating shared data structures.
     """
+
     def _eval(combo: tuple[Any, ...]) -> dict[str, Any] | None:
         params = dict(zip(param_names, combo))
         merged = {**base_kwargs, **params}
@@ -398,4 +415,5 @@ def _make_combo_evaluator(
             except Exception:
                 entry["score"] = None
         return entry
+
     return _eval

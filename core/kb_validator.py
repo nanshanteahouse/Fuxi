@@ -3,8 +3,8 @@ core/kb_validator.py — Empirical marker validation against the tissue KB.
 
 Usage::
 
-    from core.kb_validator import KbValidator    
-    validator = KbValidator("retina")    
+    from core.kb_validator import KbValidator
+    validator = KbValidator("retina")
     df = validator.validate(adata, annotation_col="cell_type")
     df.to_csv("validation.csv", index=False)
 
@@ -18,8 +18,8 @@ from __future__ import annotations
 
 import argparse
 import logging
-import sys
 import os
+import sys
 from typing import Optional
 
 import pandas as pd
@@ -33,8 +33,8 @@ _repo_root = os.path.dirname(_script_dir)
 if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)
 
-from core.kb import load_kb                   # noqa: E402
-from core.annotation.scoring import _normalize_gene_name   # noqa: E402
+from core.annotation.scoring import _normalize_gene_name  # noqa: E402
+from core.kb import load_kb  # noqa: E402
 
 # Threshold: at least 30% of cells must express a marker for it to validate
 DEFAULT_PCT_THRESHOLD: float = 0.3
@@ -73,6 +73,7 @@ class KbValidator:
         if use_ontology:
             try:
                 from core.annotation.standardizer import StandardOntology
+
                 self.ontology = StandardOntology(tissue)
             except (ImportError, NotImplementedError, ValueError):
                 _log.info("StandardOntology unavailable for '%s' — direct matching only", tissue)
@@ -109,7 +110,7 @@ class KbValidator:
             if kb_entry is None:
                 continue
 
-            cell_mask = (adata.obs[annotation_col] == original_label)
+            cell_mask = adata.obs[annotation_col] == original_label
             cell_subset = adata[cell_mask]
 
             for tier in ("confirm", "add", "refine"):
@@ -118,7 +119,9 @@ class KbValidator:
                     # Handle old-style string markers (shouldn't happen, but safe)
                     rows.extend(
                         self._validate_single_gene(
-                            tier, kb_key, markers,
+                            tier,
+                            kb_key,
+                            markers,
                             cell_subset,
                         )
                     )
@@ -126,15 +129,24 @@ class KbValidator:
                     for gene in markers:
                         rows.extend(
                             self._validate_single_gene(
-                                tier, kb_key, gene, cell_subset,
+                                tier,
+                                kb_key,
+                                gene,
+                                cell_subset,
                             )
                         )
 
         if not rows:
-            return pd.DataFrame(columns=[
-                "cell_type", "gene", "tier", "validated",
-                "pct_expressed", "mean_expression",
-            ])
+            return pd.DataFrame(
+                columns=[
+                    "cell_type",
+                    "gene",
+                    "tier",
+                    "validated",
+                    "pct_expressed",
+                    "mean_expression",
+                ]
+            )
 
         return pd.DataFrame(rows)
 
@@ -176,35 +188,39 @@ class KbValidator:
         matched_var = self._find_gene(gene, cell_subset.var_names)
 
         if matched_var is None:
-            return [{
-                "cell_type": cell_type,
-                "gene": gene,
-                "tier": tier,
-                "validated": False,
-                "pct_expressed": 0.0,
-                "mean_expression": 0.0,
-            }]
+            return [
+                {
+                    "cell_type": cell_type,
+                    "gene": gene,
+                    "tier": tier,
+                    "validated": False,
+                    "pct_expressed": 0.0,
+                    "mean_expression": 0.0,
+                }
+            ]
 
         # Extract expression vector
-        X = cell_subset[:, matched_var].X
-        if hasattr(X, "toarray"):
-            expr = X.toarray().flatten()  # type: ignore[union-attr]
-            expr = X.toarray().flatten()
+        x = cell_subset[:, matched_var].X
+        if hasattr(x, "toarray"):
+            expr = x.toarray().flatten()  # type: ignore[union-attr]
+            expr = x.toarray().flatten()
         else:
-            expr = X.flatten()
+            expr = x.flatten()
 
         pct = float((expr > 0).mean())
         mean = float(expr.mean())
         validated = pct >= self.pct_threshold
 
-        return [{
-            "cell_type": cell_type,
-            "gene": gene,
-            "tier": tier,
-            "validated": validated,
-            "pct_expressed": round(pct, 4),
-            "mean_expression": round(mean, 4),
-        }]
+        return [
+            {
+                "cell_type": cell_type,
+                "gene": gene,
+                "tier": tier,
+                "validated": validated,
+                "pct_expressed": round(pct, 4),
+                "mean_expression": round(mean, 4),
+            }
+        ]
 
     @staticmethod
     def _find_gene(gene: str, var_names: pd.Index) -> Optional[str]:
@@ -230,23 +246,33 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Empirical KB marker validation for annotated scRNA-seq data.",
     )
     p.add_argument(
-        "--h5ad", required=True, type=str,
+        "--h5ad",
+        required=True,
+        type=str,
         help="Path to annotated .h5ad file (e.g. projects/rna/GSE123456/results/h5ad/05_annotated.h5ad)",
     )
     p.add_argument(
-        "--annotation", default="cell_type", type=str,
+        "--annotation",
+        default="cell_type",
+        type=str,
         help="Column in adata.obs with cell-type labels (default: cell_type)",
     )
     p.add_argument(
-        "--tissue", default="retina", type=str,
+        "--tissue",
+        default="retina",
+        type=str,
         help="Tissue KB to validate against (default: retina)",
     )
     p.add_argument(
-        "--output", "-o", default=None, type=str,
+        "--output",
+        "-o",
+        default=None,
+        type=str,
         help="CSV output path; if omitted, prints summary to stdout",
     )
     p.add_argument(
-        "--no-ontology", action="store_true",
+        "--no-ontology",
+        action="store_true",
         help="Disable StandardOntology fuzzy-matching; match labels directly",
     )
     return p
@@ -281,7 +307,6 @@ def _print_summary(df: pd.DataFrame, tissue: str) -> None:
         print(f"    {ct}:  {ct_validated}/{len(subset)}  ({ct_rate:.1f}%)")
 
 
-
 def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
@@ -296,8 +321,7 @@ def main() -> None:
     if args.annotation not in adata.obs.columns:
         available = ", ".join(adata.obs.columns.tolist())
         parser.error(
-            f"Annotation column '{args.annotation}' not found in adata.obs. "
-            f"Available: {available}"
+            f"Annotation column '{args.annotation}' not found in adata.obs. Available: {available}"
         )
 
     validator = KbValidator(
@@ -319,7 +343,6 @@ if __name__ == "__main__":
 # ═════════════════════════════════════════════════════════════════════════════
 # update_yaml_audit — Write validation results back into YAML source audit sections
 # ═════════════════════════════════════════════════════════════════════════════
-
 
 
 def update_yaml_audit(
@@ -352,8 +375,9 @@ def update_yaml_audit(
     dataset_id : str
         Dataset identifier (e.g. "GSE123456") to record in ``expression_validated``.
     """
-    import yaml
     from datetime import date
+
+    import yaml
 
     if not os.path.exists(yaml_path):
         _log.warning("YAML file not found: %s", yaml_path)

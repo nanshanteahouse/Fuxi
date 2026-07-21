@@ -18,8 +18,8 @@ Dependencies: liana>=1.0.0, anndata, pandas, mygene
 
 import os
 import time
+
 import pandas as pd
-from typing import Optional
 
 MYGENE_CHUNK_SIZE: int = 1000
 
@@ -48,7 +48,6 @@ def ensure_gene_symbols(adata, log: object = None, species: str = "human"):
         A new AnnData with gene-symbol var_names, or the original if
         no conversion was needed (same object, not a copy).
     """
-    import numpy as np
 
     is_ensembl = adata.var_names.str.match(r"^ENS[A-Z]{0,4}G\d{11}$")
     n_ensembl = is_ensembl.sum()
@@ -58,10 +57,14 @@ def ensure_gene_symbols(adata, log: object = None, species: str = "human"):
         return adata
 
     if log:
-        log.info("%d/%d var_names are Ensembl IDs -- mapping to gene symbols...",
-                 n_ensembl, adata.n_vars)
+        log.info(
+            "%d/%d var_names are Ensembl IDs -- mapping to gene symbols...",
+            n_ensembl,
+            adata.n_vars,
+        )
 
     import mygene
+
     mg = mygene.MyGeneInfo()
 
     # Batch query mygene.info in chunks of 1000
@@ -69,10 +72,11 @@ def ensure_gene_symbols(adata, log: object = None, species: str = "human"):
     results = {}
     chunk_size = MYGENE_CHUNK_SIZE
     for i in range(0, len(ensembl_ids), chunk_size):
-        chunk = ensembl_ids[i:i + chunk_size]
+        chunk = ensembl_ids[i : i + chunk_size]
         try:
-            batch = mg.querymany(chunk, scopes="ensembl.gene", fields="symbol",
-                                 species=species, as_dataframe=True)
+            batch = mg.querymany(
+                chunk, scopes="ensembl.gene", fields="symbol", species=species, as_dataframe=True
+            )
         except Exception:
             continue
         for eid, row in batch.iterrows():
@@ -90,9 +94,9 @@ def ensure_gene_symbols(adata, log: object = None, species: str = "human"):
         if name in results:
             new_names.append(results[name])
         elif name.startswith("ENSG"):
-            new_names.append(name)   # keep as-is (will be dropped later)
+            new_names.append(name)  # keep as-is (will be dropped later)
         else:
-            new_names.append(name)   # already a symbol
+            new_names.append(name)  # already a symbol
 
     # Create a clean AnnData
     new_adata = adata[:, :].copy()
@@ -168,7 +172,10 @@ def load_lr_database(
         n_receptors = lr_df["receptor"].nunique()
         log.info(
             "LR database loaded: %d interactions, %d unique ligands, %d unique receptors (%.1fs)",
-            len(lr_df), n_ligands, n_receptors, time.time() - t0,
+            len(lr_df),
+            n_ligands,
+            n_receptors,
+            time.time() - t0,
         )
 
     return lr_df
@@ -219,7 +226,9 @@ def run_cci_permutation(
     if log:
         log.info(
             "Running CCI permutation test: groupby=%s, resource=%s, n_perms=%d",
-            groupby_col, resource_name, n_perms,
+            groupby_col,
+            resource_name,
+            n_perms,
         )
 
     lr_res = li.mt.rank_aggregate(
@@ -239,7 +248,9 @@ def run_cci_permutation(
         n_sig = (lr_res.get("pvalue", 1.0) < 0.05).sum() if "pvalue" in lr_res.columns else 0
         log.info(
             "CCI permutation done: %d total, %d significant (p<0.05), took %.1fs",
-            n_interactions, n_sig, time.time() - t0,
+            n_interactions,
+            n_sig,
+            time.time() - t0,
         )
 
     return lr_res
@@ -293,7 +304,10 @@ def run_cci_spatial(
     if log:
         log.info(
             "Running CCI spatial analysis: resource=%s, local=%s, global=%s, n_perms=%d",
-            resource_name, local_name, global_name, n_perms,
+            resource_name,
+            local_name,
+            global_name,
+            n_perms,
         )
 
     # Validate spatial connectivities exist
@@ -323,7 +337,8 @@ def run_cci_spatial(
         n_interactions = len(lr_res)
         log.info(
             "CCI spatial done: %d interactions, took %.1fs",
-            n_interactions, time.time() - t0,
+            n_interactions,
+            time.time() - t0,
         )
 
     return lr_res
@@ -372,24 +387,40 @@ def format_cci_results(
     cols = lr_res.columns
 
     if "ligand" in cols and "receptor" in cols:
-        src = lr_res["source"].astype(str) if "source" in cols else pd.Series("", index=lr_res.index)
-        tgt = lr_res["target"].astype(str) if "target" in cols else pd.Series("", index=lr_res.index)
+        src = (
+            lr_res["source"].astype(str) if "source" in cols else pd.Series("", index=lr_res.index)
+        )
+        tgt = (
+            lr_res["target"].astype(str) if "target" in cols else pd.Series("", index=lr_res.index)
+        )
         if "source" in cols and "target" in cols:
-            lr_res["interaction"] = src + "->" + tgt + " | " + lr_res["ligand"].astype(str) + "_" + lr_res["receptor"].astype(str)
+            lr_res["interaction"] = (
+                src
+                + "->"
+                + tgt
+                + " | "
+                + lr_res["ligand"].astype(str)
+                + "_"
+                + lr_res["receptor"].astype(str)
+            )
         else:
-            lr_res["interaction"] = lr_res["ligand"].astype(str) + "_" + lr_res["receptor"].astype(str)
+            lr_res["interaction"] = (
+                lr_res["ligand"].astype(str) + "_" + lr_res["receptor"].astype(str)
+            )
     elif "ligand_complex" in cols and "receptor_complex" in cols:
         lr_res["interaction"] = (
-            lr_res["ligand_complex"].astype(str) + "_" +
-            lr_res["receptor_complex"].astype(str)
+            lr_res["ligand_complex"].astype(str) + "_" + lr_res["receptor_complex"].astype(str)
         )
 
     # ── Apply anatomical adjacency filter (v4.0+) ──
     if adjacency is not None and adjacency_mode != "off":
         from core.pipeline.anatomy import filter_cci_by_adjacency
+
         lr_res = filter_cci_by_adjacency(
-            lr_res, adjacency, mode=adjacency_mode,
-            adjacency_types=[],   # empty = all types pass
+            lr_res,
+            adjacency,
+            mode=adjacency_mode,
+            adjacency_types=[],  # empty = all types pass
             log=log,
         )
 

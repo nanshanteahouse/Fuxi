@@ -115,9 +115,7 @@ def load_adjacency(tissue_name: str) -> pd.DataFrame:
         adjacency module or is not supported.
     """
     try:
-        adj_mod = importlib.import_module(
-            f".{tissue_name}.adjacency", __package__
-        )
+        adj_mod = importlib.import_module(f".{tissue_name}.adjacency", __package__)
         return pd.DataFrame(
             adj_mod.ADJACENCY,
             columns=["source", "target", "adjacency_type"],
@@ -145,20 +143,12 @@ def load_pathway_relevance(tissue_name: str) -> dict:
         Returns empty dict for unsupported tissues.
     """
     try:
-        pr_mod = importlib.import_module(
-            f".{tissue_name}.pathway_relevance", __package__
-        )
+        pr_mod = importlib.import_module(f".{tissue_name}.pathway_relevance", __package__)
         prefix = tissue_name.upper()
         return {
-            "key_pathways": list(
-                getattr(pr_mod, f"{prefix}_KEY_PATHWAYS", [])
-            ),
-            "generic_pathways": list(
-                getattr(pr_mod, f"{prefix}_GENERIC_PATHWAYS", [])
-            ),
-            "kb_pathway_markers": dict(
-                getattr(pr_mod, f"{prefix}_KB_PATHWAY_MARKERS", {})
-            ),
+            "key_pathways": list(getattr(pr_mod, f"{prefix}_KEY_PATHWAYS", [])),
+            "generic_pathways": list(getattr(pr_mod, f"{prefix}_GENERIC_PATHWAYS", [])),
+            "kb_pathway_markers": dict(getattr(pr_mod, f"{prefix}_KB_PATHWAY_MARKERS", {})),
         }
     except ImportError:
         pass
@@ -180,9 +170,7 @@ def load_synonyms(tissue_name: str) -> dict:
         or empty dict if unavailable.
     """
     try:
-        cfg_mod = importlib.import_module(
-            f".{tissue_name}.config", __package__
-        )
+        cfg_mod = importlib.import_module(f".{tissue_name}.config", __package__)
         syn_path = getattr(cfg_mod, "SYNONYMS_PATH", None)
         if syn_path and os.path.isfile(syn_path):
             with open(syn_path) as fh:

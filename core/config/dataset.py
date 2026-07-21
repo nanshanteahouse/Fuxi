@@ -18,16 +18,17 @@ dataset_schema.py — dataset.yaml Python 数据模型
     print(ds.modalities[0].name)  # "scRNA-seq"
 """
 
-import os
-import yaml
 import logging
+import os
 from typing import Optional
 
-from pydantic import BaseModel, Field, ConfigDict
+import yaml
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class FileEntry(BaseModel):
     """单个数据文件描述"""
+
     model_config = ConfigDict(extra="forbid")
     file: str
     format: str
@@ -35,6 +36,7 @@ class FileEntry(BaseModel):
 
 class SampleEntry(BaseModel):
     """样本描述 — 包含 RNA/ATAC/Spatial 文件列表"""
+
     model_config = ConfigDict(extra="forbid")
     id: str
     label: str
@@ -49,27 +51,30 @@ class SampleEntry(BaseModel):
 
 class ModalityEntry(BaseModel):
     """组学类型声明"""
+
     model_config = ConfigDict(extra="forbid")
-    name: str            # scRNA-seq, scATAC-seq, spatial_transcriptomics, sc_multiome
-    status: str          # downloaded, partial, not_downloaded
+    name: str  # scRNA-seq, scATAC-seq, spatial_transcriptomics, sc_multiome
+    status: str  # downloaded, partial, not_downloaded
     format: str
     file_count: int = 0
     total_size_gb: float = 0.0
-    assay_type: Optional[str] = None   # "scRNAseq" | "snRNAseq" | None
+    assay_type: Optional[str] = None  # "scRNAseq" | "snRNAseq" | None
     subseries: Optional[str] = None
     note: Optional[str] = None
 
 
 class Comparison(BaseModel):
     """实验比较设计"""
+
     model_config = ConfigDict(extra="forbid")
     name: str
-    type: str            # condition, time_series, perturbation
+    type: str  # condition, time_series, perturbation
     groups: list[str] = Field(default_factory=list)
 
 
 class Resources(BaseModel):
     """外部资源引用"""
+
     model_config = ConfigDict(extra="forbid")
     genome: Optional[str] = None
     ortholog_map: Optional[str] = None
@@ -78,14 +83,16 @@ class Resources(BaseModel):
 
 class PipelineStatus(BaseModel):
     """管线运行状态"""
+
     model_config = ConfigDict(extra="forbid")
-    scRNAseq: Optional[str] = None   # pending, running, completed, failed
+    scRNAseq: Optional[str] = None  # noqa: N815
     ATACseq: Optional[str] = None
     spatial: Optional[str] = None
 
 
 class Meta(BaseModel):
     """元数据的元数据"""
+
     model_config = ConfigDict(extra="forbid")
     created: Optional[str] = None
     updated: Optional[str] = None
@@ -95,12 +102,13 @@ class Meta(BaseModel):
 
 class DatasetMeta(BaseModel):
     """完整的 dataset.yaml 数据模型"""
+
     model_config = ConfigDict(extra="forbid")
     id: str
-    type: str           # SingleAccession, SuperSeries
+    type: str  # SingleAccession, SuperSeries
     title: str
     species: Optional[str] = None
-    species_key: Optional[str] = None   # normalised pipeline key (e.g. 'human', 'mouse')
+    species_key: Optional[str] = None  # normalised pipeline key (e.g. 'human', 'mouse')
     tissue: Optional[str] = None
     note: Optional[str] = None
     description: Optional[str] = None
@@ -118,14 +126,14 @@ class DatasetMeta(BaseModel):
 
 def load_dataset(yaml_path: str) -> DatasetMeta:
     """从 YAML 文件加载数据集元数据"""
-    with open(yaml_path, 'r', encoding='utf-8') as f:
+    with open(yaml_path, "r", encoding="utf-8") as f:
         return DatasetMeta.model_validate(yaml.safe_load(f))
 
 
 def save_dataset(ds: DatasetMeta, yaml_path: str) -> None:
     """将 DatasetMeta 保存为 YAML 文件"""
     os.makedirs(os.path.dirname(yaml_path) or ".", exist_ok=True)
-    with open(yaml_path, 'w', encoding='utf-8') as f:
+    with open(yaml_path, "w", encoding="utf-8") as f:
         yaml.dump(
             ds.model_dump(exclude_none=True, exclude_defaults=True, by_alias=True),
             f,

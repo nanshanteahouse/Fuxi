@@ -18,12 +18,13 @@ ai_caller.py — 统一 LLM 调用模块
     result = ai_query(ANNOTATION_SYSTEM_PROMPT, "User query...", cfg)
 """
 
+import json
 import os
 import sys
 import time
-import json
 import urllib.request
 from functools import lru_cache
+
 
 @lru_cache(maxsize=1)
 def _query_available_models(api_base: str, api_key: str) -> list[str]:
@@ -32,20 +33,21 @@ def _query_available_models(api_base: str, api_key: str) -> list[str]:
     Uses urllib.request (stdlib) - no new dependencies.
     Returns empty list on any failure (network, auth, non-standard API).
     """
-    url = api_base.rstrip('/') + '/models'
+    url = api_base.rstrip("/") + "/models"
     req = urllib.request.Request(url)
     if api_key:
-        req.add_header('Authorization', 'Bearer ' + api_key)
+        req.add_header("Authorization", "Bearer " + api_key)
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode())
-        return [m['id'] for m in data.get('data', []) if isinstance(m, dict) and 'id' in m]
+        return [m["id"] for m in data.get("data", []) if isinstance(m, dict) and "id" in m]
     except Exception:
         return []
 
 
-def ai_query(system_prompt: str, user_prompt: str, cfg,
-             log=None, expect_json: bool = False) -> str:
+def ai_query(
+    system_prompt: str, user_prompt: str, cfg, log=None, expect_json: bool = False
+) -> str:
     """
     统一的 LLM 查询接口。
 
@@ -72,29 +74,32 @@ def ai_query(system_prompt: str, user_prompt: str, cfg,
         '{"0": {"cell_type": "T cell", ...}}'
     """
     import logging
+
     if log is None:
         log = logging.getLogger(__name__)
 
     # ── 磁盘缓存（可配置开关，默认开启） ──────────────────────────────
-    if getattr(cfg, 'ai_cache_responses', False):
+    if getattr(cfg, "ai_cache_responses", False):
         import hashlib
-        cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                 '..', 'cache', 'ai_responses')
+
+        cache_dir = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "..", "cache", "ai_responses"
+        )
         os.makedirs(cache_dir, exist_ok=True)
         cache_key = hashlib.sha256(
-            f"{cfg.model}:{system_prompt}:{user_prompt}".encode('utf-8')
+            f"{cfg.model}:{system_prompt}:{user_prompt}".encode("utf-8")
         ).hexdigest()
         cache_path = os.path.join(cache_dir, f"{cache_key}.json")
         if os.path.exists(cache_path):
             try:
-                with open(cache_path, 'r') as f:
+                with open(cache_path, "r") as f:
                     cached = json.load(f)
-                return cached['response']
+                return cached["response"]
             except (json.JSONDecodeError, KeyError):
                 pass  # Corrupted cache — proceed to live call
 
-    from openai import OpenAI
     import openai
+    from openai import OpenAI
 
     api_key = cfg.api_key or os.getenv("LLM_API_KEY") or None
     if api_key is None:
@@ -108,7 +113,7 @@ def ai_query(system_prompt: str, user_prompt: str, cfg,
 
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user",   "content": user_prompt},
+        {"role": "user", "content": user_prompt},
     ]
 
     # Retry loop: some vLLM deployments return content=None transiently
@@ -141,59 +146,79 @@ def ai_query(system_prompt: str, user_prompt: str, cfg,
             resp = client.chat.completions.create(**call_kwargs)
         except openai.APIConnectionError:
             if attempt < max_retries - 1:
-                wait = 2 ** attempt
+                wait = 2**attempt
                 print(f"[ai_caller] Connection error, retrying in {wait}s...", file=sys.stderr)
                 time.sleep(wait)
             continue
         except openai.APIStatusError as e:
             if e.status_code in (429, 503):
                 if attempt < max_retries - 1:
-                    wait = 2 ** attempt
-                    print(f"[ai_caller] HTTP {e.status_code}, retrying in {wait}s...", file=sys.stderr)
+                    wait = 2**attempt
+                    print(
+                        f"[ai_caller] HTTP {e.status_code}, retrying in {wait}s...",
+                        file=sys.stderr,
+                    )
                     time.sleep(wait)
                 continue
             if e.status_code in (404, 422):
                 models = _query_available_models(
                     api_base=cfg.api_base,
-                    api_key=cfg.api_key or os.environ.get('LLM_API_KEY') or None,
+                    api_key=cfg.api_key or os.environ.get("LLM_API_KEY") or None,
                 )
                 if models:
-                    msg = '[ai_caller] Model ' + repr(cfg.model) + ' not found. Available models: ' + str(models)
+                    msg = (
+                        "[ai_caller] Model "
+                        + repr(cfg.model)
+                        + " not found. Available models: "
+                        + str(models)
+                    )
                     print(msg, file=sys.stderr)
                 else:
-                    msg = '[ai_caller] Model ' + repr(cfg.model) + ' not found (HTTP ' + str(e.status_code) + '). Could not query available models endpoint.'
+                    msg = (
+                        "[ai_caller] Model "
+                        + repr(cfg.model)
+                        + " not found (HTTP "
+                        + str(e.status_code)
+                        + "). Could not query available models endpoint."
+                    )
                     print(msg, file=sys.stderr)
             raise
         content = resp.choices[0].message.content
 
         # Check finish_reason: permanent errors should not be retried
-        finish_reason = getattr(resp.choices[0], 'finish_reason', None)
-        if finish_reason == 'content_filter':
+        finish_reason = getattr(resp.choices[0], "finish_reason", None)
+        if finish_reason == "content_filter":
             log.warning("Content filtered (finish_reason=%s), not retrying", finish_reason)
             break
 
         if content is not None and content.strip():
             # ── Write to cache on success ─────────────────────────────────
-            if getattr(cfg, 'ai_cache_responses', False):
+            if getattr(cfg, "ai_cache_responses", False):
                 try:
-                    with open(cache_path, 'w') as f:
-                        json.dump({
-                            'model': cfg.model,
-                            'created': time.time(),
-                            'response': content,
-                        }, f)
+                    with open(cache_path, "w") as f:
+                        json.dump(
+                            {
+                                "model": cfg.model,
+                                "created": time.time(),
+                                "response": content,
+                            },
+                            f,
+                        )
                 except Exception:
                     pass  # Cache write failure is non-fatal
             return content
 
         # Remember reasoning_content as fallback
-        rc = getattr(resp.choices[0].message, 'reasoning_content', None)
+        rc = getattr(resp.choices[0].message, "reasoning_content", None)
         if rc and rc.strip():
             last_content = rc.strip()
         if attempt < max_retries - 1:
-            wait = 2 ** attempt
-            msg = repr(content)[:100] if content is not None else 'None'
-            print(f"[ai_caller] Empty response (content={msg}), retrying in {wait}s...", file=sys.stderr)
+            wait = 2**attempt
+            msg = repr(content)[:100] if content is not None else "None"
+            print(
+                f"[ai_caller] Empty response (content={msg}), retrying in {wait}s...",
+                file=sys.stderr,
+            )
             time.sleep(wait)
 
     # Fallback: use reasoning_content if available

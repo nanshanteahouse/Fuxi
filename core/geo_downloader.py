@@ -31,9 +31,8 @@ import shutil
 import subprocess
 import sys
 import time
-import urllib.request
 import urllib.error
-from pathlib import Path
+import urllib.request
 from typing import Optional
 
 # Add repo root to sys.path (consistent with all step scripts)
@@ -56,15 +55,15 @@ _SUPPL_LIST_URL = "https://ftp.ncbi.nlm.nih.gov/geo/series/{gse_nnn}/{gse}/suppl
 
 # SOFT field mapping: !header → returned dict key
 _SOFT_FIELD_MAP: dict[str, str] = {
-    "Series_title":              "title",
-    "Series_geo_accession":      "gse_id",
-    "Series_status":             "status",
-    "Series_submission_date":    "submission_date",
-    "Series_last_update_date":   "last_update_date",
-    "Series_summary":            "summary",
-    "Series_overall_design":     "overall_design",
-    "Series_type":               "series_type",
-    "Platform_title":            "platform_title",
+    "Series_title": "title",
+    "Series_geo_accession": "gse_id",
+    "Series_status": "status",
+    "Series_submission_date": "submission_date",
+    "Series_last_update_date": "last_update_date",
+    "Series_summary": "summary",
+    "Series_overall_design": "overall_design",
+    "Series_type": "series_type",
+    "Platform_title": "platform_title",
 }
 
 # These accumulate to a list
@@ -73,6 +72,7 @@ _SOFT_LIST_FIELDS = {"Series_pubmed_id", "Series_contributor"}
 # ═══════════════════════════════════════════════════════════════════
 # Downloader detection (wget / curl)
 # ═══════════════════════════════════════════════════════════════════
+
 
 def _detect_downloader() -> str:
     """Return the path to the best available downloader.
@@ -108,6 +108,7 @@ def _get_downloader_name() -> str:
 # NCBI HTTP helpers
 # ═══════════════════════════════════════════════════════════════════
 
+
 def _ncbi_api_key() -> Optional[str]:
     """Read NCBI_API_KEY from environment (empty string → None)."""
     key = os.environ.get("NCBI_API_KEY", "").strip()
@@ -139,6 +140,7 @@ def _ncbi_fetch(url: str, raw: bool = False) -> bytes | str:
 # URL construction
 # ═══════════════════════════════════════════════════════════════════
 
+
 def _gse_nnn(gse_id: str) -> str:
     """Convert GSE accession to NCBI directory pattern.
 
@@ -146,7 +148,7 @@ def _gse_nnn(gse_id: str) -> str:
     ``GSE123456`` → ``GSE123nnn``  (6-digit, prefix=107)
     ``GSE12345``  → ``GSE12nnn``   (5-digit, prefix=81)
     """
-    m = re.match(r'GSE(\d+)', gse_id.upper())
+    m = re.match(r"GSE(\d+)", gse_id.upper())
     if not m:
         raise ValueError(f"Invalid GSE accession: {gse_id!r}")
     digits = m.group(1)
@@ -176,6 +178,7 @@ def _build_file_url(gse_id: str, filename: str) -> str:
 # HUMAN-READABLE SIZE
 # ═══════════════════════════════════════════════════════════════════
 
+
 def _human_size(n_bytes: int) -> str:
     """Convert byte count to human-readable string.
 
@@ -194,6 +197,7 @@ def _human_size(n_bytes: int) -> str:
 # ═══════════════════════════════════════════════════════════════════
 # SOFT metadata parser
 # ═══════════════════════════════════════════════════════════════════
+
 
 def _parse_soft_metadata(text: str) -> dict:
     """Parse SOFT format text into a structured metadata dict.
@@ -311,6 +315,7 @@ def _resolve_organism(organisms: set[str]) -> str:
 # SOFT metadata fetching (public)
 # ═══════════════════════════════════════════════════════════════════
 
+
 def fetch_soft_metadata(gse_id: str) -> dict:
     """Download and parse SOFT.gz metadata for a GEO series.
 
@@ -346,6 +351,7 @@ def fetch_soft_metadata(gse_id: str) -> dict:
 # Supplementary file listing
 # ═══════════════════════════════════════════════════════════════════
 
+
 def _parse_suppl_html(html: str) -> list[dict]:
     """Parse NCBI FTP directory listing into file metadata.
 
@@ -363,8 +369,8 @@ def _parse_suppl_html(html: str) -> list[dict]:
     # Match each file row: <a href="NAME">...</a>  DATE  TIME  SIZE
     file_row = re.compile(
         r'<a\s+href="([^"]+?)">[^<]+</a>'
-        r'\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})'
-        r'\s+([\d.]+[KMGT]?)',
+        r"\s+(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})"
+        r"\s+([\d.]+[KMGT]?)",
     )
 
     for line in html.splitlines():
@@ -383,12 +389,14 @@ def _parse_suppl_html(html: str) -> list[dict]:
             continue
 
         size_bytes = _parse_ftp_size(size_str)
-        files.append({
-            "name": name,
-            "size_bytes": size_bytes,
-            "size_human": _human_size(size_bytes) if size_bytes else "?",
-            "is_raw_tar": bool(re.search(r'RAW.*\.tar', name, re.IGNORECASE)),
-        })
+        files.append(
+            {
+                "name": name,
+                "size_bytes": size_bytes,
+                "size_human": _human_size(size_bytes) if size_bytes else "?",
+                "is_raw_tar": bool(re.search(r"RAW.*\.tar", name, re.IGNORECASE)),
+            }
+        )
     return files
 
 
@@ -442,6 +450,7 @@ def list_suppl_files(gse_id: str) -> list[dict]:
 # File download via wget / curl
 # ═══════════════════════════════════════════════════════════════════
 
+
 def download_file(
     url: str,
     dest_path: str,
@@ -485,7 +494,7 @@ def download_file(
     try:
         result = subprocess.run(cmd, capture_output=False)
         return result.returncode == 0
-    except Exception as exc:
+    except Exception:
         return False
     except Exception as exc:
         log.error("Download error: %s — %s", url, exc)
@@ -495,6 +504,7 @@ def download_file(
 # ═══════════════════════════════════════════════════════════════════
 # Main orchestrator
 # ═══════════════════════════════════════════════════════════════════
+
 
 def download_gse(
     gse_id: str,
@@ -559,8 +569,10 @@ def download_gse(
                 print(f"    PMID:     {', '.join(meta.get('pmid', [])) or 'none'}")
                 print(f"    Samples:  {meta.get('n_samples', 0)}")
                 if meta.get("is_superseries"):
-                    print(f"    ⚠  SuperSeries detected — individual sub-series "
-                          f"should be downloaded separately")
+                    print(
+                        "    ⚠  SuperSeries detected — individual sub-series "
+                        "should be downloaded separately"
+                    )
 
             # Save metadata cache
             meta_path = os.path.join(dest_dir, ".geo_meta.json")
@@ -570,11 +582,11 @@ def download_gse(
         except Exception as exc:
             if not quiet:
                 print(f"  [WARNING] Failed to fetch SOFT metadata: {exc}")
-                print(f"    Continuing with file listing only...")
+                print("    Continuing with file listing only...")
 
     # ── Phase 2: File listing ─────────────────────────────────────
     if not quiet:
-        print(f"\n  [SUPPL] Listing files...")
+        print("\n  [SUPPL] Listing files...")
 
     try:
         files = list_suppl_files(gse_id)
@@ -605,7 +617,7 @@ def download_gse(
         return result
 
     if not quiet:
-        print(f"\n  [DOWNLOAD]")
+        print("\n  [DOWNLOAD]")
 
     for f in files:
         dest_path = os.path.join(dest_dir, f["name"])
@@ -622,14 +634,17 @@ def download_gse(
                 continue
             elif expected_size and existing_size != expected_size:
                 if not quiet:
-                    print(f"    [RESUME] {f['name']} (partial: "
-                          f"{_human_size(existing_size)} / {f['size_human']})")
+                    print(
+                        f"    [RESUME] {f['name']} (partial: "
+                        f"{_human_size(existing_size)} / {f['size_human']})"
+                    )
 
         if not quiet:
             print(f"    [{_human_size(f['size_bytes']):>8s}] {f['name']}")
 
         success = download_file(
-            f["url"], dest_path,
+            f["url"],
+            dest_path,
             resume=True,
             show_progress=not quiet,
         )
@@ -646,27 +661,21 @@ def download_gse(
     # ── Phase 4: Summary ──────────────────────────────────────────
     if not quiet:
         downloaded_size = sum(
-            f["size_bytes"] for f in result["files"]
-            if f.get("status") == "downloaded"
+            f["size_bytes"] for f in result["files"] if f.get("status") == "downloaded"
         )
         print(f"\n  {'=' * 60}")
         print(f"  [SUMMARY] {gse_id}")
         print(f"  {'=' * 60}")
-        print(f"    Downloaded: {result['downloaded']}  "
-              f"(~{_human_size(downloaded_size)})")
+        print(f"    Downloaded: {result['downloaded']}  (~{_human_size(downloaded_size)})")
         print(f"    Skipped:    {result['skipped']}")
         print(f"    Failed:     {result['failed']}")
         if result["failed"]:
-            failed_names = [
-                f["name"] for f in result["files"]
-                if f.get("status") == "failed"
-            ]
+            failed_names = [f["name"] for f in result["files"] if f.get("status") == "failed"]
             print(f"    Failed files: {', '.join(failed_names)}")
         print(f"    Output:     {dest_dir}/")
         print()
-        print(f"  Next step:")
-        print(f"    python core/preprocess/preprocessor.py "
-              f"--gse {gse_id}")
+        print("  Next step:")
+        print(f"    python core/preprocess/preprocessor.py --gse {gse_id}")
 
     return result
 
@@ -674,17 +683,17 @@ def download_gse(
 # ── Species name normalisation (NCBI taxon → common slug) ─────────
 
 _SPECIES_TO_SLUG: dict[str, str] = {
-    "mus musculus":         "mouse",
-    "homo sapiens":         "human",
-    "gallus gallus":       "chick",
-    "danio rerio":          "zebrafish",
-    "macaca fascicularis":  "macaque",
-    "rattus norvegicus":    "rat",
-    "macaca mulatta":       "macaque",
-    "xenopus laevis":       "xenopus",
-    "xenopus tropicalis":   "xenopus",
+    "mus musculus": "mouse",
+    "homo sapiens": "human",
+    "gallus gallus": "chick",
+    "danio rerio": "zebrafish",
+    "macaca fascicularis": "macaque",
+    "rattus norvegicus": "rat",
+    "macaca mulatta": "macaque",
+    "xenopus laevis": "xenopus",
+    "xenopus tropicalis": "xenopus",
     "drosophila melanogaster": "fruit_fly",
-    "caenorhabditis elegans":  "c_elegans",
+    "caenorhabditis elegans": "c_elegans",
 }
 
 
@@ -726,11 +735,11 @@ def enrich_dataset_from_soft(
     """
     try:
         from core.paper.registry import (
-            load_master_registry,
-            save_master_registry,
             InsightStatus,
             LinkRole,
             PaperDatasetLink,
+            load_master_registry,
+            save_master_registry,
         )
     except ImportError:
         log.warning("Cannot import core.registry — skipping enrichment")
@@ -774,11 +783,13 @@ def enrich_dataset_from_soft(
             continue
         existing_links = registry.get_dataset_links(paper.paper_id)
         if not any(ln[0] == gse_id for ln in existing_links):
-            registry.links.append(PaperDatasetLink(
-                paper_id=paper.paper_id,
-                dataset_id=gse_id,
-                role=LinkRole.PRIMARY,
-            ))
+            registry.links.append(
+                PaperDatasetLink(
+                    paper_id=paper.paper_id,
+                    dataset_id=gse_id,
+                    role=LinkRole.PRIMARY,
+                )
+            )
             log.info("  link: %s ↔ %s", paper.paper_id, gse_id)
             # Auto-heal: if paper was marked no_geo, update to generated
             if paper.insights and paper.insights.status == InsightStatus.NO_GEO:
@@ -822,10 +833,10 @@ def update_registry_after_download(
     """
     try:
         from core.paper.registry import (
+            DatasetStatus,
             load_master_registry,
             save_master_registry,
-            DatasetStatus,
-)
+        )
     except ImportError:
         log.warning("Cannot import core.registry — skipping status update")
         return False
@@ -868,6 +879,7 @@ def update_registry_after_download(
 # CLI
 # ═══════════════════════════════════════════════════════════════════
 
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Fuxi GEO Downloader — Download datasets from NCBI GEO",
@@ -881,27 +893,36 @@ Examples:
 """,
     )
     parser.add_argument(
-        "--gse", type=str, required=True,
+        "--gse",
+        type=str,
+        required=True,
         help="GEO accession ID (e.g., GSE123456)",
     )
     parser.add_argument(
-        "--data-root", type=str, default=None,
+        "--data-root",
+        type=str,
+        default=None,
         help="Override FUXI_DATA_ROOT (default: from environment variable)",
     )
     parser.add_argument(
-        "--dry-run", action="store_true",
+        "--dry-run",
+        action="store_true",
         help="Show what would be downloaded without actually downloading",
     )
     parser.add_argument(
-        "--skip-soft", action="store_true",
+        "--skip-soft",
+        action="store_true",
         help="Skip SOFT metadata fetch (use when metadata already cached)",
     )
     parser.add_argument(
-        "--force", action="store_true",
+        "--force",
+        action="store_true",
         help="Re-download files even if they already exist",
     )
     parser.add_argument(
-        "--quiet", "-q", action="store_true",
+        "--quiet",
+        "-q",
+        action="store_true",
         help="Minimal output",
     )
     return parser
@@ -919,8 +940,7 @@ def main() -> None:
         data_root = os.environ.get("FUXI_DATA_ROOT", "")
     if not data_root:
         print("[ERROR] FUXI_DATA_ROOT is not set.", file=sys.stderr)
-        print("        Set it in .env or pass --data-root.",
-              file=sys.stderr)
+        print("        Set it in .env or pass --data-root.", file=sys.stderr)
         sys.exit(1)
 
     dest_dir = os.path.join(data_root, gse_id)

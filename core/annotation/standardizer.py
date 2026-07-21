@@ -16,11 +16,11 @@ Usage:
 
 from __future__ import annotations
 
-import sys
+import logging
 import os
+import sys
 from typing import Any
 
-import logging
 # Add core/ so core.kb, core.annotation.scoring resolve correctly
 # in both pip-installed and standalone usage.
 _script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -32,9 +32,10 @@ if _script_dir not in sys.path:
 
 log = logging.getLogger(__name__)
 
-import scanpy as sc
+import scanpy as sc  # noqa: E402
 
 LEVENSHTEIN_THRESHOLD: float = 0.85
+
 
 class StandardOntology:
     """6-tier cell-type name standardizer backed by a tissue-specific
@@ -109,6 +110,7 @@ class StandardOntology:
             If **tissue** has no synonyms module.
         """
         from core.kb import load_synonyms
+
         syns = load_synonyms(tissue)
         if syns:
             return syns
@@ -134,12 +136,11 @@ class StandardOntology:
             If the tissue KB is not available.
         """
         from core.kb import load_kb
+
         try:
             return load_kb(tissue)
         except ValueError as exc:
-            raise NotImplementedError(
-                f"Tissue '{tissue}' KB not available: {exc}"
-            ) from exc
+            raise NotImplementedError(f"Tissue '{tissue}' KB not available: {exc}") from exc
 
     # ── Index builders ───────────────────────────────────────────────────
 
@@ -156,11 +157,7 @@ class StandardOntology:
         """
         syn_map: dict[str, list[str]] = {}
         for key, syn_info in self._synonyms.items():
-            synonyms_list = (
-                syn_info.get("synonyms", [])
-                if isinstance(syn_info, dict)
-                else []
-            )
+            synonyms_list = syn_info.get("synonyms", []) if isinstance(syn_info, dict) else []
             for syn in synonyms_list:
                 syn_lower = syn.lower().strip()
                 if syn_lower not in syn_map:
@@ -183,20 +180,14 @@ class StandardOntology:
         """
         canonical: dict[str, dict[str, Any]] = {}
         for key, syn_info in self._synonyms.items():
-            display_name = (
-                syn_info.get("display_name", key)
-                if isinstance(syn_info, dict)
-                else key
-            )
+            display_name = syn_info.get("display_name", key) if isinstance(syn_info, dict) else key
 
             # Extract marker genes from the KB for this type
             kb_entry = self._kb.get(key, {})
             markers_raw = kb_entry.get("markers", {})
             marker_genes: list[str] = []
             for sub_key in ("confirm", "add", "refine"):
-                marker_genes.extend(
-                    g.upper() for g in markers_raw.get(sub_key, {}).keys()
-                )
+                marker_genes.extend(g.upper() for g in markers_raw.get(sub_key, {}).keys())
 
             canonical[key] = {
                 "display_name": display_name,
@@ -241,9 +232,9 @@ class StandardOntology:
             for j, cb in enumerate(b):
                 cost = 0 if ca == cb else 1
                 curr[j + 1] = min(
-                    curr[j] + 1,       # insertion
-                    prev[j + 1] + 1,   # deletion
-                    prev[j] + cost,    # substitution
+                    curr[j] + 1,  # insertion
+                    prev[j + 1] + 1,  # deletion
+                    prev[j] + cost,  # substitution
                 )
             prev, curr = curr, prev
 
@@ -261,10 +252,7 @@ class StandardOntology:
         list[str]
             Sorted human-readable cell type names (length = 32 for retina).
         """
-        return sorted(
-            info["display_name"]
-            for info in self._canonical.values()
-        )
+        return sorted(info["display_name"] for info in self._canonical.values())
 
     # ── 6-tier standardize ───────────────────────────────────────────
 
@@ -327,7 +315,9 @@ class StandardOntology:
             if len(tier4_candidates) > 1:
                 log.warning(
                     "Tier 4 substring match: %d candidates for '%s': %s",
-                    len(tier4_candidates), name, [c[1] for c in tier4_candidates],
+                    len(tier4_candidates),
+                    name,
+                    [c[1] for c in tier4_candidates],
                 )
             key, display = tier4_candidates[0]
             return (key, display, "medium")
@@ -395,7 +385,9 @@ class StandardOntology:
     # ── Marker cross-validation ──────────────────────────────────────
 
     def validate(
-        self, adata: Any, top_n: int | None = None,
+        self,
+        adata: Any,
+        top_n: int | None = None,
         min_overlap: float | None = None,
         marginal_threshold: float | None = None,
         species: str | None = None,
@@ -442,17 +434,19 @@ class StandardOntology:
         # Resolve thresholds: explicit args > CFG > built-in defaults
         try:
             from core.config.schema import CFG
+
             _top_n = (
-                top_n if top_n is not None
-                else getattr(CFG, 'marker_validation_n_top_genes', 15)
+                top_n if top_n is not None else getattr(CFG, "marker_validation_n_top_genes", 15)
             )
             _min_overlap = (
-                min_overlap if min_overlap is not None
-                else getattr(CFG, 'marker_validation_min_overlap', 0.5)
+                min_overlap
+                if min_overlap is not None
+                else getattr(CFG, "marker_validation_min_overlap", 0.5)
             )
             _marginal = (
-                marginal_threshold if marginal_threshold is not None
-                else getattr(CFG, 'marker_validation_marginal_threshold', 0.25)
+                marginal_threshold
+                if marginal_threshold is not None
+                else getattr(CFG, "marker_validation_marginal_threshold", 0.25)
             )
         except (ImportError, AttributeError):
             _top_n = top_n if top_n is not None else 15
@@ -464,6 +458,7 @@ class StandardOntology:
         if species:
             try:
                 from core.annotation.scoring import _species_matches
+
                 _is_cross = not (
                     _species_matches(species, ["Homo sapiens"])
                     or _species_matches(species, ["Mus musculus"])
@@ -475,27 +470,26 @@ class StandardOntology:
                     log.info(
                         "Cross-species mode: lowered validation thresholds "
                         "(min_overlap=%.2f, marginal=%.2f)",
-                        _min_overlap, _marginal,
+                        _min_overlap,
+                        _marginal,
                     )
             except ImportError:
                 pass
         # Ensure rank_genes_groups is available
         if "rank_genes_groups" not in adata.uns:
             sc.tl.rank_genes_groups(
-                adata, groupby="leiden", method="wilcoxon",
+                adata,
+                groupby="leiden",
+                method="wilcoxon",
                 use_raw=True if adata.raw is not None else None,
             )
 
         # Determine which obs column holds the standardised cell type
-        type_col = (
-            "cell_type_std" if "cell_type_std" in adata.obs else "cell_type"
-        )
+        type_col = "cell_type_std" if "cell_type_std" in adata.obs else "cell_type"
 
         # Build cluster → majority cell type mapping
         cluster_to_type: dict[str, str] = {}
-        for cluster in sorted(
-            adata.obs["leiden"].unique(), key=lambda x: int(x)
-        ):
+        for cluster in sorted(adata.obs["leiden"].unique(), key=lambda x: int(x)):
             mask = adata.obs["leiden"] == cluster
             type_vals = adata.obs.loc[mask, type_col]
             try:
@@ -507,21 +501,13 @@ class StandardOntology:
                 cluster_to_type[str(cluster)] = "unknown"
 
         results: list[dict[str, Any]] = []
-        for cluster_str in sorted(
-            cluster_to_type.keys(), key=lambda x: int(x)
-        ):
+        for cluster_str in sorted(cluster_to_type.keys(), key=lambda x: int(x)):
             assigned_type = cluster_to_type[cluster_str]
 
             # Get top_n marker genes for this cluster
             try:
-                marker_df = sc.get.rank_genes_groups_df(
-                    adata, group=cluster_str
-                )
-                top_genes = [
-                    g
-                    for g in marker_df.head(_top_n)["names"].tolist()
-                    if g
-                ]
+                marker_df = sc.get.rank_genes_groups_df(adata, group=cluster_str)
+                top_genes = [g for g in marker_df.head(_top_n)["names"].tolist() if g]
             except (KeyError, ValueError):
                 top_genes = []
 
@@ -532,14 +518,16 @@ class StandardOntology:
                 kb_markers = self._canonical[std_key].get("markers", [])
 
             if not kb_markers:
-                results.append({
-                    "cluster": cluster_str,
-                    "assigned_type": assigned_type,
-                    "markers_found": 0,
-                    "markers_total": 0,
-                    "status": "NO_ONTOLOGY",
-                    "score": 0.0,
-                })
+                results.append(
+                    {
+                        "cluster": cluster_str,
+                        "assigned_type": assigned_type,
+                        "markers_found": 0,
+                        "markers_total": 0,
+                        "status": "NO_ONTOLOGY",
+                        "score": 0.0,
+                    }
+                )
                 continue
 
             # Calculate overlap between top marker genes and KB markers
@@ -557,13 +545,15 @@ class StandardOntology:
             else:
                 status = "FAIL"
 
-            results.append({
-                "cluster": cluster_str,
-                "assigned_type": assigned_type,
-                "markers_found": len(overlap),
-                "markers_total": len(kb_set),
-                "status": status,
-                "score": round(score, 4),
-            })
+            results.append(
+                {
+                    "cluster": cluster_str,
+                    "assigned_type": assigned_type,
+                    "markers_found": len(overlap),
+                    "markers_total": len(kb_set),
+                    "status": status,
+                    "score": round(score, 4),
+                }
+            )
 
         return results

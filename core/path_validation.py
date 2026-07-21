@@ -40,9 +40,7 @@ def validate_safe_path(path: str, base_dir: str) -> str:
     resolved_base = os.path.realpath(base_dir)
 
     if not os.path.exists(resolved_path):
-        raise FileNotFoundError(
-            f"Path does not exist after resolution: {resolved_path}"
-        )
+        raise FileNotFoundError(f"Path does not exist after resolution: {resolved_path}")
 
     if not resolved_path.startswith(resolved_base):
         raise ValueError(

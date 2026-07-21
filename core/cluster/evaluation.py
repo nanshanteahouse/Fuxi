@@ -14,24 +14,31 @@ Exports:
     _compute_cluster_coherence(adata, cluster_key, per_cell_scores, ...) -> float
 """
 
-import numpy as np
-from scipy.spatial import ConvexHull
+import logging
 from typing import Literal
 
-import logging
+import numpy as np
+from scipy.spatial import ConvexHull
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MULTI_METRIC_WEIGHTS = {
-    'silhouette': 0.2,
-    'stability': 0.2,
-    'cluster_coherence': 0.3,
-    'splitting_gain': 0.2,
-    'kb_annotatable_rate': 0.1,
+    "silhouette": 0.2,
+    "stability": 0.2,
+    "cluster_coherence": 0.3,
+    "splitting_gain": 0.2,
+    "kb_annotatable_rate": 0.1,
 }
 
 
-def select_best_params(results_summary, method="pareto_elbow", best_resolution=None, best_n_neighbors=0, multi_metric_weights=None, log=None):
+def select_best_params(
+    results_summary,
+    method="pareto_elbow",
+    best_resolution=None,
+    best_n_neighbors=0,
+    multi_metric_weights=None,
+    log=None,
+):
     """Select the best (n_neighbors, resolution) from a grid search summary.
 
     Parameters
@@ -72,10 +79,12 @@ def select_best_params(results_summary, method="pareto_elbow", best_resolution=N
         One-line diagnostic for the logger.
     """
     # -- Filter invalid / missing silhouette scores --
-    valid = [r for r in results_summary
-             if r.get('silhouette_score') is not None
-             and not (isinstance(r['silhouette_score'], float)
-                      and np.isnan(r['silhouette_score']))]
+    valid = [
+        r
+        for r in results_summary
+        if r.get("silhouette_score") is not None
+        and not (isinstance(r["silhouette_score"], float) and np.isnan(r["silhouette_score"]))
+    ]
 
     if not valid:
         raise ValueError("No valid silhouette scores in results_summary")
@@ -100,12 +109,13 @@ def select_best_params(results_summary, method="pareto_elbow", best_resolution=N
 #  Internal selection strategies
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def _select_max_silhouette(valid):
     """Pick the combination with the highest silhouette score."""
-    best = max(valid, key=lambda r: r['silhouette_score'])
+    best = max(valid, key=lambda r: r["silhouette_score"])
     return (
-        best['n_neighbors'],
-        best['resolution'],
+        best["n_neighbors"],
+        best["resolution"],
         "silhouette",
         f"silhouette={best['silhouette_score']:.4f} k={best['n_clusters']}",
     )
@@ -119,16 +129,16 @@ def _select_manual(valid, best_resolution, best_n_neighbors=0):
     - Falls back to max silhouette if the requested combination is not in grid.
     """
     if best_resolution is not None:
-        matching = [r for r in valid if r['resolution'] == best_resolution]
+        matching = [r for r in valid if r["resolution"] == best_resolution]
         if matching:
             if best_n_neighbors and best_n_neighbors > 0:
                 # Exact combination requested
-                exact = [r for r in matching if r['n_neighbors'] == best_n_neighbors]
+                exact = [r for r in matching if r["n_neighbors"] == best_n_neighbors]
                 if exact:
                     best = exact[0]
                     return (
-                        best['n_neighbors'],
-                        best['resolution'],
+                        best["n_neighbors"],
+                        best["resolution"],
                         "manual",
                         f"n_neighbors={best_n_neighbors}, resolution={best['resolution']:.1f} "
                         f"(configured) silhouette={best['silhouette_score']:.4f} "
@@ -136,20 +146,20 @@ def _select_manual(valid, best_resolution, best_n_neighbors=0):
                     )
                 # n_neighbors not found at this resolution → fall through to
                 # pick best silhouette at the given resolution
-            best = max(matching, key=lambda r: r['silhouette_score'])
+            best = max(matching, key=lambda r: r["silhouette_score"])
             return (
-                best['n_neighbors'],
-                best['resolution'],
+                best["n_neighbors"],
+                best["resolution"],
                 "manual",
                 f"resolution={best['resolution']:.1f} (configured) "
                 f"silhouette={best['silhouette_score']:.4f} k={best['n_clusters']}",
             )
         # best_resolution set but not in grid → fall through to auto
     # Fallback: max silhouette
-    best = max(valid, key=lambda r: r['silhouette_score'])
+    best = max(valid, key=lambda r: r["silhouette_score"])
     return (
-        best['n_neighbors'],
-        best['resolution'],
+        best["n_neighbors"],
+        best["resolution"],
         "silhouette",
         f"best_resolution={best_resolution} not in grid, "
         f"fallback silhouette={best['silhouette_score']:.4f} k={best['n_clusters']}",
@@ -171,7 +181,7 @@ def _select_pareto_elbow(valid):
     Returns (best_n, best_r, method_label, reason_str).
     """
     # Build (k, ss) array
-    pts = np.array([(r['n_clusters'], r['silhouette_score']) for r in valid])
+    pts = np.array([(r["n_clusters"], r["silhouette_score"]) for r in valid])
 
     # -- Pareto frontier (O(n log n) sort+scan) --
     n = len(pts)
@@ -209,8 +219,8 @@ def _select_pareto_elbow(valid):
     if len(pareto_k) == 1:
         best = valid[pareto_idx[0]]
         return (
-            best['n_neighbors'],
-            best['resolution'],
+            best["n_neighbors"],
+            best["resolution"],
             "pareto_elbow",
             f"single_pareto_point silhouette={best['silhouette_score']:.4f} "
             f"k={best['n_clusters']}",
@@ -222,7 +232,7 @@ def _select_pareto_elbow(valid):
     s_norm = (pareto_s - pareto_s.min()) / (pareto_s.max() - pareto_s.min() + eps)
 
     # Distance to ideal point (k_norm=0, s_norm=1)
-    dist = np.sqrt((1.0 - s_norm)**2 + k_norm**2)
+    dist = np.sqrt((1.0 - s_norm) ** 2 + k_norm**2)
     elbow_idx = np.argmin(dist)
 
     best = valid[pareto_idx[elbow_idx]]
@@ -237,8 +247,8 @@ def _select_pareto_elbow(valid):
         delta_note = f" ΔSS/Δk={ratio:.6f}"
 
     return (
-        best['n_neighbors'],
-        best['resolution'],
+        best["n_neighbors"],
+        best["resolution"],
         "pareto_elbow",
         f"dist_to_ideal={dist[elbow_idx]:.4f} "
         f"silhouette={best['silhouette_score']:.4f} k={best['n_clusters']}"
@@ -251,7 +261,13 @@ def _select_pareto_elbow(valid):
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def _compute_stability(adata, resolution, leiden_flavor: Literal['leidenalg', 'igraph'] = 'igraph', n_seeds=5, base_seed=42):
+def _compute_stability(
+    adata,
+    resolution,
+    leiden_flavor: Literal["leidenalg", "igraph"] = "igraph",
+    n_seeds=5,
+    base_seed=42,
+):
     """Compute cross-seed clustering stability via pairwise ARI.
 
     Re-runs Leiden clustering with *n_seeds* different random seeds at the
@@ -279,11 +295,11 @@ def _compute_stability(adata, resolution, leiden_flavor: Literal['leidenalg', 'i
     if n_seeds <= 1:
         return 1.0
 
-    from sklearn.metrics import adjusted_rand_score
     import scanpy as sc
+    from sklearn.metrics import adjusted_rand_score
 
     seeds = range(base_seed, base_seed + n_seeds)
-    temp_keys = [f'_temp_stab_{i}' for i in range(n_seeds)]
+    temp_keys = [f"_temp_stab_{i}" for i in range(n_seeds)]
 
     label_sets = []
     for i, seed in enumerate(seeds):
@@ -307,7 +323,7 @@ def _compute_stability(adata, resolution, leiden_flavor: Literal['leidenalg', 'i
 
     # Final cleanup: remove any remaining temp columns
     for col in list(adata.obs.columns):
-        if col.startswith('_temp_stab_'):
+        if col.startswith("_temp_stab_"):
             del adata.obs[col]
 
     n_runs = len(label_sets)
@@ -324,7 +340,9 @@ def _compute_stability(adata, resolution, leiden_flavor: Literal['leidenalg', 'i
     return float(np.mean(aris))
 
 
-def _compute_cluster_coherence(adata, cluster_key, per_cell_scores, dominance_threshold=1.5, min_expression=0.05):
+def _compute_cluster_coherence(
+    adata, cluster_key, per_cell_scores, dominance_threshold=1.5, min_expression=0.05
+):
     """Per-cluster marker coherence metric that peaks at intermediate resolution.
 
     For each cluster label in adata.obs[cluster_key]:
@@ -426,16 +444,16 @@ def _compute_splitting_gain(valid_by_resolution: list[dict]) -> dict[float, floa
         return {}
 
     # Ensure sorted by resolution
-    sorted_entries = sorted(valid_by_resolution, key=lambda e: e.get('resolution', 0.0))
+    sorted_entries = sorted(valid_by_resolution, key=lambda e: e.get("resolution", 0.0))
 
     gains = {}
     for i in range(1, len(sorted_entries)):
         prev = sorted_entries[i - 1]
         curr = sorted_entries[i]
-        r_prev = prev['resolution']
-        r_curr = curr['resolution']
-        k_prev = prev['n_clusters']
-        k_curr = curr['n_clusters']
+        r_prev = prev["resolution"]
+        r_curr = curr["resolution"]
+        k_prev = prev["n_clusters"]
+        k_curr = curr["n_clusters"]
 
         delta_k = k_curr - k_prev
         delta_r = r_curr - r_prev
@@ -448,6 +466,7 @@ def _compute_splitting_gain(valid_by_resolution: list[dict]) -> dict[float, floa
         gains[r_curr] = gain
 
     return gains
+
 
 def _select_multi_metric(valid, weights=None, log=None):
     """Select best clustering via composite multi-metric scoring.
@@ -475,22 +494,22 @@ def _select_multi_metric(valid, weights=None, log=None):
     n = len(valid)
 
     # ── Gather raw scores ──
-    sil_scores = np.array([r['silhouette_score'] for r in valid])
-    stab_scores = np.array([r.get('stability_score', 0.0) for r in valid])
+    sil_scores = np.array([r["silhouette_score"] for r in valid])
+    stab_scores = np.array([r.get("stability_score", 0.0) for r in valid])
 
-    has_coherence = any('cluster_coherence' in r for r in valid)
+    has_coherence = any("cluster_coherence" in r for r in valid)
     coh_scores: np.ndarray = np.zeros(n)
     if has_coherence:
-        coh_scores = np.array([r.get('cluster_coherence', 0.0) for r in valid])
+        coh_scores = np.array([r.get("cluster_coherence", 0.0) for r in valid])
 
-    has_splitting_gain = any('splitting_gain' in r for r in valid)
+    has_splitting_gain = any("splitting_gain" in r for r in valid)
     split_scores: np.ndarray = np.zeros(n)
     if has_splitting_gain:
-        split_scores = np.array([r.get('splitting_gain', 0.0) for r in valid])
-    has_kb_rate = any('kb_annotatable_rate' in r for r in valid)
+        split_scores = np.array([r.get("splitting_gain", 0.0) for r in valid])
+    has_kb_rate = any("kb_annotatable_rate" in r for r in valid)
     kb_scores: np.ndarray = np.zeros(n)
     if has_kb_rate:
-        kb_scores = np.array([r.get('kb_annotatable_rate', 0.0) for r in valid])
+        kb_scores = np.array([r.get("kb_annotatable_rate", 0.0) for r in valid])
 
     # ── Determine initial weights ──
     if weights is None:
@@ -498,26 +517,31 @@ def _select_multi_metric(valid, weights=None, log=None):
             active_weights = dict(DEFAULT_MULTI_METRIC_WEIGHTS)
         elif has_coherence and has_splitting_gain:
             # Degrade to 4-metric (no kb_annotatable_rate)
-            active_weights = {'silhouette': 0.2, 'stability': 0.2, 'cluster_coherence': 0.35, 'splitting_gain': 0.25}
+            active_weights = {
+                "silhouette": 0.2,
+                "stability": 0.2,
+                "cluster_coherence": 0.35,
+                "splitting_gain": 0.25,
+            }
         elif has_coherence:
             # Degrade to 3-metric (no splitting_gain)
-            active_weights = {'silhouette': 0.25, 'stability': 0.25, 'cluster_coherence': 0.5}
+            active_weights = {"silhouette": 0.25, "stability": 0.25, "cluster_coherence": 0.5}
         else:
-            active_weights = {'silhouette': 0.5, 'stability': 0.5}
+            active_weights = {"silhouette": 0.5, "stability": 0.5}
     else:
         active_weights = dict(weights)
 
     # Remove cluster_coherence from weights if entries lack it
     if not has_coherence:
-        active_weights.pop('cluster_coherence', None)
+        active_weights.pop("cluster_coherence", None)
 
     # Remove splitting_gain from weights if entries lack it
     if not has_splitting_gain:
-        active_weights.pop('splitting_gain', None)
+        active_weights.pop("splitting_gain", None)
 
     # Remove kb_annotatable_rate from weights if entries lack it
     if not has_kb_rate:
-        active_weights.pop('kb_annotatable_rate', None)
+        active_weights.pop("kb_annotatable_rate", None)
 
     # -- Coherence mismatch auto-degrade: if all entries have cluster_coherence < 0.1 --
     if has_coherence and float(np.max(coh_scores)) < 0.1:
@@ -527,19 +551,19 @@ def _select_multi_metric(valid, weights=None, log=None):
             float(np.max(coh_scores)),
         )
         has_coherence = False
-        active_weights = {'silhouette': 0.5, 'stability': 0.5}
+        active_weights = {"silhouette": 0.5, "stability": 0.5}
 
     # ── Low-variance guard (on raw scores) ──
     metrics_raw = {
-        'silhouette': sil_scores,
-        'stability': stab_scores,
+        "silhouette": sil_scores,
+        "stability": stab_scores,
     }
     if has_coherence:
-        metrics_raw['cluster_coherence'] = coh_scores
+        metrics_raw["cluster_coherence"] = coh_scores
     if has_splitting_gain:
-        metrics_raw['splitting_gain'] = split_scores
+        metrics_raw["splitting_gain"] = split_scores
     if has_kb_rate:
-        metrics_raw['kb_annotatable_rate'] = kb_scores
+        metrics_raw["kb_annotatable_rate"] = kb_scores
 
     for metric_name in list(active_weights.keys()):
         scores = metrics_raw.get(metric_name)
@@ -549,13 +573,14 @@ def _select_multi_metric(valid, weights=None, log=None):
         if score_range < 0.01:
             logger.warning(
                 "%s variance < 0.01 (range=%.4f) — disabling metric",
-                metric_name, score_range,
+                metric_name,
+                score_range,
             )
             del active_weights[metric_name]
 
     if not active_weights:
         logger.warning("All metrics dropped — falling back to silhouette only")
-        active_weights = {'silhouette': 1.0}
+        active_weights = {"silhouette": 1.0}
 
     # ── Renormalise weights to sum=1.0 ──
     total_w = sum(active_weights.values())
@@ -571,16 +596,16 @@ def _select_multi_metric(valid, weights=None, log=None):
         return (values - vmin) / (vmax - vmin + 1e-10)
 
     norm = {}
-    if 'silhouette' in active_weights:
-        norm['silhouette'] = _normalize(sil_scores)
-    if 'stability' in active_weights:
-        norm['stability'] = _normalize(stab_scores)
-    if 'cluster_coherence' in active_weights and has_coherence:
-        norm['cluster_coherence'] = _normalize(coh_scores)
-    if 'splitting_gain' in active_weights and has_splitting_gain:
-        norm['splitting_gain'] = _normalize(split_scores)
-    if 'kb_annotatable_rate' in active_weights and has_kb_rate:
-        norm['kb_annotatable_rate'] = _normalize(kb_scores)
+    if "silhouette" in active_weights:
+        norm["silhouette"] = _normalize(sil_scores)
+    if "stability" in active_weights:
+        norm["stability"] = _normalize(stab_scores)
+    if "cluster_coherence" in active_weights and has_coherence:
+        norm["cluster_coherence"] = _normalize(coh_scores)
+    if "splitting_gain" in active_weights and has_splitting_gain:
+        norm["splitting_gain"] = _normalize(split_scores)
+    if "kb_annotatable_rate" in active_weights and has_kb_rate:
+        norm["kb_annotatable_rate"] = _normalize(kb_scores)
 
     # ── Composite score ──
     composite = np.zeros(n)
@@ -590,11 +615,10 @@ def _select_multi_metric(valid, weights=None, log=None):
     # ── 3-tier resolution recommendation logging ──
     try:
         entries_by_resolution = sorted(
-            [(valid[i], composite[i]) for i in range(n)],
-            key=lambda x: x[0]['resolution']
+            [(valid[i], composite[i]) for i in range(n)], key=lambda x: x[0]["resolution"]
         )
         comp_max = max(composite)
-        stab_max = max(stab_scores) if 'stability' in active_weights else None
+        stab_max = max(stab_scores) if "stability" in active_weights else None
 
         # Coarse: lowest resolution whose composite > 0.7 of max composite
         coarse_entry = None
@@ -610,19 +634,19 @@ def _select_multi_metric(valid, weights=None, log=None):
         fine_entry = None
         if stab_max is not None and stab_max > 0:
             for entry, _ in reversed(entries_by_resolution):
-                stab = entry.get('stability_score', 0.0)
+                stab = entry.get("stability_score", 0.0)
                 if stab > 0.85 * stab_max:
                     fine_entry = entry
                     break
 
         (log or logger).info(
             "[multi_metric 3-tier] coarse: r=%.2f (k=%d) / balanced: r=%.2f (k=%d) / fine: r=%.2f (k=%d)",
-            coarse_entry['resolution'] if coarse_entry else float('nan'),
-            coarse_entry['n_clusters'] if coarse_entry else 0,
-            balanced_entry['resolution'],
-            balanced_entry['n_clusters'],
-            fine_entry['resolution'] if fine_entry else float('nan'),
-            fine_entry['n_clusters'] if fine_entry else 0,
+            coarse_entry["resolution"] if coarse_entry else float("nan"),
+            coarse_entry["n_clusters"] if coarse_entry else 0,
+            balanced_entry["resolution"],
+            balanced_entry["n_clusters"],
+            fine_entry["resolution"] if fine_entry else float("nan"),
+            fine_entry["n_clusters"] if fine_entry else 0,
         )
     except Exception as exc:
         logger.debug("3-tier computation skipped: %s", exc)
@@ -631,15 +655,15 @@ def _select_multi_metric(valid, weights=None, log=None):
     best = valid[best_idx]
 
     # ── Build reason string ──
-    sil_val = best['silhouette_score']
-    stab_val = best.get('stability_score', 0.0)
-    coh_val = best.get('cluster_coherence', 0.0) if has_coherence else 0.0
-    split_val = best.get('splitting_gain', 0.0) if has_splitting_gain else 0.0
-    kb_val = best.get('kb_annotatable_rate', 0.0) if has_kb_rate else 0.0
-    k = best['n_clusters']
+    sil_val = best["silhouette_score"]
+    stab_val = best.get("stability_score", 0.0)
+    coh_val = best.get("cluster_coherence", 0.0) if has_coherence else 0.0
+    split_val = best.get("splitting_gain", 0.0) if has_splitting_gain else 0.0
+    kb_val = best.get("kb_annotatable_rate", 0.0) if has_kb_rate else 0.0
+    k = best["n_clusters"]
 
-    sil_norm_val = norm.get('silhouette', np.zeros(n))[best_idx]
-    stab_norm_val = norm.get('stability', np.zeros(n))[best_idx]
+    sil_norm_val = norm.get("silhouette", np.zeros(n))[best_idx]
+    stab_norm_val = norm.get("stability", np.zeros(n))[best_idx]
 
     reason = (
         f"composite={composite[best_idx]:.4f} "
@@ -650,15 +674,16 @@ def _select_multi_metric(valid, weights=None, log=None):
     )
 
     return (
-        best['n_neighbors'],
-        best['resolution'],
-        'multi_metric',
+        best["n_neighbors"],
+        best["resolution"],
+        "multi_metric",
         reason,
     )
 
 
-
-def _detect_granularity(results_summary: list[dict], cv_threshold: float = 0.05, min_clusters: int = 10) -> str:
+def _detect_granularity(
+    results_summary: list[dict], cv_threshold: float = 0.05, min_clusters: int = 10
+) -> str:
     """Determine whether the data is tissue-level or subtype-level.
 
     Two-path architecture for cluster granularity detection. This function
@@ -710,9 +735,9 @@ def _detect_granularity(results_summary: list[dict], cv_threshold: float = 0.05,
     # 1. Group entries by n_neighbors
     groups: dict[int, list[dict]] = {}
     for entry in results_summary:
-        if 'n_neighbors' not in entry:
+        if "n_neighbors" not in entry:
             continue
-        nn = entry['n_neighbors']
+        nn = entry["n_neighbors"]
         groups.setdefault(nn, []).append(entry)
 
     if not groups:
@@ -725,17 +750,17 @@ def _detect_granularity(results_summary: list[dict], cv_threshold: float = 0.05,
 
     # 2. Collect silhouette scores and n_clusters from the median group
     #    Sort by resolution for deterministic ordering
-    median_group_sorted = sorted(median_group, key=lambda e: e.get('resolution', 0.0))
+    median_group_sorted = sorted(median_group, key=lambda e: e.get("resolution", 0.0))
 
     silhouette_values = []
     n_clusters_values = []
     for entry in median_group_sorted:
-        if 'silhouette_score' not in entry or entry['silhouette_score'] is None:
+        if "silhouette_score" not in entry or entry["silhouette_score"] is None:
             continue
-        if 'n_clusters' not in entry or entry['n_clusters'] is None:
+        if "n_clusters" not in entry or entry["n_clusters"] is None:
             continue
-        silhouette_values.append(entry['silhouette_score'])
-        n_clusters_values.append(entry['n_clusters'])
+        silhouette_values.append(entry["silhouette_score"])
+        n_clusters_values.append(entry["n_clusters"])
 
     if not silhouette_values:
         return "tissue"
@@ -770,6 +795,7 @@ def _detect_granularity(results_summary: list[dict], cv_threshold: float = 0.05,
             f"(n_neighbors={_median_nn}, n_entries={len(median_group)})"
         )
         return "tissue"
+
 
 def _select_de_gated(valid, adata, de_gate_threshold=25):
     """Select best resolution using DE-gated criterion for subtype-level data.
@@ -838,7 +864,9 @@ def _select_de_gated(valid, adata, de_gate_threshold=25):
             except Exception as e:
                 logger.warning(
                     "rank_genes_groups failed for cluster_key=%s (resolution=%.2f): %s",
-                    cluster_key, entry["resolution"], e,
+                    cluster_key,
+                    entry["resolution"],
+                    e,
                 )
                 continue
 
@@ -868,7 +896,8 @@ def _select_de_gated(valid, adata, de_gate_threshold=25):
         except Exception as e:
             logger.warning(
                 "Failed to extract DE counts for cluster_key=%s: %s",
-                cluster_key, e,
+                cluster_key,
+                e,
             )
             continue
 
@@ -877,8 +906,7 @@ def _select_de_gated(valid, adata, de_gate_threshold=25):
     if not candidates:
         # All entries failed -> fallback to first entry
         logger.warning(
-            "DE-gated selection: all rank_genes_groups calls failed -- "
-            "fallback to first entry"
+            "DE-gated selection: all rank_genes_groups calls failed -- fallback to first entry"
         )
         entry = sorted_entries[0]
         return (
@@ -890,7 +918,9 @@ def _select_de_gated(valid, adata, de_gate_threshold=25):
 
     # Select entry with highest n_clusters where min_pairwise_de >= threshold
     candidates_by_n = sorted(
-        candidates, key=lambda c: c[0]["n_clusters"], reverse=True,
+        candidates,
+        key=lambda c: c[0]["n_clusters"],
+        reverse=True,
     )
     best_entry = None
     best_min_de = -1
@@ -906,12 +936,15 @@ def _select_de_gated(valid, adata, de_gate_threshold=25):
         logger.info(
             "DE-gated selection: best_resolution=%.2f, min_pairwise_de=%d "
             "(fallback: no entry met threshold=%d)",
-            best_entry["resolution"], best_min_de, de_gate_threshold,
+            best_entry["resolution"],
+            best_min_de,
+            de_gate_threshold,
         )
     else:
         logger.info(
             "DE-gated selection: best_resolution=%.2f, min_pairwise_de=%d",
-            best_entry["resolution"], best_min_de,
+            best_entry["resolution"],
+            best_min_de,
         )
 
     return (
@@ -922,7 +955,7 @@ def _select_de_gated(valid, adata, de_gate_threshold=25):
     )
 
 
-def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, CFG, use_rep, log):
+def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, CFG, use_rep, log):  # noqa: N803
     """Sweep min_dist × spread on the best (n_neighbors) neighbor graph,
     or use manual fallback.
 
@@ -960,22 +993,19 @@ def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, C
         Empty list if sweep was skipped.
     """
     import scanpy as sc
-    import numpy as np
-    import pandas as pd
 
-    use_paga = getattr(CFG.clustering, 'umap_paga_init', False)
+    use_paga = getattr(CFG.clustering, "umap_paga_init", False)
 
     # ── Manual mode ──
     if method is None:
-        md = getattr(CFG.clustering, 'umap_min_dist', 0.3)
-        sp = getattr(CFG.clustering, 'umap_spread', 1.0)
+        md = getattr(CFG.clustering, "umap_min_dist", 0.3)
+        sp = getattr(CFG.clustering, "umap_spread", 1.0)
         log.info("UMAP params (manual): min_dist=%.2f, spread=%.1f", md, sp)
         return md, sp, "manual", []
 
     if method != "convex_hull":
         raise ValueError(
-            f"Unknown umap_selection_method: {method!r}. "
-            f"Valid options: 'convex_hull', None"
+            f"Unknown umap_selection_method: {method!r}. Valid options: 'convex_hull', None"
         )
 
     # ── Auto-sweep: convex_hull ──
@@ -986,25 +1016,28 @@ def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, C
         do_sweep = False
 
     if not do_sweep:
-        md = getattr(CFG.clustering, 'umap_min_dist', 0.3)
-        sp = getattr(CFG.clustering, 'umap_spread', 1.0)
-        log.info("UMAP params (convex_hull, empty grid → fallback): min_dist=%.2f, spread=%.1f",
-                 md, sp)
+        md = getattr(CFG.clustering, "umap_min_dist", 0.3)
+        sp = getattr(CFG.clustering, "umap_spread", 1.0)
+        log.info(
+            "UMAP params (convex_hull, empty grid → fallback): min_dist=%.2f, spread=%.1f", md, sp
+        )
         return md, sp, "convex_hull", []
 
     # ── Ensure neighbor graph exists for best_n ──
     log.info("Building KNN graph (n_neighbors=%d) for UMAP parameter sweep...", best_n)
     try:
         sc.pp.neighbors(
-            adata, n_neighbors=best_n,
-            n_pcs=CFG.pca.n_pcs_use, use_rep=use_rep,
+            adata,
+            n_neighbors=best_n,
+            n_pcs=CFG.pca.n_pcs_use,
+            use_rep=use_rep,
             random_state=CFG.execution.random_seed,
         )
     except Exception as e:
         log.error("KNN graph build failed for UMAP sweep: %s", e)
         return (
-            getattr(CFG.clustering, 'umap_min_dist', 0.3),
-            getattr(CFG.clustering, 'umap_spread', 1.0),
+            getattr(CFG.clustering, "umap_min_dist", 0.3),
+            getattr(CFG.clustering, "umap_spread", 1.0),
             "convex_hull",
             [],
         )
@@ -1018,31 +1051,42 @@ def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, C
     for md in min_dist_grid:
         for sp in spread_grid:
             try:
-                sc.tl.umap(adata, min_dist=md, spread=sp,
-                           init_pos='paga' if use_paga else 'spectral',
-                           random_state=CFG.execution.random_seed)
-                coords = adata.obsm['X_umap']
+                sc.tl.umap(
+                    adata,
+                    min_dist=md,
+                    spread=sp,
+                    init_pos="paga" if use_paga else "spectral",
+                    random_state=CFG.execution.random_seed,
+                )
+                coords = adata.obsm["X_umap"]
                 hull = ConvexHull(coords)
                 area = float(hull.volume)  # 2D → area
-                results.append({
-                    'min_dist': md,
-                    'spread': sp,
-                    'convex_hull_area': area,
-                })
-                log.info("  min_dist=%.2f, spread=%.1f → convex_hull_area=%.2f",
-                         md, sp, area)
+                results.append(
+                    {
+                        "min_dist": md,
+                        "spread": sp,
+                        "convex_hull_area": area,
+                    }
+                )
+                log.info("  min_dist=%.2f, spread=%.1f → convex_hull_area=%.2f", md, sp, area)
                 if area > best_area:
                     best_area = area
                     best_md = md
                     best_sp = sp
             except Exception as e:
                 log.warning("  UMAP failed (min_dist=%.2f, spread=%.1f): %s", md, sp, e)
-                results.append({
-                    'min_dist': md,
-                    'spread': sp,
-                    'convex_hull_area': None,
-                })
+                results.append(
+                    {
+                        "min_dist": md,
+                        "spread": sp,
+                        "convex_hull_area": None,
+                    }
+                )
 
-    log.info("Best UMAP params (convex_hull): min_dist=%.2f, spread=%.1f (area=%.2f)",
-             best_md, best_sp, best_area)
+    log.info(
+        "Best UMAP params (convex_hull): min_dist=%.2f, spread=%.1f (area=%.2f)",
+        best_md,
+        best_sp,
+        best_area,
+    )
     return best_md, best_sp, "convex_hull", results

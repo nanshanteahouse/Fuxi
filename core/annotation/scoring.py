@@ -59,9 +59,9 @@ while preserving the power of markers that are **conserved across
 multiple classes** (a strong signal of biological relevance).
 """
 
-from typing import Any, Dict, List, NamedTuple, Optional
 import logging
 import re
+from typing import Any, Dict, List, NamedTuple, Optional
 
 import numpy as np
 import pandas as pd
@@ -77,7 +77,7 @@ logger = logging.getLogger(__name__)
 # NOTE: .digit suffixes (e.g. RHO.1, RP11-34P13.7) are NOT stripped
 # here because they are also part of real human gene names and
 # cannot be disambiguated reliably.
-_RE_MACACA_SUFFIX = re.compile(r'_[pn]\d*$')
+_RE_MACACA_SUFFIX = re.compile(r"_[pn]\d*$")
 
 
 def _normalize_gene_name(name: str) -> str:
@@ -97,7 +97,8 @@ def _normalize_gene_name(name: str) -> str:
     >>> _normalize_gene_name('her4.2')
     'HER4.2'
     """
-    return _RE_MACACA_SUFFIX.sub('', str(name)).upper()
+    return _RE_MACACA_SUFFIX.sub("", str(name)).upper()
+
 
 # ── Consensus-weight map ──────────────────────────────────────────────
 # Mirrors merge.compute_consensus_level() — maps qualitative label to a
@@ -105,10 +106,10 @@ def _normalize_gene_name(name: str) -> str:
 # KB marker hits in the cluster's top-N DE genes).
 
 _CONSENSUS_WEIGHTS: Dict[str, float] = {
-    "gold":   3.0,
-    "high":   2.0,
+    "gold": 3.0,
+    "high": 2.0,
     "medium": 1.5,
-    "low":    1.0,
+    "low": 1.0,
 }
 
 
@@ -134,6 +135,7 @@ class Score(NamedTuple):
     negative_penalty : bool
         Whether a negative-marker penalty was applied.
     """
+
     score: float
     p_value: float
     method: str
@@ -146,9 +148,12 @@ class Score(NamedTuple):
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def _get_canonical_markers(kb: Dict[str, Any], type_key: str,
-                           species: Optional[str] = None,
-                           gene_names: Optional[List[str]] = None) -> List[str]:
+def _get_canonical_markers(
+    kb: Dict[str, Any],
+    type_key: str,
+    species: Optional[str] = None,
+    gene_names: Optional[List[str]] = None,
+) -> List[str]:
     """Return the union of all *confirm* + *add* markers for *type_key*.
 
     If *species* is provided and the type's ``species`` list does not contain
@@ -180,7 +185,9 @@ def _get_canonical_markers(kb: Dict[str, Any], type_key: str,
             if gene_names and _looks_mapped_to_target(gene_names):
                 logger.debug(
                     "Species '%s' not in KB for type '%s', but genes appear "
-                    "mapped to target — keeping markers", species, type_key,
+                    "mapped to target — keeping markers",
+                    species,
+                    type_key,
                 )
                 return list(result)
             return []
@@ -188,8 +195,7 @@ def _get_canonical_markers(kb: Dict[str, Any], type_key: str,
     return list(result)
 
 
-def _looks_mapped_to_target(gene_names: List[str],
-                            unmapped_prefix: str = "UNMAPPED_") -> bool:
+def _looks_mapped_to_target(gene_names: List[str], unmapped_prefix: str = "UNMAPPED_") -> bool:
     """Heuristic: check if gene names were already ortholog-mapped.
 
     Returns True if >= 75% of gene names look like standard symbols (not
@@ -200,7 +206,7 @@ def _looks_mapped_to_target(gene_names: List[str],
         return False
     sample = gene_names[:200]
     n_unmapped = sum(1 for g in sample if str(g).startswith(unmapped_prefix))
-    n_ensembl = sum(1 for g in sample if re.match(r'^ENS[A-Z]{0,4}G\d{11}$', str(g)))
+    n_ensembl = sum(1 for g in sample if re.match(r"^ENS[A-Z]{0,4}G\d{11}$", str(g)))
     ratio_mapped = 1.0 - (n_unmapped + n_ensembl) / len(sample)
     return ratio_mapped >= 0.75
 
@@ -245,13 +251,9 @@ def _species_matches(user_species: str, kb_species_list: list[str]) -> bool:
     """
     if not user_species or not kb_species_list:
         return False
-    normalised_user = _SPECIES_SYNONYMS.get(
-        user_species.strip().lower(), user_species.strip()
-    )
+    normalised_user = _SPECIES_SYNONYMS.get(user_species.strip().lower(), user_species.strip())
     for ks in kb_species_list:
-        normalised_ks = _SPECIES_SYNONYMS.get(
-            ks.strip().lower(), ks.strip()
-        )
+        normalised_ks = _SPECIES_SYNONYMS.get(ks.strip().lower(), ks.strip())
         if normalised_user.lower() == normalised_ks.lower():
             return True
     return False
@@ -285,8 +287,9 @@ def _same_class_as_any(user_species: str, kb_species_list: list[str]) -> bool:
     return False
 
 
-def _negative_marker_penalty(kb: Dict[str, Any], type_key: str,
-                             cluster_markers: pd.DataFrame) -> bool:
+def _negative_marker_penalty(
+    kb: Dict[str, Any], type_key: str, cluster_markers: pd.DataFrame
+) -> bool:
     """Return ``True`` if the cluster expresses >= 2 negative markers for *type_key*.
 
     Both raw KB (``negative_markers`` key) and lookup format (``negative``
@@ -296,16 +299,11 @@ def _negative_marker_penalty(kb: Dict[str, Any], type_key: str,
     if not type_data:
         return False
 
-    neg_markers = (
-        type_data.get("negative_markers")
-        or type_data.get("negative")
-        or []
-    )
+    neg_markers = type_data.get("negative_markers") or type_data.get("negative") or []
     if not neg_markers:
         return False
 
-    top10 = set(_normalize_gene_name(g)
-                for g in cluster_markers.head(10)["names"].tolist())
+    top10 = set(_normalize_gene_name(g) for g in cluster_markers.head(10)["names"].tolist())
     found = sum(1 for m in neg_markers if m in top10)
     return found >= 2
 
@@ -324,12 +322,13 @@ def _type_data(kb: Dict[str, Any], type_key: str) -> Dict[str, Any]:
     return {}
 
 
-def phylogenetic_weight(source_class: str,
-                         target_class: str,
-                         target_order: str = "",
-                         source_order: str = "",
-                         source_classes_contrib: list | None = None
-                         ) -> float:
+def phylogenetic_weight(
+    source_class: str,
+    target_class: str,
+    target_order: str = "",
+    source_order: str = "",
+    source_classes_contrib: list | None = None,
+) -> float:
     """Return a multiplicative weight based on taxonomic distance.
 
     The weight reflects how relevant a KB cell-type marker set is for
@@ -398,10 +397,10 @@ def phylogenetic_weight(source_class: str,
             to = target_order.strip().lower()
             so = source_order.strip().lower()
             if to == so:
-                return 1.0    # same class + same order
+                return 1.0  # same class + same order
             else:
-                return 0.8    # same class + different order
-        return 1.0            # same class, no order filtering
+                return 0.8  # same class + different order
+        return 1.0  # same class, no order filtering
 
     # Different class.  Check whether this marker set is multi-class
     # (conserved across classes) — that raises the weight.
@@ -416,8 +415,7 @@ def phylogenetic_weight(source_class: str,
     return 0.6
 
 
-def _build_kb_lookup(kb: Dict[str, Any],
-                     species: Optional[str] = None) -> Dict[str, Any]:
+def _build_kb_lookup(kb: Dict[str, Any], species: Optional[str] = None) -> Dict[str, Any]:
     """Convert a raw KB into a flat lookup dict for fast scoring.
 
     Returns
@@ -477,7 +475,6 @@ def _build_kb_lookup(kb: Dict[str, Any],
 # ═══════════════════════════════════════════════════════════════════════
 
 
-
 def _compute_fisher_consensus(
     positive_set: set[str],
     top_in_bg: set[str],
@@ -505,14 +502,14 @@ def _compute_fisher_consensus(
     tuple[float, float, int, str]
         ``(hypergeometric_score, raw_p_value, n_markers_found, fisher_source)``.
     """
-    a = len(positive_set & top_in_bg)          # type markers in top-N (raw)
-    b = len(positive_set) - a                  # type markers NOT in top-N
-    c = n_top_in_bg - a                         # non-type KB markers in top-N
-    d = max(background_size - a - b - c, 1)     # remaining KB markers
+    a = len(positive_set & top_in_bg)  # type markers in top-N (raw)
+    b = len(positive_set) - a  # type markers NOT in top-N
+    c = n_top_in_bg - a  # non-type KB markers in top-N
+    d = max(background_size - a - b - c, 1)  # remaining KB markers
 
     # Consensus-weighted variant
     _a_weighted = 0.0
-    for _gene in (positive_set & top_in_bg):
+    for _gene in positive_set & top_in_bg:
         _level = consensus_levels.get(_gene, "low")
         _a_weighted += _CONSENSUS_WEIGHTS.get(_level, 1.0)
     a_w = int(round(_a_weighted))
@@ -524,7 +521,7 @@ def _compute_fisher_consensus(
         d_w = max(background_size - a_w - b_w - c_w, 1)
         if d_w > 0:
             try:
-                _r = fisher_exact([[a_w, b_w], [c_w, d_w]], alternative='greater')
+                _r = fisher_exact([[a_w, b_w], [c_w, d_w]], alternative="greater")
                 _w_p = float(str(_r[1]))
                 _w_score = 1.0 - _w_p
                 if _w_score > 0 and _w_p < 0.999:
@@ -534,7 +531,7 @@ def _compute_fisher_consensus(
                 else:
                     fisher_source = "raw_fallback"
                     if a > 0 and b >= 0 and c >= 0 and d > 0:
-                        _r = fisher_exact([[a, b], [c, d]], alternative='greater')
+                        _r = fisher_exact([[a, b], [c, d]], alternative="greater")
                         raw_p = float(str(_r[1]))
                     else:
                         raw_p = 1.0
@@ -542,13 +539,13 @@ def _compute_fisher_consensus(
             except ValueError:
                 fisher_source = "raw_fallback"
                 if a > 0 and b >= 0 and c >= 0 and d > 0:
-                    _r = fisher_exact([[a, b], [c, d]], alternative='greater')
+                    _r = fisher_exact([[a, b], [c, d]], alternative="greater")
                     raw_p = float(str(_r[1]))
                 else:
                     raw_p = 1.0
                 hypergeometric_score = 1.0 - raw_p
     elif a > 0 and b >= 0 and c >= 0 and d > 0:
-        _r = fisher_exact([[a, b], [c, d]], alternative='greater')
+        _r = fisher_exact([[a, b], [c, d]], alternative="greater")
         raw_p = float(str(_r[1]))
         hypergeometric_score = 1.0 - raw_p
     else:
@@ -595,7 +592,8 @@ def _apply_phylogenetic_weight(
     source_ord = type_data_raw.get("order", "") if type_data_raw else ""
     source_classes = type_data_raw.get("classes", []) if type_data_raw else []
     p_weight = phylogenetic_weight(
-        source_cls, target_class,
+        source_cls,
+        target_class,
         target_order=target_order,
         source_order=source_ord,
         source_classes_contrib=source_classes,
@@ -646,13 +644,15 @@ def _merge_evidence_scores(
 
     return base_score * conf_mult, base_method
 
-def score_cluster_against_kb(kb: Dict[str, Any],
-                             cluster_markers: pd.DataFrame,
-                             species: Optional[str] = None,
-                             target_class: str = "",
-                             target_order: str = "",
-                             adaptive_top_n: bool = False,
-                             ) -> Dict[str, Score]:
+
+def score_cluster_against_kb(
+    kb: Dict[str, Any],
+    cluster_markers: pd.DataFrame,
+    species: Optional[str] = None,
+    target_class: str = "",
+    target_order: str = "",
+    adaptive_top_n: bool = False,
+) -> Dict[str, Score]:
     """Score one cluster against every cell type in the Knowledge Base.
 
     Parameters
@@ -687,11 +687,12 @@ def score_cluster_against_kb(kb: Dict[str, Any],
     """
     # ── Pre-filter: keep only protein-coding / meaningful genes ─────
     from re import compile as _re_compile
-    _RE_LNCRNA = _re_compile(
-        r'^(LINC\d|AC\d|AL\d|AP\d|BX\d|FAM\d+[A-Z]|C\d+orf|'
-        r'RP\d+-|CTC-|CTD-|RP11-|XXyac-|LLNLF-|WI2-|XXbac-)'
+
+    _re_lncrna = _re_compile(
+        r"^(LINC\d|AC\d|AL\d|AP\d|BX\d|FAM\d+[A-Z]|C\d+orf|"
+        r"RP\d+-|CTC-|CTD-|RP11-|XXyac-|LLNLF-|WI2-|XXbac-)"
     )
-    _RE_RIBO = _re_compile(r'^(RPL|RPS|MRPL|MRPS)\d*')
+    _re_ribo = _re_compile(r"^(RPL|RPS|MRPL|MRPS)\d*")
     # Filter: keep rows where names don't match noise patterns,
     # preserving logFC sort order (caller pre-sorts).
     _all_rows = cluster_markers.copy()
@@ -700,9 +701,9 @@ def score_cluster_against_kb(kb: Dict[str, Any],
         _g = str(_row["names"])
         if _g.startswith("MT-"):
             _keep_mask[_i] = False
-        elif _RE_RIBO.match(_g):
+        elif _re_ribo.match(_g):
             _keep_mask[_i] = False
-        elif _RE_LNCRNA.match(_g):
+        elif _re_lncrna.match(_g):
             _keep_mask[_i] = False
     _filtered = _all_rows[_keep_mask]
 
@@ -758,34 +759,41 @@ def score_cluster_against_kb(kb: Dict[str, Any],
 
         # ── 1. Hypergeometric (Fisher's exact) score ────────────────
         hypergeometric_score, raw_p, a, fisher_source = _compute_fisher_consensus(
-            positive_set, top_in_bg, n_top_in_bg, background_size, consensus_levels,
+            positive_set,
+            top_in_bg,
+            n_top_in_bg,
+            background_size,
+            consensus_levels,
         )
 
         # ── 2. Cosine similarity score ──────────────────────────────
-        all_genes = list(set(_normalize_gene_name(g)
-                             for g in top_markers["names"].tolist() + positive_markers))
-        cluster_vec = np.array(
-            [1.0 if g in top_gene_set else 0.0 for g in all_genes]
+        all_genes = list(
+            set(_normalize_gene_name(g) for g in top_markers["names"].tolist() + positive_markers)
         )
-        type_vec = np.array(
-            [1.0 if g in positive_set else 0.0 for g in all_genes]
-        )
+        cluster_vec = np.array([1.0 if g in top_gene_set else 0.0 for g in all_genes])
+        type_vec = np.array([1.0 if g in positive_set else 0.0 for g in all_genes])
         cluster_norm = np.linalg.norm(cluster_vec)
         type_norm = np.linalg.norm(type_vec)
         if cluster_norm > 0 and type_norm > 0:
-            cos_sim = float(np.dot(cluster_vec, type_vec)
-                            / (cluster_norm * type_norm))
+            cos_sim = float(np.dot(cluster_vec, type_vec) / (cluster_norm * type_norm))
         else:
             cos_sim = 0.0
 
         # ── 3. Merge evidence scores ────────────────────────────────
         final_score, base_method = _merge_evidence_scores(
-            hypergeometric_score, cos_sim, fisher_source, len(positive_markers),
+            hypergeometric_score,
+            cos_sim,
+            fisher_source,
+            len(positive_markers),
         )
 
         # ── 4. Phylogenetic weight ──────────────────────────────────
         final_score = _apply_phylogenetic_weight(
-            final_score, target_class, target_order, kb, type_key,
+            final_score,
+            target_class,
+            target_order,
+            kb,
+            type_key,
         )
 
         # ── 5. Negative-marker penalty ──────────────────────────────
@@ -806,13 +814,14 @@ def score_cluster_against_kb(kb: Dict[str, Any],
     return results
 
 
-def annotate_all_clusters(kb_all_markers: Dict[str, Any],
-                          all_marker_dfs: pd.DataFrame,
-                          species: str,
-                          target_class: str = "",
-                          target_order: str = "",
-                          adaptive_top_n: bool = False,
-                          ) -> pd.DataFrame:
+def annotate_all_clusters(
+    kb_all_markers: Dict[str, Any],
+    all_marker_dfs: pd.DataFrame,
+    species: str,
+    target_class: str = "",
+    target_order: str = "",
+    adaptive_top_n: bool = False,
+) -> pd.DataFrame:
     """Score every cluster and assign the best-matching cell type.
 
     Parameters
@@ -855,8 +864,11 @@ def annotate_all_clusters(kb_all_markers: Dict[str, Any],
         cl_sort = cl_sort.iloc[lfc_idx]
 
         scores = score_cluster_against_kb(
-            kb_all_markers, cl_sort, species=species,
-            target_class=target_class, target_order=target_order,
+            kb_all_markers,
+            cl_sort,
+            species=species,
+            target_class=target_class,
+            target_order=target_order,
             adaptive_top_n=adaptive_top_n,
         )
 
@@ -868,20 +880,21 @@ def annotate_all_clusters(kb_all_markers: Dict[str, Any],
         best_score = scores[best_type]
 
         if best_score.score >= 0.25:
-            records.append({
-                "cluster": cl,
-                "cell_type": best_type,
-                "score": best_score.score,
-                "p_value": best_score.p_value,
-                "method": best_score.method,
-                "n_markers_found": best_score.n_markers_found,
-            })
+            records.append(
+                {
+                    "cluster": cl,
+                    "cell_type": best_type,
+                    "score": best_score.score,
+                    "p_value": best_score.p_value,
+                    "method": best_score.method,
+                    "n_markers_found": best_score.n_markers_found,
+                }
+            )
 
     return pd.DataFrame(records)
 
 
-def detect_low_quality_cluster(cluster_markers: pd.DataFrame,
-                                top_n: int = 20) -> tuple[bool, str]:
+def detect_low_quality_cluster(cluster_markers: pd.DataFrame, top_n: int = 20) -> tuple[bool, str]:
     """Detect clusters dominated by mitochondrial or ribosomal genes.
 
     Parameters
@@ -901,10 +914,7 @@ def detect_low_quality_cluster(cluster_markers: pd.DataFrame,
     genes = top["names"].tolist()
 
     n_mito = sum(1 for g in genes if str(g).startswith("MT-"))
-    n_ribo = sum(
-        1 for g in genes
-        if str(g).startswith(("RPL", "RPS", "MRPL", "MRPS"))
-    )
+    n_ribo = sum(1 for g in genes if str(g).startswith(("RPL", "RPS", "MRPL", "MRPS")))
 
     if n_mito >= 3:
         return True, "mito_high ({} MT- genes in top-{})".format(n_mito, top_n)

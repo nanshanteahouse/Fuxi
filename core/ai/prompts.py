@@ -29,7 +29,6 @@ ai_prompts.py — AI 注释与解读的提示词模板（RNA + ATAC 统一）
 """
 
 import json
-import os
 
 from core.ai.templates._loader import load_prompt
 
@@ -42,12 +41,16 @@ ANNOTATION_SYSTEM_PROMPT: str = _annotation["system"]
 ANNOTATION_USER_PROMPT_TEMPLATE: str = _annotation["user_template"]
 
 
-def build_annotation_prompt(adata, tissue: str, species: str,
-                            precomputed_rank: bool = False,
-                            extra_context: str = "",
-                            compact: bool = False,
-                            kb_candidates: list[str] | None = None,
-                            unconstrained: bool = False):
+def build_annotation_prompt(
+    adata,
+    tissue: str,
+    species: str,
+    precomputed_rank: bool = False,
+    extra_context: str = "",
+    compact: bool = False,
+    kb_candidates: list[str] | None = None,
+    unconstrained: bool = False,
+):
     """
     构建 RNA 聚类注释的完整提示词对。
 
@@ -74,13 +77,16 @@ def build_annotation_prompt(adata, tissue: str, species: str,
 
     # ── 计算 marker 基因（如尚未计算）────────────────────────────────
     if not precomputed_rank:
-        sc.tl.rank_genes_groups(adata, groupby="leiden", method="wilcoxon",
-                            use_raw=True if adata.raw is not None else None)
+        sc.tl.rank_genes_groups(
+            adata,
+            groupby="leiden",
+            method="wilcoxon",
+            use_raw=True if adata.raw is not None else None,
+        )
 
     # ── 提取每聚类 marker 基因 ───────────────────────────────────────
     n_top = 5 if compact else 20
-    clusters = sorted(adata.obs["leiden"].unique(),
-                      key=lambda x: int(x))
+    clusters = sorted(adata.obs["leiden"].unique(), key=lambda x: int(x))
     cluster_markers: dict = {}
     for cl in clusters:
         df = sc.get.rank_genes_groups_df(adata, group=str(cl))

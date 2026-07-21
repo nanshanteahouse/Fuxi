@@ -49,10 +49,9 @@ def validate_kb(kb: Dict[str, Any]) -> Tuple[bool, List[str]]:
 
     # Collect all known type keys (excluding "expert_rules" and "_meta")
     type_keys: Set[str] = {
-        k for k in kb
-        if k not in ("expert_rules", "_meta")
-        and not k.startswith("_")
-        and isinstance(kb[k], dict)
+        k
+        for k in kb
+        if k not in ("expert_rules", "_meta") and not k.startswith("_") and isinstance(kb[k], dict)
     }
 
     # Known species across the entire KB
@@ -64,15 +63,14 @@ def validate_kb(kb: Dict[str, Any]) -> Tuple[bool, List[str]]:
         markers = type_data.get("markers", {})
         confirm: Dict[str, Any] = markers.get("confirm", {})
         add: Dict[str, Any] = markers.get("add", {})
-        refine: Dict[str, Any] = markers.get("refine", {})
+        markers.get("refine", {})
 
         positive_genes: Set[str] = set(confirm.keys()) | set(add.keys())
 
         # 1. Minimum 3 markers
         if len(positive_genes) < 3:
             errors.append(
-                f"'{type_key}': only {len(positive_genes)} positive marker(s) "
-                f"(need >= 3)"
+                f"'{type_key}': only {len(positive_genes)} positive marker(s) (need >= 3)"
             )
 
         # 2. Sources >= 2
@@ -95,17 +93,14 @@ def validate_kb(kb: Dict[str, Any]) -> Tuple[bool, List[str]]:
         overlap: Set[str] = neg_set & positive_genes
         if overlap:
             errors.append(
-                f"'{type_key}': negative_markers overlap with positive "
-                f"markers: {sorted(overlap)}"
+                f"'{type_key}': negative_markers overlap with positive markers: {sorted(overlap)}"
             )
 
         # 4. Consensus-levels completeness
         consensus_levels: Dict[str, str] = type_data.get("consensus_levels", {})
         for gene in positive_genes:
             if gene not in consensus_levels:
-                errors.append(
-                    f"'{type_key}': marker '{gene}' missing from consensus_levels"
-                )
+                errors.append(f"'{type_key}': marker '{gene}' missing from consensus_levels")
 
         # Collect species
         species_list = type_data.get("species", [])
@@ -119,8 +114,7 @@ def validate_kb(kb: Dict[str, Any]) -> Tuple[bool, List[str]]:
         action = rule.get("action", "")
         if action not in type_keys:
             errors.append(
-                f"expert_rules[{idx}]: action '{action}' does not match "
-                f"any KB cell type"
+                f"expert_rules[{idx}]: action '{action}' does not match any KB cell type"
             )
 
         condition = rule.get("condition", {})
@@ -131,9 +125,10 @@ def validate_kb(kb: Dict[str, Any]) -> Tuple[bool, List[str]]:
         # Build deterministic key for condition (include absent markers)
         markers_absent = condition.get("markers_absent", [])
         absent_str = "!" + ",".join(sorted(markers_absent)) if markers_absent else ""
-        cond_key = ";".join(
-            f"{g}:{markers_present[g]}" for g in sorted(markers_present.keys())
-        ) + absent_str
+        cond_key = (
+            ";".join(f"{g}:{markers_present[g]}" for g in sorted(markers_present.keys()))
+            + absent_str
+        )
 
         if cond_key in seen_conditions and seen_conditions[cond_key] != action:
             errors.append(

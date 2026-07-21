@@ -1,6 +1,7 @@
 """Prompt YAML loader — loads and caches LLM prompts from YAML files."""
 
 from pathlib import Path
+
 import yaml
 
 _PROMPTS_DIR = Path(__file__).parent
