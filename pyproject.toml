@@ -61,3 +61,6 @@ exclude_also = [
     "raise NotImplementedError",
     "assert False",
 ]
+
+[project.optional-dependencies]
+scvi = ["scvi-tools>=1.5,<2"]
