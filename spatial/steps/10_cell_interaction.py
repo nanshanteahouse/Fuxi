@@ -17,14 +17,18 @@ Output:
 
 Dependencies: pip install liana>=1.0.0
 """
-import sys, os, time, argparse
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
-from core.utils import setup_logger, resolve_config
-import numpy as np
-import pandas as pd
-import scanpy as sc
+
+import argparse
+import os
+import sys
+import time
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 import matplotlib
 import matplotlib.pyplot as plt
+import scanpy as sc
+
+from core.utils import resolve_config, setup_logger
 
 matplotlib.use("Agg")
 
@@ -33,9 +37,10 @@ matplotlib.use("Agg")
 #  Export
 # ═══════════════════════════════════════════════════════════════════════
 
-def export_spatial_results(lr_res, top_df, CFG, log):
+
+def export_spatial_results(lr_res, top_df, cfg, log):
     """Save spatial CCI interaction tables to CSV."""
-    table_dir = os.path.join(CFG.table_dir, "10_cell_interaction")
+    table_dir = os.path.join(cfg.table_dir, "10_cell_interaction")
     os.makedirs(table_dir, exist_ok=True)
 
     path = os.path.join(table_dir, "cci_spatial_interactions.csv")
@@ -51,9 +56,10 @@ def export_spatial_results(lr_res, top_df, CFG, log):
 #  Plots
 # ═══════════════════════════════════════════════════════════════════════
 
-def plot_spatial_heatmap(top_df, CFG, log):
+
+def plot_spatial_heatmap(top_df, cfg, log):
     """Heatmap showing Moran's R scores for top LR interactions."""
-    fig_dir = os.path.join(CFG.figure_dir, "10_cell_interaction")
+    fig_dir = os.path.join(cfg.figure_dir, "10_cell_interaction")
     os.makedirs(fig_dir, exist_ok=True)
 
     # Bivariate output: ligand, receptor, morans -- no source/target columns
@@ -63,8 +69,10 @@ def plot_spatial_heatmap(top_df, CFG, log):
 
     score_col = "morans" if "morans" in top_df.columns else top_df.columns[0]
     pivot = top_df.pivot_table(
-        index="ligand", columns="receptor",
-        values=score_col, aggfunc="mean",
+        index="ligand",
+        columns="receptor",
+        values=score_col,
+        aggfunc="mean",
     )
     pivot = pivot.fillna(0)
 
@@ -85,9 +93,7 @@ def plot_spatial_heatmap(top_df, CFG, log):
     ax.set_yticklabels(pivot.index, fontsize=8)
     ax.set_xlabel("Receptor")
     ax.set_ylabel("Ligand")
-    ax.set_title(
-        f"Top {len(top_df)} Spatial CCI ({score_col})"
-    )
+    ax.set_title(f"Top {len(top_df)} Spatial CCI ({score_col})")
 
     cbar = fig.colorbar(im, ax=ax, shrink=0.8)
     cbar.set_label("N interactions")
@@ -99,9 +105,9 @@ def plot_spatial_heatmap(top_df, CFG, log):
     log.info("Saved: %s", path)
 
 
-def plot_spatial_dotplot(top_df, CFG, log):
+def plot_spatial_dotplot(top_df, cfg, log):
     """Dotplot of top LR pairs with global Moran's R or similarity scores."""
-    fig_dir = os.path.join(CFG.figure_dir, "10_cell_interaction")
+    fig_dir = os.path.join(cfg.figure_dir, "10_cell_interaction")
     os.makedirs(fig_dir, exist_ok=True)
 
     # Determine value column for color
@@ -124,13 +130,10 @@ def plot_spatial_dotplot(top_df, CFG, log):
     top_df = top_df.copy()
     if "ligand_complex" in top_df.columns and "receptor_complex" in top_df.columns:
         top_df["interaction"] = (
-            top_df["ligand_complex"].astype(str) + "_"
-            + top_df["receptor_complex"].astype(str)
+            top_df["ligand_complex"].astype(str) + "_" + top_df["receptor_complex"].astype(str)
         )
     elif "ligand" in top_df.columns and "receptor" in top_df.columns:
-        top_df["interaction"] = (
-            top_df["ligand"].astype(str) + "_" + top_df["receptor"].astype(str)
-        )
+        top_df["interaction"] = top_df["ligand"].astype(str) + "_" + top_df["receptor"].astype(str)
     else:
         log.warning("No ligand/receptor columns -- skipping dotplot")
         return
@@ -143,8 +146,10 @@ def plot_spatial_dotplot(top_df, CFG, log):
     fig_h = max(4, n_interactions * 0.3 + 1.0)
     fig, ax = plt.subplots(figsize=(fig_w, fig_h))
 
-    colors = plt.cm.RdYlBu_r((plot_df[score_col].values - plot_df[score_col].min())
-                              / (plot_df[score_col].max() - plot_df[score_col].min() + 0.001))
+    colors = plt.cm.RdYlBu_r(
+        (plot_df[score_col].values - plot_df[score_col].min())
+        / (plot_df[score_col].max() - plot_df[score_col].min() + 0.001)
+    )
     ax.barh(range(n_interactions), plot_df[score_col].values, color=colors)
     ax.set_yticks(range(n_interactions))
     ax.set_yticklabels(plot_df["interaction"].values, fontsize=7)
@@ -162,23 +167,24 @@ def plot_spatial_dotplot(top_df, CFG, log):
 #  Main
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def main():
     t0 = time.time()
     args_parser = argparse.ArgumentParser()
     args_parser.add_argument("--config", default="../config.py")
     args = args_parser.parse_args()
 
-    CFG = resolve_config(args.config)
-    log = setup_logger("10_cci", os.path.join(CFG.log_dir, "10_cci.log"))
+    cfg = resolve_config(args.config)
+    log = setup_logger("10_cci", os.path.join(cfg.log_dir, "10_cci.log"))
     log.info("Step 10: Spatial Cell-Cell Interaction (CCI) via LIANA+ bivariate")
 
     # ── Gate check ──────────────────────────────────────────────────────
-    if not getattr(CFG.cci, "run", True):
+    if not getattr(cfg.cci, "run", True):
         log.info("run_cci=False — skipping")
         return
 
     # ── Load input ──────────────────────────────────────────────────────
-    adata_path = CFG.annotated_h5ad
+    adata_path = cfg.annotated_h5ad
     if not os.path.exists(adata_path):
         log.error("Input not found: %s (run Step 05 first)", adata_path)
         sys.exit(1)
@@ -199,12 +205,15 @@ def main():
     log.info("Spatial connectivities: %d spots, avg degree %.1f", n_spots, avg_degree)
 
     # Optionally rebuild spatial neighbors with custom radius
-    cci_distance = getattr(CFG.cci, "spatial_distance", 0.0)
+    cci_distance = getattr(cfg.cci, "spatial_distance", 0.0)
     if cci_distance > 0:
         import squidpy as sq
+
         log.info("Rebuilding spatial neighbors with radius=%.0f px", cci_distance)
         sq.gr.spatial_neighbors(
-            adata, radius=cci_distance, key_added="spatial_connectivities",
+            adata,
+            radius=cci_distance,
+            key_added="spatial_connectivities",
         )
         new_avg = adata.obsp["spatial_connectivities"].sum() / n_spots
         log.info("  Updated avg degree: %.1f", new_avg)
@@ -220,29 +229,32 @@ def main():
 
     # ── Load anatomical adjacency (v4.0+) ────────────────────────────
     from core.pipeline.anatomy import load_adjacency
-    adj_tissue = getattr(CFG.cci, "tissue", "") or CFG.tissue
-    adj_file = getattr(CFG.cci, "adjacency_file", "")
+
+    adj_tissue = getattr(cfg.cci, "tissue", "") or cfg.tissue
+    adj_file = getattr(cfg.cci, "adjacency_file", "")
     adjacency_df = load_adjacency(tissue=adj_tissue, custom_file=adj_file, log=log)
-    adj_mode = getattr(CFG.cci, "adjacency", "off")
+    adj_mode = getattr(cfg.cci, "adjacency", "off")
     if adj_mode != "off":
         log.info(
             "CCI adjacency constraint: mode=%s, tissue=%s, %d adjacency pairs",
-            adj_mode, adj_tissue, len(adjacency_df),
+            adj_mode,
+            adj_tissue,
+            len(adjacency_df),
         )
 
     # ── Run CCI spatial analysis ────────────────────────────────────────
     from core.interaction.cell_interaction import (
         ensure_gene_symbols,
-        run_cci_spatial,
         format_cci_results,
+        run_cci_spatial,
     )
 
     # ── Ensure gene symbols (LIANA uses HGNC symbols) ───────────────────
-    adata = ensure_gene_symbols(adata, species=CFG.species, log=log)
+    adata = ensure_gene_symbols(adata, species=cfg.species, log=log)
 
     # Auto-select mouse-compatible LR database
-    lr_db = CFG.cci.lr_database
-    if lr_db == "consensus" and CFG.species.lower() in ("mouse", "mus musculus"):
+    lr_db = cfg.cci.lr_database
+    if lr_db == "consensus" and cfg.species.lower() in ("mouse", "mus musculus"):
         lr_db = "omnipath"
         log.info("Switched CCI LR database for mouse: consensus → omnipath")
 
@@ -252,7 +264,7 @@ def main():
         connectivity_key="spatial_connectivities",
         local_name="cosine",
         global_name="morans",
-        n_perms=CFG.cci.permutations,
+        n_perms=cfg.cci.permutations,
         log=log,
     )
 
@@ -262,7 +274,7 @@ def main():
     sort_col = "morans" if "morans" in lr_res.columns else lr_res.columns[0]
     top_df = format_cci_results(
         lr_res,
-        n_top=CFG.cci.n_top_interactions,
+        n_top=cfg.cci.n_top_interactions,
         pval_col=sort_col,
         ascending=False,
         log=log,
@@ -270,11 +282,11 @@ def main():
         adjacency_mode=adj_mode,
     )
 
-    export_spatial_results(lr_res, top_df, CFG, log)
+    export_spatial_results(lr_res, top_df, cfg, log)
 
     # ── Plot ────────────────────────────────────────────────────────────
-    plot_spatial_heatmap(top_df, CFG, log)
-    plot_spatial_dotplot(top_df, CFG, log)
+    plot_spatial_heatmap(top_df, cfg, log)
+    plot_spatial_dotplot(top_df, cfg, log)
 
     log.info("Step 10 complete, took %.1fs", time.time() - t0)
 
