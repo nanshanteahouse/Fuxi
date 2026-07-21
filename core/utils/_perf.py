@@ -1,29 +1,28 @@
 """Performance monitoring — wall time, CPU, memory, GPU tracking."""
 
-import logging
+import json
+import os
 import subprocess as _sp
 import threading
 import time as _time
 from contextlib import contextmanager
 from dataclasses import dataclass
-import json
-import os
 from typing import Optional
-
 
 
 @dataclass
 class PerformanceReport:
     """Performance metrics for a pipeline step."""
+
     step: str = ""
     wall_sec: float = 0.0
     cpu_sec: float = 0.0
-    peak_rss_mib: float = 0.0          # MiB = 1024² bytes
+    peak_rss_mib: float = 0.0  # MiB = 1024² bytes
     avg_cpu_pct: float = 0.0
     gpu_mem_mb: float = -1.0
     n_cells: int = 0
     n_genes: int = 0
-    checkpoint_mib: float = 0.0        # MiB = 1024² bytes
+    checkpoint_mib: float = 0.0  # MiB = 1024² bytes
 
 
 @contextmanager
@@ -40,6 +39,7 @@ def monitor_performance(step_name: str = "", log=None, child_pid: Optional[int] 
         If provided, the child process (pid) is tracked instead of the parent.
     """
     import psutil
+
     report = PerformanceReport(step=step_name)
     t0 = _time.time()
     if child_pid is not None:
@@ -57,7 +57,8 @@ def monitor_performance(step_name: str = "", log=None, child_pid: Optional[int] 
         while not stop.is_set():
             try:
                 m = proc.memory_info().rss
-                if m > peak_rss: peak_rss = m
+                if m > peak_rss:
+                    peak_rss = m  # track new peak
                 cpu_samples.append(proc.cpu_percent())
             except Exception:
                 pass
@@ -68,13 +69,16 @@ def monitor_performance(step_name: str = "", log=None, child_pid: Optional[int] 
     try:
         yield report
     finally:
-        stop.set(); sampler.join(timeout=5)
+        stop.set()
+        sampler.join(timeout=5)
         dt = _time.time() - t0
         report.wall_sec = round(dt, 1)
         if child_pid is not None:
             try:
                 tcpu1 = proc.cpu_times()
-                report.cpu_sec = round((tcpu1.user + tcpu1.system) - (tcpu0.user + tcpu0.system), 1)
+                report.cpu_sec = round(
+                    (tcpu1.user + tcpu1.system) - (tcpu0.user + tcpu0.system), 1
+                )
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 report.cpu_sec = 0.0
         else:
@@ -83,15 +87,26 @@ def monitor_performance(step_name: str = "", log=None, child_pid: Optional[int] 
         report.peak_rss_mib = round(peak_rss / (1024 * 1024), 1)
         report.avg_cpu_pct = round(sum(cpu_samples) / max(len(cpu_samples), 1), 1)
         try:
-            out = _sp.check_output(["nvidia-smi","--query-gpu=memory.used",
-                "--format=csv,noheader,nounits"]).decode().strip().split("\n")
+            out = (
+                _sp.check_output(
+                    ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"]
+                )
+                .decode()
+                .strip()
+                .split("\n")
+            )
             report.gpu_mem_mb = sum(float(m) for m in out)
         except Exception:
             report.gpu_mem_mb = -1.0
         if log:
-            log.info("[perf] wall=%.1fs cpu=%.1fs mem=%.1fMiB cpu%%=%.1f%% gpu=%.0fMB",
-                     report.wall_sec, report.cpu_sec, report.peak_rss_mib,
-                     report.avg_cpu_pct, report.gpu_mem_mb)
+            log.info(
+                "[perf] wall=%.1fs cpu=%.1fs mem=%.1fMiB cpu%%=%.1f%% gpu=%.0fMB",
+                report.wall_sec,
+                report.cpu_sec,
+                report.peak_rss_mib,
+                report.avg_cpu_pct,
+                report.gpu_mem_mb,
+            )
 
 
 class PerformanceSummary:
@@ -120,17 +135,19 @@ class PerformanceSummary:
         """Full JSON-ready dict with pipeline, steps, and summary keys."""
         steps_list: list[dict] = []
         for s in self.steps:
-            steps_list.append({
-                "step": s.step,
-                "wall_sec": s.wall_sec,
-                "cpu_sec": s.cpu_sec,
-                "peak_rss_mib": s.peak_rss_mib,
-                "avg_cpu_pct": s.avg_cpu_pct,
-                "gpu_mem_mb": s.gpu_mem_mb,
-                "n_cells": s.n_cells,
-                "n_genes": s.n_genes,
-                "checkpoint_mib": s.checkpoint_mib,
-            })
+            steps_list.append(
+                {
+                    "step": s.step,
+                    "wall_sec": s.wall_sec,
+                    "cpu_sec": s.cpu_sec,
+                    "peak_rss_mib": s.peak_rss_mib,
+                    "avg_cpu_pct": s.avg_cpu_pct,
+                    "gpu_mem_mb": s.gpu_mem_mb,
+                    "n_cells": s.n_cells,
+                    "n_genes": s.n_genes,
+                    "checkpoint_mib": s.checkpoint_mib,
+                }
+            )
 
         if steps_list:
             total_wall = sum(s["wall_sec"] for s in steps_list)
@@ -158,7 +175,9 @@ class PerformanceSummary:
         with open(path, "w") as f:
             json.dump(self.to_dict(), f, indent=2)
 
-    def print_terminal_summary(self, n_jobs: int = 0, modality: str = "", config_path: str = "") -> None:
+    def print_terminal_summary(
+        self, n_jobs: int = 0, modality: str = "", config_path: str = ""
+    ) -> None:
         """Print a bordered table with step details and memory reference estimate."""
         data = self.to_dict()
         steps_list = data["steps"]
@@ -167,7 +186,6 @@ class PerformanceSummary:
         if not steps_list:
             print("No steps recorded.")
             return
-
 
         # Column widths
         c_step = 6
@@ -191,7 +209,9 @@ class PerformanceSummary:
             print(f"║  {meta_line:<{total_w - 4}}║")
             print(f"╚{'═' * (total_w - 2)}╝")
 
-        _h = lambda w: "─" * w
+        def _h(w):
+            return "─" * w
+
         _b = "│"
 
         top = f"┌{_h(c_step)}┬{_h(c_desc)}┬{_h(c_wall)}┬{_h(c_cpu)}┬{_h(c_mem)}┬{_h(c_cells)}┐"
@@ -238,9 +258,7 @@ class PerformanceSummary:
             mem_per_1k = summary["max_peak_rss_mib"] / (n_cells_total / 1000)
             mem_line = f" \U0001f4d0 Memory reference: ~{mem_per_1k:.2f} MiB per 1k cells at {n_genes_val:,} genes"
             print(f"{_b}{mem_line:<{total_w - 2}}{_b}")
-            est = self._estimate_memory(
-                summary["max_peak_rss_mib"], n_cells_total, n_genes_val
-            )
+            est = self._estimate_memory(summary["max_peak_rss_mib"], n_cells_total, n_genes_val)
             parts = []
             for k, v in est.items():
                 parts.append(f"{k} × {n_genes_val:,}: ~{v:.1f} GiB")

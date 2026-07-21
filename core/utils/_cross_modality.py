@@ -26,12 +26,12 @@ def find_rna_h5ad(cfg=None, dataset_id: str = None, log=None) -> Optional[str]:
         log = logging.getLogger(__name__)
 
     # ── 1. Explicit setting always wins ──────────────────────────────
-    if cfg is not None and getattr(cfg, 'rna_h5ad', ''):
+    if cfg is not None and getattr(cfg, "rna_h5ad", ""):
         return cfg.rna_h5ad
 
     # ── 2. Derive dataset ID from config ─────────────────────────────
     if dataset_id is None and cfg is not None:
-        proj = getattr(cfg, 'project_dir', '')
+        proj = getattr(cfg, "project_dir", "")
         if proj:
             dataset_id = os.path.basename(os.path.normpath(proj))
     if not dataset_id:
@@ -86,9 +86,9 @@ def find_rna_marker_csv(cfg=None, dataset_id: str = None, log=None) -> Optional[
         log = logging.getLogger(__name__)
 
     # ── 1. Explicit path to CSV — use directly ────────────────────────
-    if cfg is not None and getattr(cfg, 'rna_ref', ''):
+    if cfg is not None and getattr(cfg, "rna_ref", ""):
         ref = cfg.rna_ref
-        if ref.endswith('.csv') and os.path.isfile(ref):
+        if ref.endswith(".csv") and os.path.isfile(ref):
             return ref
         # If rna_ref is a directory path, use its basename as dataset_id
         if os.path.isdir(ref):
@@ -96,11 +96,11 @@ def find_rna_marker_csv(cfg=None, dataset_id: str = None, log=None) -> Optional[
 
     # ── 2. Resolve dataset_id from rna_ref string or project_dir ─────
     if dataset_id is None and cfg is not None:
-        ref = getattr(cfg, 'rna_ref', '')
-        if ref and not os.path.sep in ref and '/' not in ref:
-            dataset_id = ref   # bare ID like "GSE123456"
+        ref = getattr(cfg, "rna_ref", "")
+        if ref and os.path.sep not in ref and "/" not in ref:
+            dataset_id = ref  # bare ID like "GSE123456"
     if dataset_id is None and cfg is not None:
-        proj = getattr(cfg, 'project_dir', '')
+        proj = getattr(cfg, "project_dir", "")
         if proj:
             dataset_id = os.path.basename(os.path.normpath(proj))
     if not dataset_id:
@@ -132,7 +132,7 @@ def find_rna_marker_csv(cfg=None, dataset_id: str = None, log=None) -> Optional[
     return None
 
 
-def load_scRNA_markers(
+def load_scRNA_markers(  # noqa: N802
     csv_path: str,
     top_n: int = 10,
     pval_threshold: float = 0.05,
@@ -171,37 +171,34 @@ def load_scRNA_markers(
     df = pd.read_csv(csv_path)
     log.info(
         "load_scRNA_markers: read %d rows from %s",
-        len(df), os.path.basename(csv_path),
+        len(df),
+        os.path.basename(csv_path),
     )
 
     # Filter: significant + positively enriched
-    mask = (
-        (df['pvals_adj'] < pval_threshold)
-        & (df['logfoldchanges'] > logfc_min)
-    )
+    mask = (df["pvals_adj"] < pval_threshold) & (df["logfoldchanges"] > logfc_min)
     df_filt = df[mask]
     log.info(
         "  after filtering (pval<%.0e, logfc>%.1f): %d rows retained",
-        pval_threshold, logfc_min, len(df_filt),
+        pval_threshold,
+        logfc_min,
+        len(df_filt),
     )
 
     # Group by cell type, sort by score descending, take top-N
     marker_dict: Dict[str, List[str]] = {}
-    for group, group_df in df_filt.groupby('group', observed=True):
-        top_genes = (
-            group_df
-            .sort_values('scores', ascending=False)
-            .head(top_n)['names']
-            .tolist()
-        )
+    for group, group_df in df_filt.groupby("group", observed=True):
+        top_genes = group_df.sort_values("scores", ascending=False).head(top_n)["names"].tolist()
         if top_genes:
             marker_dict[group] = top_genes
-            log.debug("  %s: %d markers → %s", group, len(top_genes),
-                      top_genes[:5])
+            log.debug("  %s: %d markers → %s", group, len(top_genes), top_genes[:5])
 
     log.info(
         "load_scRNA_markers: extracted markers for %d cell types "
         "(top_n=%d, pval<%.0e, logfc>%.1f)",
-        len(marker_dict), top_n, pval_threshold, logfc_min,
+        len(marker_dict),
+        top_n,
+        pval_threshold,
+        logfc_min,
     )
     return marker_dict

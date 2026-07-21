@@ -4,13 +4,18 @@ import logging
 import os
 import shutil
 from typing import Optional
+
 import anndata
 
 
-def safe_write(adata, target: str,
-               tmpdir: str = "/tmp/Fuxi",
-               compression: str = "gzip", cfg=None,
-               compression_override: Optional[str] = None) -> None:
+def safe_write(
+    adata,
+    target: str,
+    tmpdir: str = "/tmp/Fuxi",
+    compression: str = "gzip",
+    cfg=None,
+    compression_override: Optional[str] = None,
+) -> None:
     """
     安全写入 h5ad 文件，避免 WSL /mnt 挂载的文件锁定问题。
 
@@ -30,10 +35,10 @@ def safe_write(adata, target: str,
     if compression_override is not None:
         compression = compression_override
     elif cfg is not None:
-        compression = getattr(cfg, 'h5ad_compression', compression)
+        compression = getattr(cfg, "h5ad_compression", compression)
     # Respect cfg.h5ad_tempdir (from ATACseq config)
     if cfg is not None:
-        tmpdir = getattr(cfg, 'h5ad_tempdir', tmpdir)
+        tmpdir = getattr(cfg, "h5ad_tempdir", tmpdir)
     anndata.settings.allow_write_nullable_strings = True
 
     # WSL /mnt mounts: use explicit copy+unlink instead of shutil.move
@@ -56,11 +61,15 @@ def safe_write(adata, target: str,
     # Verify file integrity
     try:
         import scanpy as sc
-        _verify = sc.read(target, backed='r')
+
+        _verify = sc.read(target, backed="r")
         logger.info("Integrity check: %s verified OK", os.path.basename(target))
     except Exception as e:
-        logger.error("Integrity check FAILED for %s: %s — file may be corrupted!",
-                     os.path.basename(target), e)
+        logger.error(
+            "Integrity check FAILED for %s: %s — file may be corrupted!",
+            os.path.basename(target),
+            e,
+        )
 
 
 def safe_plot(func, *args, **kwargs):
@@ -77,17 +86,18 @@ def safe_plot(func, *args, **kwargs):
     import scanpy as sc
 
     logger = logging.getLogger(__name__)
-    save_path = kwargs.pop('save', None)
+    save_path = kwargs.pop("save", None)
     if save_path:
-        kwargs.setdefault('show', False)
+        kwargs.setdefault("show", False)
     try:
         result = func(*args, **kwargs)
         if save_path:
             import matplotlib.pyplot as plt
+
             if not os.path.isabs(save_path):
                 save_path = os.path.join(sc.settings.figdir, save_path)
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            plt.savefig(save_path, dpi=150, bbox_inches='tight')
+            plt.savefig(save_path, dpi=150, bbox_inches="tight")
             plt.close()
         return result
     except Exception as e:

@@ -26,9 +26,9 @@ def validate_adata(adata, stage_name="", logger=None, fix_nan_inf=True) -> bool:
     if logger is None:
         logger = logging.getLogger(__name__)
 
-    X_data = adata.X.data if sp.issparse(adata.X) else adata.X
-    n_nan = int(np.isnan(X_data).sum())
-    n_inf = int(np.isinf(X_data).sum())
+    x_data = adata.X.data if sp.issparse(adata.X) else adata.X
+    n_nan = int(np.isnan(x_data).sum())
+    n_inf = int(np.isinf(x_data).sum())
     total = n_nan + n_inf
 
     if total == 0:
@@ -37,7 +37,9 @@ def validate_adata(adata, stage_name="", logger=None, fix_nan_inf=True) -> bool:
 
     logger.warning(
         "[%s] Found %d NaN and %d Inf values in X matrix — fixing",
-        stage_name or "validate", n_nan, n_inf,
+        stage_name or "validate",
+        n_nan,
+        n_inf,
     )
 
     if fix_nan_inf:
@@ -111,7 +113,8 @@ def validate_pipeline_state(adata: Any, step: str, modality: str = "rna") -> Non
     if req is None:
         logger.debug(
             "[step=%s modality=%s] No requirements defined — skipping validation",
-            step, modality,
+            step,
+            modality,
         )
         return
 
@@ -130,16 +133,15 @@ def validate_pipeline_state(adata: Any, step: str, modality: str = "rna") -> Non
             missing.append(f"obsp['{col}']")
 
     if missing:
-        msg = (
-            f"Pipeline state validation failed at step {step} ({modality}):\n"
-            + "\n".join(f"  - Missing: {m}" for m in missing)
+        msg = f"Pipeline state validation failed at step {step} ({modality}):\n" + "\n".join(
+            f"  - Missing: {m}" for m in missing
         )
         raise AssertionError(msg)
 
     logger.debug(
-        "[step=%s modality=%s] All required columns present: "
-        "obs=%s obsm=%s obsp=%s",
-        step, modality,
+        "[step=%s modality=%s] All required columns present: obs=%s obsm=%s obsp=%s",
+        step,
+        modality,
         sorted(req.get("obs", [])),
         sorted(req.get("obsm", [])),
         sorted(req.get("obsp", [])),
