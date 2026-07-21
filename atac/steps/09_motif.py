@@ -10,12 +10,15 @@ Note: chromVAR not available in Snapatac2 2.9. Motif enrichment
       uses standalone API with genome_fasta requirement.
 """
 
-import sys, os, time, argparse
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
-from core.utils import setup_logger, resolve_config, safe_plot
-import numpy as np
-import pandas as pd
+import argparse
+import os
+import sys
+import time
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 import snapatac2 as snap
+
+from core.utils import resolve_config, setup_logger
 
 
 def main():
@@ -24,18 +27,19 @@ def main():
     args_parser.add_argument("--config", default="../config.py")
     args = args_parser.parse_args()
 
-    CFG = resolve_config(args.config)
-    log = setup_logger("09_motif", os.path.join(CFG.log_dir, "09_motif.log"))
+    cfg = resolve_config(args.config)
+    log = setup_logger("09_motif", os.path.join(cfg.log_dir, "09_motif.log"))
     log.info("Step 09: Motif enrichment")
 
-    data = snap.read(CFG.annotated_h5ad)
+    data = snap.read(cfg.annotated_h5ad)
     log.info("Loaded: %d cells, %d peaks (backed mode)", data.n_obs, data.n_vars)
 
-    groupby = 'cell_type' if 'cell_type' in data.obs else None
+    groupby = "cell_type" if "cell_type" in data.obs else None
     if groupby is None:
         for c in data.obs.columns:
-            if c.startswith('leiden'):
-                groupby = c; break
+            if c.startswith("leiden"):
+                groupby = c
+                break
 
     try:
         log.info("Loading motifs (CIS-BP human)...")
@@ -47,7 +51,7 @@ def main():
         # If clusters already re-run after step 4 fix, markers may not be in data.uns
         # Instead, re-run marker_regions here if needed
         log.info("Computing marker regions for motif enrichment...")
-        markers = snap.tl.marker_regions(data, groupby=groupby, pvalue=CFG.atac.marker_peaks_fdr)
+        markers = snap.tl.marker_regions(data, groupby=groupby, pvalue=cfg.atac.marker_peaks_fdr)
         # markers is Dict[str, pd.Index]
         regions_by_group = {}
         for grp in data.obs[groupby].unique():
@@ -61,6 +65,7 @@ def main():
 
         # Use pre-built Genome object for hg38 (auto-downloads FASTA)
         from snapatac2.genome import hg38
+
         genome = hg38
 
         if regions_by_group:
@@ -72,7 +77,9 @@ def main():
                     genome_fasta=genome,
                 )
                 for grp, df in result.items():
-                    csv_out = os.path.join(CFG.table_dir, "06_motif", f"motif_enrichment_{grp}.csv")
+                    csv_out = os.path.join(
+                        cfg.table_dir, "06_motif", f"motif_enrichment_{grp}.csv"
+                    )
                     csv_dir = os.path.dirname(csv_out)
                     os.makedirs(csv_dir, exist_ok=True)
                     df.write_csv(csv_out)
@@ -86,5 +93,5 @@ def main():
     log.info("Step 09 complete, took %.1fs", time.time() - t0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

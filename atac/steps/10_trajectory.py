@@ -10,10 +10,15 @@ Input:  05_annotated.h5ad
 Output: 10_trajectory.h5ad
 """
 
-import sys, os, time, argparse
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
-from core.utils import setup_logger, resolve_config, safe_write, safe_plot
+import argparse
+import os
+import sys
+import time
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 import snapatac2 as snap
+
+from core.utils import resolve_config, safe_plot, safe_write, setup_logger
 
 
 def main():
@@ -22,21 +27,21 @@ def main():
     args_parser.add_argument("--config", default="../config.py")
     args = args_parser.parse_args()
 
-    CFG = resolve_config(args.config)
-    log = setup_logger("10_trajectory", os.path.join(CFG.log_dir, "10_trajectory.log"))
+    cfg = resolve_config(args.config)
+    log = setup_logger("10_trajectory", os.path.join(cfg.log_dir, "10_trajectory.log"))
     log.info("Step 10: ATAC pseudotime")
 
-    if os.path.exists(CFG.trajectory_h5ad):
-        log.info("Skip: %s exists.", CFG.trajectory_h5ad)
+    if os.path.exists(cfg.trajectory_h5ad):
+        log.info("Skip: %s exists.", cfg.trajectory_h5ad)
         return
 
-    data = snap.read(CFG.annotated_h5ad)
+    data = snap.read(cfg.annotated_h5ad)
     log.info("Loaded: %d cells (backed mode)", data.n_obs)
 
-    if 'X_umap' not in data.obsm:
+    if "X_umap" not in data.obsm:
         if not data.isbacked:
             try:
-                snap.tl.umap(data, random_state=CFG.execution.random_seed)
+                snap.tl.umap(data, random_state=cfg.execution.random_seed)
             except Exception:
                 pass
         else:
@@ -45,21 +50,27 @@ def main():
     # Pseudotime not available in SnapATAC2 2.9 — create a placeholder
     log.info("Pseudotime analysis: snap.tl.pseudotime not available in SnapATAC2 2.9, skipping")
     import numpy as np
-    import pandas as pd
+
     # Must materialize obs to pandas for column assignment
     if data.isbacked:
         data = data.to_memory()
-    data.obs['pseudotime'] = np.zeros(data.n_obs, dtype=float)
+    data.obs["pseudotime"] = np.zeros(data.n_obs, dtype=float)
 
     try:
-        safe_plot(snap.pl.umap, data, color='pseudotime', cmap='viridis', show=False,
-                  save=os.path.join(CFG.figure_dir, "07_trajectory", "trajectory_pseudotime.png"))
+        safe_plot(
+            snap.pl.umap,
+            data,
+            color="pseudotime",
+            cmap="viridis",
+            show=False,
+            save=os.path.join(cfg.figure_dir, "07_trajectory", "trajectory_pseudotime.png"),
+        )
     except Exception:
         pass
 
-    safe_write(data, CFG.trajectory_h5ad, cfg=CFG)
+    safe_write(data, cfg.trajectory_h5ad, cfg=cfg)
     log.info("Step 10 complete, took %.1fs", time.time() - t0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
