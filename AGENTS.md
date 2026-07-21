@@ -29,6 +29,8 @@ Both modes use `--step N` to run one step at a time. The difference is whether t
 
 **Interactive mode** — Execute `--step N` one at a time. After each step, present results, ask questions, offer options, and wait for confirmation before proceeding. Suitable for exploratory analysis or new datasets.
 **TUI mode** — Launch the unified terminal interface: `python -m core.tui`. Keyboard-navigable dashboard with registry browser, pipeline runner, config editor, and results viewer. Ideal for project exploration and batch management.
+**MCP mode** — Start an AI-accessible server that lets LLM agents (Claude Desktop, VS Code Copilot, custom agents) query the registry, check pipeline status, and trigger downloads/preprocessing/pipeline runs through the Model Context Protocol. See `docs/mcp_guide_zh-CN.md` for setup instructions.
+
 
 
 
@@ -60,6 +62,10 @@ python -m core.paper.registry register --gse GSE123456  # register GSE → PMID 
 python -m core.paper.registry find-orphans        # list orphan datasets
 python core/pipeline/reproduce.py --all --dry-run       # preview reproducibility
 python core/pipeline/reproduce.py <paper_dir>           # reproduce a single paper
+
+# MCP server
+python -m core.ai.mcp_server                         # stdio mode (for AI agents)
+python -m core.ai.mcp_server --http 8080             # HTTP mode (for remote clients)
 ```
 
 ### Key paths
@@ -77,6 +83,7 @@ python core/pipeline/reproduce.py <paper_dir>           # reproduce a single pap
 | Ad-hoc scripts | `adhoc/` (one-off migration, ortholog processing, dataset-specific analysis) |
 | Brainstorming | `projects/notebook/` (methodology_ideas, keywords, etc.) |
 | TUI | `core/tui/` (7 backends, 6 screens, 4 widgets) — `python -m core.tui` |
+| MCP server | `core/ai/mcp_server.py` (10 tools: registry + pipeline + execution) — `python -m core.ai.mcp_server` |
 
 ### Dataset & Paper lookup
 
