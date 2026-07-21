@@ -83,12 +83,12 @@ class StepListingScreen(Screen):
         mod = MODALITY_MAP[modality]
         steps = mod["steps"]
         checkpoints = mod["checkpoints"]
-        write_checkpoints = mod["write_checkpoints"]
+        mod["write_checkpoints"]
 
         table = self.query_one("#steps-table", DataTable)
         table.clear()
 
-        bold = Style(bold=True)
+        Style(bold=True)
 
         for idx, (num, script, desc) in enumerate(steps):
             cp = checkpoints[idx] if idx < len(checkpoints) else ""

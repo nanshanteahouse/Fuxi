@@ -11,10 +11,9 @@ import ast
 import logging
 import os
 import subprocess
-from typing import Any, get_args, get_origin, Literal
+from typing import Any, Literal, get_args, get_origin
 
 from pydantic.fields import FieldInfo
-
 from textual.app import ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.screen import Screen
@@ -31,13 +30,13 @@ from textual.widgets import (
     TextArea,
 )
 
+from core.config.schema import Config
 from core.tui.backends.config import (
     field_to_widget_type,
     get_config_fields,
     load_yaml_config,
     save_yaml_config,
 )
-from core.config.schema import Config
 
 logger = logging.getLogger(__name__)
 
@@ -563,12 +562,14 @@ class ConfigEditorScreen(Screen):
             if get_origin(field_info.annotation) is list:
                 if raw:
                     stripped = raw.strip()
-                    if stripped.startswith('[') and stripped.endswith(']'):
+                    if stripped.startswith("[") and stripped.endswith("]"):
                         try:
                             return ast.literal_eval(stripped)
                         except (ValueError, SyntaxError):
                             pass
-                    items = [item.strip().strip("\"'") for item in stripped.split(",") if item.strip()]
+                    items = [
+                        item.strip().strip("\"'") for item in stripped.split(",") if item.strip()
+                    ]
                     return items
                 return field_info.default or []
             return raw
@@ -645,7 +646,7 @@ class ConfigEditorScreen(Screen):
                 widget.classes = " ".join(classes)
             # Clear transient validation messages from status bar
             # (only if the current status starts with "Validation")
-            status_bar = self.query_one("#status-bar", Static)
+            self.query_one("#status-bar", Static)
             if self._last_status.startswith("[red]Validation"):
                 self._update_status(
                     f"Loaded: {self._config_path}" if self._config_path else "Ready."

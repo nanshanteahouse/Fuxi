@@ -15,13 +15,13 @@ logger = logging.getLogger(__name__)
 # ── Re-export enums for color-coded badges in the TUI ──
 try:
     from core.paper.registry import (
-        InsightStatus,
         DatasetStatus,
+        InsightStatus,
         ModalityStatus,
-        load_master_registry,
-        save_master_registry,
         _cmd_add_paper,
         _cmd_register_gse,
+        load_master_registry,
+        save_master_registry,
     )
 
     _HAS_REGISTRY = True

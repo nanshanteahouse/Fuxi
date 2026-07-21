@@ -16,7 +16,7 @@ import os
 from typing import Any
 
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal
 from textual.reactive import reactive
 from textual.screen import Screen
 from textual.widgets import (
@@ -29,7 +29,7 @@ from textual.widgets import (
     RichLog,
     Static,
     TabbedContent,
-    TabPane
+    TabPane,
 )
 
 from core.tui.backends.download import download_gse_async, fetch_meta_async, list_suppl_async
@@ -280,13 +280,9 @@ class DataManagementScreen(Screen):
         try:
             result = await register_paper_async(pmid)
             if result:
-                log.write(
-                    f"[bold green]✓[/] Successfully registered paper {pmid}\n"
-                )
+                log.write(f"[bold green]✓[/] Successfully registered paper {pmid}\n")
             else:
-                log.write(
-                    f"[bold yellow]⚠[/] Registration returned no result for PMID {pmid}\n"
-                )
+                log.write(f"[bold yellow]⚠[/] Registration returned no result for PMID {pmid}\n")
         except Exception as exc:
             log.write(f"[bold red]Error:[/] {exc}\n")
             logger.exception("Failed to register paper")
@@ -319,16 +315,14 @@ class DataManagementScreen(Screen):
             is_superseries = metadata.get("is_superseries", False)
 
             if is_superseries:
-                log.write(
-                    f"[bold yellow]⚠ SuperSeries Detected:[/] {gse_id} is a SuperSeries\n"
-                )
+                log.write(f"[bold yellow]⚠ SuperSeries Detected:[/] {gse_id} is a SuperSeries\n")
                 subseries = metadata.get("subseries", [])
                 if subseries:
                     warning.update(
                         f"[bold]SuperSeries Warning:[/] This is a SuperSeries containing "
-                        f"{len(subseries)} sub-series:\n" +
-                        "\n".join(f"  • {s}" for s in subseries) +
-                        "\n\nConsider downloading individual sub-series instead."
+                        f"{len(subseries)} sub-series:\n"
+                        + "\n".join(f"  • {s}" for s in subseries)
+                        + "\n\nConsider downloading individual sub-series instead."
                     )
                     warning.display = True
                 else:
@@ -352,9 +346,7 @@ class DataManagementScreen(Screen):
             table.clear()
 
             if not files:
-                log.write(
-                    f"[bold yellow]⚠[/] No supplementary files found for {gse_id}\n"
-                )
+                log.write(f"[bold yellow]⚠[/] No supplementary files found for {gse_id}\n")
                 download_button.disabled = True
                 return
 
@@ -382,9 +374,7 @@ class DataManagementScreen(Screen):
                     key=f"file_{idx}",
                 )
 
-            log.write(
-                f"[bold green]✓[/] Found {len(files)} supplementary file(s)\n"
-            )
+            log.write(f"[bold green]✓[/] Found {len(files)} supplementary file(s)\n")
             download_button.disabled = False
 
         except Exception as exc:
@@ -403,18 +393,14 @@ class DataManagementScreen(Screen):
             return
 
         if not self.data_root:
-            log.write(
-                "[bold red]Error:[/] FUXI_DATA_ROOT environment variable not set\n"
-            )
+            log.write("[bold red]Error:[/] FUXI_DATA_ROOT environment variable not set\n")
             return
 
         progress.total = 100
         progress.display = True
         progress.advance(0)
 
-        log.write(
-            f"[cyan]Starting download for {self._download_gse_id}[/]\n"
-        )
+        log.write(f"[cyan]Starting download for {self._download_gse_id}[/]\n")
         log.write(f"[dim]Destination: {self.data_root}[/]\n")
 
         try:
@@ -422,9 +408,7 @@ class DataManagementScreen(Screen):
             log.write("[dim]Initializing download...[/]\n")
 
             line_count = 0
-            async for line in download_gse_async(
-                self._download_gse_id, self.data_root
-            ):
+            async for line in download_gse_async(self._download_gse_id, self.data_root):
                 log.write(f"{line}\n")
                 line_count += 1
 
@@ -435,9 +419,7 @@ class DataManagementScreen(Screen):
                         progress.progress = 90
 
             progress.advance(100 - progress.progress)
-            log.write(
-                f"[bold green]✓[/] Download completed for {self._download_gse_id}\n"
-            )
+            log.write(f"[bold green]✓[/] Download completed for {self._download_gse_id}\n")
 
         except asyncio.CancelledError:
             log.write("[bold yellow]Download cancelled[/]\n")
@@ -479,9 +461,7 @@ class DataManagementScreen(Screen):
                 self._preprocess_gse_id = basename
 
         if not os.path.exists(data_dir):
-            log.write(
-                f"[bold red]Error:[/] Directory does not exist: {data_dir}\n"
-            )
+            log.write(f"[bold red]Error:[/] Directory does not exist: {data_dir}\n")
             return
 
         log.write(f"[cyan]Detecting formats in: {data_dir}[/]\n")
@@ -546,14 +526,10 @@ class DataManagementScreen(Screen):
             return
 
         if not self.data_root:
-            log.write(
-                "[bold red]Error:[/] FUXI_DATA_ROOT environment variable not set\n"
-            )
+            log.write("[bold red]Error:[/] FUXI_DATA_ROOT environment variable not set\n")
             return
 
-        log.write(
-            f"[cyan]Generating config for {self._preprocess_gse_id}[/]\n"
-        )
+        log.write(f"[cyan]Generating config for {self._preprocess_gse_id}[/]\n")
         log.write(f"[dim]Data root: {self.data_root}[/]\n")
 
         try:

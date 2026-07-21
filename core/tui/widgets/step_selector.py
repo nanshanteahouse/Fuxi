@@ -263,9 +263,7 @@ class StepSelector(Widget):
         """
         completed = checkbox_class == "completed-indicator"
         checkbox = (
-            f"[bold green]{checkbox_content}[/]"
-            if completed
-            else f"[bold]{checkbox_content}[/]"
+            f"[bold green]{checkbox_content}[/]" if completed else f"[bold]{checkbox_content}[/]"
         )
         parts = [
             checkbox,

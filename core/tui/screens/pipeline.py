@@ -8,10 +8,10 @@ from datetime import datetime
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
-from textual.screen import Screen
-from textual.widgets import Button, Footer, Header, Input, Static
-from textual.timer import Timer
 from textual.reactive import reactive
+from textual.screen import Screen
+from textual.timer import Timer
+from textual.widgets import Button, Footer, Header, Input, Static
 
 from core.pipeline.runner import MODALITY_MAP
 from core.tui.backends.pipeline import (
@@ -86,7 +86,7 @@ class PipelineRunnerScreen(Screen):
     def on_mount(self) -> None:
         """Initialize the screen when mounted."""
         # Sync modality from app (set by HomeScreen)
-        if hasattr(self.app, 'modality') and self.app.modality:
+        if hasattr(self.app, "modality") and self.app.modality:
             self.modality = self.app.modality
         # Auto-populate config path from recent state
         self._auto_populate_config()
@@ -102,6 +102,7 @@ class PipelineRunnerScreen(Screen):
         if new and os.path.isfile(new):
             try:
                 from core.utils._config import resolve_config
+
                 cfg = resolve_config(new)
                 self.h5ad_dir = cfg.h5ad_dir
             except Exception:
@@ -112,9 +113,11 @@ class PipelineRunnerScreen(Screen):
     def _auto_populate_config(self) -> None:
         """Auto-populate config_path from recent state or project scanning."""
         import glob
+
         # Try recent state first
         try:
             from core.tui.backends.state import load
+
             state = load()
             recent = state.get("recent_configs", [])
             if recent and recent[0].get("modality") == self.modality:
@@ -138,6 +141,7 @@ class PipelineRunnerScreen(Screen):
     def _browse_config(self) -> None:
         """Handle Browse button — cycle through available configs."""
         import glob
+
         prefix = f"projects/{self.modality}/"
         configs = sorted(glob.glob(f"{prefix}*/config_*.yaml"))
         if not configs:
@@ -241,7 +245,9 @@ class PipelineRunnerScreen(Screen):
 
         log_panel = self.query_one("#log_panel", LogPanel)
         log_panel.clear()
-        log_panel.write_line(f"Starting pipeline run with {len(selected_indices)} selected steps...", "stdout")
+        log_panel.write_line(
+            f"Starting pipeline run with {len(selected_indices)} selected steps...", "stdout"
+        )
 
         # Configure progress tracker
         tracker = self.query_one("#progress_tracker", ProgressTracker)
@@ -289,7 +295,9 @@ class PipelineRunnerScreen(Screen):
 
                 log_panel.set_step_info(self.modality, step_name)
                 log_panel.write_line(f"\n{'=' * 60}", "stdout")
-                log_panel.write_line(f"Running step {step_idx + 1}/{len(step_indices)}: {step_name}", "stdout")
+                log_panel.write_line(
+                    f"Running step {step_idx + 1}/{len(step_indices)}: {step_name}", "stdout"
+                )
                 log_panel.write_line(f"Description: {desc}", "stdout")
                 log_panel.write_line(f"{'=' * 60}\n", "stdout")
 
@@ -302,7 +310,9 @@ class PipelineRunnerScreen(Screen):
 
                     if step_succeeded:
                         tracker.set_step_status(step_idx, "completed")
-                        log_panel.write_line(f"\n✓ Step {step_name} completed successfully.", "stdout")
+                        log_panel.write_line(
+                            f"\n✓ Step {step_name} completed successfully.", "stdout"
+                        )
                     else:
                         tracker.set_step_status(step_idx, "failed")
                         log_panel.write_line(f"\n✗ Step {step_name} failed.", "stderr")
@@ -317,7 +327,9 @@ class PipelineRunnerScreen(Screen):
                     raise
                 except Exception as e:
                     tracker.set_step_status(step_idx, "failed")
-                    log_panel.write_line(f"\n✗ Step {step_name} encountered an error: {e}", "stderr")
+                    log_panel.write_line(
+                        f"\n✗ Step {step_name} encountered an error: {e}", "stderr"
+                    )
                     continue
 
             # All steps done

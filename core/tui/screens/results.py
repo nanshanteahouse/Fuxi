@@ -19,7 +19,7 @@ from core.tui.backends.results import (
     parse_marker_genes,
     parse_qc_report,
 )
-from core.tui.widgets.config_selector import ConfigSelector, ConfigSelected
+from core.tui.widgets.config_selector import ConfigSelected, ConfigSelector
 
 
 class ResultsSummaryScreen(Screen):
@@ -28,6 +28,7 @@ class ResultsSummaryScreen(Screen):
     Displays QC reports, marker genes, enrichment results, and a summary
     overview in tabbed panels with a config selector on the left.
     """
+
     id = "results"
 
     SCREEN_ID = "results"
@@ -120,11 +121,17 @@ class ResultsSummaryScreen(Screen):
                         with Horizontal(id="marker-toolbar"):
                             yield Input(placeholder="Search markers...", id="search-input")
                         yield DataTable(id="marker-table")
-                        yield Static("No marker genes available", id="marker-empty", classes="hidden")
+                        yield Static(
+                            "No marker genes available", id="marker-empty", classes="hidden"
+                        )
 
                     with TabPane("Enrichment", id="enrichment"):
                         yield DataTable(id="enrichment-table")
-                        yield Static("No enrichment results available", id="enrichment-empty", classes="hidden")
+                        yield Static(
+                            "No enrichment results available",
+                            id="enrichment-empty",
+                            classes="hidden",
+                        )
 
                     with TabPane("Summary", id="summary"):
                         yield Static(id="summary-list")
@@ -324,9 +331,8 @@ class ResultsSummaryScreen(Screen):
         """Display an error message in the current tab."""
         # Find the active tab and show error there
         try:
-            tabs = self.query_one(TabbedContent)
-            active_pane = tabs.active_pane
-            error_msg = Static(f"[red]{message}[/]")
+            self.query_one(TabbedContent)
+            Static(f"[red]{message}[/]")
             # For now, just log the error - could be enhanced to show in each pane
             self.log(message)
         except Exception:

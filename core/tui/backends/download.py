@@ -16,14 +16,12 @@ from collections.abc import AsyncIterator
 
 # Ensure repo root is on sys.path (same pattern as core/tui/__main__.py)
 _repo_root = os.path.dirname(
-    os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    )
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 )
 if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)
 
-from core.geo_downloader import fetch_soft_metadata, list_suppl_files
+from core.geo_downloader import fetch_soft_metadata, list_suppl_files  # noqa: E402
 
 
 async def download_gse_async(
@@ -73,9 +71,7 @@ async def download_gse_async(
 
     await process.wait()
     if process.returncode and process.returncode != 0:
-        raise RuntimeError(
-            f"geo_downloader.py exited with code {process.returncode}"
-        )
+        raise RuntimeError(f"geo_downloader.py exited with code {process.returncode}")
 
 
 async def list_suppl_async(gse_id: str) -> list[dict]:

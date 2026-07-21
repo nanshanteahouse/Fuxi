@@ -29,11 +29,11 @@ import glob as _glob
 import os as _os
 from typing import Any
 
+from textual.app import ComposeResult
 from textual.message import Message
 from textual.reactive import reactive
 from textual.widget import Widget
 from textual.widgets import Static, Tree
-from textual.app import ComposeResult
 from textual.widgets._tree import TreeNode
 
 from core.utils._path import repo_root
@@ -262,9 +262,7 @@ class ConfigSelector(Widget):
             if not _os.path.isdir(mod_path):
                 continue
 
-            for config_path in sorted(
-                _glob.glob(_os.path.join(mod_path, "*", "config_*.yaml"))
-            ):
+            for config_path in sorted(_glob.glob(_os.path.join(mod_path, "*", "config_*.yaml"))):
                 gse_id = self._gse_id_from_path(config_path)
                 if gse_id:
                     self._configs.setdefault(mod_name, {})[gse_id] = config_path
@@ -288,9 +286,7 @@ class ConfigSelector(Widget):
         Checks for any ``.h5ad`` files inside
         ``<project-dir>/results/h5ad/``.
         """
-        h5ad_dir = _os.path.join(
-            _os.path.dirname(config_path), "results", "h5ad"
-        )
+        h5ad_dir = _os.path.join(_os.path.dirname(config_path), "results", "h5ad")
         if not _os.path.isdir(h5ad_dir):
             return False
         try:
@@ -316,9 +312,7 @@ class ConfigSelector(Widget):
         for mod_name in sorted(self._configs):
             datasets = self._configs[mod_name]
             mod_label = f"[bold]{mod_name.upper()}[/bold]  ({len(datasets)})"
-            mod_node: TreeNode[dict[str, Any]] = tree.root.add(
-                mod_label, expand=True
-            )
+            mod_node: TreeNode[dict[str, Any]] = tree.root.add(mod_label, expand=True)
 
             for gse_id in sorted(datasets):
                 config_path = datasets[gse_id]
@@ -358,9 +352,7 @@ class ConfigSelector(Widget):
         """Update the status bar with current selection or summary info."""
         sb = self.query_one("#cs-status", Static)
         if self._selected_path:
-            sb.update(
-                f"Selected: [bold]{_os.path.basename(self._selected_path)}[/bold]"
-            )
+            sb.update(f"Selected: [bold]{_os.path.basename(self._selected_path)}[/bold]")
         elif self._configs:
             total = sum(len(ds) for ds in self._configs.values())
             mods = ", ".join(sorted(self._configs.keys()))
@@ -370,9 +362,7 @@ class ConfigSelector(Widget):
 
     # ── Event handlers ─────────────────────────────────────────────────
 
-    def on_tree_node_selected(
-        self, event: Tree.NodeSelected[dict[str, Any]]
-    ) -> None:
+    def on_tree_node_selected(self, event: Tree.NodeSelected[dict[str, Any]]) -> None:
         """Handle single-click node selection.
 
         For leaf nodes (config files) the path is stored and a
@@ -388,6 +378,7 @@ class ConfigSelector(Widget):
 
     def on_click(self, event) -> None:
         """Detect double-click on leaf nodes; post :class:`ConfigConfirmed`."""
+
         # Let single-click handling complete first (selected_path is set by
         # on_tree_node_selected).  Then check for double-click.
         def _post_if_double() -> None:

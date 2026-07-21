@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
-from textual.screen import Screen
 from textual.containers import Horizontal, Vertical
-from textual.widgets import Button, Header, Select, Footer, Static
+from textual.screen import Screen
+from textual.widgets import Button, Footer, Header, Select, Static
+
 from core.pipeline.runner import MODALITY_MAP
 
-LOGO = "\n".join([
-    "███████╗██╗   ██╗██╗  ██╗██╗",
-    "██╔════╝██║   ██║╚██╗██╔╝██║",
-    "█████╗  ██║   ██║ ╚███╔╝ ██║",
-    "██╔══╝  ██║   ██║ ██╔██╗ ██║",
-    "██║     ╚██████╔╝██╔╝ ██╗██║",
-    "╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═╝",
-])
+LOGO = "\n".join(
+    [
+        "███████╗██╗   ██╗██╗  ██╗██╗",
+        "██╔════╝██║   ██║╚██╗██╔╝██║",
+        "█████╗  ██║   ██║ ╚███╔╝ ██║",
+        "██╔══╝  ██║   ██║ ██╔██╗ ██║",
+        "██║     ╚██████╔╝██╔╝ ██╗██║",
+        "╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═╝",
+    ]
+)
+
 
 class HomeScreen(Screen):
     """Home screen — branded landing page with modality selector and quick-launch buttons."""

@@ -18,7 +18,6 @@ import pandas as pd
 
 from core.tui.backends.config import load_yaml_config
 
-
 # ═══════════════════════════════════════════════════════════════════════
 #  QC Report
 # ═══════════════════════════════════════════════════════════════════════
@@ -198,10 +197,13 @@ def list_available_reports(config_path: str) -> list[str]:
         labels.append("QC report")
 
     # Marker genes
-    if _first_existing(table_dir, [
-        "marker_genes_per_group.csv",
-        "marker_genes_per_group_filtered.csv",
-    ]):
+    if _first_existing(
+        table_dir,
+        [
+            "marker_genes_per_group.csv",
+            "marker_genes_per_group_filtered.csv",
+        ],
+    ):
         labels.append("Marker genes")
 
     # Enrichment

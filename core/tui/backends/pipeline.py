@@ -15,10 +15,9 @@ from typing import AsyncIterator
 
 from core.pipeline.runner import (
     MODALITY_MAP,
-    find_first_incomplete,
     _get_step_dependency,
+    find_first_incomplete,
 )
-
 
 # ═══════════════════════════════════════════════════════════════════
 #  Repo root resolution
@@ -37,11 +36,7 @@ def _resolve_repo_root() -> str:
         core/                           →  <repo-root>/
     """
     return os.path.dirname(
-        os.path.dirname(
-            os.path.dirname(
-                os.path.dirname(os.path.abspath(__file__))
-            )
-        )
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     )
 
 

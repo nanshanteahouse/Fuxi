@@ -81,6 +81,7 @@ class RegistryBrowserScreen(Screen):
         │  Fuxi …                                              │
         └──────────────────────────────────────────────────────┘
     """
+
     id = "registry"
 
     # ── CSS ────────────────────────────────────────────────────────────
@@ -218,9 +219,7 @@ class RegistryBrowserScreen(Screen):
             with Vertical(id="detail-panel"):
                 yield Static("Select a row to inspect", id="detail-title")
                 yield Static(
-                    "↕  Navigate with arrow keys\n"
-                    "🔍  Type to search\n"
-                    "⏎  Press Enter to select",
+                    "↕  Navigate with arrow keys\n🔍  Type to search\n⏎  Press Enter to select",
                     id="detail-content",
                 )
         yield Footer()
@@ -271,53 +270,49 @@ class RegistryBrowserScreen(Screen):
         for paper in self._registry.papers:
             pmid_display = paper.pmid or paper.paper_id or "?"
             status = (
-                paper.insights.status.value
-                if paper.insights
-                else InsightStatus.PDF_ONLY.value
+                paper.insights.status.value if paper.insights else InsightStatus.PDF_ONLY.value
             )
-            self._all_rows.append({
-                "type": "Paper",
-                "id": pmid_display,
-                "title": paper.title or "?",
-                "status": status,
-                "year": paper.year or "",
-                "journal": paper.journal or "",
-                "author": paper.first_author or "",
-                "doi": paper.doi or "",
-                "slug": paper.slug or "",
-                "paper_id": paper.paper_id,
-                "_entry": paper,
-            })
+            self._all_rows.append(
+                {
+                    "type": "Paper",
+                    "id": pmid_display,
+                    "title": paper.title or "?",
+                    "status": status,
+                    "year": paper.year or "",
+                    "journal": paper.journal or "",
+                    "author": paper.first_author or "",
+                    "doi": paper.doi or "",
+                    "slug": paper.slug or "",
+                    "paper_id": paper.paper_id,
+                    "_entry": paper,
+                }
+            )
 
         # Datasets -------------------------------------------------------
         for ds_id, ds in self._registry.datasets.items():
-            title = (
-                ds.data_root.replace("{FUXI_DATA_ROOT}/", "")
-                if ds.data_root
-                else ds_id
-            )
+            title = ds.data_root.replace("{FUXI_DATA_ROOT}/", "") if ds.data_root else ds_id
             species = ds.species or ""
             tissue = ds.tissue or ""
             modality_str = ", ".join(ds.modalities.keys()) if ds.modalities else ""
             links = self._registry.get_paper_links(ds_id)
             linked_pmids = ", ".join(p for p, _ in links) if links else ""
-            self._all_rows.append({
-                "type": "Dataset",
-                "id": ds_id,
-                "title": title,
-                "status": ds.status or DatasetStatus.UNKNOWN.value,
-                "species": species,
-                "tissue": tissue,
-                "modalities": modality_str,
-                "linked_papers": linked_pmids,
-                "n_samples": ds.n_samples,
-                "n_cells": ds.n_cells,
-                "repository": (
-                    ds.repository.value if ds.repository else ""
-                ),
-                "data_root": ds.data_root or "",
-                "_entry": ds,
-            })
+            self._all_rows.append(
+                {
+                    "type": "Dataset",
+                    "id": ds_id,
+                    "title": title,
+                    "status": ds.status or DatasetStatus.UNKNOWN.value,
+                    "species": species,
+                    "tissue": tissue,
+                    "modalities": modality_str,
+                    "linked_papers": linked_pmids,
+                    "n_samples": ds.n_samples,
+                    "n_cells": ds.n_cells,
+                    "repository": (ds.repository.value if ds.repository else ""),
+                    "data_root": ds.data_root or "",
+                    "_entry": ds,
+                }
+            )
 
         self._populate_table()
 
@@ -348,11 +343,7 @@ class RegistryBrowserScreen(Screen):
 
         # Filter ---------------------------------------------------------
         q = self.filter_text.strip().lower()
-        self._filtered_rows = [
-            row
-            for row in self._all_rows
-            if not q or self._row_matches(row, q)
-        ]
+        self._filtered_rows = [row for row in self._all_rows if not q or self._row_matches(row, q)]
 
         # Empty state ----------------------------------------------------
         if not self._filtered_rows:
@@ -376,11 +367,7 @@ class RegistryBrowserScreen(Screen):
 
         for row in self._filtered_rows:
             badge = _status_badge(row["status"])
-            extra = (
-                row.get("year")
-                or row.get("species")
-                or ""
-            )
+            extra = row.get("year") or row.get("species") or ""
             table.add_row(
                 row["type"],
                 row["id"],
@@ -400,9 +387,7 @@ class RegistryBrowserScreen(Screen):
                 f"  ·  filter: “{q}”"
             )
         else:
-            status_bar.update(
-                f"{total} entries  ·  {n_papers} papers, {n_datasets} datasets"
-            )
+            status_bar.update(f"{total} entries  ·  {n_papers} papers, {n_datasets} datasets")
         status_bar.display = True
 
         # Reset detail panel when repopulating
@@ -494,7 +479,7 @@ class RegistryBrowserScreen(Screen):
         if paper.slug:
             kv("Slug", paper.slug)
         lines.append("")
-        lines.append(f"[bold]Title[/]")
+        lines.append("[bold]Title[/]")
         lines.append(f"  {paper.title or '—'}")
         lines.append("")
         kv("Journal", paper.journal, fallback="—")
@@ -507,9 +492,7 @@ class RegistryBrowserScreen(Screen):
         if paper.insights:
             lines.append("")
             lines.append("[bold]Insights[/]")
-            lines.append(
-                f"  Status: [bold]{paper.insights.status.value}[/]"
-            )
+            lines.append(f"  Status: [bold]{paper.insights.status.value}[/]")
             if paper.insights.insights_path:
                 lines.append(f"  Path:   {paper.insights.insights_path}")
 
@@ -519,9 +502,7 @@ class RegistryBrowserScreen(Screen):
 
         if paper.kb_sources:
             lines.append("")
-            lines.append(
-                f"[bold]KB Sources[/]  ({len(paper.kb_sources)} entry/entries)"
-            )
+            lines.append(f"[bold]KB Sources[/]  ({len(paper.kb_sources)} entry/entries)")
 
         cross = paper.cross_references or {}
         also_cited = cross.get("also_cited_by", [])
@@ -540,16 +521,16 @@ class RegistryBrowserScreen(Screen):
         """Build the detail panel content for a dataset entry."""
         lines: list[str] = []
 
-        lines.append(f"[bold]GSE ID[/]")
+        lines.append("[bold]GSE ID[/]")
         lines.append(f"  {row['id']}")
-        lines.append(f"[bold]Type[/]")
+        lines.append("[bold]Type[/]")
         lines.append(f"  {ds.type or '—'}")
-        lines.append(f"[bold]Status[/]")
+        lines.append("[bold]Status[/]")
         status_val = ds.status or "unknown"
         colour = _STATUS_COLORS.get(status_val, "grey")
         lines.append(f"  [{colour}]{status_val}[/]")
         if ds.data_root:
-            lines.append(f"[bold]Data Root[/]")
+            lines.append("[bold]Data Root[/]")
             lines.append(f"  {ds.data_root}")
 
         lines.append("")
@@ -601,7 +582,7 @@ class RegistryBrowserScreen(Screen):
 
         if ds.notes:
             lines.append("")
-            lines.append(f"[bold]Notes[/]")
+            lines.append("[bold]Notes[/]")
             lines.append(f"  {ds.notes}")
 
         return "\n".join(lines)

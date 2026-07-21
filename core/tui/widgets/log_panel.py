@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime
+
 from textual.app import ComposeResult
 from textual.reactive import reactive
-from textual.widgets import RichLog, Static
 from textual.widget import Widget
+from textual.widgets import RichLog, Static
 
 
 class LogPanel(Widget):

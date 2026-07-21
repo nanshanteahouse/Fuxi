@@ -21,23 +21,25 @@ class FuxiTUI(App):
     def get_css_variables(self) -> dict[str, str]:
         """Extend built-in CSS variables with Fuxi custom palette."""
         variables = super().get_css_variables()
-        variables.update({
-            "bg-dark": "#1a1a2e",
-            "bg-medium": "#16213e",
-            "bg-light": "#0f3460",
-            "text-primary": "#e0e0e0",
-            "text-secondary": "#a0a0a0",
-            "text-muted": "#6e7681",
-            "accent-hover": "#ff6b6b",
-            "border": "#2a2a4a",
-            "border-light": "#3a3a5a",
-            "highlight": "#2a2a4a",
-            "scrollbar-track": "#0f0f1a",
-            "scrollbar-thumb": "#4a4a6a",
-            "info": "#3498db",
-            "warning-bg": "#3a3a2e",
-            "warning-fg": "#ffd93d",
-        })
+        variables.update(
+            {
+                "bg-dark": "#1a1a2e",
+                "bg-medium": "#16213e",
+                "bg-light": "#0f3460",
+                "text-primary": "#e0e0e0",
+                "text-secondary": "#a0a0a0",
+                "text-muted": "#6e7681",
+                "accent-hover": "#ff6b6b",
+                "border": "#2a2a4a",
+                "border-light": "#3a3a5a",
+                "highlight": "#2a2a4a",
+                "scrollbar-track": "#0f0f1a",
+                "scrollbar-thumb": "#4a4a6a",
+                "info": "#3498db",
+                "warning-bg": "#3a3a2e",
+                "warning-fg": "#ffd93d",
+            }
+        )
         return variables
 
     BINDINGS = [

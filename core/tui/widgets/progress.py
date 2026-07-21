@@ -27,10 +27,10 @@ from textual.widgets import ProgressBar, Static
 
 _STATUS_COLORS: dict[str, str] = {
     "pending": "#555555",
-    "running": "#e94560",    # $accent
+    "running": "#e94560",  # $accent
     "completed": "#4ecca3",  # $success
-    "failed": "#e74c3c",     # $error
-    "skipped": "#ffd93d",    # $warning
+    "failed": "#e74c3c",  # $error
+    "skipped": "#ffd93d",  # $warning
 }
 
 _STATUS_SYMBOLS: dict[str, str] = {
@@ -199,11 +199,7 @@ class ProgressTracker(Widget):
     def _badge(self, index: int) -> Text:
         """Build a single step badge as a ``Text`` renderable."""
         status = self._statuses[index]
-        label = (
-            self._labels[index]
-            if index < len(self._labels)
-            else f"Step {index + 1}"
-        )
+        label = self._labels[index] if index < len(self._labels) else f"Step {index + 1}"
         color = _STATUS_COLORS.get(status, "#555")
 
         if status == "running":

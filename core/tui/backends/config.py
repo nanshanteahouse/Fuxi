@@ -5,7 +5,7 @@ and produce field metadata that can drive automatic form generation
 in TUI screens.
 """
 
-from typing import Any, Dict, get_args, get_origin, Literal, Union
+from typing import Any, Dict, Literal, Union, get_args, get_origin
 
 import yaml
 from pydantic import BaseModel
@@ -13,7 +13,6 @@ from pydantic.fields import FieldInfo
 
 from core.config.schema import Config
 from core.utils._config import resolve_config
-
 
 # ═══════════════════════════════════════════════════════════════════
 # Field introspection
@@ -87,6 +86,7 @@ def _maybe_resolve_forward_ref(annotation: Any) -> Any:
     type.  Otherwise return *annotation* unchanged.
     """
     from annotationlib import ForwardRef  # stdlib since Python 3.12
+
     if isinstance(annotation, ForwardRef):
         resolved = annotation.evaluate()
         if resolved is not None:

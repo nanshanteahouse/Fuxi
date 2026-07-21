@@ -18,7 +18,6 @@ from typing import Optional
 from core.dataset_detector import scan_directory
 from core.utils import repo_root
 
-
 # ── Preprocessor subprocess ──────────────────────────────────────────────
 
 
@@ -87,10 +86,7 @@ async def preprocess_async(
         raise
 
     if process.returncode != 0:
-        raise RuntimeError(
-            f"Pre-processor exited with code {process.returncode} "
-            f"(GSE: {gse_id})"
-        )
+        raise RuntimeError(f"Pre-processor exited with code {process.returncode} (GSE: {gse_id})")
 
 
 # ── Format detection (thread-pool wrapper) ────────────────────────────────

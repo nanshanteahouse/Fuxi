@@ -167,7 +167,7 @@ def push_recent_config(
     # Prepend new entry
     recent.insert(0, entry)
     # Cap at max
-    current["recent_configs"] = recent[: _MAX_RECENT_CONFIGS]
+    current["recent_configs"] = recent[:_MAX_RECENT_CONFIGS]
 
     save(current)
     return current
