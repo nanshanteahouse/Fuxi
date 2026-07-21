@@ -682,7 +682,13 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
 
 
 def _write_quality_report(
-    adata, ann_records, fusion_quality, cell_category_map, decision_map, CFG, logger  # noqa: N803
+    adata,
+    ann_records,
+    fusion_quality,
+    cell_category_map,
+    decision_map,
+    CFG,  # noqa: N803
+    logger,
 ):
     """Write 05_annotation_quality.json summarising annotation health."""
     pass_cells = (

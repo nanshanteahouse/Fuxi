@@ -21,29 +21,33 @@ from __future__ import annotations
 
 import argparse
 import os
-import shutil
 import re
+import shutil
 import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Any, Optional
 
-
 # Ensure repo root is on sys.path for core package imports
 _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)
 
-import yaml
+import logging  # noqa: E402
 
-import logging
+import yaml  # noqa: E402
 
-from core.config.dataset import update_pipeline_status
-from core.paper.registry import (
-    DatasetStatus, ExperimentGroup, MasterRegistry, PaperEntry,
-    _dict_to_exp_group, detect_modality,
-    load_master_registry, save_master_registry,
+from core.config.dataset import update_pipeline_status  # noqa: E402
+from core.paper.registry import (  # noqa: E402
+    DatasetStatus,
+    ExperimentGroup,
+    MasterRegistry,
+    PaperEntry,
+    _dict_to_exp_group,
+    detect_modality,
+    load_master_registry,
+    save_master_registry,
 )
 
 REPRODUCE_TIMEOUT = 1800  # 30 minutes per GSE pipeline run
@@ -54,6 +58,7 @@ GSE_PATTERN = re.compile(r"GSE\d+")
 # Helpers
 # ──────────────────────────────────────────────
 
+
 def _build_experiment_config_path(base_config_path: str, subset_suffix: str) -> str:
     """Build a config path for an experiment group by inserting *subset_suffix*.
 
@@ -62,7 +67,6 @@ def _build_experiment_config_path(base_config_path: str, subset_suffix: str) -> 
     if base_config_path.endswith(".py"):
         return base_config_path[:-3] + subset_suffix + ".py"
     return base_config_path + subset_suffix
-
 
 
 def _detect_modality(config_path: str) -> str:
@@ -102,7 +106,8 @@ def _extract_geo_ids(insights: dict, raw_text: str = "") -> list[str]:
 
 
 def _run_pipeline_for_gse(
-    _gse_id: str, config_path: str,
+    _gse_id: str,
+    config_path: str,
     modality: str | None = None,
     experiment_group: ExperimentGroup | None = None,
 ) -> dict[str, Any]:
@@ -202,7 +207,8 @@ def _run_pipeline_for_gse(
         except Exception as e:
             _log = logging.getLogger(__name__)
             _log.warning(
-                "Failed to update pipeline status in dataset.yaml: %s", e,
+                "Failed to update pipeline status in dataset.yaml: %s",
+                e,
             )
 
     return _result
@@ -339,93 +345,149 @@ def run_reproduce(
             modality = next(iter(ds.modalities))
             mod_info = ds.modalities[modality]
             status_val = mod_info.status
-            config_path = mod_info.configs[0].path if mod_info.configs else ''
+            config_path = mod_info.configs[0].path if mod_info.configs else ""
         else:
-            modality = 'rna'
+            modality = "rna"
             status_val = ds.status
-            config_path = ''
+            config_path = ""
 
         # -- experiment group dispatch --
-        experiments_data = mod_info.configs[0].experiments if (ds.modalities and mod_info and mod_info.configs) else []
-    
+        experiments_data = (
+            mod_info.configs[0].experiments
+            if (ds.modalities and mod_info and mod_info.configs)
+            else []
+        )
+
         if dry_run:
             if experiments_data:
                 for exp_dict in experiments_data:
                     group = _dict_to_exp_group(exp_dict)
-                    eg_modalities = (['rna', 'atac'] if group.modality == 'multiome' else [group.modality])
+                    eg_modalities = (
+                        ["rna", "atac"] if group.modality == "multiome" else [group.modality]
+                    )
                     for eg_mod in eg_modalities:
-                        exp_config_path = (group.config_path if group.config_path
-                                           else _build_experiment_config_path(config_path, group.subset_suffix))
-                        results[f'{gse_id}_{group.group_name}_{eg_mod}'] = {
-                            'status': 'dry_run', 'config_path': exp_config_path, 'modality': eg_mod,
+                        exp_config_path = (
+                            group.config_path
+                            if group.config_path
+                            else _build_experiment_config_path(config_path, group.subset_suffix)
+                        )
+                        results[f"{gse_id}_{group.group_name}_{eg_mod}"] = {
+                            "status": "dry_run",
+                            "config_path": exp_config_path,
+                            "modality": eg_mod,
                         }
             else:
-                results[gse_id] = {'status': 'dry_run', 'config_path': config_path, 'modality': modality}
+                results[gse_id] = {
+                    "status": "dry_run",
+                    "config_path": config_path,
+                    "modality": modality,
+                }
             continue
-    
-        if status_val == 'config_exists' and config_path:
+
+        if status_val == "config_exists" and config_path:
             if experiments_data:
                 for exp_dict in experiments_data:
                     group = _dict_to_exp_group(exp_dict)
-                    eg_modalities = (['rna', 'atac'] if group.modality == 'multiome' else [group.modality])
+                    eg_modalities = (
+                        ["rna", "atac"] if group.modality == "multiome" else [group.modality]
+                    )
                     for eg_mod in eg_modalities:
-                        exp_config_path = (group.config_path if group.config_path
-                                           else _build_experiment_config_path(config_path, group.subset_suffix))
-                        result = _run_pipeline_for_gse(gse_id, exp_config_path, modality=eg_mod, experiment_group=group)
-                        result.setdefault('config_path', exp_config_path)
-                        result.setdefault('modality', eg_mod)
-                        result['group_name'] = group.group_name
-                        results[f'{gse_id}_{group.group_name}_{eg_mod}'] = result
-                        if result['status'] == 'success' and not dry_run:
+                        exp_config_path = (
+                            group.config_path
+                            if group.config_path
+                            else _build_experiment_config_path(config_path, group.subset_suffix)
+                        )
+                        result = _run_pipeline_for_gse(
+                            gse_id, exp_config_path, modality=eg_mod, experiment_group=group
+                        )
+                        result.setdefault("config_path", exp_config_path)
+                        result.setdefault("modality", eg_mod)
+                        result["group_name"] = group.group_name
+                        results[f"{gse_id}_{group.group_name}_{eg_mod}"] = result
+                        if result["status"] == "success" and not dry_run:
                             _write_pipeline_status(registry_path, gse_id, result, paper_dir)
             else:
                 result = _run_pipeline_for_gse(gse_id, config_path, modality=modality)
-                result.setdefault('config_path', config_path)
-                result.setdefault('modality', modality)
+                result.setdefault("config_path", config_path)
+                result.setdefault("modality", modality)
                 results[gse_id] = result
-                if result['status'] == 'success' and not dry_run:
+                if result["status"] == "success" and not dry_run:
                     _write_pipeline_status(registry_path, gse_id, result, paper_dir)
-    
-        elif status_val == 'not_configured' or (status_val == 'config_exists' and not config_path):
+
+        elif status_val == "not_configured" or (status_val == "config_exists" and not config_path):
             if experiments_data:
+                from core.preprocess.matrix_loader import (
+                    _post_process_config,
+                    _resolve_project_dir,
+                )
                 from core.preprocess.preprocessor import run_preprocess
-                from core.preprocess.matrix_loader import _post_process_config, _resolve_project_dir
+
                 try:
-                    retcode = run_preprocess(gse_id=gse_id, paper_context=insights, force=False, quiet=True)
+                    retcode = run_preprocess(
+                        gse_id=gse_id, paper_context=insights, force=False, quiet=True
+                    )
                 except Exception:
                     retcode = 1
                 if retcode == 0:
                     proj_dir = _resolve_project_dir(modality, gse_id)
-                    base_config_path = os.path.join(proj_dir, f'config_{gse_id}.py')
+                    base_config_path = os.path.join(proj_dir, f"config_{gse_id}.py")
                     for exp_dict in experiments_data:
                         group = _dict_to_exp_group(exp_dict)
                         if group.config_path is None:
-                            copied_path = _build_experiment_config_path(base_config_path, group.subset_suffix)
+                            copied_path = _build_experiment_config_path(
+                                base_config_path, group.subset_suffix
+                            )
                             if os.path.exists(base_config_path):
                                 shutil.copy2(base_config_path, copied_path)
-                                _post_process_config(copied_path, paper_context={},
-                                    inject={'sample_keep': group.sample_ids, 'subset_suffix': group.subset_suffix})
+                                _post_process_config(
+                                    copied_path,
+                                    paper_context={},
+                                    inject={
+                                        "sample_keep": group.sample_ids,
+                                        "subset_suffix": group.subset_suffix,
+                                    },
+                                )
                             group.config_path = copied_path
-                        eg_modalities = (['rna', 'atac'] if group.modality == 'multiome' else [group.modality])
+                        eg_modalities = (
+                            ["rna", "atac"] if group.modality == "multiome" else [group.modality]
+                        )
                         for eg_mod in eg_modalities:
-                            results[f'{gse_id}_{group.group_name}_{eg_mod}'] = {
-                                'status': 'configured', 'config_path': group.config_path,
-                                'modality': eg_mod, 'reason': 'Config generated for experiment group',
+                            results[f"{gse_id}_{group.group_name}_{eg_mod}"] = {
+                                "status": "configured",
+                                "config_path": group.config_path,
+                                "modality": eg_mod,
+                                "reason": "Config generated for experiment group",
                             }
                 else:
-                    results[gse_id] = {'status': 'not_configured', 'config_path': config_path,
-                                       'modality': modality, 'reason': 'GSE needs config generation (use P2 first)'}
+                    results[gse_id] = {
+                        "status": "not_configured",
+                        "config_path": config_path,
+                        "modality": modality,
+                        "reason": "GSE needs config generation (use P2 first)",
+                    }
             else:
-                results[gse_id] = {'status': 'not_configured', 'config_path': config_path,
-                                   'modality': modality, 'reason': 'GSE needs config generation (use P2 first)'}
-    
-        elif status_val == 'data_not_downloaded':
-            results[gse_id] = {'status': 'skipped', 'config_path': config_path,
-                               'modality': modality, 'reason': 'GSE data not downloaded'}
-    
+                results[gse_id] = {
+                    "status": "not_configured",
+                    "config_path": config_path,
+                    "modality": modality,
+                    "reason": "GSE needs config generation (use P2 first)",
+                }
+
+        elif status_val == "data_not_downloaded":
+            results[gse_id] = {
+                "status": "skipped",
+                "config_path": config_path,
+                "modality": modality,
+                "reason": "GSE data not downloaded",
+            }
+
         else:
-            results[gse_id] = {'status': 'skipped', 'config_path': config_path,
-                               'modality': modality, 'reason': f'status={status_val}'}
+            results[gse_id] = {
+                "status": "skipped",
+                "config_path": config_path,
+                "modality": modality,
+                "reason": f"status={status_val}",
+            }
 
 
 # ──────────────────────────────────────────────
@@ -459,8 +521,7 @@ def _build_parser() -> argparse.ArgumentParser:
         "--gse",
         type=str,
         default=None,
-        help="Target a specific GSE ID (ignores others). "
-        "Mutually exclusive with --all.",
+        help="Target a specific GSE ID (ignores others). Mutually exclusive with --all.",
     )
     parser.add_argument(
         "--dry-run",
@@ -499,7 +560,7 @@ def main() -> None:
         return
 
     if not paper_list:
-        print('No papers found.')
+        print("No papers found.")
         return
 
     all_results: dict[str, dict[str, dict[str, Any]]] = {}

@@ -21,7 +21,6 @@ from typing import Optional
 
 import pandas as pd
 
-
 # ── Module-level logger ────────────────────────────────────────────────
 _log = logging.getLogger(__name__)
 
@@ -80,8 +79,7 @@ def load_adjacency(
             missing = required - set(df.columns)
             if missing:
                 logger.warning(
-                    "Custom adjacency file '%s' missing columns: %s. "
-                    "Returning empty DataFrame.",
+                    "Custom adjacency file '%s' missing columns: %s. Returning empty DataFrame.",
                     custom_file,
                     sorted(missing),
                 )
@@ -95,8 +93,7 @@ def load_adjacency(
             return df[["source", "target", "adjacency_type"]]
         else:
             logger.warning(
-                "Custom adjacency file not found: '%s'. "
-                "Falling through to tissue default.",
+                "Custom adjacency file not found: '%s'. Falling through to tissue default.",
                 custom_file,
             )
 
@@ -191,9 +188,7 @@ def filter_cci_by_adjacency(
 
     # ── Mode validation ──────────────────────────────────────────────
     if mode not in {"off", "soft", "hard"}:
-        raise ValueError(
-            f"Unknown mode: '{mode}'. Expected one of: 'off', 'soft', 'hard'."
-        )
+        raise ValueError(f"Unknown mode: '{mode}'. Expected one of: 'off', 'soft', 'hard'.")
 
     if mode == "off":
         return lr_res
@@ -203,8 +198,7 @@ def filter_cci_by_adjacency(
         for col in ("source", "target"):
             if col not in df.columns:
                 logger.warning(
-                    "Column '%s' missing from %s. "
-                    "Returning lr_res%s.",
+                    "Column '%s' missing from %s. Returning lr_res%s.",
                     col,
                     name,
                     " unchanged" if mode == "hard" else " copy",

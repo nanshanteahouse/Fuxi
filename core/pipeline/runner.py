@@ -23,15 +23,16 @@ run_pipeline.py — Fuxi (伏羲) 统一管线主控
     python run_pipeline.py --config my_config.py               # 使用自定义配置
 """
 
-import sys
-import os
-import subprocess
 import argparse
 import logging
+import os
+import subprocess
+import sys
 import time
 
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except ImportError:
     pass
@@ -44,46 +45,49 @@ if _repo_root not in sys.path:
 # ── Performance monitor (optional) ──────────────────────────────────
 try:
     from core.utils import monitor_performance
+
     _HAVE_MONITOR = True
 except ImportError:
     _HAVE_MONITOR = False
     from contextlib import nullcontext as _nullcontext
-    def monitor_performance(step_name: str = "", log=None, child_pid=None): return _nullcontext()
+
+    def monitor_performance(step_name: str = "", log=None, child_pid=None):
+        return _nullcontext()
 
 
 # ═══════════════════════════════════════════════════════════════════════
 #  RNA step registry
 # ═══════════════════════════════════════════════════════════════════════
 RNA_STEPS = [
-    ("00", "00_load.py",                "Load raw data → 00_raw.h5ad"),
-    ("01", "01_doublet.py",             "Scrublet doublet detection (per sample) → 01_doublet.h5ad"),
-    ("02", "02_qc.py",                  "QC filtering (doublets removed) → 02_qc.h5ad"),
-    ("03", "03_integrate.py",           "Normalize + HVG + PCA + Harmony → 03_integrated.h5ad"),
-    ("04", "04_cluster_umap.py",        "Multi-param UMAP + multi-resolution Leiden"),
-    ("05", "05_annotate_major.py",      "AI-assisted major cell type annotation (dual mode)"),
-    ("06", "06_subcluster.py",          "Interactive subtype analysis (requires --cell-type)"),
-    ("07", "07_markers_de.py",          "Differential expression (multi-layer)"),
-    ("08", "08_trajectory.py",          "PAGA + DPT trajectory analysis"),
-    ("09", "09_enrichment.py",          "GO/KEGG enrichment + AI interpretation"),
-    ("10", "10_exploratory.py",         "Exploratory analysis (composition/QC/marker)"),
-    ("11", "11_grn.py",                 "GRN regulatory network analysis (decoupler) → 11_grn.h5ad"),
-    ("12", "12_cell_interaction.py",   "CCI cell-cell interaction (LIANA+) → tables + figures"),
+    ("00", "00_load.py", "Load raw data → 00_raw.h5ad"),
+    ("01", "01_doublet.py", "Scrublet doublet detection (per sample) → 01_doublet.h5ad"),
+    ("02", "02_qc.py", "QC filtering (doublets removed) → 02_qc.h5ad"),
+    ("03", "03_integrate.py", "Normalize + HVG + PCA + Harmony → 03_integrated.h5ad"),
+    ("04", "04_cluster_umap.py", "Multi-param UMAP + multi-resolution Leiden"),
+    ("05", "05_annotate_major.py", "AI-assisted major cell type annotation (dual mode)"),
+    ("06", "06_subcluster.py", "Interactive subtype analysis (requires --cell-type)"),
+    ("07", "07_markers_de.py", "Differential expression (multi-layer)"),
+    ("08", "08_trajectory.py", "PAGA + DPT trajectory analysis"),
+    ("09", "09_enrichment.py", "GO/KEGG enrichment + AI interpretation"),
+    ("10", "10_exploratory.py", "Exploratory analysis (composition/QC/marker)"),
+    ("11", "11_grn.py", "GRN regulatory network analysis (decoupler) → 11_grn.h5ad"),
+    ("12", "12_cell_interaction.py", "CCI cell-cell interaction (LIANA+) → tables + figures"),
 ]
 
 RNA_CHECKPOINT_FILES = [
-    "00_raw.h5ad",               # step 00
-    "01_doublet.h5ad",           # step 01
-    "02_qc.h5ad",                # step 02
-    "03_integrated.h5ad",        # step 03
-    "04_clustered.h5ad",         # step 04
-    "05_annotated.h5ad",         # step 05
-    "05_annotated.h5ad",         # step 06 (reads 05_annotated)
-    "05_annotated.h5ad",         # step 07 (reads 05_annotated)
-    "04_clustered.h5ad",         # step 08 (reads 04_clustered)
-    "marker_genes_per_group.csv",# step 09 (reads CSV from tables/)
-    "05_annotated.h5ad",         # step 10 (reads 05_annotated)
-    "11_grn.h5ad",               # step 11
-    "05_annotated.h5ad",         # step 12 (reads 05_annotated)
+    "00_raw.h5ad",  # step 00
+    "01_doublet.h5ad",  # step 01
+    "02_qc.h5ad",  # step 02
+    "03_integrated.h5ad",  # step 03
+    "04_clustered.h5ad",  # step 04
+    "05_annotated.h5ad",  # step 05
+    "05_annotated.h5ad",  # step 06 (reads 05_annotated)
+    "05_annotated.h5ad",  # step 07 (reads 05_annotated)
+    "04_clustered.h5ad",  # step 08 (reads 04_clustered)
+    "marker_genes_per_group.csv",  # step 09 (reads CSV from tables/)
+    "05_annotated.h5ad",  # step 10 (reads 05_annotated)
+    "11_grn.h5ad",  # step 11
+    "05_annotated.h5ad",  # step 12 (reads 05_annotated)
 ]
 
 RNA_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5, 11}
@@ -93,37 +97,37 @@ RNA_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5, 11}
 #  ATAC step registry
 # ═══════════════════════════════════════════════════════════════════════
 ATAC_STEPS = [
-    ("00", "00_load.py",            "Load fragments.tsv.gz → 00_raw.h5ad"),
-    ("01", "01_doublet.py",          "Scrublet doublet detection → 01_doublet.h5ad"),
-    ("02", "02_qc.py",               "QC filtering + TSS + peak calling + peak matrix → 02_filtered.h5ad"),
-    ("03", "03_process.py",           "Feature selection + spectral + Harmony + KNN → 03_processed.h5ad"),
-    ("04", "04_cluster.py",           "Multi-param Leiden + UMAP → 04_clustered.h5ad"),
-    ("05", "05_peaks.py",             "Post-clustering peak calling → 05_peaks.h5ad"),
-    ("06", "06_annotate.py",          "AI-assisted chromatin state annotation → 05_annotated.h5ad"),
-    ("07", "07_subcluster.py",        "Subcluster analysis (placeholder)"),
-    ("08", "08_marker_peaks.py",      "Differential peak accessibility → marker_peaks.csv"),
-    ("09", "09_motif.py",             "Motif enrichment → motif_results.csv"),
-    ("10", "10_trajectory.py",        "ATAC pseudotime trajectory → 10_trajectory.h5ad"),
-    ("11", "11_enrichment.py",        "GO/KEGG enrichment on peak-associated genes → enrichment_*.csv"),
-    ("12", "12_exploratory.py",       "Exploratory analysis (placeholder)"),
-    ("13", "13_integrate.py",         "RNA+ATAC integration via muon → 13_integrated.h5ad"),
+    ("00", "00_load.py", "Load fragments.tsv.gz → 00_raw.h5ad"),
+    ("01", "01_doublet.py", "Scrublet doublet detection → 01_doublet.h5ad"),
+    ("02", "02_qc.py", "QC filtering + TSS + peak calling + peak matrix → 02_filtered.h5ad"),
+    ("03", "03_process.py", "Feature selection + spectral + Harmony + KNN → 03_processed.h5ad"),
+    ("04", "04_cluster.py", "Multi-param Leiden + UMAP → 04_clustered.h5ad"),
+    ("05", "05_peaks.py", "Post-clustering peak calling → 05_peaks.h5ad"),
+    ("06", "06_annotate.py", "AI-assisted chromatin state annotation → 05_annotated.h5ad"),
+    ("07", "07_subcluster.py", "Subcluster analysis (placeholder)"),
+    ("08", "08_marker_peaks.py", "Differential peak accessibility → marker_peaks.csv"),
+    ("09", "09_motif.py", "Motif enrichment → motif_results.csv"),
+    ("10", "10_trajectory.py", "ATAC pseudotime trajectory → 10_trajectory.h5ad"),
+    ("11", "11_enrichment.py", "GO/KEGG enrichment on peak-associated genes → enrichment_*.csv"),
+    ("12", "12_exploratory.py", "Exploratory analysis (placeholder)"),
+    ("13", "13_integrate.py", "RNA+ATAC integration via muon → 13_integrated.h5ad"),
 ]
 
 ATAC_CHECKPOINT_FILES = [
-    "00_raw.h5ad",           # step 00
-    "01_doublet.h5ad",       # step 01
-    "02_filtered.h5ad",      # step 02
-    "03_processed.h5ad",     # step 03
-    "04_clustered.h5ad",     # step 04
-    "05_peaks.h5ad",         # step 05
-    "05_annotated.h5ad",     # step 06
-    "",                      # step 07 (placeholder)
-    "marker_peaks.csv",      # step 08
-    "motif_results.csv",     # step 09
-    "10_trajectory.h5ad",    # step 10
-    "enrichment_*.csv",      # step 11
-    "",                      # step 12 (placeholder)
-    "13_integrated.h5ad",    # step 13
+    "00_raw.h5ad",  # step 00
+    "01_doublet.h5ad",  # step 01
+    "02_filtered.h5ad",  # step 02
+    "03_processed.h5ad",  # step 03
+    "04_clustered.h5ad",  # step 04
+    "05_peaks.h5ad",  # step 05
+    "05_annotated.h5ad",  # step 06
+    "",  # step 07 (placeholder)
+    "marker_peaks.csv",  # step 08
+    "motif_results.csv",  # step 09
+    "10_trajectory.h5ad",  # step 10
+    "enrichment_*.csv",  # step 11
+    "",  # step 12 (placeholder)
+    "13_integrated.h5ad",  # step 13
 ]
 
 ATAC_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 13}
@@ -133,35 +137,39 @@ ATAC_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 13}
 #  Spatial step registry
 # ═══════════════════════════════════════════════════════════════════════
 SPATIAL_STEPS = [
-    ("00", "00_load.py",           "Load spatial data -> 00_raw.h5ad (coords + image)"),
-    ("01", "01_qc.py",             "QC filtering (spots + tissue detection) -> 01_qc.h5ad"),
-    ("02", "02_image.py",          "Image processing (sq.im.process) -> 02_image.h5ad"),
-    ("03", "03_normalize.py",      "Normalize + HVG + spatial graph -> 03_processed.h5ad"),
-    ("04", "04_cluster.py",        "PCA + UMAP + Leiden clustering -> 04_clustered.h5ad"),
-    ("05", "05_annotate.py",       "Cell type annotation (AI / score_genes) -> 05_annotated.h5ad"),
-    ("06", "06_spatial_stats.py",     "DE + SVG + nhood enrichment + co-occurrence -> CSVs + figures"),
-    ("07", "07_trajectory.py",     "Pseudotime analysis -> 07_trajectory.h5ad"),
-    ("08", "08_enrichment.py",     "GO/KEGG enrichment -> enrichment CSVs"),
-    ("09", "09_exploratory.py",    "Spatial visualization -> figures + CSVs"),
-    ("10", "10_cell_interaction.py",  "CCI spatial cell-cell interaction (LIANA+) -> tables + figures"),
-    ("11", "subcluster.py",          "Conditional subclustering per cell type -> 05_sub_{type}.h5ad"),
-    ("12", "grn.py",                  "Conditional GRN analysis via decoupler -> TF activity CSV + heatmap"),
+    ("00", "00_load.py", "Load spatial data -> 00_raw.h5ad (coords + image)"),
+    ("01", "01_qc.py", "QC filtering (spots + tissue detection) -> 01_qc.h5ad"),
+    ("02", "02_image.py", "Image processing (sq.im.process) -> 02_image.h5ad"),
+    ("03", "03_normalize.py", "Normalize + HVG + spatial graph -> 03_processed.h5ad"),
+    ("04", "04_cluster.py", "PCA + UMAP + Leiden clustering -> 04_clustered.h5ad"),
+    ("05", "05_annotate.py", "Cell type annotation (AI / score_genes) -> 05_annotated.h5ad"),
+    ("06", "06_spatial_stats.py", "DE + SVG + nhood enrichment + co-occurrence -> CSVs + figures"),
+    ("07", "07_trajectory.py", "Pseudotime analysis -> 07_trajectory.h5ad"),
+    ("08", "08_enrichment.py", "GO/KEGG enrichment -> enrichment CSVs"),
+    ("09", "09_exploratory.py", "Spatial visualization -> figures + CSVs"),
+    (
+        "10",
+        "10_cell_interaction.py",
+        "CCI spatial cell-cell interaction (LIANA+) -> tables + figures",
+    ),
+    ("11", "subcluster.py", "Conditional subclustering per cell type -> 05_sub_{type}.h5ad"),
+    ("12", "grn.py", "Conditional GRN analysis via decoupler -> TF activity CSV + heatmap"),
 ]
 
 SPATIAL_CHECKPOINT_FILES = [
-    "00_raw.h5ad",           # step 00
-    "01_qc.h5ad",            # step 01
-    "02_image.h5ad",         # step 02
-    "03_processed.h5ad",     # step 03
-    "04_clustered.h5ad",     # step 04
-    "05_annotated.h5ad",     # step 05
-    "05_annotated.h5ad",     # step 06
-    "05_annotated.h5ad",     # step 07
-    "05_annotated.h5ad",     # step 08
-    "05_annotated.h5ad",     # step 09
-    "05_annotated.h5ad",     # step 10
-    "05_annotated.h5ad",     # step 11 (subcluster reads 05_annotated)
-    "05_annotated.h5ad",     # step 12 (GRN reads 05_annotated)
+    "00_raw.h5ad",  # step 00
+    "01_qc.h5ad",  # step 01
+    "02_image.h5ad",  # step 02
+    "03_processed.h5ad",  # step 03
+    "04_clustered.h5ad",  # step 04
+    "05_annotated.h5ad",  # step 05
+    "05_annotated.h5ad",  # step 06
+    "05_annotated.h5ad",  # step 07
+    "05_annotated.h5ad",  # step 08
+    "05_annotated.h5ad",  # step 09
+    "05_annotated.h5ad",  # step 10
+    "05_annotated.h5ad",  # step 11 (subcluster reads 05_annotated)
+    "05_annotated.h5ad",  # step 12 (GRN reads 05_annotated)
 ]
 
 SPATIAL_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5}
@@ -170,21 +178,21 @@ SPATIAL_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5}
 #  Bulk step registry
 # ═══════════════════════════════════════════════════════════════════════
 BULK_STEPS = [
-    ("00", "00_load.py",            "Load count matrix (CSV/TSV/h5ad) -> 00_raw.h5ad"),
-    ("01", "01_qc.py",              "Sample QC (library size, gene detection) -> 01_qc.h5ad"),
-    ("02", "02_de.py",              "DESeq2 normalization + DE -> 02_de.h5ad + CSVs + figures"),
-    ("03", "03_enrichment.py",      "GO/KEGG enrichment (GSEApy) -> tables/"),
-    ("04", "04_exploratory.py",     "PCA, heatmaps, volcano plots -> figures/"),
-    ("05", "05_batch.py",           "Batch correction (optional, pycombat) -> 05_batch_corrected.h5ad"),
+    ("00", "00_load.py", "Load count matrix (CSV/TSV/h5ad) -> 00_raw.h5ad"),
+    ("01", "01_qc.py", "Sample QC (library size, gene detection) -> 01_qc.h5ad"),
+    ("02", "02_de.py", "DESeq2 normalization + DE -> 02_de.h5ad + CSVs + figures"),
+    ("03", "03_enrichment.py", "GO/KEGG enrichment (GSEApy) -> tables/"),
+    ("04", "04_exploratory.py", "PCA, heatmaps, volcano plots -> figures/"),
+    ("05", "05_batch.py", "Batch correction (optional, pycombat) -> 05_batch_corrected.h5ad"),
 ]
 
 BULK_CHECKPOINT_FILES = [
-    "00_raw.h5ad",           # step 00
-    "01_qc.h5ad",            # step 01
-    "02_de.h5ad",            # step 02
-    "",                      # step 03 (CSV output, no h5ad checkpoint)
-    "",                      # step 04 (figures output)
-    "05_batch_corrected.h5ad",# step 05 (optional)
+    "00_raw.h5ad",  # step 00
+    "01_qc.h5ad",  # step 01
+    "02_de.h5ad",  # step 02
+    "",  # step 03 (CSV output, no h5ad checkpoint)
+    "",  # step 04 (figures output)
+    "05_batch_corrected.h5ad",  # step 05 (optional)
 ]
 
 BULK_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 5}
@@ -233,8 +241,9 @@ def find_first_incomplete(h5ad_dir: str, steps, checkpoints, write_checkpoints, 
         if i not in write_checkpoints:
             continue
         ckpt = os.path.join(h5ad_dir, checkpoints[i])
-        if '*' in ckpt:
+        if "*" in ckpt:
             import glob as glob_mod
+
             if not glob_mod.glob(ckpt):
                 return i
         elif not os.path.exists(ckpt) or os.path.getsize(ckpt) == 0:
@@ -246,24 +255,24 @@ def _get_step_dependency(step: int, steps, checkpoints, modality: str = "rna") -
     """Return the checkpoint file that step `step` reads from."""
     if modality == "atac":
         deps = {
-            2: checkpoints[0],    # 02_qc reads raw_h5ad
-            3: checkpoints[1],    # 03_process reads doublet_h5ad
-            6: checkpoints[4],    # 06_annotate reads clustered_h5ad
-            8: checkpoints[6],    # 08_marker_peaks reads annotated_h5ad
-            9: checkpoints[6],    # 09_motif reads annotated_h5ad
-            10: checkpoints[6],   # 10_trajectory reads annotated_h5ad
-            11: checkpoints[8],   # 11_enrichment reads marker_peaks.csv
-            12: checkpoints[6],   # 12_exploratory reads annotated_h5ad
-            13: checkpoints[6],   # 13_integrate reads annotated_h5ad
+            2: checkpoints[0],  # 02_qc reads raw_h5ad
+            3: checkpoints[1],  # 03_process reads doublet_h5ad
+            6: checkpoints[4],  # 06_annotate reads clustered_h5ad
+            8: checkpoints[6],  # 08_marker_peaks reads annotated_h5ad
+            9: checkpoints[6],  # 09_motif reads annotated_h5ad
+            10: checkpoints[6],  # 10_trajectory reads annotated_h5ad
+            11: checkpoints[8],  # 11_enrichment reads marker_peaks.csv
+            12: checkpoints[6],  # 12_exploratory reads annotated_h5ad
+            13: checkpoints[6],  # 13_integrate reads annotated_h5ad
         }
         return deps.get(step, checkpoints[step - 1] if step > 0 else "")
     if modality == "spatial":
         deps = {
-            5: checkpoints[3],   # annotate reads clustered
-            6: checkpoints[5],   # spatial_de reads annotated
-            7: checkpoints[5],   # trajectory reads annotated
-            8: checkpoints[6],   # enrichment reads DE CSVs
-            9: checkpoints[5],   # exploratory reads annotated
+            5: checkpoints[3],  # annotate reads clustered
+            6: checkpoints[5],  # spatial_de reads annotated
+            7: checkpoints[5],  # trajectory reads annotated
+            8: checkpoints[6],  # enrichment reads DE CSVs
+            9: checkpoints[5],  # exploratory reads annotated
             10: checkpoints[5],  # CCI reads 05_annotated
             11: checkpoints[5],  # subcluster reads 05_annotated
             12: checkpoints[5],  # GRN reads 05_annotated
@@ -271,11 +280,11 @@ def _get_step_dependency(step: int, steps, checkpoints, modality: str = "rna") -
         return deps.get(step, checkpoints[step - 1] if step > 0 else "")
     if modality == "bulk":
         deps = {
-            1: checkpoints[0],    # 01_qc reads raw
-            2: checkpoints[1],    # 02_de reads qc
-            3: checkpoints[2],    # 03_enrichment reads DE output
-            4: checkpoints[2],    # 04_exploratory reads DE output
-            5: checkpoints[1],    # 05_batch reads qc
+            1: checkpoints[0],  # 01_qc reads raw
+            2: checkpoints[1],  # 02_de reads qc
+            3: checkpoints[2],  # 03_enrichment reads DE output
+            4: checkpoints[2],  # 04_exploratory reads DE output
+            5: checkpoints[1],  # 05_batch reads qc
         }
         return deps.get(step, checkpoints[step - 1] if step > 0 else "")
     # RNA dependencies
@@ -288,7 +297,7 @@ def _get_step_dependency(step: int, steps, checkpoints, modality: str = "rna") -
         9: checkpoints[5],
         10: checkpoints[5],
         11: checkpoints[5],
-        12: checkpoints[5],   # CCI reads 05_annotated
+        12: checkpoints[5],  # CCI reads 05_annotated
     }
     return deps.get(step, checkpoints[step - 1] if step > 0 else "")
 
@@ -310,8 +319,9 @@ def _get_checkpoint_shape(ckpt_path: str) -> tuple:
     """
     if not ckpt_path:
         return (0, 0)
-    if '*' in ckpt_path:
+    if "*" in ckpt_path:
         import glob
+
         files = glob.glob(ckpt_path)
         if not files:
             return (0, 0)
@@ -319,11 +329,12 @@ def _get_checkpoint_shape(ckpt_path: str) -> tuple:
     if not os.path.exists(ckpt_path):
         return (0, 0)
     try:
-        if ckpt_path.endswith('.h5ad'):
+        if ckpt_path.endswith(".h5ad"):
             import anndata
-            ad = anndata.read_h5ad(ckpt_path, backed='r')
+
+            ad = anndata.read_h5ad(ckpt_path, backed="r")
             return (ad.n_obs, ad.n_vars)
-        elif ckpt_path.endswith('.csv'):
+        elif ckpt_path.endswith(".csv"):
             with open(ckpt_path) as f:
                 n_rows = sum(1 for _ in f) - 1  # minus header
             return (n_rows, 0)
@@ -331,44 +342,58 @@ def _get_checkpoint_shape(ckpt_path: str) -> tuple:
         pass
     return (0, 0)
 
+
 def main():
     parser = argparse.ArgumentParser(
         description="Fuxi (伏羲) — Unified single-cell multi-omics pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    parser.add_argument("--modality", type=str, choices=["rna", "atac", "spatial", "bulk"],
-                        default="rna",
-                        help="Modality: rna (default), atac, spatial, bulk")
+    parser.add_argument(
+        "--modality",
+        type=str,
+        choices=["rna", "atac", "spatial", "bulk"],
+        default="rna",
+        help="Modality: rna (default), atac, spatial, bulk",
+    )
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--steps", type=str,
-                       help="Step range (e.g. 0-2) or list (e.g. 1,3,5)")
-    group.add_argument("--step", type=int,
-                       help="Run a single step (0-based)")
-    group.add_argument("--resume", action="store_true",
-                       help="Resume from first incomplete checkpoint")
-    parser.add_argument("--list", action="store_true",
-                        help="List all steps")
-    parser.add_argument("--config", type=str, default="config.py",
-                        help="Config file path (default: config.py)")
-    parser.add_argument("--cleanup", action="store_true",
-                        help="Remove upstream intermediate checkpoint files after each step")
-    parser.add_argument("--cell-type", type=str,
-                        help="(RNA only) Cell type to subcluster (Step 07)")
-    parser.add_argument("--annotate-method", type=str,
-                        choices=["auto", "unified"], default="auto",
-                        help="(RNA only) Annotation method: auto=AI, unified=KB-based")
+    group.add_argument("--steps", type=str, help="Step range (e.g. 0-2) or list (e.g. 1,3,5)")
+    group.add_argument("--step", type=int, help="Run a single step (0-based)")
+    group.add_argument(
+        "--resume", action="store_true", help="Resume from first incomplete checkpoint"
+    )
+    parser.add_argument("--list", action="store_true", help="List all steps")
+    parser.add_argument(
+        "--config", type=str, default="config.py", help="Config file path (default: config.py)"
+    )
+    parser.add_argument(
+        "--cleanup",
+        action="store_true",
+        help="Remove upstream intermediate checkpoint files after each step",
+    )
+    parser.add_argument(
+        "--cell-type", type=str, help="(RNA only) Cell type to subcluster (Step 07)"
+    )
+    parser.add_argument(
+        "--annotate-method",
+        type=str,
+        choices=["auto", "unified"],
+        default="auto",
+        help="(RNA only) Annotation method: auto=AI, unified=KB-based",
+    )
     args = parser.parse_args()
 
     # ── Get modality config ──────────────────────────────────────────
     if args.modality not in MODALITY_MAP:
-        print(f"[run] Error: unknown modality '{args.modality}'. Supported: {list(MODALITY_MAP.keys())}")
+        print(
+            f"[run] Error: unknown modality '{args.modality}'. Supported: {list(MODALITY_MAP.keys())}"
+        )
         sys.exit(1)
 
     mod = MODALITY_MAP[args.modality]
-    STEPS = mod["steps"]
-    CHECKPOINT_FILES = mod["checkpoints"]
-    STEPS_WRITE_CHECKPOINT = mod["write_checkpoints"]
+    STEPS = mod["steps"]  # noqa: N806
+    CHECKPOINT_FILES = mod["checkpoints"]  # noqa: N806
+    STEPS_WRITE_CHECKPOINT = mod["write_checkpoints"]  # noqa: N806
 
     # ── --list mode ──────────────────────────────────────────────────
     if args.list:
@@ -384,24 +409,34 @@ def main():
     # ── Load config ──────────────────────────────────────────────────
     config_path = os.path.abspath(args.config)
     from core.utils._config import resolve_config
-    CFG = resolve_config(config_path)
+
+    CFG = resolve_config(config_path)  # noqa: N806
     print(f"[run] Using {CFG.execution.n_jobs} CPU core(s)")
 
     # ── BLAS / OpenMP thread limits ──────────────────────────────────
-    if CFG.execution.n_jobs > 0 and getattr(CFG.execution, 'limit_blas_threads', True):
-        for var in ["OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
-                     "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
-                     "PYTORCH_ENABLE_MPS_FALLBACK", "TORCH_NUM_THREADS"]:
+    if CFG.execution.n_jobs > 0 and getattr(CFG.execution, "limit_blas_threads", True):
+        for var in [
+            "OMP_NUM_THREADS",
+            "MKL_NUM_THREADS",
+            "OPENBLAS_NUM_THREADS",
+            "NUMEXPR_NUM_THREADS",
+            "VECLIB_MAXIMUM_THREADS",
+            "PYTORCH_ENABLE_MPS_FALLBACK",
+            "TORCH_NUM_THREADS",
+        ]:
             if var not in os.environ:
                 os.environ[var] = str(CFG.execution.n_jobs)
         print(f"[run] Set BLAS/OpenMP threads to {CFG.execution.n_jobs} via env vars")
 
     # ── Resolve paths ────────────────────────────────────────────────
-    scripts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', mod["dir"], 'steps')
+    scripts_dir = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "..", mod["dir"], "steps"
+    )
 
     # ── ATAC: auto-discover RNA h5ad for Step 09 integration ─────────
-    if args.modality == "atac" and not getattr(CFG, 'rna_h5ad', ''):
+    if args.modality == "atac" and not getattr(CFG, "rna_h5ad", ""):
         from core.utils import find_rna_h5ad
+
         auto_rna = find_rna_h5ad(cfg=CFG)
         if auto_rna:
             CFG.rna_h5ad = auto_rna
@@ -410,8 +445,9 @@ def main():
             print("[run] No RNA h5ad auto-discovered — Step 09 will be skipped.")
 
     # ── Spatial: auto-discover scRNA marker CSV for Phase 1 transfer ─
-    if args.modality == "spatial" and not getattr(CFG, 'rna_ref', ''):
+    if args.modality == "spatial" and not getattr(CFG, "rna_ref", ""):
         from core.utils import find_rna_marker_csv
+
         auto_csv = find_rna_marker_csv(cfg=CFG)
         if auto_csv:
             print(f"[run] Auto-discovered scRNA marker CSV: {auto_csv}")
@@ -422,15 +458,18 @@ def main():
 
     # ── Parse step range ─────────────────────────────────────────────
     if args.resume:
-        start = find_first_incomplete(CFG.h5ad_dir, STEPS, CHECKPOINT_FILES, STEPS_WRITE_CHECKPOINT, cfg=CFG)
+        start = find_first_incomplete(
+            CFG.h5ad_dir, STEPS, CHECKPOINT_FILES, STEPS_WRITE_CHECKPOINT, cfg=CFG
+        )
         if start >= len(STEPS):
             print("[run] All steps completed.")
             return
         dep = _get_step_dependency(start, STEPS, CHECKPOINT_FILES, modality=args.modality)
         if dep:
             dep_path = os.path.join(CFG.h5ad_dir, dep)
-            if '*' in dep:
+            if "*" in dep:
                 import glob as glob_mod
+
                 if not glob_mod.glob(dep_path):
                     print(f"[run] Step [{STEPS[start][0]}] dependency missing: {dep_path}")
             elif not os.path.exists(dep_path):
@@ -451,8 +490,9 @@ def main():
     else:
         step_indices = list(range(len(STEPS)))
 
-    if getattr(CFG, 'perf_monitoring', True):
+    if getattr(CFG, "perf_monitoring", True):
         from core.utils import PerformanceSummary
+
         pipeline_summary = PerformanceSummary()
         pipeline_summary.pipeline_info = {
             "modality": args.modality,
@@ -486,10 +526,11 @@ def main():
         step_t0 = time.time()
         step_proc = subprocess.Popen(
             [python_exe, script_path] + extra_args,
-            stdout=None, stderr=None,
+            stdout=None,
+            stderr=None,
         )
         _perf_report = None
-        if _HAVE_MONITOR and getattr(CFG, 'perf_monitoring', True):
+        if _HAVE_MONITOR and getattr(CFG, "perf_monitoring", True):
             with monitor_performance(f"Step[{num}]", child_pid=step_proc.pid) as perf:
                 step_proc.wait()
                 _perf_report = perf
@@ -505,8 +546,10 @@ def main():
 
         if result.returncode != 0:
             print(f"\n[run] Step [{num}] failed (exit code={result.returncode})")
-            print(f"[run] To continue after fixing the issue:")
-            print(f"      python {__file__} --modality {args.modality} --resume --config {args.config}")
+            print("[run] To continue after fixing the issue:")
+            print(
+                f"      python {__file__} --modality {args.modality} --resume --config {args.config}"
+            )
             sys.exit(1)
         if pipeline_summary is not None and _HAVE_MONITOR and _perf_report is not None:
             # Read output checkpoint shape
@@ -522,17 +565,21 @@ def main():
 
             _perf_report.n_cells = n_cells
             _perf_report.n_genes = n_genes
-            ckpt_size = os.path.getsize(ckpt_path) / (1024 * 1024) if ckpt_path and os.path.exists(ckpt_path) and '*' not in ckpt_path else 0.0
+            ckpt_size = (
+                os.path.getsize(ckpt_path) / (1024 * 1024)
+                if ckpt_path and os.path.exists(ckpt_path) and "*" not in ckpt_path
+                else 0.0
+            )
             _perf_report.checkpoint_mib = round(ckpt_size, 1)
 
             pipeline_summary.add_step(num, desc, _perf_report)
 
         # ── Optional checkpoint cleanup ──────────────────────────────
-        if args.cleanup or getattr(CFG, 'cleanup_intermediates', False):
+        if args.cleanup or getattr(CFG, "cleanup_intermediates", False):
             dep = _get_step_dependency(i, STEPS, CHECKPOINT_FILES, modality=args.modality)
             if dep and i in STEPS_WRITE_CHECKPOINT:
                 dep_path = os.path.join(CFG.h5ad_dir, dep)
-                if '*' not in dep_path and os.path.exists(dep_path):
+                if "*" not in dep_path and os.path.exists(dep_path):
                     try:
                         os.remove(dep_path)
                         print(f"[run]   Cleaned up: {dep}")
@@ -548,7 +595,7 @@ def main():
     print(f"\n{'=' * 60}")
     print(f"[run] Fuxi {args.modality.upper()}-seq pipeline execution finished.")
     print(f"{'=' * 60}")
-    print(f"[run] Step timing summary:")
+    print("[run] Step timing summary:")
     for num, desc, elapsed in step_times:
         print(f"  [{num}] {elapsed:7.1f}s  {desc}")
     print(f"  {'─' * 50}")

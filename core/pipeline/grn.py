@@ -22,7 +22,6 @@ from typing import Optional
 
 import pandas as pd
 
-
 # ── Module-level logger ────────────────────────────────────────────────
 _log = logging.getLogger(__name__)
 
@@ -93,9 +92,7 @@ def compute_tf_relevance(
     # ── Handle missing/empty net ───────────────────────────────────────
     has_net: bool = not net.empty
     if not has_net:
-        logger.warning(
-            "net is empty. All overlap statistics will be zero."
-        )
+        logger.warning("net is empty. All overlap statistics will be zero.")
 
     # ── Collect all TFs present in the activity matrix ─────────────────
     tf_list: list[str] = list(activity_df.columns)
@@ -118,9 +115,7 @@ def compute_tf_relevance(
         net_upper["target"] = net_upper["target"].astype(str).str.upper()
 
         for tf in tf_list:
-            targets = net_upper.loc[
-                net_upper["source"] == tf, "target"
-            ].tolist()
+            targets = net_upper.loc[net_upper["source"] == tf, "target"].tolist()
             tf_target_map[tf] = targets
     else:
         for tf in tf_list:
@@ -136,10 +131,7 @@ def compute_tf_relevance(
         n_t = len(targets)
         n_targets_list.append(n_t)
 
-        if (
-            markers
-            and n_t > 0
-        ):
+        if markers and n_t > 0:
             overlap = sum(1 for g in targets if g in markers)
             ratio = overlap / n_t
         else:
@@ -160,21 +152,16 @@ def compute_tf_relevance(
 
     # ── Build weighted activity matrix ─────────────────────────────────
     #  annotated_df[tf] = abs(activity_df[tf]) * (1 + kb_overlap_ratio[tf])
-    ratio_map: dict[str, float] = dict(
-        zip(tf_list, kb_overlap_ratio_list, strict=False)
-    )
+    ratio_map: dict[str, float] = dict(zip(tf_list, kb_overlap_ratio_list, strict=False))
     annotated_activity_df = activity_df.copy()
     for tf in tf_list:
         r = ratio_map.get(tf, 0.0)
-        annotated_activity_df[tf] = (
-            annotated_activity_df[tf].abs() * (1.0 + r)
-        )
+        annotated_activity_df[tf] = annotated_activity_df[tf].abs() * (1.0 + r)
 
     # ── Log summary ────────────────────────────────────────────────────
     n_with_overlap = sum(1 for c in kb_overlap_count_list if c > 0)
     logger.debug(
-        "compute_tf_relevance: %d/%d TFs have KB overlap (markers=%s). "
-        "Net edges: %s.",
+        "compute_tf_relevance: %d/%d TFs have KB overlap (markers=%s). Net edges: %s.",
         n_with_overlap,
         len(tf_list),
         "provided" if markers else "None/empty",

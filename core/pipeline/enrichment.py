@@ -26,7 +26,6 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-
 # ── Module-level logger ────────────────────────────────────────────────
 _log = logging.getLogger(__name__)
 
@@ -97,9 +96,7 @@ def compute_pathway_relevance(
     # ── Determine whether we have Overlap data ─────────────────────────
     has_overlap: bool = "Overlap" in df.columns
     if not has_overlap:
-        logger.warning(
-            "Column 'Overlap' not found. All kb_overlap columns will be 0."
-        )
+        logger.warning("Column 'Overlap' not found. All kb_overlap columns will be 0.")
 
     # ── Normalise kb_markers ───────────────────────────────────────────
     markers: set[str] | None = kb_markers
@@ -362,9 +359,7 @@ def filter_enrichment_by_tissue(
 
     # ── Mode validation ────────────────────────────────────────────────
     if mode not in {"off", "soft", "hard"}:
-        raise ValueError(
-            f"Unknown mode: '{mode}'. Expected one of: 'off', 'soft', 'hard'."
-        )
+        raise ValueError(f"Unknown mode: '{mode}'. Expected one of: 'off', 'soft', 'hard'.")
 
     if mode == "off":
         return result_df
@@ -408,9 +403,7 @@ def filter_enrichment_by_tissue(
         ]
         if unbiased_scores:
             median_kb = float(np.median(unbiased_scores))
-            logger.debug(
-                "Median kb_relevance_score (unbiased rows): %.4f", median_kb
-            )
+            logger.debug("Median kb_relevance_score (unbiased rows): %.4f", median_kb)
 
     # ── Final decisions ────────────────────────────────────────────────
     tissue_relevant: list[bool] = []
