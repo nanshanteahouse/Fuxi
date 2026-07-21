@@ -71,7 +71,7 @@ def main():
     if sample_size and data.n_obs > sample_size:
         spectral_kwargs["sample_size"] = sample_size
         log.info("Spectral with Nyström (sample_size=%s)", sample_size)
-    snap.tl.spectral(data, **spectral_kwargs)
+    snap.tl.spectral(data, **spectral_kwargs)  # type: ignore[reportArgumentType]
 
     # ── KNN graph (with optional Harmony batch correction) ──
     if cfg.atac.harmony_use_harmony and cfg.atac.harmony_batch_key in data.obs:

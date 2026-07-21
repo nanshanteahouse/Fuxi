@@ -5,6 +5,7 @@ import argparse
 import os
 import sys
 import time
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 import snapatac2 as snap
@@ -44,7 +45,7 @@ def main():
     # Import fragments fresh (bypasses HDF5 plugin issue with raw_h5ad)
     log.info("Importing fragments...")
     data = snap.pp.import_fragments(
-        fragment_file=frag,
+        fragment_file=Path(frag),
         chrom_sizes=chrom_sizes,
         sorted_by_barcode=True,
         min_num_fragments=0,

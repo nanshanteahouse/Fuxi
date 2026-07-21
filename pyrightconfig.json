@@ -13,6 +13,7 @@
     "**/__pycache__"
   ],
   "typeCheckingMode": "basic",
+  "reportAttributeAccessIssue": "warning",
   "reportMissingImports": "warning",
   "reportMissingTypeStubs": "none",
   "pythonVersion": "3.14"

@@ -108,7 +108,13 @@ def apply_annotation_patches(
     # ── Recalculate marker_validation ───────────────────────────────────
     if std is not None:
         try:
-            validation_results = std.validate(adata)
+            validation_results = std.validate(
+                adata,
+                top_n=cfg.marker.validation_n_top_genes if cfg else None,
+                min_overlap=cfg.marker.validation_min_overlap if cfg else None,
+                marginal_threshold=cfg.marker.validation_marginal_threshold if cfg else None,
+                species=cfg.species if cfg else None,
+            )
             validation_map = {r["cluster"]: r["status"] for r in validation_results}
             adata.obs["marker_validation"] = leiden_str.map(
                 lambda c: validation_map.get(c, "NO_ONTOLOGY")

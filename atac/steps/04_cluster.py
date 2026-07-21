@@ -37,6 +37,8 @@ def _atac_clusterer(adata, resolution=None, n_neighbors=None, random_seed=42, **
     The key is constructed from n_neighbors and resolution so each
     combination gets a unique column (e.g. ``leiden_15_0.5``).
     """
+    assert n_neighbors is not None, "n_neighbors must be provided"
+    assert resolution is not None, "resolution must be provided"
     key = f"leiden_{n_neighbors}_{resolution}"
     snap.tl.leiden(adata, resolution=resolution, key_added=key, random_state=random_seed)
     return key
@@ -44,6 +46,7 @@ def _atac_clusterer(adata, resolution=None, n_neighbors=None, random_seed=42, **
 
 def _atac_neighbor_fn(adata, n_neighbors=None, **kwargs):
     """Compute the KNN graph with snapatac2."""
+    assert n_neighbors is not None, "n_neighbors must be provided"
     snap.pp.knn(adata, n_neighbors=n_neighbors)
 
 
@@ -195,7 +198,7 @@ def main():
 
     best_n, best_r, method_name, reason = select_best_params(
         results_summary,
-        method=method,
+        method=method,  # type: ignore[reportArgumentType]
         best_resolution=cfg.clustering.best_resolution if method is None else None,
         best_n_neighbors=getattr(cfg.clustering, "best_n_neighbors", 0) if method is None else 0,
         log=log,

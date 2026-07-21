@@ -407,16 +407,14 @@ class StandardOntology:
             ``.obs['cell_type_std']`` or ``.obs['cell_type']``.
         top_n : int or None
             Number of top marker genes to consider per cluster.
-            If None, reads from ``CFG.marker_validation_n_top_genes``
-            (default: 15).
+            Default: 15.  Configurable via ``cfg.marker.validation_n_top_genes``.
         min_overlap : float or None
             Minimum overlap ratio for PASS status.
-            If None, reads from ``CFG.marker_validation_min_overlap``
-            (default: 0.5).
+            Default: 0.5.  Configurable via ``cfg.marker.validation_min_overlap``.
         marginal_threshold : float or None
             Threshold for MARGINAL tier (PASS > MARGINAL > LOW > FAIL).
-            If None, reads from ``CFG.marker_validation_marginal_threshold``
-            (default: 0.25).  Set to 0 to disable MARGINAL tier.
+            Default: 0.25.  Configurable via ``cfg.marker.validation_marginal_threshold``.
+            Set to 0 to disable MARGINAL tier.
 
         Returns
         -------
@@ -431,27 +429,10 @@ class StandardOntology:
                 ``"FAIL"`` (0.0), or ``"NO_ONTOLOGY"`` (no KB markers)
               - ``score`` — overlap ratio (0.0 – 1.0)
         """
-        # Resolve thresholds: explicit args > CFG > built-in defaults
-        try:
-            from core.config.schema import CFG
-
-            _top_n = (
-                top_n if top_n is not None else getattr(CFG, "marker_validation_n_top_genes", 15)
-            )
-            _min_overlap = (
-                min_overlap
-                if min_overlap is not None
-                else getattr(CFG, "marker_validation_min_overlap", 0.5)
-            )
-            _marginal = (
-                marginal_threshold
-                if marginal_threshold is not None
-                else getattr(CFG, "marker_validation_marginal_threshold", 0.25)
-            )
-        except (ImportError, AttributeError):
-            _top_n = top_n if top_n is not None else 15
-            _min_overlap = min_overlap if min_overlap is not None else 0.5
-            _marginal = marginal_threshold if marginal_threshold is not None else 0.25
+        # Resolve thresholds: explicit args > built-in defaults
+        _top_n = top_n if top_n is not None else 15
+        _min_overlap = min_overlap if min_overlap is not None else 0.5
+        _marginal = marginal_threshold if marginal_threshold is not None else 0.25
 
         # Relax thresholds for species without dedicated KB (e.g. zebrafish
         # shares hahn2023 human-style markers that have low overlap)

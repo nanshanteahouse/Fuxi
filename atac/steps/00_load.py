@@ -15,6 +15,7 @@ import gzip
 import os
 import sys
 import time
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 import numpy as np
@@ -117,13 +118,13 @@ def main():
 
         log.info("Importing fragments (sorted_by_barcode=%s)...", sorted_by_bc)
         data = snap.pp.import_fragments(
-            fragment_file=frag_path,
+            fragment_file=Path(frag_path),
             chrom_sizes=chrom_sizes,
             whitelist=whitelist,
             sorted_by_barcode=sorted_by_bc,
             min_num_fragments=0,
             n_jobs=cfg.execution.n_jobs,
-            file=cfg.raw_h5ad,
+            file=Path(cfg.raw_h5ad),
         )
         log.info("Imported: %d cells → %s", data.n_obs, cfg.raw_h5ad)
         log.info("Written directly to checkpoint by SnapATAC2.")

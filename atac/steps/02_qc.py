@@ -50,7 +50,7 @@ def main():
 
     # ── TSS enrichment score
     try:
-        genome_obj = snap.genome.hg38 if cfg.atac.genome == "hg38" else snap.genome.mm10
+        genome_obj = getattr(snap.genome, cfg.atac.genome)  # type: ignore[reportAttributeAccessIssue]
         snap.metrics.tsse(data, genome_obj, inplace=True)
         log.info("TSS enrichment: mean=%.2f", data.obs["tsse"].mean())
         data.uns["library_tsse"] = float(data.obs["tsse"].median())
