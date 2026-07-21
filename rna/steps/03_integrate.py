@@ -17,7 +17,7 @@ Step 03: 归一化 + HVG 选择 + PCA + Harmony 批次校正（整合版）
 
 输入: 02_qc.h5ad
 输出: 03_integrated.h5ad (X = log1p(normalized) on HVGs, .raw = 全基因,
-                          obsm: X_pca, X_pca_harmony)
+                          obsm: X_pca, X_integrated)
 """
 
 import argparse
@@ -251,6 +251,11 @@ def main():
     adata = adata[:, adata.var["highly_variable"]].copy()
     log.info("X subset to HVGs: %s", adata.shape)
 
+    # ── 保存原始 counts 供 scVI 使用（必须在 normalize_total+log1p 之前）──
+    if getattr(cfg.integration, "method", None) == "scvi":
+        adata.layers["counts"] = adata.X.copy()
+        log.info("Raw counts preserved in adata.layers['counts'] for scVI")
+
     # ── 归一化 (HVG 子集) ──
     skip_norm = getattr(cfg, "expression_type", "raw_counts") == "log1p_counts"
     if skip_norm:
@@ -386,12 +391,12 @@ def main():
 
     # ── Batch diagnosis (v4.x+) ──
     report = None
-    if cfg.harmony.diagnose:
+    if cfg.integration.diagnose:
         from rna.utils.batch_diagnostics import diagnose_batch_candidates, plot_diagnosis_report
 
         adata_orig = adata.copy()
-        gini_b = cfg.harmony.gini_batch_threshold
-        gini_ = cfg.harmony.gini_biology_threshold
+        gini_b = cfg.integration.gini_batch_threshold
+        gini_ = cfg.integration.gini_biology_threshold
         log.info("Running batch diagnosis ...")
         try:
             report = diagnose_batch_candidates(
@@ -408,12 +413,12 @@ def main():
             )
             # Augment batch_key with auto-detected batch columns
             augment = report.batch_cols if report.batch_cols else []
-            user_key = cfg.harmony.batch_key
+            user_key = cfg.integration.batch_key
             bk_list = [user_key] if isinstance(user_key, str) else list(user_key)
             batch_keys = list(dict.fromkeys(bk_list + [c for c in augment if c in adata.obs]))
             for w in report.warnings:
                 log.warning("[batch-diagnosis] %s", w)
-            if cfg.harmony.diagnose_report:
+            if cfg.integration.diagnose_report:
                 os.makedirs(fig_dir, exist_ok=True)
                 report_path = os.path.join(fig_dir, "_batch_diagnosis.pdf")
                 plot_diagnosis_report(report, report_path)
@@ -421,114 +426,220 @@ def main():
         except Exception as e:
             log.warning("Batch diagnosis failed (%s) — continuing without diagnosis", e)
             batch_keys = (
-                [cfg.harmony.batch_key]
-                if isinstance(cfg.harmony.batch_key, str)
-                else list(cfg.harmony.batch_key)
+                [cfg.integration.batch_key]
+                if isinstance(cfg.integration.batch_key, str)
+                else list(cfg.integration.batch_key)
             )
     else:
         batch_keys = (
-            [cfg.harmony.batch_key]
-            if isinstance(cfg.harmony.batch_key, str)
-            else list(cfg.harmony.batch_key)
+            [cfg.integration.batch_key]
+            if isinstance(cfg.integration.batch_key, str)
+            else list(cfg.integration.batch_key)
         )
 
-    # ── Harmony ──
+    # ── Integration ──
     bk_list = [b for b in batch_keys if b in adata.obs]
     collinear_warnings = []
-    if cfg.harmony.collinearity_guard and report is not None and report.warnings:
+    if cfg.integration.collinearity_guard and report is not None and report.warnings:
         collinear_warnings = [
             w
             for w in report.warnings
             if "perfectly collinear" in w.lower() and any(bc in w for bc in report.biology_cols)
         ]
 
-    if collinear_warnings:
-        log.error(
-            "[collinearity-guard] Harmony ABORTED — batch_key perfectly collinear with biology:"
-        )
-        for w in collinear_warnings[:3]:
-            log.error("  %s", w)
-        log.error("  To override: set harmony.collinearity_guard: false in config.yaml")
-        adata.uns["harmony_skipped"] = {
-            "reason": "collinearity",
-            "warnings": collinear_warnings,
-        }
-    elif cfg.harmony.use_harmony and bk_list:
-        import harmonypy as hm
-
-        # Unified NaN detection across all batch keys
-        nan_mask = adata.obs[bk_list].isna().any(axis=1)
-        if nan_mask.any():
-            n_nan = nan_mask.sum()
-            log.warning(
-                "batch_keys %s contain %d NaN rows — these cells will be removed",
-                bk_list,
-                n_nan,
+    if cfg.integration.method == "harmony":
+        if collinear_warnings:
+            log.error(
+                "[collinearity-guard] Harmony ABORTED — batch_key perfectly collinear with biology:"
             )
-            adata._inplace_subset_obs(~nan_mask)
-        log.info("Harmony correction (batch_keys=%s)...", bk_list)
-        try:
-            ho = hm.run_harmony(
-                adata.obsm["X_pca"][:, : cfg.pca.n_pcs_use],
-                adata.obs,
-                vars_use=bk_list,
-                random_state=cfg.execution.random_seed,
-                max_iter_harmony=cfg.harmony.max_iter,
-            )
-            adata.obsm["X_pca_harmony"] = ho.Z_corr
-            log.info("  Harmony complete, output shape: %s", ho.Z_corr.shape)
-        except Exception as e:
-            log.warning("Harmony correction failed (%s) — continuing with raw PCA", e)
-            adata.obsm["X_pca_harmony"] = adata.obsm["X_pca"].copy()
-        # 对比图
-        primary_key = bk_list[0]
-        fig, axes = plt.subplots(1, 2, figsize=(14, 6))
-        sc.pl.embedding(
-            adata,
-            basis="X_pca",
-            color=primary_key,
-            ax=axes[0],
-            show=False,
-            title="PCA (before Harmony)",
-        )
-        sc.pl.embedding(
-            adata,
-            basis="X_pca_harmony",
-            color=primary_key,
-            ax=axes[1],
-            show=False,
-            title="Harmony-corrected",
-        )
-        fig.tight_layout()
-        fig.savefig(os.path.join(fig_dir, "harmony_comparison.png"), dpi=150)
-        plt.close(fig)
-        log.info("  Harmony comparison plot saved")
-        # ── Post-Harmony preservation check ──
-        if cfg.harmony.diagnose and report is not None and report.biology_cols:
-            try:
-                from rna.utils.batch_diagnostics import validate_harmony_preservation
+            for w in collinear_warnings[:3]:
+                log.error("  %s", w)
+            log.error("  To override: set integration.collinearity_guard: false in config.yaml")
+            adata.uns["harmony_skipped"] = {
+                "reason": "collinearity",
+                "warnings": collinear_warnings,
+            }
+        elif bk_list:
+            import harmonypy as hm
 
-                preservation = validate_harmony_preservation(
-                    adata_orig, adata, report.biology_cols
+            # Unified NaN detection across all batch keys
+            nan_mask = adata.obs[bk_list].isna().any(axis=1)
+            if nan_mask.any():
+                n_nan = nan_mask.sum()
+                log.warning(
+                    "batch_keys %s contain %d NaN rows — these cells will be removed",
+                    bk_list,
+                    n_nan,
                 )
-                for col, ratio in preservation.items():
-                    if ratio < 0.9:
-                        log.warning(
-                            "[preservation-check] %s: purity dropped to %.2fx — "
-                            "biological signal may be degraded",
-                            col,
-                            ratio,
-                        )
-                    else:
-                        log.info("[preservation-check] %s: purity preserved at %.2fx", col, ratio)
+                adata._inplace_subset_obs(~nan_mask)
+            log.info("Harmony correction (batch_keys=%s)...", bk_list)
+            try:
+                ho = hm.run_harmony(
+                    adata.obsm["X_pca"][:, : cfg.pca.n_pcs_use],
+                    adata.obs,
+                    vars_use=bk_list,
+                    random_state=cfg.execution.random_seed,
+                    max_iter_harmony=cfg.integration.max_iter,
+                )
+                adata.obsm["X_integrated"] = ho.Z_corr
+                log.info("  Harmony complete, output shape: %s", ho.Z_corr.shape)
             except Exception as e:
-                log.warning("Preservation check failed (%s) — skipping", e)
-    else:
-        if cfg.harmony.use_harmony and not bk_list:
-            log.warning("No valid batch keys found in obs, skipping Harmony")
+                log.warning("Harmony correction failed (%s) — continuing with raw PCA", e)
+                adata.obsm["X_integrated"] = adata.obsm["X_pca"].copy()
+            # 对比图
+            primary_key = bk_list[0]
+            fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+            sc.pl.embedding(
+                adata,
+                basis="X_pca",
+                color=primary_key,
+                ax=axes[0],
+                show=False,
+                title="PCA (before Harmony)",
+            )
+            sc.pl.embedding(
+                adata,
+                basis="X_integrated",
+                color=primary_key,
+                ax=axes[1],
+                show=False,
+                title="Harmony-corrected",
+            )
+            fig.tight_layout()
+            fig.savefig(os.path.join(fig_dir, "harmony_comparison.png"), dpi=150)
+            plt.close(fig)
+            log.info("  Harmony comparison plot saved")
+            # ── Post-Harmony preservation check ──
+            if cfg.integration.diagnose and report is not None and report.biology_cols:
+                try:
+                    from rna.utils.batch_diagnostics import validate_harmony_preservation
+
+                    preservation = validate_harmony_preservation(
+                        adata_orig, adata, report.biology_cols
+                    )
+                    for col, ratio in preservation.items():
+                        if ratio < 0.9:
+                            log.warning(
+                                "[preservation-check] %s: purity dropped to %.2fx — "
+                                "biological signal may be degraded",
+                                col,
+                                ratio,
+                            )
+                        else:
+                            log.info(
+                                "[preservation-check] %s: purity preserved at %.2fx", col, ratio
+                            )
+                except Exception as e:
+                    log.warning("Preservation check failed (%s) — skipping", e)
         else:
-            log.info("Harmony disabled, using raw PCA.")
-        adata.obsm["X_pca_harmony"] = adata.obsm["X_pca"].copy()
+            log.warning("No valid batch keys found in obs, skipping Harmony")
+            adata.obsm["X_integrated"] = adata.obsm["X_pca"].copy()
+    elif cfg.integration.method == "combat":
+        if bk_list:
+            log.info("Combat correction (batch_key=%s)...", cfg.integration.batch_key)
+            sc.pp.combat(adata, key=cfg.integration.batch_key)
+            sc.pp.pca(
+                adata,
+                n_comps=cfg.pca.n_pcs_use,
+                svd_solver=_solver,
+                random_state=cfg.execution.random_seed,
+            )
+            adata.obsm["X_integrated"] = adata.obsm["X_pca"].copy()
+            # 对比图
+            primary_key = bk_list[0]
+            fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+            sc.pl.embedding(
+                adata,
+                basis="X_pca",
+                color=primary_key,
+                ax=axes[0],
+                show=False,
+                title="PCA (before Combat)",
+            )
+            sc.pl.embedding(
+                adata,
+                basis="X_integrated",
+                color=primary_key,
+                ax=axes[1],
+                show=False,
+                title="Combat-corrected",
+            )
+            fig.tight_layout()
+            fig.savefig(os.path.join(fig_dir, "combat_comparison.png"), dpi=150)
+            plt.close(fig)
+            log.info("  Combat comparison plot saved")
+        else:
+            log.warning("No valid batch keys found in obs, skipping Combat")
+            adata.obsm["X_integrated"] = adata.obsm["X_pca"].copy()
+    elif cfg.integration.method == "scvi":
+        from core.utils._optional import gpu_available_torch, require_scvi
+
+        require_scvi("step 03 integration (scVI)")
+        import scvi
+
+        log.info("scVI integration (n_latent=%d)...", cfg.integration.scvi.n_latent)
+        try:
+            # Check raw counts exist
+            if "counts" not in adata.layers:
+                raise ValueError(
+                    "No 'counts' layer found. Raw counts must be preserved before normalization."
+                )
+
+            # Verify counts are integer-valued
+            if sp.issparse(adata.layers["counts"]):
+                mean_count = adata.layers["counts"].toarray().mean()
+            else:
+                mean_count = adata.layers["counts"].mean()
+            log.info("  mean raw count per cell: %.2f", mean_count)
+
+            # GPU detection
+            use_gpu = cfg.integration.scvi.use_gpu and gpu_available_torch()
+            if cfg.integration.scvi.use_gpu and not use_gpu:
+                log.warning("GPU requested but not available — falling back to CPU")
+
+            # Determine batch key: try scvi-specific first, then general, else None
+            batch_key = (
+                cfg.integration.scvi.batch_key
+                if cfg.integration.scvi.batch_key in adata.obs
+                else (
+                    cfg.integration.batch_key if cfg.integration.batch_key in adata.obs else None
+                )
+            )
+
+            # Setup and train scVI model
+            scvi.model.SCVI.setup_anndata(
+                adata,
+                layer="counts",
+                batch_key=batch_key,
+            )
+            model = scvi.model.SCVI(
+                adata,
+                n_latent=cfg.integration.scvi.n_latent,
+                n_layers=cfg.integration.scvi.n_layers,
+                n_hidden=cfg.integration.scvi.n_hidden,
+            )
+            t_start = time.time()
+            model.train(
+                max_epochs=cfg.integration.scvi.max_epochs,
+                train_size=cfg.integration.scvi.train_size,
+                accelerator="gpu" if use_gpu else "cpu",
+                devices=1,
+            )
+            elapsed = time.time() - t_start
+            log.info("scVI training completed in %.1f seconds", elapsed)
+
+            # Get latent representation
+            latent = model.get_latent_representation()
+            adata.obsm["X_integrated"] = latent
+            log.info("  scVI latent shape: %s", latent.shape)
+
+        except Exception as e:
+            log.warning("scVI integration failed (%s) — falling back to raw PCA", e)
+            adata.obsm["X_integrated"] = adata.obsm["X_pca"][:, : cfg.pca.n_pcs_use].copy()
+
+    else:
+        log.info("Integration method '%s' — using raw PCA.", cfg.integration.method)
+        adata.obsm["X_integrated"] = adata.obsm["X_pca"].copy()
 
     # ── 保存 ──
     out_path = os.path.join(cfg.h5ad_dir, "03_integrated.h5ad")

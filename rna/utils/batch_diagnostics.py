@@ -272,11 +272,11 @@ def diagnose_batch_candidates(
 def validate_harmony_preservation(
     adata_before, adata_after, biology_cols: list[str]
 ) -> dict[str, float]:
-    """purity_after/purity_before per biology col using X_pca vs X_pca_harmony."""
+    """purity_after/purity_before per biology col using X_pca vs X_integrated."""
     results: dict[str, float] = {}
     for col in biology_cols:
         pb = _compute_purity_one_shot(adata_before, col, use_rep="X_pca")
-        pa = _compute_purity_one_shot(adata_after, col, use_rep="X_pca_harmony")
+        pa = _compute_purity_one_shot(adata_after, col, use_rep="X_integrated")
         results[col] = pa / pb if pb > 0 else 1.0
     return results
 
