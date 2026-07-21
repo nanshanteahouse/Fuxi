@@ -18,21 +18,23 @@ Output: 02_de.h5ad           — normalized counts stored in .X
         figures/02_volcano.png
         figures/02_ma_plot.png
 """
-import sys
-import os
-import time
+
 import argparse
+import os
+import sys
+import time
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 
+import matplotlib
 import numpy as np
 import pandas as pd
 import scanpy as sc
-import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from core.utils import setup_logger, resolve_config, safe_write
+from core.utils import resolve_config, safe_write, setup_logger
 
 
 def main():
@@ -41,11 +43,11 @@ def main():
     args_parser.add_argument("--config", default="../config.py")
     args = args_parser.parse_args()
 
-    CFG = resolve_config(args.config)
-    log = setup_logger("02_de", os.path.join(CFG.log_dir, "02_de.log"))
+    cfg = resolve_config(args.config)
+    log = setup_logger("02_de", os.path.join(cfg.log_dir, "02_de.log"))
     log.info("Step 02: DESeq2 differential expression")
 
-    de_h5ad_path = os.path.join(CFG.h5ad_dir, "02_de.h5ad")
+    de_h5ad_path = os.path.join(cfg.h5ad_dir, "02_de.h5ad")
 
     # ── Resume check ──────────────────────────────────────────────────
     if os.path.exists(de_h5ad_path):
@@ -53,13 +55,13 @@ def main():
         return
 
     # ── Load input ────────────────────────────────────────────────────
-    qc_h5ad = os.path.join(CFG.h5ad_dir, "01_qc.h5ad")
+    qc_h5ad = os.path.join(cfg.h5ad_dir, "01_qc.h5ad")
     log.info("Loading %s", qc_h5ad)
     adata = sc.read(qc_h5ad)
     log.info("Loaded: %d samples x %d genes", adata.n_obs, adata.n_vars)
 
     # ── Validate design formula ───────────────────────────────────────
-    bulk = CFG.bulk
+    bulk = cfg.bulk
     design = bulk.design
 
     # Parse R-style formula "~term1 + term2" → extract term names
@@ -72,7 +74,8 @@ def main():
     if missing_terms:
         log.error(
             "Design terms %s not found in adata.obs. Available columns: %s",
-            missing_terms, list(adata.obs.columns),
+            missing_terms,
+            list(adata.obs.columns),
         )
         sys.exit(1)
     log.info("All design terms present in adata.obs")
@@ -82,7 +85,8 @@ def main():
     if contrast_col not in adata.obs.columns:
         log.error(
             "contrast_column '%s' not found in adata.obs. Available: %s",
-            contrast_col, list(adata.obs.columns),
+            contrast_col,
+            list(adata.obs.columns),
         )
         sys.exit(1)
 
@@ -90,45 +94,47 @@ def main():
     baseline = bulk.contrast_baseline
     if not treatment or not baseline:
         log.error(
-            "contrast_treatment and contrast_baseline must be non-empty "
-            "(got: '%s', '%s')",
-            treatment, baseline,
+            "contrast_treatment and contrast_baseline must be non-empty (got: '%s', '%s')",
+            treatment,
+            baseline,
         )
         sys.exit(1)
 
     valid_levels = set(adata.obs[contrast_col].unique())
-    for val_name, val in [("contrast_treatment", treatment),
-                          ("contrast_baseline", baseline)]:
+    for val_name, val in [("contrast_treatment", treatment), ("contrast_baseline", baseline)]:
         if val not in valid_levels:
             log.error(
-                "bulk.%s='%s' not found in adata.obs['%s']. "
-                "Valid values: %s",
-                val_name, val, contrast_col, sorted(valid_levels),
+                "bulk.%s='%s' not found in adata.obs['%s']. Valid values: %s",
+                val_name,
+                val,
+                contrast_col,
+                sorted(valid_levels),
             )
             sys.exit(1)
     log.info(
         "Contrast: %s = '%s' (treatment) vs '%s' (baseline)",
-        contrast_col, treatment, baseline,
+        contrast_col,
+        treatment,
+        baseline,
     )
 
     # ── Extract raw integer count matrix ──────────────────────────────
     log.info("Extracting count matrix...")
-    X = adata.X
-    if hasattr(X, "toarray"):
-        X = X.toarray()
+    x = adata.X
+    if hasattr(x, "toarray"):
+        x = x.toarray()
 
     # Warn if data appears non-integer
-    if not np.issubdtype(X.dtype, np.integer) and not np.allclose(X, X.astype(int)):
+    if not np.issubdtype(x.dtype, np.integer) and not np.allclose(x, x.astype(int)):
         log.warning(
-            "adata.X contains non-integer values (dtype=%s). "
-            "Rounding to integer for DESeq2.",
-            X.dtype,
+            "adata.X contains non-integer values (dtype=%s). Rounding to integer for DESeq2.",
+            x.dtype,
         )
 
-    X_int = np.round(X).astype(int)
+    x_int = np.round(x).astype(int)
 
     counts_df = pd.DataFrame(
-        X_int,
+        x_int,
         index=adata.obs_names,
         columns=adata.var_names,
     )
@@ -152,11 +158,16 @@ def main():
     if n_removed > 0:
         log.info(
             "Removing %d/%d genes with total count < %d",
-            n_removed, counts_df.shape[1], min_counts,
+            n_removed,
+            counts_df.shape[1],
+            min_counts,
         )
     else:
-        log.info("All %d genes pass the min_counts_per_gene (%d) threshold",
-                  counts_df.shape[1], min_counts)
+        log.info(
+            "All %d genes pass the min_counts_per_gene (%d) threshold",
+            counts_df.shape[1],
+            min_counts,
+        )
 
     counts_df = counts_df.loc[:, genes_to_keep]
     log.info("After filtering: %d genes remain", counts_df.shape[1])
@@ -196,7 +207,8 @@ def main():
         log.info("Applying LFC shrinkage...")
         # Determine the LFC coefficient name (non-intercept contrast column)
         lfc_coeffs = [
-            c for c in dds.varm["LFC"].columns
+            c
+            for c in dds.varm["LFC"].columns
             if c != "Intercept" and c.startswith(bulk.contrast_column)
         ]
         coeff = lfc_coeffs[0] if lfc_coeffs else None
@@ -224,27 +236,29 @@ def main():
     n_total = len(results_df)
     log.info(
         "Significant DEGs (padj < %s): %d / %d (%.1f%%)",
-        alpha, n_sig, n_total,
+        alpha,
+        n_sig,
+        n_total,
         100.0 * n_sig / n_total if n_total > 0 else 0.0,
     )
 
     # ── Export CSVs ───────────────────────────────────────────────────
-    os.makedirs(CFG.table_dir, exist_ok=True)
+    os.makedirs(cfg.table_dir, exist_ok=True)
 
-    results_path = os.path.join(CFG.table_dir, "02_de_results.csv")
+    results_path = os.path.join(cfg.table_dir, "02_de_results.csv")
     results_df.to_csv(results_path, index=False)
     log.info("Exported: %s (%d rows)", results_path, n_total)
 
-    sig_path = os.path.join(CFG.table_dir, "02_de_significant.csv")
+    sig_path = os.path.join(cfg.table_dir, "02_de_significant.csv")
     sig_df.to_csv(sig_path, index=False)
     log.info("Exported: %s (%d rows)", sig_path, n_sig)
 
     # ── Volcano plot ──────────────────────────────────────────────────
-    os.makedirs(CFG.figure_dir, exist_ok=True)
-    _volcano_plot(results_df, alpha, treatment, baseline, CFG.figure_dir, log)
+    os.makedirs(cfg.figure_dir, exist_ok=True)
+    _volcano_plot(results_df, alpha, treatment, baseline, cfg.figure_dir, log)
 
     # ── MA plot ───────────────────────────────────────────────────────
-    _ma_plot(results_df, alpha, treatment, baseline, CFG.figure_dir, log)
+    _ma_plot(results_df, alpha, treatment, baseline, cfg.figure_dir, log)
 
     # ── Store normalized counts and save ──────────────────────────────
     log.info("Storing normalized counts...")
@@ -276,11 +290,12 @@ def main():
     }
 
     log.info("Saving to %s...", de_h5ad_path)
-    safe_write(out_adata, de_h5ad_path, cfg=CFG)
+    safe_write(out_adata, de_h5ad_path, cfg=cfg)
     log.info("Step 02 complete, took %.1fs", time.time() - t0)
 
 
 # ── Plot helpers ──────────────────────────────────────────────────────────
+
 
 def _volcano_plot(results_df, alpha, treatment, baseline, figure_dir, log):
     """Generate volcano plot: -log10(padj) vs log2FoldChange."""
@@ -303,13 +318,18 @@ def _volcano_plot(results_df, alpha, treatment, baseline, figure_dir, log):
         ax.scatter(
             plot_df.loc[~sig_mask, "log2FoldChange"],
             plot_df.loc[~sig_mask, "neg_log10_padj"],
-            s=3, alpha=0.3, color="grey", label="NS",
+            s=3,
+            alpha=0.3,
+            color="grey",
+            label="NS",
         )
         # Significant
         ax.scatter(
             plot_df.loc[sig_mask, "log2FoldChange"],
             plot_df.loc[sig_mask, "neg_log10_padj"],
-            s=5, alpha=0.6, color="red",
+            s=5,
+            alpha=0.6,
+            color="red",
             label=f"padj<{alpha}",
         )
 
@@ -363,16 +383,22 @@ def _ma_plot(results_df, alpha, treatment, baseline, figure_dir, log):
         # Non-significant
         ns_ma = plot_df if sig_ma is None else plot_df[~sig_ma]
         ax.scatter(
-            ns_ma["baseMean"], ns_ma["log2FoldChange"],
-            s=3, alpha=0.3, color="grey",
+            ns_ma["baseMean"],
+            ns_ma["log2FoldChange"],
+            s=3,
+            alpha=0.3,
+            color="grey",
         )
 
         # Significant
         if sig_ma is not None and sig_ma.any():
             s_ma = plot_df[sig_ma]
             ax.scatter(
-                s_ma["baseMean"], s_ma["log2FoldChange"],
-                s=5, alpha=0.6, color="red",
+                s_ma["baseMean"],
+                s_ma["log2FoldChange"],
+                s=5,
+                alpha=0.6,
+                color="red",
                 label=f"padj<{alpha}",
             )
             ax.legend(loc="upper right")

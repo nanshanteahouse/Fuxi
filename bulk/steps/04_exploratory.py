@@ -15,13 +15,20 @@ Output: figures/04_pca.png
         figures/04_de_heatmap.png
         figures/04_top_genes_boxplot.png
 """
-import sys, os, time, argparse
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
-from core.utils import setup_logger, resolve_config
-import scanpy as sc
-import pandas as pd
-import numpy as np
+
+import argparse
+import os
+import sys
+import time
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 import matplotlib
+import numpy as np
+import pandas as pd
+import scanpy as sc
+
+from core.utils import resolve_config, setup_logger
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -35,36 +42,36 @@ def main():
     args_parser.add_argument("--config", default="../config.py")
     args = args_parser.parse_args()
 
-    CFG = resolve_config(args.config)
-    log = setup_logger("04_exploratory", os.path.join(CFG.log_dir, "04_exploratory.log"))
+    cfg = resolve_config(args.config)
+    log = setup_logger("04_exploratory", os.path.join(cfg.log_dir, "04_exploratory.log"))
     log.info("Step 04: Exploratory analysis / visualization")
 
     # ── Resume check ──────────────────────────────────────────────────
-    pca_fig = os.path.join(CFG.figure_dir, "04_pca.png")
+    pca_fig = os.path.join(cfg.figure_dir, "04_pca.png")
     if os.path.exists(pca_fig):
         log.info("Skip: %s already exists. Delete figures to force rerun.", pca_fig)
         return
 
     # ── Ensure figure dir ─────────────────────────────────────────────
-    os.makedirs(CFG.figure_dir, exist_ok=True)
+    os.makedirs(cfg.figure_dir, exist_ok=True)
 
     # ── Load data ─────────────────────────────────────────────────────
-    de_h5ad = os.path.join(CFG.h5ad_dir, "02_de.h5ad")
+    de_h5ad = os.path.join(cfg.h5ad_dir, "02_de.h5ad")
     log.info("Loading %s", de_h5ad)
     adata = sc.read(de_h5ad)
     log.info("Loaded: %d samples x %d genes", adata.n_obs, adata.n_vars)
 
-    contrast_col = getattr(CFG.bulk, "contrast_column", "condition")
+    contrast_col = getattr(cfg.bulk, "contrast_column", "condition")
     log.info("Contrast column: %s", contrast_col)
 
     # ── 1. PCA Plot ───────────────────────────────────────────────────
-    _pca_plot(adata, contrast_col, CFG.figure_dir, log)
+    _pca_plot(adata, contrast_col, cfg.figure_dir, log)
 
     # ── 2. Sample distance heatmap ────────────────────────────────────
-    _sample_distance_heatmap(adata, contrast_col, CFG.figure_dir, log)
+    _sample_distance_heatmap(adata, contrast_col, cfg.figure_dir, log)
 
     # ── Load DEG table for DE-specific plots ──────────────────────────
-    sig_path = os.path.join(CFG.table_dir, "02_de_significant.csv")
+    sig_path = os.path.join(cfg.table_dir, "02_de_significant.csv")
     if os.path.isfile(sig_path):
         sig_df = pd.read_csv(sig_path)
         n_sig = len(sig_df)
@@ -78,13 +85,13 @@ def main():
     if n_sig == 0:
         log.warning("No significant DEGs found — skipping DE heatmap")
     else:
-        _de_heatmap(adata, sig_df, contrast_col, CFG.figure_dir, log)
+        _de_heatmap(adata, sig_df, contrast_col, cfg.figure_dir, log)
 
     # ── 4. Top gene boxplots ──────────────────────────────────────────
     if n_sig == 0:
         log.warning("No significant DEGs found — skipping top gene boxplots")
     else:
-        _top_genes_boxplot(adata, sig_df, contrast_col, CFG.figure_dir, log)
+        _top_genes_boxplot(adata, sig_df, contrast_col, cfg.figure_dir, log)
 
     log.info("Step 04 complete, took %.1fs", time.time() - t0)
 
@@ -105,10 +112,10 @@ def _pca_plot(adata, contrast_col, figure_dir, log):
         log.info("Running PCA with %d components...", n_comps)
 
         # Use normalized counts from .X
-        X = adata.X
-        if hasattr(X, "toarray"):
-            X = X.toarray()
-        X_log = np.log1p(X)
+        x = adata.X
+        if hasattr(x, "toarray"):
+            x = x.toarray()
+        np.log1p(x)
 
         sc.pp.pca(adata, n_comps=n_comps)
         fig, ax = plt.subplots(figsize=(8, 6))
@@ -133,18 +140,17 @@ def _sample_distance_heatmap(adata, contrast_col, figure_dir, log):
     try:
         log.info("Computing sample distance matrix...")
 
-        X = adata.X
-        if hasattr(X, "toarray"):
-            X = X.toarray()
-        X_log = np.log1p(X)
+        x = adata.X
+        if hasattr(x, "toarray"):
+            x = x.toarray()
+        x_log = np.log1p(x)
 
         # Euclidean distance between samples
-        dist_matrix = squareform(pdist(X_log, metric="euclidean"))
+        dist_matrix = squareform(pdist(x_log, metric="euclidean"))
         sample_names = adata.obs_names.tolist()
         dist_df = pd.DataFrame(dist_matrix, index=sample_names, columns=sample_names)
 
         # Build annotation DataFrame for row colors
-        row_colors_df = None
         if contrast_col in adata.obs.columns:
             groups = adata.obs[contrast_col].astype("category")
             palette = sns.color_palette("Set2", n_colors=len(groups.cat.categories))
@@ -152,7 +158,7 @@ def _sample_distance_heatmap(adata, contrast_col, figure_dir, log):
             # Build color mapping without map() to avoid pandas MultiIndex issue
             cat_to_color = pd.Series(color_map)
             color_vals = cat_to_color[groups.values].values
-            row_colors_df = pd.DataFrame({"condition": color_vals}, index=sample_names)
+            pd.DataFrame({"condition": color_vals}, index=sample_names)
 
         n = len(sample_names)
         figsize = (max(8, n * 0.8), max(6, n * 0.6))
@@ -168,7 +174,9 @@ def _sample_distance_heatmap(adata, contrast_col, figure_dir, log):
         )
         ax.set_title("Sample Distance (Euclidean, log1p counts)")
         fig.tight_layout()
-        fig.savefig(os.path.join(figure_dir, "04_sample_heatmap.png"), dpi=150, bbox_inches="tight")
+        fig.savefig(
+            os.path.join(figure_dir, "04_sample_heatmap.png"), dpi=150, bbox_inches="tight"
+        )
         plt.close(fig)
         log.info("Sample distance heatmap saved: 04_sample_heatmap.png")
 
@@ -202,15 +210,15 @@ def _de_heatmap(adata, sig_df, contrast_col, figure_dir, log):
             log.warning("No top DEGs found in adata.var_names — skipping DE heatmap")
             return
 
-        X = adata[:, available].X
-        if hasattr(X, "toarray"):
-            X = X.toarray()
+        x = adata[:, available].X
+        if hasattr(x, "toarray"):
+            x = x.toarray()
 
         # Z-score normalize (row-wise = per gene)
-        X_z = zscore(X, axis=1)
+        x_z = zscore(x, axis=1)
 
         heatmap_df = pd.DataFrame(
-            X_z,
+            x_z,
             index=adata.obs_names,
             columns=available,
         ).T
@@ -233,7 +241,8 @@ def _de_heatmap(adata, sig_df, contrast_col, figure_dir, log):
             z_score=None,  # already z-scored
             cmap="RdBu_r",
             center=0,
-            vmin=-3, vmax=3,
+            vmin=-3,
+            vmax=3,
             figsize=figsize,
             col_colors=col_colors_df,
             linewidths=0.3,
@@ -275,10 +284,10 @@ def _top_genes_boxplot(adata, sig_df, contrast_col, figure_dir, log):
             log.warning("No top DEGs found in adata.var_names — skipping boxplots")
             return
 
-        X = adata[:, available].X
-        if hasattr(X, "toarray"):
-            X = X.toarray()
-        expr_df = pd.DataFrame(X, index=adata.obs_names, columns=available)
+        x = adata[:, available].X
+        if hasattr(x, "toarray"):
+            x = x.toarray()
+        expr_df = pd.DataFrame(x, index=adata.obs_names, columns=available)
 
         # Add group info
         if contrast_col in adata.obs.columns:
@@ -295,8 +304,7 @@ def _top_genes_boxplot(adata, sig_df, contrast_col, figure_dir, log):
 
         ncols = min(5, n_top)
         nrows = int(np.ceil(n_top / ncols))
-        fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * 3.5, nrows * 3.5),
-                                 squeeze=False)
+        fig, axes = plt.subplots(nrows, ncols, figsize=(ncols * 3.5, nrows * 3.5), squeeze=False)
 
         for idx, gene in enumerate(available):
             row = idx // ncols
@@ -305,8 +313,16 @@ def _top_genes_boxplot(adata, sig_df, contrast_col, figure_dir, log):
 
             gene_df = plot_df[plot_df["gene"] == gene]
             sns.boxplot(data=gene_df, x="group", y="expression", ax=ax, palette="Set2")
-            sns.stripplot(data=gene_df, x="group", y="expression", ax=ax,
-                          color="black", size=4, alpha=0.6, jitter=True)
+            sns.stripplot(
+                data=gene_df,
+                x="group",
+                y="expression",
+                ax=ax,
+                color="black",
+                size=4,
+                alpha=0.6,
+                jitter=True,
+            )
 
             ax.set_title(gene, fontsize=10)
             ax.set_xlabel("")
@@ -321,7 +337,9 @@ def _top_genes_boxplot(adata, sig_df, contrast_col, figure_dir, log):
         fig.suptitle("Top DEG Expression by Group", y=1.02, fontsize=12)
         fig.tight_layout()
 
-        fig.savefig(os.path.join(figure_dir, "04_top_genes_boxplot.png"), dpi=150, bbox_inches="tight")
+        fig.savefig(
+            os.path.join(figure_dir, "04_top_genes_boxplot.png"), dpi=150, bbox_inches="tight"
+        )
         plt.close(fig)
         log.info("Top gene boxplots saved: 04_top_genes_boxplot.png")
 

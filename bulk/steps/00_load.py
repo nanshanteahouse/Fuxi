@@ -9,13 +9,20 @@ Supports three input formats:
 
 Output: 00_raw.h5ad
 """
-import sys, os, time, argparse
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
-from core.utils import setup_logger, resolve_config
-import scanpy as sc
-import pandas as pd
+
+import argparse
+import os
+import sys
+import time
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 import numpy as np
+import pandas as pd
+import scanpy as sc
 import scipy.sparse as sp
+
+from core.utils import resolve_config, setup_logger
+
 
 def main():
     t0 = time.time()
@@ -23,75 +30,77 @@ def main():
     args_parser.add_argument("--config", default="../config.py")
     args = args_parser.parse_args()
 
-    CFG = resolve_config(args.config)
-    log = setup_logger("00_load", os.path.join(CFG.log_dir, "00_load.log"))
+    cfg = resolve_config(args.config)
+    log = setup_logger("00_load", os.path.join(cfg.log_dir, "00_load.log"))
     log.info("Step 00: Load bulk RNA-seq data")
-    log.info("Format: %s", CFG.data_format)
+    log.info("Format: %s", cfg.data_format)
 
-    if os.path.exists(CFG.raw_h5ad):
-        log.info("Skip: %s already exists. Delete it to force reload.", CFG.raw_h5ad)
+    if os.path.exists(cfg.raw_h5ad):
+        log.info("Skip: %s already exists. Delete it to force reload.", cfg.raw_h5ad)
         return
 
     # --- count_matrix format ---
-    if CFG.data_format == "count_matrix":
-        log.info("Loading from count matrix: %s", CFG.data_input.matrix_file)
-        sep = getattr(CFG.data_input, "csv_sep", None)
+    if cfg.data_format == "count_matrix":
+        log.info("Loading from count matrix: %s", cfg.data_input.matrix_file)
+        sep = getattr(cfg.data_input, "csv_sep", None)
         if not sep:
             # Auto-detect: try comma first
-            import io
-            with open(CFG.data_input.matrix_file, 'r') as f:
+            with open(cfg.data_input.matrix_file, "r") as f:
                 first_line = f.readline()
             sep = "," if "," in first_line and "\t" not in first_line else "\t"
-        df = pd.read_csv(CFG.data_input.matrix_file, index_col=0, sep=sep)
+        df = pd.read_csv(cfg.data_input.matrix_file, index_col=0, sep=sep)
         log.info("Matrix shape (genes x samples): %s", df.shape)
         # Transpose to AnnData convention: samples x genes
-        X = df.values.T
-        if not sp.issparse(X):
-            X = sp.csr_matrix(X.astype(np.float32))
-        adata = sc.AnnData(X=X)
+        x = df.values.T
+        if not sp.issparse(x):
+            x = sp.csr_matrix(x.astype(np.float32))
+        adata = sc.AnnData(X=x)
         adata.obs_names = df.columns.astype(str)
         adata.var_names = df.index.astype(str)
         log.info("Loading complete: %d samples x %d genes", adata.n_obs, adata.n_vars)
 
     # --- tpm_matrix format ---
-    elif CFG.data_format == "tpm_matrix":
-        log.info("Loading TPM matrix: %s", CFG.data_input.matrix_file)
-        sep = getattr(CFG.data_input, "csv_sep", None)
+    elif cfg.data_format == "tpm_matrix":
+        log.info("Loading TPM matrix: %s", cfg.data_input.matrix_file)
+        sep = getattr(cfg.data_input, "csv_sep", None)
         if not sep:
-            with open(CFG.data_input.matrix_file, 'r') as f:
+            with open(cfg.data_input.matrix_file, "r") as f:
                 first_line = f.readline()
             sep = "," if "," in first_line and "\t" not in first_line else "\t"
-        df = pd.read_csv(CFG.data_input.matrix_file, index_col=0, sep=sep)
+        df = pd.read_csv(cfg.data_input.matrix_file, index_col=0, sep=sep)
         log.info("Matrix shape (genes x samples): %s", df.shape)
-        X = df.values.T
-        if not sp.issparse(X):
-            X = sp.csr_matrix(X.astype(np.float32))
-        adata = sc.AnnData(X=X)
+        x = df.values.T
+        if not sp.issparse(x):
+            x = sp.csr_matrix(x.astype(np.float32))
+        adata = sc.AnnData(X=x)
         adata.obs_names = df.columns.astype(str)
         adata.var_names = df.index.astype(str)
         adata.uns["expression_type"] = "tpm"
         log.info("Loading complete: %d samples x %d genes", adata.n_obs, adata.n_vars)
 
     # --- h5ad format ---
-    elif CFG.data_format == "h5ad":
-        log.info("Loading from h5ad: %s", CFG.data_input.input_h5ad)
-        adata = sc.read(CFG.data_input.input_h5ad)
+    elif cfg.data_format == "h5ad":
+        log.info("Loading from h5ad: %s", cfg.data_input.input_h5ad)
+        adata = sc.read(cfg.data_input.input_h5ad)
         # Validate: must be samples x genes (few obs, many vars)
         if adata.n_obs > adata.n_vars:
             log.warning(
                 "adata shape (%d x %d) looks transposed (more obs than vars). "
                 "Bulk RNA-seq data should be samples x genes. "
                 "If your matrix is genes x samples, transpose it before saving as h5ad.",
-                adata.n_obs, adata.n_vars,
+                adata.n_obs,
+                adata.n_vars,
             )
         log.info("Loading complete: %d samples x %d genes", adata.n_obs, adata.n_vars)
 
     else:
-        log.error("Unknown data_format: %s. Supported: count_matrix, tpm_matrix, h5ad", CFG.data_format)
+        log.error(
+            "Unknown data_format: %s. Supported: count_matrix, tpm_matrix, h5ad", cfg.data_format
+        )
         sys.exit(1)
 
     # --- Uniform CSR format ---
-    force_csr = getattr(CFG.execution, "force_csr", True)
+    force_csr = getattr(cfg.execution, "force_csr", True)
     if force_csr:
         if sp.issparse(adata.X):
             if not sp.isspmatrix_csr(adata.X):
@@ -100,14 +109,15 @@ def main():
             adata.X = sp.csr_matrix(adata.X)
 
     # --- Save ---
-    log.info("Saving to %s...", CFG.raw_h5ad)
+    log.info("Saving to %s...", cfg.raw_h5ad)
     from core.utils import safe_write
+
     if not adata.obs_names.is_unique:
         log.warning("Observation names not unique, calling make_unique()")
         adata.obs_names_make_unique()
 
     # --- Load sample metadata if provided ---
-    meta_file = getattr(CFG.data_input, "metadata_file", "")
+    meta_file = getattr(cfg.data_input, "metadata_file", "")
     if meta_file and os.path.exists(meta_file):
         log.info("Loading sample metadata from: %s", meta_file)
         meta_df = pd.read_csv(meta_file)
@@ -121,8 +131,9 @@ def main():
         log.warning("Metadata file not found: %s", meta_file)
     else:
         log.info("No metadata file provided")
-    safe_write(adata, CFG.raw_h5ad, cfg=CFG)
+    safe_write(adata, cfg.raw_h5ad, cfg=cfg)
     log.info("Step 00 complete, took %.1fs", time.time() - t0)
+
 
 if __name__ == "__main__":
     main()
