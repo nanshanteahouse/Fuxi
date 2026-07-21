@@ -225,7 +225,7 @@ class TestPmcXmlSource:
         assert meta["doi"] == "10.1234/synthetic-2024-00001"
         assert meta["year"] == "2024"
         assert meta["first_author"] == "Smith"
-        assert meta["pmid"] == "99999999"
+        assert meta["pmid"] == "114514"
         assert "title" in meta and len(meta["title"]) > 20
 
     @skipif_no_pmc_fixture
