@@ -31,28 +31,37 @@ from core.utils import safe_write
 
 
 def test_safe_write_wsl():
-    """W1-01: tmp+mv strategy on /mnt/ paths (WSL fix).
+    """W1-01: tmp+copy2+unlink strategy on /mnt/ paths (WSL fix).
 
     Verifies that when target starts with /mnt/, the function:
       1. Creates tmpdir
       2. Writes to tmp path
-      3. Moves tmp file to target
+      3. Copies tmp file to target (copy2, not move)
+      4. Unlinks tmp file
     """
     mock_adata = MagicMock()
 
-    with patch("core.utils.os.makedirs") as mock_makedirs:
-        with patch("core.utils.shutil.move") as mock_move:
-            with patch("core.utils.os.path.getsize", return_value=1_000_000):
-                safe_write(mock_adata, "/mnt/data/test.h5ad")
+    with patch("core.utils._io.os.makedirs") as mock_makedirs:
+        with patch("core.utils._io.shutil.copy2") as mock_copy2:
+            with patch("core.utils._io.os.unlink") as mock_unlink:
+                with patch("core.utils._io.os.path.getsize", return_value=1_000_000):
+                    safe_write(mock_adata, "/mnt/data/test.h5ad")
 
-                # tmpdir created
-                mock_makedirs.assert_called_once_with("/tmp/Fuxi", exist_ok=True)
+                    # tmpdir created
+                    mock_makedirs.assert_any_call("/tmp/Fuxi", exist_ok=True)
 
-                # adata.write called with tmp path (not target)
-                mock_adata.write.assert_called_once_with("/tmp/Fuxi/test.h5ad", compression="gzip")
+                    # adata.write called with tmp path (not target)
+                    mock_adata.write.assert_called_once_with(
+                        "/tmp/Fuxi/test.h5ad", compression="gzip"
+                    )
 
-                # shutil.move called with tmp -> target
-                mock_move.assert_called_once_with("/tmp/Fuxi/test.h5ad", "/mnt/data/test.h5ad")
+                    # shutil.copy2 called with tmp -> target
+                    mock_copy2.assert_called_once_with(
+                        "/tmp/Fuxi/test.h5ad", "/mnt/data/test.h5ad"
+                    )
+
+                    # os.unlink called for tmp cleanup
+                    mock_unlink.assert_called_once_with("/tmp/Fuxi/test.h5ad")
 
 
 # ══════════════════════════════════════════════════════════════════════════

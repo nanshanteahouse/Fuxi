@@ -55,7 +55,7 @@ class TestAppLaunch:
         async def check():
             async with FuxiTUI().run_test(size=(80, 24)) as pilot:
                 await asyncio.sleep(0.15)
-                static = pilot.app.screen.query_one("Static.-header")
+                static = pilot.app.screen.query_one("#home-logo")
                 assert "Fuxi" in str(static.visual)
 
         _run(check())
@@ -316,6 +316,7 @@ class TestResultsScreen:
     @pytest.mark.skip(reason="Sidebar widget removed from TUI")
     def test_results_screen_has_sidebar(self):
         pass
+
 
 # ══════════════════════════════════════════════════════════════════════════
 # TestDataManagement

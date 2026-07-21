@@ -119,6 +119,7 @@ def _post_process_yaml(
     Since the output is YAML (not Python), AST manipulation is no longer
     needed.  Instead we append additional YAML key-value lines.
 
+
     Args:
         config_path:   Path to the generated ``config_GSE_ID.yaml`` file.
         paper_context: Dict with optional keys ``features``, ``is_nuclei``,
@@ -159,6 +160,10 @@ def _post_process_yaml(
         f.write("\n")
         f.write("\n".join(lines_to_append))
         f.write("\n")
+
+
+# Backward-compat alias for tests and reproduce.py
+_post_process_config = _post_process_yaml  # noqa: F811
 
 
 # ═══════════════════════════════════════════════════════════════════════
