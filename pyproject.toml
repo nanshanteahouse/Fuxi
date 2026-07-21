@@ -39,6 +39,12 @@ exclude = [
     "__pycache__/",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"rna/steps/*.py" = ["N999"]
+"spatial/steps/*.py" = ["N999"]
+"atac/steps/*.py" = ["N999"]
+"bulk/steps/*.py" = ["N999"]
+"tests/**/*.py" = ["N802"]
 [tool.ruff.lint.isort]
 known-first-party = ["core", "rna", "atac", "spatial", "bulk"]
 
