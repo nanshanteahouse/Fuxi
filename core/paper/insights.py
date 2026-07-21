@@ -9,65 +9,96 @@ Usage:
     python core/paper_insights.py <paper.md> [--output OUTPUT] [--force] [--methodology]
 """
 
-import re
-import json
-import os
-import sys
 import argparse
+import json
 import logging
+import os
+import re
+import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Union
-
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
-import time
-
 
 # Ensure repo root is on sys.path for standalone CLI usage
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from core.ai.caller import ai_query
-from core.ai.prompts import (
-    PAPER_META_SYSTEM_PROMPT,
-    PAPER_META_USER_TEMPLATE,
+from core.ai.caller import ai_query  # noqa: E402
+from core.ai.prompts import (  # noqa: E402
     PAPER_FIGURE_SYSTEM_PROMPT,
     PAPER_FIGURE_USER_TEMPLATE,
-    PAPER_METHODS_SYSTEM_PROMPT,
-    PAPER_METHODS_USER_TEMPLATE,
+    PAPER_META_SYSTEM_PROMPT,
+    PAPER_META_USER_TEMPLATE,
     PAPER_METHODOLOGY_SYSTEM_PROMPT,
     PAPER_METHODOLOGY_USER_TEMPLATE,
+    PAPER_METHODS_SYSTEM_PROMPT,
+    PAPER_METHODS_USER_TEMPLATE,
+)
+from core.paper.converter import (  # noqa: E402
+    MarkdownSource,
+    PaperSource,
+    PmcXmlSource,
+    PubmedSource,
+    Pymupdf4llmSource,
 )
 
-from core.paper.converter import PaperSource, PmcXmlSource, MarkdownSource, Pymupdf4llmSource
-from core.paper.converter import PaperSource, PmcXmlSource, MarkdownSource, Pymupdf4llmSource, PubmedSource
 logger = logging.getLogger(__name__)
 
 # -- Section / figure regex patterns --------------------------------------------
 _SECTION_RE = re.compile(
-    r'^(?:#+\s*)?(SUMMARY|Abstract|Introduction|Results|Discussion|Methods|Materials\s*(?:and|&)\s*Methods|Experimental\s*Procedures)(?!(?-i:[a-z]))',
+    r"^(?:#+\s*)?(SUMMARY|Abstract|Introduction|Results|Discussion|Methods|Materials\s*(?:and|&)\s*Methods|Experimental\s*Procedures)(?!(?-i:[a-z]))",
     re.MULTILINE | re.IGNORECASE,
 )
-_FIGURE_RE = re.compile(r'(?:Figure|Fig\.?)\s+\d+[a-z]?', re.IGNORECASE)
+_FIGURE_RE = re.compile(r"(?:Figure|Fig\.?)\s+\d+[a-z]?", re.IGNORECASE)
 
 _METHOD_KEYWORDS = [
-    "Seurat", "Scanpy", "Harmony", "UMAP", "t-SNE", "tsne",
-    "Wilcoxon", "Mann-Whitney", "MAST", "DESeq2", "edgeR",
-    "Monocle", "Slingshot", "Velocity", "scVelo",
-    "CellChat", "NicheNet", "LIANA", "CellPhoneDB",
-    "SCENIC", "pySCENIC", "AUCell",
-    "ROGUE", "scran", "scran.js",
-    "SoupX", "DoubletFinder", "Scrublet",
-    "MAGIC", "SCTransform", "SCVI", "scGPT",
-    "BayesSpace", "SPOTlight", "CARD", "RCTD",
+    "Seurat",
+    "Scanpy",
+    "Harmony",
+    "UMAP",
+    "t-SNE",
+    "tsne",
+    "Wilcoxon",
+    "Mann-Whitney",
+    "MAST",
+    "DESeq2",
+    "edgeR",
+    "Monocle",
+    "Slingshot",
+    "Velocity",
+    "scVelo",
+    "CellChat",
+    "NicheNet",
+    "LIANA",
+    "CellPhoneDB",
+    "SCENIC",
+    "pySCENIC",
+    "AUCell",
+    "ROGUE",
+    "scran",
+    "scran.js",
+    "SoupX",
+    "DoubletFinder",
+    "Scrublet",
+    "MAGIC",
+    "SCTransform",
+    "SCVI",
+    "scGPT",
+    "BayesSpace",
+    "SPOTlight",
+    "CARD",
+    "RCTD",
 ]
 
 
 @dataclass
 class _LLMConfig:
     """Minimal LLM config for standalone CLI use."""
+
     model: str = "deepseek-v4-flash"
     api_base: str = "https://api.deepseek.com/v1"
     api_key: str = ""
@@ -84,7 +115,7 @@ def _parse_filename_meta(md_path: str) -> dict:
        Use ``PaperSource.get_metadata()`` instead.
     """
     stem = Path(md_path).stem
-    parts = stem.split('_')
+    parts = stem.split("_")
     meta: dict = {
         "filename": Path(md_path).name,
         "stem": stem,
@@ -97,19 +128,19 @@ def _parse_filename_meta(md_path: str) -> dict:
         meta["year"] = parts[0]
         meta["first_author"] = parts[1]
         meta["journal"] = parts[2]
-        meta["title"] = '_'.join(parts[3:]) if len(parts) > 3 else parts[2]
+        meta["title"] = "_".join(parts[3:]) if len(parts) > 3 else parts[2]
     return meta
 
 
 def _safe_json_parse(raw: str, fallback_label: str = "unknown") -> dict:
     """Parse JSON from LLM response, stripping markdown fences. Returns {} on failure."""
     text = raw.strip()
-    if text.startswith('```'):
-        idx = text.find('\n')
+    if text.startswith("```"):
+        idx = text.find("\n")
         if idx != -1:
-            text = text[idx + 1:]
-        text = text.removesuffix('```').strip()
-    if text.startswith('`') and text.endswith('`'):
+            text = text[idx + 1 :]
+        text = text.removesuffix("```").strip()
+    if text.startswith("`") and text.endswith("`"):
         text = text[1:-1].strip()
     try:
         return json.loads(text)
@@ -128,9 +159,9 @@ def _yaml_dump(data: Any, indent: int = 0) -> list[str]:
     if isinstance(data, (int, float)):
         return [f"{pfx}{data}"]
     if isinstance(data, str):
-        if '\n' in data:
-            return [f"{pfx}|"] + [f"{pfx}  {l}" for l in data.split('\n')]
-        escaped = data.replace('\\', '\\\\').replace('\"', '\\"')
+        if "\n" in data:
+            return [f"{pfx}|"] + [f"{pfx}  {line}" for line in data.split("\n")]
+        escaped = data.replace("\\", "\\\\").replace('"', '\\"')
         return [f'{pfx}"{escaped}"']
     if isinstance(data, dict):
         if not data:
@@ -177,10 +208,10 @@ def _build_cfg_from_env() -> _LLMConfig:
     )
 
 
-
 def _extract_geo_ids(text: str) -> list[str]:
     """Extract GEO accession IDs (GSE\\d{4,8}) from text via regex."""
-    return re.findall(r'GSE\d{4,8}', text)
+    return re.findall(r"GSE\d{4,8}", text)
+
 
 def _extract_data_access(meta: dict | None, methods: dict | None, full_text: str = "") -> dict:
     """Extract geo_ids/sra_ids from meta.data_access or regex-fallback from data_notes.
@@ -205,8 +236,8 @@ def _extract_data_access(meta: dict | None, methods: dict | None, full_text: str
             notes.extend(methods.get("data_notes", []))
         for note in notes:
             if isinstance(note, str):
-                geo = re.findall(r'\bGSE\d{4,}\b', note)
-                sra = re.findall(r'\bSRP\d{4,}\b', note)
+                geo = re.findall(r"\bGSE\d{4,}\b", note)
+                sra = re.findall(r"\bSRP\d{4,}\b", note)
                 result["geo_ids"].extend(geo)
                 result["sra_ids"].extend(sra)
 
@@ -228,11 +259,12 @@ def _extract_key_methods(text: str) -> list[str]:
     found: list[str] = []
     seen: set[str] = set()
     for kw in _METHOD_KEYWORDS:
-        if re.search(r'\b' + re.escape(kw) + r'\b', text, re.IGNORECASE):
+        if re.search(r"\b" + re.escape(kw) + r"\b", text, re.IGNORECASE):
             if kw not in seen:
                 seen.add(kw)
                 found.append(kw)
     return found
+
 
 def _extract_methods_summary(methods_data: dict | None, full_text: str = "") -> dict:
     """Extract methods summary from methods LLM extraction output.
@@ -257,11 +289,11 @@ def _extract_methods_summary(methods_data: dict | None, full_text: str = "") -> 
 
     return result
 
+
 # ---------------------------------------------------------------------------
 # Methodology-safe truncation: clip methods to a max token budget for LLM
 # ---------------------------------------------------------------------------
 _METHODOLOGY_METHODS_MAX_CHARS = 8000
-
 
 
 def _resolve_doi_to_pmid(doi: str) -> str | None:
@@ -274,28 +306,29 @@ def _resolve_doi_to_pmid(doi: str) -> str | None:
         return None
     doi = doi.strip()
     url = (
-        'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi'
-        f'?db=pubmed&term={doi}[doi]&retmode=json'
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+        f"?db=pubmed&term={doi}[doi]&retmode=json"
     )
     time.sleep(0.35)  # NCBI rate limit: ~3 req/s
     for attempt in range(3):
         try:
             req = Request(url)
-            req.add_header('User-Agent', 'Fuxi/1.0 (paper-insights; academic use)')
+            req.add_header("User-Agent", "Fuxi/1.0 (paper-insights; academic use)")
             with urlopen(req, timeout=15) as resp:
-                data = json.loads(resp.read().decode('utf-8'))
-                idlist = data.get('esearchresult', {}).get('idlist', [])
+                data = json.loads(resp.read().decode("utf-8"))
+                idlist = data.get("esearchresult", {}).get("idlist", [])
                 if idlist:
                     return str(idlist[0])
                 return None
         except HTTPError as e:
             if e.code in (429, 503):
-                time.sleep(0.5 * (2 ** attempt))
+                time.sleep(0.5 * (2**attempt))
                 continue
             return None
         except (URLError, OSError, json.JSONDecodeError):
             return None
     return None
+
 
 class PaperInsights:
     """Extract structured insights from paper markdown using AI prompts."""
@@ -307,7 +340,9 @@ class PaperInsights:
         Returns {abstract, introduction, results, discussion, methods} with
         lowercase keys. Missing sections get empty string.
         """
-        sections: dict[str, str] = {k: "" for k in ("abstract", "introduction", "results", "discussion", "methods")}
+        sections: dict[str, str] = {
+            k: "" for k in ("abstract", "introduction", "results", "discussion", "methods")
+        }
         matches = list(_SECTION_RE.finditer(md_text))
         if not matches:
             sections["results"] = md_text.strip()
@@ -332,7 +367,7 @@ class PaperInsights:
             sections[key] = md_text[start:end].strip()
         # Capture pre-heading text as abstract if no Abstract heading was matched
         if not sections["abstract"] and matches and matches[0].start() > 0:
-            pre_text = md_text[:matches[0].start()].strip()
+            pre_text = md_text[: matches[0].start()].strip()
             if pre_text:
                 sections["abstract"] = pre_text
         return sections
@@ -374,7 +409,8 @@ class PaperInsights:
                 full_text_beginning=full_beginning or "(not available)",
                 abstract_text=abstract_text,
             ),
-            cfg, expect_json=True,
+            cfg,
+            expect_json=True,
         )
         if raw is None:
             return {}
@@ -385,7 +421,12 @@ class PaperInsights:
         """Extract structured info from figure legend via LLM. Returns {} on failure."""
         if not figure_block.strip():
             return {}
-        raw = ai_query(PAPER_FIGURE_SYSTEM_PROMPT, PAPER_FIGURE_USER_TEMPLATE.format(figure_text=figure_block), cfg, expect_json=True)
+        raw = ai_query(
+            PAPER_FIGURE_SYSTEM_PROMPT,
+            PAPER_FIGURE_USER_TEMPLATE.format(figure_text=figure_block),
+            cfg,
+            expect_json=True,
+        )
         if raw is None:
             return {}
         return _safe_json_parse(raw, "figure")
@@ -396,13 +437,20 @@ class PaperInsights:
         if not methods_text.strip():
             logger.info("Methods empty -- skipping methods extraction")
             return {}
-        raw = ai_query(PAPER_METHODS_SYSTEM_PROMPT, PAPER_METHODS_USER_TEMPLATE.format(methods_text=methods_text), cfg, expect_json=True)
+        raw = ai_query(
+            PAPER_METHODS_SYSTEM_PROMPT,
+            PAPER_METHODS_USER_TEMPLATE.format(methods_text=methods_text),
+            cfg,
+            expect_json=True,
+        )
         if raw is None:
             return {}
         return _safe_json_parse(raw, "methods")
 
     @staticmethod
-    def extract_methodology(abstract: str, methods_text: str, key_findings: list[str], cfg) -> dict:
+    def extract_methodology(
+        abstract: str, methods_text: str, key_findings: list[str], cfg
+    ) -> dict:
         """Extract methodology patterns (5 dimensions) from paper sections via LLM.
 
         Returns dict with 'methodology_patterns' key, or {} on failure.
@@ -412,11 +460,16 @@ class PaperInsights:
             logger.info("Abstract + methods both empty -- skipping methodology extraction")
             return {}
 
-        kf_text = "\n".join(f"- {kf}" for kf in key_findings) if key_findings else "(no key findings available)"
+        kf_text = (
+            "\n".join(f"- {kf}" for kf in key_findings)
+            if key_findings
+            else "(no key findings available)"
+        )
 
         user_prompt = PAPER_METHODOLOGY_USER_TEMPLATE.format(
             abstract=abstract.strip() or "(abstract not available)",
-            methods=methods_text.strip()[:_METHODOLOGY_METHODS_MAX_CHARS] or "(methods not available)",
+            methods=methods_text.strip()[:_METHODOLOGY_METHODS_MAX_CHARS]
+            or "(methods not available)",
             key_findings=kf_text,
         )
         raw = ai_query(PAPER_METHODOLOGY_SYSTEM_PROMPT, user_prompt, cfg, expect_json=True)
@@ -425,9 +478,15 @@ class PaperInsights:
         return _safe_json_parse(raw, "methodology_patterns")
 
     @staticmethod
-    def merge_to_insights(meta: dict, figures: list[dict], methods_data: dict, paper_meta: dict,
-                          full_text: str = "", methods_text: str = "",
-                          methodology: dict | None = None) -> dict:
+    def merge_to_insights(
+        meta: dict,
+        figures: list[dict],
+        methods_data: dict,
+        paper_meta: dict,
+        full_text: str = "",
+        methods_text: str = "",
+        methodology: dict | None = None,
+    ) -> dict:
         """Merge LLM-extracted metadata, figures, methods, and methodology into a single insights dict.
 
         Args:
@@ -481,13 +540,25 @@ class PaperInsights:
         # when the AI provides a substantively better value.
         biblio = (meta or {}).get("bibliographic", {}) or {}
         if biblio:
-            _is_good = lambda v: v is not None and str(v).strip() != "" \
-                and not str(v).startswith("pymupdf4llm_")
-            _is_bad = lambda v: v is None or str(v).strip() == "" \
-                or str(v).startswith("pymupdf4llm_")
-            for _key, _bkey in [("pmid", "pmid"), ("title", "title"),
-                                 ("journal", "journal"), ("year", "year"),
-                                 ("first_author", "first_author"), ("doi", "doi")]:
+
+            def _is_good(v):
+                return (
+                    v is not None
+                    and str(v).strip() != ""
+                    and not str(v).startswith("pymupdf4llm_")
+                )
+
+            def _is_bad(v):
+                return v is None or str(v).strip() == "" or str(v).startswith("pymupdf4llm_")
+
+            for _key, _bkey in [
+                ("pmid", "pmid"),
+                ("title", "title"),
+                ("journal", "journal"),
+                ("year", "year"),
+                ("first_author", "first_author"),
+                ("doi", "doi"),
+            ]:
                 ai_v = biblio.get(_bkey)
                 pm_v = paper_meta.get(_key)
                 if not _is_good(ai_v):
@@ -514,9 +585,14 @@ class PaperInsights:
 
         return result
 
-
-    def run(self, source: Union[PaperSource, str], cfg, output_path: str | None = None,
-            force: bool = False, extract_methodology: bool = False) -> str:
+    def run(
+        self,
+        source: Union[PaperSource, str],
+        cfg,
+        output_path: str | None = None,
+        force: bool = False,
+        extract_methodology: bool = False,
+    ) -> str:
         """Full pipeline: read, split, extract, merge, write.
 
         Returns path to written file, or "SKIPPED" if output exists and not force.
@@ -555,7 +631,7 @@ class PaperInsights:
             blocks = self.extract_figure_blocks(sections["results"])
             logger.info("Found %d figure blocks", len(blocks))
             for i, block in enumerate(blocks):
-                sys.stderr.write(f"\r  Figure {i+1}/{len(blocks)}...")
+                sys.stderr.write(f"\r  Figure {i + 1}/{len(blocks)}...")
                 sys.stderr.flush()
                 fig = self.extract_figure(block, cfg)
                 if fig:
@@ -582,14 +658,19 @@ class PaperInsights:
             )
 
         insights = self.merge_to_insights(
-            meta, figures, methods_data=methods, paper_meta=source.get_metadata(),
-            full_text=md_text, methods_text=sections.get("methods", ""),
+            meta,
+            figures,
+            methods_data=methods,
+            paper_meta=source.get_metadata(),
+            full_text=md_text,
+            methods_text=sections.get("methods", ""),
             methodology=methodology,
         )
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text('\n'.join(_yaml_dump(insights)) + '\n', encoding="utf-8")
+        out_path.write_text("\n".join(_yaml_dump(insights)) + "\n", encoding="utf-8")
         logger.info("Wrote insights to %s", out_path)
         return str(out_path)
+
 
 def _resolve_source(args) -> PaperSource:
     """Determine PaperSource from CLI arguments."""
@@ -631,28 +712,55 @@ def _resolve_source(args) -> PaperSource:
     if args.positional:
         return MarkdownSource(args.positional)
 
-    raise ValueError("No valid source found. Provide --pmid/--doi/--xml/--pdf or a positional .md file")
+    raise ValueError(
+        "No valid source found. Provide --pmid/--doi/--xml/--pdf or a positional .md file"
+    )
 
 
 def main() -> None:
     """CLI entry point for paper_insights."""
     parser = argparse.ArgumentParser(description="Extract structured paper insights using AI.")
-    parser.add_argument("positional", nargs="?", type=str, help="Paper markdown file (optional if --pmid/--doi/--xml/--pdf given)")
+    parser.add_argument(
+        "positional",
+        nargs="?",
+        type=str,
+        help="Paper markdown file (optional if --pmid/--doi/--xml/--pdf given)",
+    )
     parser.add_argument("--pmid", type=str, default=None, help="PubMed ID")
     parser.add_argument("--doi", type=str, default=None, help="DOI")
     parser.add_argument("--xml", type=str, default=None, help="Local PMC XML file path")
     parser.add_argument("--pdf", type=str, default=None, help="PDF file path")
-    parser.add_argument("--source", type=str, default="auto", choices=["auto", "pmc", "pdf", "md"], help="Source selection strategy")
+    parser.add_argument(
+        "--source",
+        type=str,
+        default="auto",
+        choices=["auto", "pmc", "pdf", "md"],
+        help="Source selection strategy",
+    )
     parser.add_argument("--output", "-o", type=str, default=None, help="Output path")
-    parser.add_argument("--force", "-f", action="store_true", default=False, help="Overwrite existing output")
-    parser.add_argument("--verbose", "-v", action="store_true", default=False, help="Enable debug logging")
-    parser.add_argument("--methodology", "-m", action="store_true", default=False, help="Also extract methodology patterns (5 dimensions: archetype, strategy, narrative, toolbox, contribution)")
+    parser.add_argument(
+        "--force", "-f", action="store_true", default=False, help="Overwrite existing output"
+    )
+    parser.add_argument(
+        "--verbose", "-v", action="store_true", default=False, help="Enable debug logging"
+    )
+    parser.add_argument(
+        "--methodology",
+        "-m",
+        action="store_true",
+        default=False,
+        help="Also extract methodology patterns (5 dimensions: archetype, strategy, narrative, toolbox, contribution)",
+    )
     args = parser.parse_args()
 
     if args.pmid and args.xml:
         parser.error("--pmid and --xml are mutually exclusive")
 
-    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO, format="%(levelname)s [%(name)s] %(message)s", stream=sys.stderr)
+    logging.basicConfig(
+        level=logging.DEBUG if args.verbose else logging.INFO,
+        format="%(levelname)s [%(name)s] %(message)s",
+        stream=sys.stderr,
+    )
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
     cfg = _build_cfg_from_env()
@@ -660,10 +768,14 @@ def main() -> None:
 
     source = _resolve_source(args)
     result = PaperInsights().run(
-        source=source, cfg=cfg, output_path=args.output, force=args.force,
+        source=source,
+        cfg=cfg,
+        output_path=args.output,
+        force=args.force,
         extract_methodology=args.methodology,
     )
     print("SKIPPED" if result == "SKIPPED" else f"Done: {result}")
+
 
 if __name__ == "__main__":
     main()

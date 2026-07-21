@@ -22,15 +22,14 @@ core/registry.py — 五域统一论文登记表 (Master Registry)
         print(pmid, role)
     orphans = reg.find_orphans()
 """
+
 from __future__ import annotations
 
 import logging
 import os
 import re
 from enum import Enum
-from pathlib import Path
 from typing import Any, Optional
-from collections.abc import Callable
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
@@ -44,37 +43,41 @@ logger = logging.getLogger(__name__)
 
 class InsightStatus(str, Enum):
     """AI 解读状态."""
+
     GENERATED = "generated"
     PENDING = "pending"
     FAILED = "failed"
     NO_GEO = "no_geo"
-    PENDING_REVIEW = "pending_review"   # 脏数据/需人工审核
-    PREPRINT = "preprint"               # 预印本，无 PMID
-    PDF_ONLY = "pdf_only"               # 只有原始 PDF，未处理
+    PENDING_REVIEW = "pending_review"  # 脏数据/需人工审核
+    PREPRINT = "preprint"  # 预印本，无 PMID
+    PDF_ONLY = "pdf_only"  # 只有原始 PDF，未处理
 
 
 class DatasetStatus(str, Enum):
     """GSE 数据集状态."""
+
     DATA_DOWNLOADED = "data_downloaded"
     CONFIG_EXISTS = "config_exists"
     PIPELINE_COMPLETE = "pipeline_complete"
     DATA_NOT_DOWNLOADED = "data_not_downloaded"
-    ORPHAN = "orphan"                   # 无关联论文的数据集
+    ORPHAN = "orphan"  # 无关联论文的数据集
     UNKNOWN = "unknown"
 
 
 class ModalityStatus(str, Enum):
     """Per-modality 运行状态."""
-    DATA_DOWNLOADED = "data_downloaded"       # 数据已下载但未配 config
-    NOT_CONFIGURED = "not_configured"         # config 缺失
-    CONFIG_EXISTS = "config_exists"           # config 文件已存在
-    PIPELINE_COMPLETE = "pipeline_complete"     # pipeline 已跑通
-    N_A = "n_a"                               # 非管线模态 (bulk/STARR/SuperSeries 容器)
+
+    DATA_DOWNLOADED = "data_downloaded"  # 数据已下载但未配 config
+    NOT_CONFIGURED = "not_configured"  # config 缺失
+    CONFIG_EXISTS = "config_exists"  # config 文件已存在
+    PIPELINE_COMPLETE = "pipeline_complete"  # pipeline 已跑通
+    N_A = "n_a"  # 非管线模态 (bulk/STARR/SuperSeries 容器)
     UNKNOWN = "unknown"
 
 
 class LinkRole(str, Enum):
     """论文↔数据集关联角色."""
+
     PRIMARY = "primary"
     VALIDATION = "validation"
     SUPERSERIES = "superseries"
@@ -84,6 +87,7 @@ class LinkRole(str, Enum):
 
 class RepositoryType(str, Enum):
     """数据仓库类型."""
+
     GEO = "geo"
     ARRAYEXPRESS = "arrayexpress"
     SRA = "sra"
@@ -94,6 +98,7 @@ class RepositoryType(str, Enum):
 
 class RelationshipType(str, Enum):
     """数据集间关系类型."""
+
     SUPERSERIES_OF = "superseries_of"
     PART_OF = "part_of"
     RELATED = "related"
@@ -107,8 +112,17 @@ class RelationshipType(str, Enum):
 class ExperimentGroup:
     """An experimental sub-grouping within a dataset."""
 
-    def __init__(self, *, group_name, sample_ids, subset_suffix, modality, status,
-                 config_path=None, figures=None):
+    def __init__(
+        self,
+        *,
+        group_name,
+        sample_ids,
+        subset_suffix,
+        modality,
+        status,
+        config_path=None,
+        figures=None,
+    ):
         self.group_name: str = group_name
         self.sample_ids: list[str] = sample_ids
         self.subset_suffix: str = subset_suffix
@@ -146,6 +160,7 @@ def detect_modality(config_path: str) -> str:
     match = re.search(r"""CFG\.modality\s*=\s*["'](\w+)["']""", content)
     return match.group(1) if match else "unknown"
 
+
 # ═══════════════════════════════════════════════════════
 # Sub-models
 # ═══════════════════════════════════════════════════════
@@ -153,6 +168,7 @@ def detect_modality(config_path: str) -> str:
 
 class InsightEntry(BaseModel):
     """论文 AI 解读入口."""
+
     model_config = ConfigDict(extra="forbid")
     status: InsightStatus = InsightStatus.PDF_ONLY
     insights_path: Optional[str] = None
@@ -161,6 +177,7 @@ class InsightEntry(BaseModel):
 
 class SupplementFile(BaseModel):
     """单个附表文件."""
+
     model_config = ConfigDict(extra="forbid")
     path: str
     description: str = ""
@@ -168,6 +185,7 @@ class SupplementFile(BaseModel):
 
 class SupplementEntry(BaseModel):
     """论文附表."""
+
     model_config = ConfigDict(extra="forbid")
     source: str = ""
     dir: str = ""
@@ -177,6 +195,7 @@ class SupplementEntry(BaseModel):
 
 class KbSourceEntry(BaseModel):
     """知识库来源."""
+
     model_config = ConfigDict(extra="forbid")
     kb_id: str
     path: str
@@ -188,6 +207,7 @@ class KbSourceEntry(BaseModel):
 
 class DatasetConfig(BaseModel):
     """single config for one modality run."""
+
     model_config = ConfigDict(extra="forbid")
     path: str
     pipeline_status: str = "not_configured"
@@ -201,12 +221,15 @@ class ModalityInfo(BaseModel):
     status 取值见 ModalityStatus enum (data_downloaded / not_configured /
     config_exists / pipeline_complete / n_a / unknown).
     """
+
     model_config = ConfigDict(extra="forbid")
     status: str = "unknown"
     configs: list[DatasetConfig] = []
 
+
 class DatasetRelationship(BaseModel):
     """数据集间关系（SuperSeries / part_of）。"""
+
     model_config = ConfigDict(extra="forbid")
     type: RelationshipType
     dataset_id: str
@@ -214,16 +237,19 @@ class DatasetRelationship(BaseModel):
 
 class DatasetEntry(BaseModel):
     """数据集（GSE / E-MTAB / 本地数据）。"""
+
     model_config = ConfigDict(extra="forbid")
     repository: RepositoryType = RepositoryType.UNKNOWN
     modalities: dict[str, ModalityInfo] = Field(default_factory=dict)
-    status: str = "unknown"          # ∈ {data_downloaded, not_downloaded, orphan, unknown}
-    type: str = "SingleAccession"     # "SingleAccession" | "SuperSeries"
-    non_pipeline: bool = False       # bulk / STARR / SuperSeries containers — pipeline never runs on these
+    status: str = "unknown"  # ∈ {data_downloaded, not_downloaded, orphan, unknown}
+    type: str = "SingleAccession"  # "SingleAccession" | "SuperSeries"
+    non_pipeline: bool = (
+        False  # bulk / STARR / SuperSeries containers — pipeline never runs on these
+    )
     data_root: str = ""
     dataset_yaml: Optional[str] = None
     relationships: list[DatasetRelationship] = []
-    subseries: list[dict[str, str]] = []   # for SuperSeries: [{id: GSE..., note: ""}, ...]
+    subseries: list[dict[str, str]] = []  # for SuperSeries: [{id: GSE..., note: ""}, ...]
     notes: str = ""
     # ── 数据集补充字段（手工维护在 datasets.yaml 中）──
     species: str = ""
@@ -239,6 +265,7 @@ class DatasetEntry(BaseModel):
 
 class PaperEntry(BaseModel):
     """论文条目。"""
+
     model_config = ConfigDict(extra="forbid")
     paper_id: str
     slug: str
@@ -252,13 +279,12 @@ class PaperEntry(BaseModel):
     insights: InsightEntry = Field(default_factory=InsightEntry)
     supplements: list[SupplementEntry] = []
     kb_sources: list[KbSourceEntry] = []
-    cross_references: dict = Field(
-        default_factory=lambda: {"also_cited_by": [], "notes": ""}
-    )
+    cross_references: dict = Field(default_factory=lambda: {"also_cited_by": [], "notes": ""})
 
 
 class PaperDatasetLink(BaseModel):
     """论文↔数据集关联（M:N 连接）。"""
+
     model_config = ConfigDict(extra="forbid")
     paper_id: str
     dataset_id: str
@@ -272,6 +298,7 @@ class PaperDatasetLink(BaseModel):
 
 class MasterRegistry(BaseModel):
     """完整的五域统一登记表。"""
+
     model_config = ConfigDict(extra="forbid")
     papers: list[PaperEntry] = []
     datasets: dict[str, DatasetEntry] = {}
@@ -280,22 +307,16 @@ class MasterRegistry(BaseModel):
     # ── 查询 API ────────────────────────────────────
 
     def get_dataset_links(
-        self, paper_id: str,
+        self,
+        paper_id: str,
     ) -> list[tuple[str, LinkRole]]:
-        return [
-            (ln.dataset_id, ln.role)
-            for ln in self.links
-            if ln.paper_id == paper_id
-        ]
+        return [(ln.dataset_id, ln.role) for ln in self.links if ln.paper_id == paper_id]
 
     def get_paper_links(
-        self, dataset_id: str,
+        self,
+        dataset_id: str,
     ) -> list[tuple[str, LinkRole]]:
-        return [
-            (ln.paper_id, ln.role)
-            for ln in self.links
-            if ln.dataset_id == dataset_id
-        ]
+        return [(ln.paper_id, ln.role) for ln in self.links if ln.dataset_id == dataset_id]
 
     def get_paper(self, paper_id: str) -> Optional[PaperEntry]:
         for p in self.papers:
@@ -320,14 +341,11 @@ class MasterRegistry(BaseModel):
 
     def find_orphans(self) -> list[tuple[str, DatasetEntry]]:
         linked_ids = {ln.dataset_id for ln in self.links}
-        return [
-            (ds_id, ds)
-            for ds_id, ds in self.datasets.items()
-            if ds_id not in linked_ids
-        ]
+        return [(ds_id, ds) for ds_id, ds in self.datasets.items() if ds_id not in linked_ids]
 
     def find_orphan_supplements(
-        self, supplements_root: str = "notes/supplements",
+        self,
+        supplements_root: str = "notes/supplements",
     ) -> list[str]:
         if not os.path.isdir(supplements_root):
             return []
@@ -347,46 +365,53 @@ class MasterRegistry(BaseModel):
         known_papers = {p.paper_id for p in self.papers}
         for ln in self.links:
             if ln.paper_id not in known_papers:
-                findings.append({
-                    "level": "error",
-                    "message": f"Link 引用不存在的 paper_id: {ln.paper_id}",
-                    "source": ln.dataset_id,
-                })
+                findings.append(
+                    {
+                        "level": "error",
+                        "message": f"Link 引用不存在的 paper_id: {ln.paper_id}",
+                        "source": ln.dataset_id,
+                    }
+                )
 
         known_datasets = set(self.datasets.keys())
         for ln in self.links:
             if ln.dataset_id not in known_datasets:
-                findings.append({
-                    "level": "error",
-                    "message": f"Link 引用不存在的 dataset_id: {ln.dataset_id}",
-                    "source": ln.paper_id,
-                })
+                findings.append(
+                    {
+                        "level": "error",
+                        "message": f"Link 引用不存在的 dataset_id: {ln.dataset_id}",
+                        "source": ln.paper_id,
+                    }
+                )
 
         orphan_ids = {ln.dataset_id for ln in self.links}
         for ds_id, ds in self.datasets.items():
             if ds_id not in orphan_ids and ds.status != DatasetStatus.ORPHAN:
-                findings.append({
-                    "level": "warn",
-                    "message": (
-                        f"数据集 {ds_id} 无关联论文但 status={ds.status!r}, "
-                        f"应为 'orphan'"
-                    ),
-                    "source": ds_id,
-                })
+                findings.append(
+                    {
+                        "level": "warn",
+                        "message": (
+                            f"数据集 {ds_id} 无关联论文但 status={ds.status!r}, 应为 'orphan'"
+                        ),
+                        "source": ds_id,
+                    }
+                )
 
         for ds_id, ds in self.datasets.items():
             for mod_key, mod_info in ds.modalities.items():
                 for cfg in mod_info.configs:
                     abs_path = resolve_path(cfg.path)
                     if not os.path.exists(abs_path):
-                        findings.append({
-                            "level": "warn",
-                            "message": (
-                                f"config 路径不存在: {cfg.path} "
-                                f"(dataset={ds_id}, modality={mod_key})"
-                            ),
-                            "source": ds_id,
-                        })
+                        findings.append(
+                            {
+                                "level": "warn",
+                                "message": (
+                                    f"config 路径不存在: {cfg.path} "
+                                    f"(dataset={ds_id}, modality={mod_key})"
+                                ),
+                                "source": ds_id,
+                            }
+                        )
 
         papers_root = "projects/papers"
         for p in self.papers:
@@ -394,27 +419,28 @@ class MasterRegistry(BaseModel):
                 continue
             paper_path = os.path.join(papers_root, p.paper_dir)
             if not os.path.isdir(paper_path):
-                findings.append({
-                    "level": "warn",
-                    "message": (
-                        f"paper_dir 不存在: {p.paper_dir} "
-                        f"(paper_id={p.paper_id})"
-                    ),
-                    "source": p.paper_id,
-                })
+                findings.append(
+                    {
+                        "level": "warn",
+                        "message": (f"paper_dir 不存在: {p.paper_dir} (paper_id={p.paper_id})"),
+                        "source": p.paper_id,
+                    }
+                )
 
         # ── 6. 检查 dataset.paper_pmids 引用的 paper_id 是否存在 ──
         for ds_id, ds in self.datasets.items():
             for pmid in ds.paper_pmids:
                 if pmid not in known_papers:
-                    findings.append({
-                        "level": "error",
-                        "message": (
-                            f"paper_pmids 引用的 paper_id={pmid} 不在 papers.yaml 中"
-                            f" (dataset={ds_id})"
-                        ),
-                        "source": ds_id,
-                    })
+                    findings.append(
+                        {
+                            "level": "error",
+                            "message": (
+                                f"paper_pmids 引用的 paper_id={pmid} 不在 papers.yaml 中"
+                                f" (dataset={ds_id})"
+                            ),
+                            "source": ds_id,
+                        }
+                    )
 
         # ── 7. 检查 dataset 的 paper_pmids 是否与 links 同步 ──
         dataset_linked_papers: dict[str, set[str]] = {}
@@ -427,45 +453,47 @@ class MasterRegistry(BaseModel):
             ds_pmids = set(ds.paper_pmids)
             missing_in_pmids = linked_ids - ds_pmids
             if missing_in_pmids:
-                findings.append({
-                    "level": "warn",
-                    "message": (
-                        f"links 中有但 paper_pmids 缺失: {sorted(missing_in_pmids)}"
-                        f" (dataset={ds_id})"
-                    ),
-                    "source": ds_id,
-                })
+                findings.append(
+                    {
+                        "level": "warn",
+                        "message": (
+                            f"links 中有但 paper_pmids 缺失: {sorted(missing_in_pmids)}"
+                            f" (dataset={ds_id})"
+                        ),
+                        "source": ds_id,
+                    }
+                )
 
         # ── 8. 检查 status 与 notes 是否矛盾 ──
         for ds_id, ds in self.datasets.items():
-            if (ds.status
-                    and "not_downloaded" in ds.status
-                    and "downloaded" in ds.notes.lower()):
+            if ds.status and "not_downloaded" in ds.status and "downloaded" in ds.notes.lower():
                 # SuperSeries 的 status=not_downloaded 但 notes=downloaded 是常见模式
                 if ds.type != "SuperSeries":
-                    findings.append({
-                        "level": "warn",
-                        "message": (
-                            f"status={ds.status} 但 notes 含 'downloaded'"
-                            f" (dataset={ds_id})"
-                        ),
-                        "source": ds_id,
-                    })
+                    findings.append(
+                        {
+                            "level": "warn",
+                            "message": (
+                                f"status={ds.status} 但 notes 含 'downloaded' (dataset={ds_id})"
+                            ),
+                            "source": ds_id,
+                        }
+                    )
             # 子模态已下载但顶层标记未下载（如 GSE123456）
             if ds.status == "data_not_downloaded" and ds.modalities:
                 downloaded_mods = [
-                    m for m, mi in ds.modalities.items()
-                    if mi.status == "data_downloaded"
+                    m for m, mi in ds.modalities.items() if mi.status == "data_downloaded"
                 ]
                 if downloaded_mods:
-                    findings.append({
-                        "level": "warn",
-                        "message": (
-                            f"status=data_not_downloaded 但模态 {downloaded_mods} 已标记 data_downloaded"
-                            f" (dataset={ds_id})"
-                        ),
-                        "source": ds_id,
-                    })
+                    findings.append(
+                        {
+                            "level": "warn",
+                            "message": (
+                                f"status=data_not_downloaded 但模态 {downloaded_mods} 已标记 data_downloaded"
+                                f" (dataset={ds_id})"
+                            ),
+                            "source": ds_id,
+                        }
+                    )
 
         # ── 9. 检查 insights 骨架（有路径但内容为空）──
         papers_root = "projects/papers"
@@ -491,32 +519,36 @@ class MasterRegistry(BaseModel):
                 and (not ed or len(ed) == 0)
             )
             # 综述期刊：骨架属正常状态（无原始数据可提取）
-            REVIEW_KEYWORDS = ["review", "annual review", "progress in"]
+            review_keywords = ["review", "annual review", "progress in"]
             journal_lower = (p.journal or "").lower()
-            is_review_journal = any(kw in journal_lower for kw in REVIEW_KEYWORDS)
+            is_review_journal = any(kw in journal_lower for kw in review_keywords)
             if is_skeleton and p.insights.status == InsightStatus.GENERATED:
                 if is_review_journal:
                     continue  # 综述骨架属正常，不报
-                findings.append({
-                    "level": "warn",
-                    "message": (
-                        f"insights.status=generated 但 insights.yaml 为骨架"
-                        f" (无 key_findings/figures/experimental_design)"
-                        f" (paper_id={p.paper_id})"
-                    ),
-                    "source": p.paper_id,
-                })
+                findings.append(
+                    {
+                        "level": "warn",
+                        "message": (
+                            f"insights.status=generated 但 insights.yaml 为骨架"
+                            f" (无 key_findings/figures/experimental_design)"
+                            f" (paper_id={p.paper_id})"
+                        ),
+                        "source": p.paper_id,
+                    }
+                )
             if is_skeleton and p.insights.status == InsightStatus.PDF_ONLY:
                 # 有 insights_path 但 status 仍是默认 PDF_ONLY → 应标记为 pending
-                findings.append({
-                    "level": "warn",
-                    "message": (
-                        f"insights.yaml 为骨架但 status=pdf_only"
-                        f" (应设为 pending 或 generated)"
-                        " (paper_id={p.paper_id})"
-                    ),
-                    "source": p.paper_id,
-                })
+                findings.append(
+                    {
+                        "level": "warn",
+                        "message": (
+                            "insights.yaml 为骨架但 status=pdf_only"
+                            " (应设为 pending 或 generated)"
+                            " (paper_id={p.paper_id})"
+                        ),
+                        "source": p.paper_id,
+                    }
+                )
 
         # ── 10. 检查 orphan paper directories ──
         known_dirs = {p.paper_dir for p in self.papers if p.paper_dir}
@@ -528,14 +560,15 @@ class MasterRegistry(BaseModel):
                 if entry == "pdf" or entry.startswith("_"):
                     continue
                 if entry not in known_dirs:
-                    findings.append({
-                        "level": "warn",
-                        "message": (
-                            f"projects/papers/{entry}/ 无对应 paper_dir"
-                            f" (建议移除或补注册)"
-                        ),
-                        "source": entry,
-                    })
+                    findings.append(
+                        {
+                            "level": "warn",
+                            "message": (
+                                f"projects/papers/{entry}/ 无对应 paper_dir (建议移除或补注册)"
+                            ),
+                            "source": entry,
+                        }
+                    )
 
         return findings
 
@@ -564,16 +597,14 @@ def resolve_path(path: str) -> str:
 def _serialize_sections(reg: MasterRegistry) -> tuple[list, dict, list]:
     """序列化 registry 的三个独立块。"""
     papers = [
-        p.model_dump(exclude_none=True, exclude_defaults=True, mode="json")
-        for p in reg.papers
+        p.model_dump(exclude_none=True, exclude_defaults=True, mode="json") for p in reg.papers
     ]
     datasets = {
         ds_id: ds.model_dump(exclude_none=True, exclude_defaults=True, mode="json")
         for ds_id, ds in reg.datasets.items()
     }
     links = [
-        ln.model_dump(exclude_none=True, exclude_defaults=True, mode="json")
-        for ln in reg.links
+        ln.model_dump(exclude_none=True, exclude_defaults=True, mode="json") for ln in reg.links
     ]
     return papers, datasets, links
 
@@ -582,7 +613,8 @@ def _dump_yaml(data: Any, path: str) -> None:
     """YAML 写入辅助, block 风格。"""
     with open(path, "w", encoding="utf-8") as f:
         yaml.dump(
-            data, f,
+            data,
+            f,
             default_flow_style=False,
             sort_keys=False,
             allow_unicode=True,
@@ -625,10 +657,7 @@ def load_master_registry(
     links = _load_yaml_file(os.path.join(dir_path, "links.yaml")) or []
 
     papers_parsed = [PaperEntry(**p) for p in papers]
-    datasets_parsed = {
-        ds_id: DatasetEntry(**ds)
-        for ds_id, ds in datasets.items()
-    }
+    datasets_parsed = {ds_id: DatasetEntry(**ds) for ds_id, ds in datasets.items()}
     links_parsed = [PaperDatasetLink(**ln) for ln in links]
 
     return MasterRegistry(
@@ -649,6 +678,7 @@ def save_master_registry(
     _dump_yaml(papers_data, os.path.join(dir_path, "papers.yaml"))
     _dump_yaml(datasets_data, os.path.join(dir_path, "datasets.yaml"))
     _dump_yaml(links_data, os.path.join(dir_path, "links.yaml"))
+
 
 # ═══════════════════════════════════════════════════════
 # 命令行入口
@@ -675,7 +705,7 @@ def _print_report(registry: MasterRegistry, verbose: bool = False) -> None:
 
     supp_orphans = registry.find_orphan_supplements()
     if supp_orphans:
-        print(f"\n\u26a0\ufe0f  孤儿附表（目录存在但无对应论文 PMID）:")
+        print("\n\u26a0\ufe0f  孤儿附表（目录存在但无对应论文 PMID）:")
         for pmid_dir in supp_orphans:
             print(f"  - notes/supplements/{pmid_dir}/")
 
@@ -688,7 +718,8 @@ def _print_report(registry: MasterRegistry, verbose: bool = False) -> None:
 
 
 def _cmd_reset_gse(
-    registry: MasterRegistry, dataset_id: str,
+    registry: MasterRegistry,
+    dataset_id: str,
     path: str,
 ) -> MasterRegistry:
     ds = registry.datasets.get(dataset_id)
@@ -702,13 +733,13 @@ def _cmd_reset_gse(
 
     if is_orphan:
         ds.status = DatasetStatus.ORPHAN
-        print(f"  \u2192 孤儿数据集，保持 status = orphan")
+        print("  \u2192 孤儿数据集，保持 status = orphan")
     elif not data_root_abs or not os.path.isdir(data_root_abs):
         ds.status = DatasetStatus.DATA_NOT_DOWNLOADED
-        print(f"  \u2192 data_root 不存在，status = data_not_downloaded")
+        print("  \u2192 data_root 不存在，status = data_not_downloaded")
     else:
         ds.status = DatasetStatus.DATA_DOWNLOADED
-        print(f"  \u2192 data_root 存在，status = data_downloaded")
+        print("  \u2192 data_root 存在，status = data_downloaded")
 
     for mod_key, mod_info in ds.modalities.items():
         for cfg in mod_info.configs:
@@ -720,7 +751,6 @@ def _cmd_reset_gse(
     registry.datasets[dataset_id] = ds
     print(f"\u2705 {dataset_id} 已重置")
     return registry
-
 
 
 def _show_gse_status(
@@ -740,7 +770,7 @@ def _show_gse_status(
             slug = paper.slug if paper else "?"
             title_short = (paper.title or "?")[:60] if paper else "?"
             print(f"{indent}             PMID {p_id}  ({slug})")
-            print(f"{indent}             \"{title_short}\"  role={role.name}")
+            print(f'{indent}             "{title_short}"  role={role.name}')
     else:
         print(f"{indent}Registry:   \u274c not registered")
 
@@ -771,7 +801,8 @@ def _show_gse_status(
         config_dir = os.path.join("projects", mod, gse_id)
         if os.path.isdir(config_dir):
             config_files = [
-                f for f in os.listdir(config_dir)
+                f
+                for f in os.listdir(config_dir)
                 if f.endswith(".yaml") and f.startswith("config_")
             ]
             if config_files:
@@ -789,7 +820,9 @@ def _show_gse_status(
             for cfg in mod_info.configs:
                 cfg_exists = os.path.exists(resolve_path(cfg.path)) if cfg.path else False
                 status_icon = "\u2705" if cfg_exists else "\u274c"
-                print(f"{indent}             {status_icon} {mod_key}: {cfg.path}  (pipeline={cfg.pipeline_status})")
+                print(
+                    f"{indent}             {status_icon} {mod_key}: {cfg.path}  (pipeline={cfg.pipeline_status})"
+                )
 
     # -- Next step --
     if not ds:
@@ -798,7 +831,9 @@ def _show_gse_status(
         print(f"{indent}\U0001f4a1 Next:  Generate config (data downloaded, no config yet)")
         print(f"{indent}          Create projects/rna/{gse_id}/config_{gse_id}.yaml from template")
     elif found_config:
-        print(f"{indent}\U0001f4a1 Next:  python core/run_pipeline.py --modality <mod> --step 0 --config <config_path>")
+        print(
+            f"{indent}\U0001f4a1 Next:  python core/run_pipeline.py --modality <mod> --step 0 --config <config_path>"
+        )
 
 
 def _cmd_status(
@@ -883,13 +918,22 @@ def _cmd_list_papers(
 
 
 _JOURNAL_ABBREVS = {
-    "cell": "cell", "neuron": "neuron", "nature": "nature",
-    "nature communications": "natcomms", "nature genetics": "natgenet",
-    "cell genomics": "cellgenom", "cell reports": "cellrep",
-    "scientific reports": "scirep", "scientific data": "scidata",
-    "plos biology": "plosbiol", "plos genetics": "plosgenet",
-    "genome biology": "genomebiol", "developmental cell": "devcell",
-    "development": "development", "elife": "elife", "iscience": "iscience",
+    "cell": "cell",
+    "neuron": "neuron",
+    "nature": "nature",
+    "nature communications": "natcomms",
+    "nature genetics": "natgenet",
+    "cell genomics": "cellgenom",
+    "cell reports": "cellrep",
+    "scientific reports": "scirep",
+    "scientific data": "scidata",
+    "plos biology": "plosbiol",
+    "plos genetics": "plosgenet",
+    "genome biology": "genomebiol",
+    "developmental cell": "devcell",
+    "development": "development",
+    "elife": "elife",
+    "iscience": "iscience",
     "frontiers in immunology": "frontimmunol",
     "frontiers in genetics": "frontgenet",
     "proceedings of the national academy of sciences": "pnas",
@@ -899,8 +943,10 @@ _JOURNAL_ABBREVS = {
     "nucleic acids research": "nucleicacidsres",
     "advanced science": "advsci",
     "national science review": "natsci_rev",
-    "protein & cell": "proteincell", "biorxiv": "biorxiv",
-    "research square": "researchsq", "stem cell reports": "stemcellrep",
+    "protein & cell": "proteincell",
+    "biorxiv": "biorxiv",
+    "research square": "researchsq",
+    "stem cell reports": "stemcellrep",
 }
 
 
@@ -911,6 +957,7 @@ def _build_slug_local(first_author: str, year: str, journal: str, pmid: Optional
     j = re.sub(r"\s+", " ", j)
     ab = _JOURNAL_ABBREVS.get(j, "unknown")
     return f"{author}{yr}_{ab}"
+
 
 def _select_datasets_interactive(
     geo_ids: list[str],
@@ -960,7 +1007,6 @@ def _select_datasets_interactive(
 
     print(f"\n\n\U0001f50d Found {len(geo_ids)} GEO dataset(s) in the paper:\n")
 
-    entries: list[dict] = []
     for i, gse in enumerate(geo_ids, 1):
         try:
             meta = fetch_soft_metadata(gse)
@@ -1008,6 +1054,8 @@ def _select_datasets_interactive(
     except (ValueError, IndexError):
         print("⚠️  Invalid input — registering paper only")
         return []
+
+
 def _register_from_insights(
     registry: MasterRegistry,
     insights: dict[str, Any],
@@ -1038,7 +1086,9 @@ def _register_from_insights(
         return registry
 
     paper_entry = PaperEntry(
-        paper_id=pmid, slug=slug, pmid=pmid if not pmid.startswith("no-pmid-") else None,
+        paper_id=pmid,
+        slug=slug,
+        pmid=pmid if not pmid.startswith("no-pmid-") else None,
         title=str(meta.get("title", "") or ""),
         journal=str(meta.get("journal", "") or ""),
         year=str(meta.get("year", "") or ""),
@@ -1062,9 +1112,13 @@ def _register_from_insights(
                 status="data_not_downloaded",
                 data_root=f"{{FUXI_DATA_ROOT}}/{gse_id}",
             )
-        new_links.append(PaperDatasetLink(
-            paper_id=pmid, dataset_id=gse_id, role=LinkRole.PRIMARY,
-        ))
+        new_links.append(
+            PaperDatasetLink(
+                paper_id=pmid,
+                dataset_id=gse_id,
+                role=LinkRole.PRIMARY,
+            )
+        )
     registry.papers.append(paper_entry)
     registry.links.extend(new_links)
     print(f"\u2705 Added: {slug}")
@@ -1152,8 +1206,9 @@ def _cmd_add_paper(
         print("\u274c Must specify --pmid, --xml, or --paper-dir")
         return registry
 
-    return _register_from_insights(registry, insights, subdir, dry_run,
-                                    select_all=select_all, datasets=datasets)
+    return _register_from_insights(
+        registry, insights, subdir, dry_run, select_all=select_all, datasets=datasets
+    )
 
 
 def _cmd_register_gse(
@@ -1212,19 +1267,20 @@ def _cmd_register_gse(
             print(f"\u26a0\ufe0f  PMID {pmid} not found in registry - skipping link")
             print(f"       Run: python -m core.registry register --pmid {pmid}")
             continue
-        existing = any(
-            ln.paper_id == pmid and ln.dataset_id == gse_id
-            for ln in registry.links
-        )
+        existing = any(ln.paper_id == pmid and ln.dataset_id == gse_id for ln in registry.links)
         if not existing:
-            registry.links.append(PaperDatasetLink(
-                paper_id=pmid, dataset_id=gse_id, role=LinkRole.RELATED,
-            ))
+            registry.links.append(
+                PaperDatasetLink(
+                    paper_id=pmid,
+                    dataset_id=gse_id,
+                    role=LinkRole.RELATED,
+                )
+            )
             print(f"\u2705  Linked {gse_id} \u2192 {pmid} ({paper.slug})")
             # Auto-heal: if paper was marked no_geo, update to generated
             if paper.insights and paper.insights.status == InsightStatus.NO_GEO:
                 paper.insights.status = InsightStatus.GENERATED
-                print(f"  \u2705  Updated insights.status: no_geo \u2192 generated")
+                print("  \u2705  Updated insights.status: no_geo \u2192 generated")
             linked += 1
         else:
             print(f"\u2139\ufe0f  Link {gse_id} \u2192 {pmid} already exists")
@@ -1234,6 +1290,7 @@ def _cmd_register_gse(
     if dry_run:
         print("\n\U0001f4a1 --dry-run, not saved")
     return registry
+
 
 def _cmd_deregister(
     registry: MasterRegistry,
@@ -1257,7 +1314,11 @@ def _cmd_deregister(
 
 def _deregister_gse(
     registry: MasterRegistry,
-    gse_id: str, action: str, force: bool, dry_run: bool, reg_path: str | None,
+    gse_id: str,
+    action: str,
+    force: bool,
+    dry_run: bool,
+    reg_path: str | None,
 ) -> MasterRegistry:
     ds = registry.datasets.get(gse_id)
     if ds is None:
@@ -1270,7 +1331,7 @@ def _deregister_gse(
     if linked_papers:
         print(f"   Linked to papers: {', '.join(linked_papers)}")
     else:
-        print(f"   Linked to papers: none (orphan)")
+        print("   Linked to papers: none (orphan)")
     if not force:
         print(f"\nConfirm {action.lower()} of {gse_id}? [y/N]: ", end="")
         try:
@@ -1290,7 +1351,12 @@ def _deregister_gse(
 
 def _deregister_paper(
     registry: MasterRegistry,
-    pmid: str, action: str, cascade: bool, force: bool, dry_run: bool, reg_path: str | None,
+    pmid: str,
+    action: str,
+    cascade: bool,
+    force: bool,
+    dry_run: bool,
+    reg_path: str | None,
 ) -> MasterRegistry:
     paper = registry.get_paper(pmid)
     if paper is None:
@@ -1301,7 +1367,9 @@ def _deregister_paper(
     orphan_gses: list[str] = []
     shared_gses: list[str] = []
     for gse_id in linked_gses:
-        other_links = [ln for ln in registry.links if ln.dataset_id == gse_id and ln.paper_id != pmid]
+        other_links = [
+            ln for ln in registry.links if ln.dataset_id == gse_id and ln.paper_id != pmid
+        ]
         if other_links:
             shared_gses.append(gse_id)
         else:
@@ -1335,16 +1403,18 @@ def _deregister_paper(
     print(f"   Done: {action}d {removed} ({len(links_to_remove)} link(s) removed)")
     return registry
 
+
 def _auto_verify(registry: MasterRegistry) -> None:
     findings = registry.verify()
     if not findings:
         return
-    n_err = sum(1 for f in findings if f.get('level') == 'error')
-    n_warn = sum(1 for f in findings if f.get('level') == 'warn')
+    n_err = sum(1 for f in findings if f.get("level") == "error")
+    n_warn = sum(1 for f in findings if f.get("level") == "warn")
     print(f"[verify] {n_err} error(s), {n_warn} warning(s)")
     for f in findings:
         icon = f"[{f['level'].upper()}]"
         print(f"  {icon} {f['source']}: {f['message']}")
+
 
 def main() -> None:
     import argparse
@@ -1353,7 +1423,9 @@ def main() -> None:
         description="五域统一论文登记表 (Master Registry) 工具",
     )
     parser.add_argument(
-        "--registry", "-r", default=None,
+        "--registry",
+        "-r",
+        default=None,
         help="路径 (目录或 .yaml 文件, 默认自动检测)",
     )
 
@@ -1369,19 +1441,29 @@ def main() -> None:
 
     sub.add_parser("find-orphans", help="查找孤儿数据集")
 
-    p_register = sub.add_parser("register", help="注册论文/数据集（--pmid | --gse | --xml | --pdf）")
+    p_register = sub.add_parser(
+        "register", help="注册论文/数据集（--pmid | --gse | --xml | --pdf）"
+    )
     p_register.add_argument("--pmid", default=None, help="PubMed ID (NCBI 自动下载)")
     p_register.add_argument("--gse", default=None, help="GEO 数据集 ID (如 GSE123456)")
     p_register.add_argument("--paper-dir", default=None, help="已有 paper 目录 (含 insights.yaml)")
     p_register.add_argument("--xml", dest="xml_path", default=None, help="本地 PMC XML 文件路径")
     p_register.add_argument("--pdf", default=None, help="PDF 文件路径 (pymupdf4llm → md → LLM)")
     p_register.add_argument("--dry-run", action="store_true", help="预览不写入")
-    p_register.add_argument("--download", action="store_true",
-                            help="Auto-download GSE datasets from NCBI GEO after paper import.")
-    p_register.add_argument("--datasets", default=None,
-                            help="只注册指定 GSE（逗号分隔，如 GSE123456,GSE123457）")
-    p_register.add_argument("--all", dest="register_all", action="store_true",
-                            help="注册论文中全部 GEO 数据集（跳过交互确认）")
+    p_register.add_argument(
+        "--download",
+        action="store_true",
+        help="Auto-download GSE datasets from NCBI GEO after paper import.",
+    )
+    p_register.add_argument(
+        "--datasets", default=None, help="只注册指定 GSE（逗号分隔，如 GSE123456,GSE123457）"
+    )
+    p_register.add_argument(
+        "--all",
+        dest="register_all",
+        action="store_true",
+        help="注册论文中全部 GEO 数据集（跳过交互确认）",
+    )
 
     p_add = sub.add_parser("add-paper", help="[DEPRECATED] 请改用 register --pmid")
     p_add.add_argument("--pmid", default=None, help="PubMed ID (NCBI 自动下载)")
@@ -1389,27 +1471,47 @@ def main() -> None:
     p_add.add_argument("--xml", dest="xml_path", default=None, help="本地 PMC XML 文件路径")
     p_add.add_argument("--pdf", default=None, help="PDF 文件路径 (pymupdf4llm → md → LLM)")
     p_add.add_argument("--dry-run", action="store_true", help="预览不写入")
-    p_add.add_argument("--download", action="store_true",
-                        help="Auto-download GSE datasets from NCBI GEO after paper import.")
+    p_add.add_argument(
+        "--download",
+        action="store_true",
+        help="Auto-download GSE datasets from NCBI GEO after paper import.",
+    )
 
     p_status = sub.add_parser("status", help="Check GSE/PMID comprehensive status")
     p_status.add_argument("--gse", default=None, help="GEO dataset ID (e.g. GSE123456)")
     p_status.add_argument("--pmid", default=None, help="PubMed ID (e.g. 31493975)")
 
     p_list = sub.add_parser("list-papers", help="Search registered papers by keyword")
-    p_list.add_argument("--query", default="", help="Keyword to search (title, author, journal, etc.)")
+    p_list.add_argument(
+        "--query", default="", help="Keyword to search (title, author, journal, etc.)"
+    )
 
     p_deregister = sub.add_parser("deregister", help="Delete dataset/paper from registry")
     p_deregister.add_argument("--pmid", default=None, help="PubMed ID to remove")
     p_deregister.add_argument("--gse", default=None, help="GEO dataset ID to remove")
-    p_deregister.add_argument("--cascade", action="store_true",
-                              help="Also remove orphan datasets (not shared with other papers)")
-    p_deregister.add_argument("--force", "-f", action="store_true", help="Skip confirmation prompt")
+    p_deregister.add_argument(
+        "--cascade",
+        action="store_true",
+        help="Also remove orphan datasets (not shared with other papers)",
+    )
+    p_deregister.add_argument(
+        "--force", "-f", action="store_true", help="Skip confirmation prompt"
+    )
     p_deregister.add_argument("--dry-run", action="store_true", help="Preview without deleting")
     args = parser.parse_args()
     reg_path = args.registry if hasattr(args, "registry") else None
 
-    if args.command in ("report", "verify", "reset-gse", "find-orphans", "add-paper", "register", "deregister", "status", "list-papers"):
+    if args.command in (
+        "report",
+        "verify",
+        "reset-gse",
+        "find-orphans",
+        "add-paper",
+        "register",
+        "deregister",
+        "status",
+        "list-papers",
+    ):
         registry = load_master_registry(reg_path)
 
     if args.command == "report":
@@ -1439,7 +1541,7 @@ def main() -> None:
             for ds_id, ds in orphans:
                 mod_str = ", ".join(ds.modalities.keys()) if ds.modalities else "?"
                 print(f"  - {ds_id}  ({mod_str}, status={ds.status})")
-        supp_orphans = registry.find_orphan_supplements()
+        registry.find_orphan_supplements()
     elif args.command == "register":
         if args.gse:
             registry = _cmd_register_gse(registry, args.gse, dry_run=args.dry_run)
@@ -1448,10 +1550,17 @@ def main() -> None:
             if hasattr(args, "datasets") and args.datasets:
                 datasets_list = [d.strip() for d in args.datasets.split(",")]
             select_all = getattr(args, "register_all", False)
-            registry = _cmd_add_paper(registry, pmid=args.pmid or "", xml=args.xml_path or "",
-                                      pdf=args.pdf or "", paper_dir=args.paper_dir or "",
-                                      dry_run=args.dry_run, download=args.download,
-                                      select_all=select_all, datasets=datasets_list)
+            registry = _cmd_add_paper(
+                registry,
+                pmid=args.pmid or "",
+                xml=args.xml_path or "",
+                pdf=args.pdf or "",
+                paper_dir=args.paper_dir or "",
+                dry_run=args.dry_run,
+                download=args.download,
+                select_all=select_all,
+                datasets=datasets_list,
+            )
         else:
             print("\u274c Must specify --pmid, --gse, --xml, --pdf, or --paper-dir")
             return registry
@@ -1459,10 +1568,18 @@ def main() -> None:
             save_master_registry(registry, reg_path)
             _auto_verify(registry)
     elif args.command == "add-paper":
-        print("\u26a0\ufe0f  [DEPRECATED] add-paper \u5df2\u5f03\u7528\uff0c\u8bf7\u6539\u7528: register --pmid <PMId>")
-        registry = _cmd_add_paper(registry, pmid=args.pmid or "", xml=args.xml_path or "",
-                                  pdf=args.pdf or "", paper_dir=args.paper_dir or "",
-                                  dry_run=args.dry_run, download=args.download)
+        print(
+            "\u26a0\ufe0f  [DEPRECATED] add-paper \u5df2\u5f03\u7528\uff0c\u8bf7\u6539\u7528: register --pmid <PMId>"
+        )
+        registry = _cmd_add_paper(
+            registry,
+            pmid=args.pmid or "",
+            xml=args.xml_path or "",
+            pdf=args.pdf or "",
+            paper_dir=args.paper_dir or "",
+            dry_run=args.dry_run,
+            download=args.download,
+        )
         if not args.dry_run:
             save_master_registry(registry, reg_path)
             _auto_verify(registry)
@@ -1477,9 +1594,15 @@ def main() -> None:
         _cmd_list_papers(registry, query=args.query)
 
     elif args.command == "deregister":
-        registry = _cmd_deregister(registry, gse_id=args.gse or "", pmid=args.pmid or "",
-                                   cascade=args.cascade, force=args.force,
-                                   dry_run=args.dry_run, reg_path=reg_path)
+        registry = _cmd_deregister(
+            registry,
+            gse_id=args.gse or "",
+            pmid=args.pmid or "",
+            cascade=args.cascade,
+            force=args.force,
+            dry_run=args.dry_run,
+            reg_path=reg_path,
+        )
         if not args.dry_run:
             save_master_registry(registry, reg_path)
             _auto_verify(registry)

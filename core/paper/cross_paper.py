@@ -35,15 +35,13 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 import warnings
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional, Sequence
+from typing import Optional, Sequence
 
 import numpy as np
 import pandas as pd
-
 
 # ──────────────────────────────────────────────────────────────────────
 #  Data types
@@ -162,21 +160,25 @@ class CrossPaperAnalyzer:
 
     def _validate_metrics(self):
         """Simple validation: metric formulas only use known gene names + basic ops."""
-        allowed = self._all_genes | {"+", "-", "*", "/", "(", ")", " ", "nan"}
+        self._all_genes | {"+", "-", "*", "/", "(", ")", " ", "nan"}
         for name, cfg in self.comparison_metrics.items():
             formula = cfg.get("formula", "")
             tokens = set()
-            for tok in formula.replace("(", " ").replace(")", " ").replace(
-                "+", " "
-            ).replace("-", " ").replace("*", " ").replace("/", " ").split():
+            for tok in (
+                formula.replace("(", " ")
+                .replace(")", " ")
+                .replace("+", " ")
+                .replace("-", " ")
+                .replace("*", " ")
+                .replace("/", " ")
+                .split()
+            ):
                 tok = tok.strip()
                 if tok:
                     tokens.add(tok)
             unknown = tokens - self._all_genes
             if unknown:
-                raise ValueError(
-                    f"Metric '{name}' formula uses unknown genes: {unknown}"
-                )
+                raise ValueError(f"Metric '{name}' formula uses unknown genes: {unknown}")
 
     # ── YAML factory ─────────────────────────────────────────────────
 
@@ -227,9 +229,7 @@ class CrossPaperAnalyzer:
                     label=entry["label"],
                     paper=entry["paper"],
                     h5ad_path=_resolve(entry["h5ad"]),
-                    grn_table=_resolve(entry["grn_table"])
-                    if entry.get("grn_table")
-                    else None,
+                    grn_table=_resolve(entry["grn_table"]) if entry.get("grn_table") else None,
                     cell_type_col=entry.get("cell_type_col", "cell_type"),
                     condition_label=entry.get("condition_label", ""),
                     split_col=entry.get("split_col"),
@@ -264,7 +264,10 @@ class CrossPaperAnalyzer:
     # ── Gene expression matrix ───────────────────────────────────────
 
     def _get_expression_matrix(
-        self, ds: DatasetEntry, cache_key: str, cell_mask: np.ndarray,
+        self,
+        ds: DatasetEntry,
+        cache_key: str,
+        cell_mask: np.ndarray,
     ) -> pd.DataFrame:
         """Return cell-type x gene mean expression for cells matching mask."""
         if cache_key in self._gene_expr_cache:
@@ -377,7 +380,7 @@ class CrossPaperAnalyzer:
             return float(expr_df.loc[ct, g]) if g in all_genes_in_expr else float("nan")
 
         for ct in cell_types:
-            n_cells = int((adata.obs[ct_col] == ct).values.sum())
+            int((adata.obs[ct_col] == ct).values.sum())
             # Use per-condition count
             ct_cond_mask = (adata.obs[ct_col] == ct).values & mask
             n_cells_cond = int(ct_cond_mask.sum())
@@ -499,9 +502,7 @@ class CrossPaperAnalyzer:
                                     f"value_{ca}": round(va, 6),
                                     f"value_{cb}": round(vb, 6),
                                     "fold_change": fc,
-                                    "log2_fc": round(np.log2(fc), 4)
-                                    if fc > 0
-                                    else float("-inf"),
+                                    "log2_fc": round(np.log2(fc), 4) if fc > 0 else float("-inf"),
                                 }
                             )
 
@@ -546,16 +547,10 @@ class CrossPaperAnalyzer:
     def to_pivot(self, metric: str = "RA Synthesis") -> pd.DataFrame:
         df = self.to_dataframe()
         if metric not in df.columns:
-            raise ValueError(
-                f"Unknown metric: {metric}. Available: {list(df.columns)}"
-            )
+            raise ValueError(f"Unknown metric: {metric}. Available: {list(df.columns)}")
         has_condition = "condition" in df.columns and df["condition"].astype(bool).any()
-        index_col = (
-            ["cell_type", "condition"] if has_condition else "cell_type"
-        )
-        return df.pivot_table(
-            index=index_col, columns="dataset", values=metric, aggfunc="mean"
-        )
+        index_col = ["cell_type", "condition"] if has_condition else "cell_type"
+        return df.pivot_table(index=index_col, columns="dataset", values=metric, aggfunc="mean")
 
     def to_csv(self, output_path: str):
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
@@ -566,9 +561,7 @@ class CrossPaperAnalyzer:
         os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
         report = {
             "datasets": [ds.label for ds in self.datasets],
-            "gene_sets": {
-                k: v.get("genes", []) for k, v in self.gene_sets.items()
-            },
+            "gene_sets": {k: v.get("genes", []) for k, v in self.gene_sets.items()},
             "results": [
                 {
                     "dataset": r.dataset,
@@ -577,9 +570,7 @@ class CrossPaperAnalyzer:
                     "cell_type": r.cell_type,
                     "n_cells": r.n_cells,
                     "cell_pct": r.cell_pct,
-                    "gene_set_scores": {
-                        k: v for k, v in r.gene_set_scores.items()
-                    },
+                    "gene_set_scores": {k: v for k, v in r.gene_set_scores.items()},
                     "individual_expr": r.individual_expr,
                     "derived_metrics": r.derived_metrics,
                     "grn": {k: v for k, v in r.grn.items()},
@@ -603,9 +594,7 @@ class CrossPaperAnalyzer:
             "cell_pct",
         ]
         metric_cols = [
-            c
-            for c in df.columns
-            if c not in set(meta_cols) and not c.startswith("GRN_")
+            c for c in df.columns if c not in set(meta_cols) and not c.startswith("GRN_")
         ][:12]  # limit to 12 metric columns for readability
         cols = [c for c in meta_cols if c in df.columns] + metric_cols
         print(df[cols].to_string(index=False))

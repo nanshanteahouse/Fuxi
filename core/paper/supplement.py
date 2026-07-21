@@ -25,28 +25,61 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 logger = logging.getLogger(__name__)
 
 # Column normalisation regexes
-_LOGFC_PATTERN = re.compile(
-    r"(?i)(?:avg_|average_)?log[2]?[fF][cC](?:hanges?)?|avg_diff"
-)
-_PVAL_PATTERN = re.compile(
-    r"(?i)p(?:val(?:ue)?|_val|vals_adj|_adjusted|adj)"
-)
+_LOGFC_PATTERN = re.compile(r"(?i)(?:avg_|average_)?log[2]?[fF][cC](?:hanges?)?|avg_diff")
+_PVAL_PATTERN = re.compile(r"(?i)p(?:val(?:ue)?|_val|vals_adj|_adjusted|adj)")
 _GENE_PATTERN = re.compile(r"(?i)(?:gene|feature|names|symbol|name|Gene)\s*$")
 
 _HEADER_KEYWORDS = {
-    "gene", "names", "name", "symbol", "cluster", "group",
-    "logfoldchanges", "logfc", "scores", "score",
-    "pvals", "pval", "pvals_adj", "avg_diff",
-    "cell", "marker", "signature",
+    "gene",
+    "names",
+    "name",
+    "symbol",
+    "cluster",
+    "group",
+    "logfoldchanges",
+    "logfc",
+    "scores",
+    "score",
+    "pvals",
+    "pval",
+    "pvals_adj",
+    "avg_diff",
+    "cell",
+    "marker",
+    "signature",
 }
 
 _CELL_TYPE_ABBREVS = {
-    "rod", "rods", "cone", "cones", "rgc", "rgcs",
-    "bc", "bp", "bps", "bipolar", "ac", "acs", "amacrine",
-    "hc", "hcs", "horizontal", "mg", "muller", "macroglia",
-    "microglia", "rpc", "prpc", "nrpc", "rpe",
-    "astrocyte", "vascular", "endothelial", "pericyte",
-    "fibroblast", "oligodendrocyte",
+    "rod",
+    "rods",
+    "cone",
+    "cones",
+    "rgc",
+    "rgcs",
+    "bc",
+    "bp",
+    "bps",
+    "bipolar",
+    "ac",
+    "acs",
+    "amacrine",
+    "hc",
+    "hcs",
+    "horizontal",
+    "mg",
+    "muller",
+    "macroglia",
+    "microglia",
+    "rpc",
+    "prpc",
+    "nrpc",
+    "rpe",
+    "astrocyte",
+    "vascular",
+    "endothelial",
+    "pericyte",
+    "fibroblast",
+    "oligodendrocyte",
 }
 
 
@@ -95,15 +128,24 @@ def _pre_normalize_cell_type(name: str) -> str:
     if s.endswith("s") and len(s) > 3 and s[:-1].lower() in _CELL_TYPE_ABBREVS:
         s = s[:-1]
     abbrev_map = {
-        "bc": "Bipolar Cell", "bps": "Bipolar Cell", "bipolar": "Bipolar Cell",
-        "ac": "Amacrine Cell", "acs": "Amacrine Cell",
+        "bc": "Bipolar Cell",
+        "bps": "Bipolar Cell",
+        "bipolar": "Bipolar Cell",
+        "ac": "Amacrine Cell",
+        "acs": "Amacrine Cell",
         "amacrine": "Amacrine Cell",
-        "hc": "Horizontal Cell", "hcs": "Horizontal Cell",
+        "hc": "Horizontal Cell",
+        "hcs": "Horizontal Cell",
         "horizontal": "Horizontal Cell",
-        "mg": "Muller Glia", "muller": "Muller Glia",
-        "macroglia": "Muller Glia", "microglia": "Microglia",
-        "rgc": "RGC", "rgcs": "RGC", "ganglion": "RGC",
-        "prpc": "Proliferating RPC", "nrpc": "Proliferating RPC",
+        "mg": "Muller Glia",
+        "muller": "Muller Glia",
+        "macroglia": "Muller Glia",
+        "microglia": "Microglia",
+        "rgc": "RGC",
+        "rgcs": "RGC",
+        "ganglion": "RGC",
+        "prpc": "Proliferating RPC",
+        "nrpc": "Proliferating RPC",
         "rpc": "RPC",
         "retinal ganglion cell": "RGC",
         "endothelial cell": "Vascular Endothelial",
@@ -135,6 +177,7 @@ def _read_sheet(xls: pd.ExcelFile, sheet_name: str) -> pd.DataFrame:
     with the correct header row.
     """
     import warnings
+
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         df_raw = pd.read_excel(xls, sheet_name=sheet_name)
@@ -161,6 +204,7 @@ def _read_sheet(xls: pd.ExcelFile, sheet_name: str) -> pd.DataFrame:
             return pd.read_excel(xls, sheet_name=sheet_name, header=2)
 
         return df_raw
+
 
 # ── SupplementTableParser ────────────────────────────────────────────────────
 
@@ -226,8 +270,7 @@ class SupplementTableParser:
         if "gene" in norm_cols:
             gene_orig = next(c for c, n in norm_map.items() if n == "gene")
             numeric_cols = [
-                c for c in df.columns
-                if c != gene_orig and pd.api.types.is_numeric_dtype(df[c])
+                c for c in df.columns if c != gene_orig and pd.api.types.is_numeric_dtype(df[c])
             ]
             if len(numeric_cols) >= 3:
                 return "gene_score_matrix"
@@ -277,7 +320,9 @@ class SupplementTableParser:
     # -- to_yaml_source -------------------------------------------------------
 
     def to_yaml_source(
-        self, markers_dict: dict[str, Any], source_meta: dict[str, Any],
+        self,
+        markers_dict: dict[str, Any],
+        source_meta: dict[str, Any],
         output_dir: str,
     ) -> str:
         """Write markers_dict + source_meta as a YAML source file."""
@@ -294,8 +339,12 @@ class SupplementTableParser:
 
         with open(filepath, "w") as f:
             yaml.dump(
-                output, f, default_flow_style=False, sort_keys=False,
-                allow_unicode=True, indent=2,
+                output,
+                f,
+                default_flow_style=False,
+                sort_keys=False,
+                allow_unicode=True,
+                indent=2,
             )
 
         logger.info("YAML source written: %s", filepath)
@@ -304,7 +353,9 @@ class SupplementTableParser:
     # -- Format-specific parsers ---------------------------------------------
 
     def _parse_cluster_marker(
-        self, xls: pd.ExcelFile, pmid: str,
+        self,
+        xls: pd.ExcelFile,
+        pmid: str,
     ) -> dict[str, Any]:
         """Parse cluster_marker format (Hu s012)."""
         sheet = xls.sheet_names[0]
@@ -325,9 +376,7 @@ class SupplementTableParser:
             if logfc_col:
                 cluster_df = cluster_df.sort_values(logfc_col, ascending=False)
 
-            canonical, display, conf = _standardize_cell_type(
-                f"Cluster_{cluster_id}"
-            )
+            canonical, display, conf = _standardize_cell_type(f"Cluster_{cluster_id}")
             if conf == "low":
                 display = str(cluster_id)
                 canonical = f"Cluster_{display}"
@@ -340,20 +389,13 @@ class SupplementTableParser:
                 if not gene or gene == "NAN":
                     continue
                 logfc_val = (
-                    float(row[logfc_col]) if logfc_col
-                    and pd.notna(row[logfc_col]) else None
+                    float(row[logfc_col]) if logfc_col and pd.notna(row[logfc_col]) else None
                 )
                 if len(confirm) + len(add) >= self.max_genes_per_type:
                     break
-                if (
-                    logfc_val is not None
-                    and logfc_val > self.confirm_logfc_threshold
-                ):
+                if logfc_val is not None and logfc_val > self.confirm_logfc_threshold:
                     confirm.setdefault(gene, []).append(pmid)
-                elif (
-                    logfc_val is not None
-                    and logfc_val > self.add_logfc_threshold
-                ):
+                elif logfc_val is not None and logfc_val > self.add_logfc_threshold:
                     add.setdefault(gene, []).append(pmid)
 
             if confirm or add:
@@ -362,7 +404,9 @@ class SupplementTableParser:
         return markers
 
     def _parse_gene_score_matrix(
-        self, xls: pd.ExcelFile, pmid: str,
+        self,
+        xls: pd.ExcelFile,
+        pmid: str,
     ) -> dict[str, Any]:
         """Parse gene_score_matrix format (Menon MOESM5)."""
         sheet = xls.sheet_names[0]
@@ -371,10 +415,7 @@ class SupplementTableParser:
         norm = _normalize_columns(df)
         gene_col = next(c for c, n in norm.items() if n == "gene")
 
-        ct_cols = [
-            c for c in df.columns
-            if c != gene_col and pd.api.types.is_numeric_dtype(df[c])
-        ]
+        ct_cols = [c for c in df.columns if c != gene_col and pd.api.types.is_numeric_dtype(df[c])]
 
         markers: dict[str, dict[str, Any]] = {}
 
@@ -401,7 +442,9 @@ class SupplementTableParser:
         return markers
 
     def _parse_per_type_sheet(
-        self, xls: pd.ExcelFile, pmid: str,
+        self,
+        xls: pd.ExcelFile,
+        pmid: str,
     ) -> dict[str, Any]:
         """Parse per_type_sheet format (Zuo + Li variants)."""
         markers: dict[str, dict[str, Any]] = {}
@@ -416,12 +459,11 @@ class SupplementTableParser:
 
         # Variant: cell-type-named sheets
         ct_sheets = [
-            s for s in xls.sheet_names
-            if _is_cell_type_sheet_name(s)
-            and "s7a" not in s.lower()
-            and "s7b" not in s.lower()
+            s
+            for s in xls.sheet_names
+            if _is_cell_type_sheet_name(s) and "s7a" not in s.lower() and "s7b" not in s.lower()
         ]
-        for sheet in ct_sheets[:self.max_sheets]:
+        for sheet in ct_sheets[: self.max_sheets]:
             try:
                 self._parse_one_type_sheet(xls, sheet, pmid, markers)
             except Exception:
@@ -430,7 +472,10 @@ class SupplementTableParser:
         return markers
 
     def _parse_one_type_sheet(
-        self, xls: pd.ExcelFile, sheet: str, pmid: str,
+        self,
+        xls: pd.ExcelFile,
+        sheet: str,
+        pmid: str,
         markers: dict[str, dict[str, Any]],
     ) -> None:
         """Parse a single cell-type sheet (Zuo or Li per-type format)."""
@@ -466,7 +511,8 @@ class SupplementTableParser:
         sort_col = score_col or logfc_col
         df_sorted = (
             df.sort_values(sort_col, ascending=False)
-            if sort_col and sort_col in df.columns else df
+            if sort_col and sort_col in df.columns
+            else df
         )
 
         confirm: dict[str, list[str]] = {}
@@ -480,27 +526,25 @@ class SupplementTableParser:
                 break
 
             logfc = (
-                float(row[logfc_col]) if logfc_col
-                and logfc_col in df.columns
-                and pd.notna(row[logfc_col]) else None
+                float(row[logfc_col])
+                if logfc_col and logfc_col in df.columns and pd.notna(row[logfc_col])
+                else None
             )
             score = (
-                float(row[score_col]) if score_col
-                and score_col in df.columns
-                and pd.notna(row[score_col]) else logfc
+                float(row[score_col])
+                if score_col and score_col in df.columns and pd.notna(row[score_col])
+                else logfc
             )
             sc_val = score if score is not None else logfc
             if sc_val is None:
                 continue
 
-            if (
-                (logfc is not None and logfc > self.confirm_logfc_threshold)
-                or (score is not None and score > self.confirm_score_threshold)
+            if (logfc is not None and logfc > self.confirm_logfc_threshold) or (
+                score is not None and score > self.confirm_score_threshold
             ):
                 confirm.setdefault(gene, []).append(pmid)
-            elif (
-                (logfc is not None and logfc > self.add_logfc_threshold)
-                or (score is not None and score > self.add_score_threshold)
+            elif (logfc is not None and logfc > self.add_logfc_threshold) or (
+                score is not None and score > self.add_score_threshold
             ):
                 add.setdefault(gene, []).append(pmid)
 
@@ -508,8 +552,12 @@ class SupplementTableParser:
             markers[canonical] = {"confirm": confirm, "add": add}
 
     def _parse_marker_column_sheet(
-        self, df: pd.DataFrame, norm: dict[str, str], sheet: str,
-        pmid: str, markers: dict[str, dict[str, Any]],
+        self,
+        df: pd.DataFrame,
+        norm: dict[str, str],
+        sheet: str,
+        pmid: str,
+        markers: dict[str, dict[str, Any]],
     ) -> None:
         """Parse a sheet with comma-separated 'marker' column (Li per-type)."""
         marker_orig = next(c for c, n in norm.items() if n == "marker")
@@ -526,11 +574,8 @@ class SupplementTableParser:
                 genes_str = str(row[marker_orig]).strip()
                 if not genes_str or genes_str == "nan":
                     continue
-                genes = [
-                    g.strip().upper() for g in genes_str.split(",")
-                    if g.strip()
-                ]
-                for g in genes[:self.max_genes_per_type]:
+                genes = [g.strip().upper() for g in genes_str.split(",") if g.strip()]
+                for g in genes[: self.max_genes_per_type]:
                     add.setdefault(g, []).append(pmid)
             if confirm or add:
                 markers[canonical] = {"confirm": confirm, "add": add}
@@ -545,10 +590,7 @@ class SupplementTableParser:
                 genes_str = str(row[marker_orig]).strip()
                 if not genes_str or genes_str == "nan":
                     continue
-                genes = [
-                    g.strip().upper() for g in genes_str.split(",")
-                    if g.strip()
-                ]
+                genes = [g.strip().upper() for g in genes_str.split(",") if g.strip()]
                 for g in genes:
                     if len(confirm) + len(add) >= self.max_genes_per_type:
                         break
@@ -557,7 +599,10 @@ class SupplementTableParser:
                 _merge_markers(markers, canonical, confirm, add)
 
     def _parse_grouped_sheet(
-        self, xls: pd.ExcelFile, sheet: str, pmid: str,
+        self,
+        xls: pd.ExcelFile,
+        sheet: str,
+        pmid: str,
         markers: dict[str, dict[str, Any]],
     ) -> None:
         """Parse a grouped sheet with 'group' column (Li S7A variant)."""
@@ -599,23 +644,21 @@ class SupplementTableParser:
                     break
 
                 logfc = (
-                    float(row[logfc_col]) if logfc_col
-                    and logfc_col in df.columns
-                    and pd.notna(row[logfc_col]) else None
+                    float(row[logfc_col])
+                    if logfc_col and logfc_col in df.columns and pd.notna(row[logfc_col])
+                    else None
                 )
                 score = (
-                    float(row[score_col]) if score_col
-                    and score_col in df.columns
-                    and pd.notna(row[score_col]) else None
+                    float(row[score_col])
+                    if score_col and score_col in df.columns and pd.notna(row[score_col])
+                    else None
                 )
-                if (
-                    (logfc is not None and logfc > self.confirm_logfc_threshold)
-                    or (score is not None and score > self.confirm_score_threshold)
+                if (logfc is not None and logfc > self.confirm_logfc_threshold) or (
+                    score is not None and score > self.confirm_score_threshold
                 ):
                     confirm.setdefault(gene, []).append(pmid)
-                elif (
-                    (logfc is not None and logfc > self.add_logfc_threshold)
-                    or (score is not None and score > self.add_score_threshold)
+                elif (logfc is not None and logfc > self.add_logfc_threshold) or (
+                    score is not None and score > self.add_score_threshold
                 ):
                     add.setdefault(gene, []).append(pmid)
 
@@ -623,7 +666,9 @@ class SupplementTableParser:
                 _merge_markers(markers, canonical, confirm, add)
 
     def _parse_unknown(
-        self, xls: pd.ExcelFile, pmid: str,
+        self,
+        xls: pd.ExcelFile,
+        pmid: str,
     ) -> dict[str, Any]:
         """Fallback parser for unknown formats (Peng MarkerGenes, etc.)."""
         markers: dict[str, dict[str, Any]] = {}
@@ -640,15 +685,10 @@ class SupplementTableParser:
             has_abbrev = any("abbreviation" in c for c in cols_lower)
 
             if has_sig and (has_ct or has_abbrev):
-                sig_col = next(
-                    c for c in df.columns if "signature" in str(c).lower()
-                )
+                sig_col = next(c for c in df.columns if "signature" in str(c).lower())
                 ct_col = next(
                     (c for c in df.columns if "cell class" in str(c).lower()),
-                    next(
-                        (c for c in df.columns
-                         if "abbreviation" in str(c).lower()), None
-                    ),
+                    next((c for c in df.columns if "abbreviation" in str(c).lower()), None),
                 )
                 if ct_col is None:
                     continue
@@ -660,15 +700,12 @@ class SupplementTableParser:
                         continue
 
                     canonical, display, _conf = _standardize_cell_type(ct_name)
-                    genes = [
-                        g.strip().upper() for g in genes_str.split(",")
-                        if g.strip()
-                    ]
+                    genes = [g.strip().upper() for g in genes_str.split(",") if g.strip()]
                     if not genes:
                         continue
 
                     conf = {g: [pmid] for g in genes[:5]}
-                    ad = {g: [pmid] for g in genes[5:self.max_genes_per_type]}
+                    ad = {g: [pmid] for g in genes[5 : self.max_genes_per_type]}
 
                     if canonical in markers:
                         existing = markers[canonical]
@@ -688,8 +725,15 @@ class SupplementTableParser:
 def _clean_meta(meta: dict[str, Any]) -> dict[str, Any]:
     """Remove empty values from source_meta for clean YAML output."""
     required = [
-        "id", "short_name", "pmid", "journal", "year",
-        "species", "tissue", "class", "order",
+        "id",
+        "short_name",
+        "pmid",
+        "journal",
+        "year",
+        "species",
+        "tissue",
+        "class",
+        "order",
     ]
     result: dict[str, Any] = {}
     for key in required:
