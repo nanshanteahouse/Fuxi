@@ -257,7 +257,7 @@ def generate_figures(adata, markers_df, cfg, log, primary_col=None):
 
     top5_per_group = (
         markers_df.groupby("group", observed=True)
-        .apply(lambda x: x.nlargest(5, "scores"))
+        .apply(lambda x: x.nlargest(5, "scores"), include_groups=False)
         .reset_index()
         # Fix: don't drop 'group' — needed for sort_values below
     )
