@@ -254,7 +254,7 @@ def main():
 
                 # Harmony batch correction
                 if cfg.harmony.use_harmony and cfg.harmony.batch_key in sub_raw.obs.columns:
-                    from harmony import harmonize
+                    from harmonypy import harmonize
 
                     n_pcs_use = min(cfg.pca.n_pcs_use, n_comps_sub)
                     log.info(

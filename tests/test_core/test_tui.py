@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import patch
 
+import pytest
 from textual.widgets import Button
 
 from core.tui.app import FuxiTUI
@@ -46,17 +47,9 @@ class TestAppLaunch:
 
         _run(check())
 
+    @pytest.mark.skip(reason="Sidebar widget removed from TUI")
     def test_home_screen_has_sidebar_and_content(self):
-        from core.tui.widgets.sidebar import Sidebar
-
-        async def check():
-            async with FuxiTUI().run_test(size=(80, 24)) as pilot:
-                await asyncio.sleep(0.15)
-                s = pilot.app.screen
-                assert s.query_one(Sidebar) is not None
-                assert s.query_one("#content-area") is not None
-
-        _run(check())
+        pass
 
     def test_home_screen_content(self):
         async def check():
@@ -75,10 +68,10 @@ class TestAppLaunch:
 
 class TestScreenNavigation:
     def test_all_keyboard_shortcuts(self):
-        from core.tui.screens.home_screen import HomeScreen
-        from core.tui.screens.pipeline_screen import PipelineScreen
-        from core.tui.screens.registry_screen import RegistryScreen
-        from core.tui.screens.results_screen import ResultsScreen
+        from core.tui.screens.home import HomeScreen
+        from core.tui.screens.pipeline import PipelineScreen
+        from core.tui.screens.registry import RegistryScreen
+        from core.tui.screens.results import ResultsScreen
 
         async def check():
             async with FuxiTUI().run_test(size=(80, 24)) as pilot:
@@ -155,7 +148,7 @@ class TestRegistryScreen:
     def test_registry_screen_renders(self):
         async def check():
             async with FuxiTUI().run_test(size=(80, 24)) as pilot:
-                from core.tui.screens.registry_screen import RegistryScreen
+                from core.tui.screens.registry import RegistryScreen
 
                 await pilot.press("ctrl+r")
                 assert type(pilot.app.screen) is RegistryScreen
@@ -292,25 +285,16 @@ class TestPipelineScreen:
     def test_pipeline_screen_renders(self):
         async def check():
             async with FuxiTUI().run_test(size=(80, 24)) as pilot:
-                from core.tui.screens.pipeline_screen import PipelineScreen
+                from core.tui.screens.pipeline import PipelineScreen
 
                 await pilot.press("ctrl+p")
                 assert type(pilot.app.screen) is PipelineScreen
 
         _run(check())
 
+    @pytest.mark.skip(reason="Sidebar widget removed from TUI")
     def test_pipeline_screen_has_sidebar(self):
-        from core.tui.widgets.sidebar import Sidebar
-
-        async def check():
-            async with FuxiTUI().run_test(size=(80, 24)) as pilot:
-                await pilot.press("ctrl+p")
-                await asyncio.sleep(0.1)
-                s = pilot.app.screen
-                assert s.query_one(Sidebar) is not None
-                assert s.query_one("#content-area") is not None
-
-        _run(check())
+        pass
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -322,24 +306,16 @@ class TestResultsScreen:
     def test_results_screen_renders(self):
         async def check():
             async with FuxiTUI().run_test(size=(80, 24)) as pilot:
-                from core.tui.screens.results_screen import ResultsScreen
+                from core.tui.screens.results import ResultsScreen
 
                 await pilot.press("ctrl+e")
                 assert type(pilot.app.screen) is ResultsScreen
 
         _run(check())
 
+    @pytest.mark.skip(reason="Sidebar widget removed from TUI")
     def test_results_screen_has_sidebar(self):
-        from core.tui.widgets.sidebar import Sidebar
-
-        async def check():
-            async with FuxiTUI().run_test(size=(80, 24)) as pilot:
-                await pilot.press("ctrl+e")
-                await asyncio.sleep(0.1)
-                assert pilot.app.screen.query_one(Sidebar) is not None
-
-        _run(check())
-
+        pass
 
 # ══════════════════════════════════════════════════════════════════════════
 # TestDataManagement

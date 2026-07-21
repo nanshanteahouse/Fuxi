@@ -452,7 +452,7 @@ def main():
             "warnings": collinear_warnings,
         }
     elif cfg.harmony.use_harmony and bk_list:
-        from harmony import harmonize
+        from harmonypy import harmonize
 
         # Unified NaN detection across all batch keys
         nan_mask = adata.obs[bk_list].isna().any(axis=1)

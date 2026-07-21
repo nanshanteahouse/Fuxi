@@ -14,3 +14,10 @@ Sub-packages:
   - preprocess/   Format detection → config generation
   - utils/        I/O, logging, path resolution, validation, performance
 """
+
+
+# Lazy re-exports for unittest.mock.patch() compatibility.
+# These allow patch("core.run_reproduce.subprocess.run") etc.
+# to resolve via pkgutil.resolve_name without eager imports.
+import core.ai.caller as ai_caller  # noqa: F401
+import core.pipeline.reproduce as run_reproduce  # noqa: F401
