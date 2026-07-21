@@ -41,6 +41,11 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.14"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('requirements/*.txt') }}
+          restore-keys: ${{ runner.os }}-uv-
       - name: Install system deps
         run: sudo apt-get update && sudo apt-get install -y libopenblas-dev cmake
       - name: Install deps
@@ -59,6 +64,11 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.14"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('requirements/*.txt') }}
+          restore-keys: ${{ runner.os }}-uv-
       - name: Install system deps
         run: sudo apt-get update && sudo apt-get install -y libopenblas-dev cmake
       - name: Install deps
@@ -78,6 +88,11 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.14"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('requirements/*.txt') }}
+          restore-keys: ${{ runner.os }}-uv-
       - name: Install system deps
         run: sudo apt-get update && sudo apt-get install -y libopenblas-dev cmake
       - name: Install deps
@@ -94,6 +109,11 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.14"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('requirements/*.txt') }}
+          restore-keys: ${{ runner.os }}-uv-
       - name: Install system deps
         run: sudo apt-get update && sudo apt-get install -y libopenblas-dev cmake
       - name: Install deps
