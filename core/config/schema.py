@@ -2,8 +2,8 @@
 """
 config.py — Fuxi (伏羲) 统一配置 (Pydantic v2)
 
-22 Pydantic BaseModel classes:
-  21 topic sub-models + 1 top-level Config
+23 Pydantic BaseModel classes:
+  22 topic sub-models + 1 top-level Config
 
 设计原则:
   - 所有参数集中在一个 Config(BaseModel) 中
@@ -17,7 +17,7 @@ config.py — Fuxi (伏羲) 统一配置 (Pydantic v2)
 """
 
 import os
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 # ── Auto-load .env from repo root ────────────────────────────────────
 # This runs before any data_root() call, so FUXI_DATA_ROOT in .env
@@ -162,13 +162,31 @@ class PCASettings(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Sub-model 8 — HarmonySettings
+# Sub-model 8 — SCVIConfig
 # ═══════════════════════════════════════════════════════════════════════
-class HarmonySettings(BaseModel):
-    """Harmony batch correction settings."""
+class SCVIConfig(BaseModel):
+    """scVI integration model configuration."""
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
+    n_latent: int = 30
+    n_layers: int = 2
+    n_hidden: int = 128
+    max_epochs: int = 400
+    batch_key: str = "sample"
+    use_gpu: bool = True
+    train_size: float = 0.9
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 9 — IntegrationSettings
+# ═══════════════════════════════════════════════════════════════════════
+class IntegrationSettings(BaseModel):
+    """Integration / batch correction settings (Harmony, scVI, Combat)."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    method: Literal["harmony", "combat", "scvi"] = "harmony"
     use_harmony: bool = True
     batch_key: str = "sample"
     max_iter: int = 20
@@ -181,10 +199,11 @@ class HarmonySettings(BaseModel):
     gini_batch_threshold: float = 0.3
     gini_biology_threshold: float = 0.6
     collinearity_guard: bool = True
+    scvi: SCVIConfig = Field(default_factory=SCVIConfig)
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Sub-model 9 — ClusteringSettings
+# Sub-model 10 — ClusteringSettings
 # ═══════════════════════════════════════════════════════════════════════
 class ClusteringSettings(BaseModel):
     """Clustering, UMAP, and parameter grid search settings."""
@@ -223,7 +242,7 @@ class ClusteringSettings(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Sub-model 10 — MarkerSettings
+# Sub-model 11 — MarkerSettings
 # ═══════════════════════════════════════════════════════════════════════
 class MarkerSettings(BaseModel):
     """Cell-type marker / annotation settings."""
@@ -247,7 +266,7 @@ class MarkerSettings(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Sub-model 11 — DESettings
+# Sub-model 12 — DESettings
 # ═══════════════════════════════════════════════════════════════════════
 class DESettings(BaseModel):
     """Differential expression analysis settings."""
@@ -264,7 +283,7 @@ class DESettings(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Sub-model 11b — PseudobulkDESettings (nested under de)
+# Sub-model 12b — PseudobulkDESettings (nested under de)
 # ═══════════════════════════════════════════════════════════════════════
 class PseudobulkDESettings(BaseModel):
     """Pseudobulk differential expression via PyDESeq2."""
@@ -286,7 +305,7 @@ class PseudobulkDESettings(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Sub-model 12 — TrajectorySettings
+# Sub-model 13 — TrajectorySettings
 # ═══════════════════════════════════════════════════════════════════════
 class TrajectorySettings(BaseModel):
     """Pseudotime / trajectory analysis settings."""
@@ -304,7 +323,7 @@ class TrajectorySettings(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Sub-model 13 — EnrichmentSettings
+# Sub-model 14 — EnrichmentSettings
 # ═══════════════════════════════════════════════════════════════════════
 class EnrichmentSettings(BaseModel):
     """Gene-set enrichment analysis settings."""
@@ -338,7 +357,7 @@ class EnrichmentSettings(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Sub-model 14 — GRNSettings
+# Sub-model 15 — GRNSettings
 # ═══════════════════════════════════════════════════════════════════════
 class GRNSettings(BaseModel):
     """Gene regulatory network analysis settings."""
@@ -357,7 +376,7 @@ class GRNSettings(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Sub-model 15 — CCISettings
+# Sub-model 16 — CCISettings
 # ═══════════════════════════════════════════════════════════════════════
 class CCISettings(BaseModel):
     """Cell-cell interaction analysis settings."""
@@ -379,7 +398,7 @@ class CCISettings(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Sub-model 16 — DownsampleSettings
+# Sub-model 17 — DownsampleSettings
 # ═══════════════════════════════════════════════════════════════════════
 class DownsampleSettings(BaseModel):
     """Downsampling and subset filtering settings."""
@@ -396,7 +415,7 @@ class DownsampleSettings(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Sub-model 17 — SpatialConfig
+# Sub-model 18 — SpatialConfig
 # ═══════════════════════════════════════════════════════════════════════
 class SpatialConfig(BaseModel):
     """Spatial transcriptomics platform and processing settings."""
@@ -418,7 +437,7 @@ class SpatialConfig(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Sub-model 18 — ATACConfig
+# Sub-model 19 — ATACConfig
 # ═══════════════════════════════════════════════════════════════════════
 class ATACConfig(BaseModel):
     """ATAC-specific configuration fields."""
@@ -450,7 +469,7 @@ class ATACConfig(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Sub-model 19 — ExecutionConfig
+# Sub-model 20 — ExecutionConfig
 # ═══════════════════════════════════════════════════════════════════════
 class ExecutionConfig(BaseModel):
     """Execution environment settings."""
@@ -472,7 +491,7 @@ class ExecutionConfig(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Sub-model 20 — AIConfig
+# Sub-model 21 — AIConfig
 # ═══════════════════════════════════════════════════════════════════════
 class AIConfig(BaseModel):
     """AI / LLM configuration — all AI features controlled here."""
@@ -499,7 +518,7 @@ class AIConfig(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# Sub-model 21 — BulkConfig
+# Sub-model 22 — BulkConfig
 # ═══════════════════════════════════════════════════════════════════════
 class BulkConfig(BaseModel):
     """Bulk RNA-seq specific configuration fields."""
@@ -589,7 +608,7 @@ class Config(BaseModel):
     normalization: NormalizationSettings = Field(default_factory=NormalizationSettings)
     hvg: HVGSettings = Field(default_factory=HVGSettings)
     pca: PCASettings = Field(default_factory=PCASettings)
-    harmony: HarmonySettings = Field(default_factory=HarmonySettings)
+    integration: IntegrationSettings = Field(default_factory=IntegrationSettings)
     clustering: ClusteringSettings = Field(default_factory=ClusteringSettings)
     marker: MarkerSettings = Field(default_factory=MarkerSettings)
     de: DESettings = Field(default_factory=DESettings)
@@ -701,10 +720,6 @@ class Config(BaseModel):
     @property
     def norm_h5ad(self) -> str:
         return os.path.join(self.h5ad_dir, "03_normalized.h5ad")
-
-    @property
-    def harmony_h5ad(self) -> str:
-        return os.path.join(self.h5ad_dir, "03_harmony.h5ad")
 
     @property
     def integrated_h5ad(self) -> str:
