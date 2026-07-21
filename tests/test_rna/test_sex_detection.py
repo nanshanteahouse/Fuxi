@@ -68,7 +68,7 @@ def _make_test_adata(
         A fresh AnnData object suitable for ``detect_sex``.
     """
     rng = np.random.RandomState(42)
-    X = rng.poisson(0.5, size=(n_cells, n_genes)).astype(np.float32)
+    x = rng.poisson(0.5, size=(n_cells, n_genes)).astype(np.float32)
     var_names = [f"Gene_{i}" for i in range(n_genes)]
 
     if include_xist:
@@ -77,16 +77,15 @@ def _make_test_adata(
         var_names[1] = "Eif2s3y"
 
     index = pd.Index(var_names)
-    adata = sc.AnnData(X=X, var=pd.DataFrame(index=index))
-
+    adata = sc.AnnData(X=x, var=pd.DataFrame(index=index))
     if with_raw:
         # Clean raw layer — all zeros except where we seed expression
-        raw_X = np.zeros((n_cells, n_genes), dtype=np.float32)
+        raw_x = np.zeros((n_cells, n_genes), dtype=np.float32)
         if include_xist:
-            raw_X[:30, 0] = 1.0  # cells  0…29   Xist+
+            raw_x[:30, 0] = 1.0  # cells  0…29   Xist+
         if include_y:
-            raw_X[50:80, 1] = 1.0  # cells 50…79   Eif2s3y+
-        raw_adata = sc.AnnData(X=raw_X, var=pd.DataFrame(index=index))
+            raw_x[50:80, 1] = 1.0  # cells 50…79   Eif2s3y+
+        raw_adata = sc.AnnData(X=raw_x, var=pd.DataFrame(index=index))
         adata.raw = raw_adata
 
     return adata
@@ -136,9 +135,7 @@ class TestMissingData:
 
     def test_no_sex_genes(self, tmp_path: Path) -> None:
         """No sex-linked genes in raw → warning log, return, no predicted_sex."""
-        adata = _make_test_adata(
-            with_raw=True, include_xist=False, include_y=False
-        )
+        adata = _make_test_adata(with_raw=True, include_xist=False, include_y=False)
         detect_sex(adata, _MockCFG(tmp_path), logging.getLogger("test"))
         assert "predicted_sex" not in adata.obs
 
@@ -174,17 +171,17 @@ class TestPrediction:
         var_names[1] = "Eif2s3y"
         index = pd.Index(var_names)
 
-        raw_X = np.zeros((n, 100), dtype=np.float32)
-        raw_X[:10, 0] = 1.0  # cells  0…9  Xist⁺       → Female
-        raw_X[10:20, 1] = 1.0  # cells 10…19 Eif2s3y⁺   → Male
-        raw_X[20:30, 0] = 1.0  # cells 20…29 both⁺      → Ambiguous
-        raw_X[20:30, 1] = 1.0
+        raw_x = np.zeros((n, 100), dtype=np.float32)
+        raw_x[:10, 0] = 1.0  # cells  0…9  Xist⁺       → Female
+        raw_x[10:20, 1] = 1.0  # cells 10…19 Eif2s3y⁺   → Male
+        raw_x[20:30, 0] = 1.0  # cells 20…29 both⁺      → Ambiguous
+        raw_x[20:30, 1] = 1.0
 
         adata = sc.AnnData(
             X=np.zeros((n, 100), dtype=np.float32),
             var=pd.DataFrame(index=index),
         )
-        adata.raw = sc.AnnData(X=raw_X, var=pd.DataFrame(index=index))
+        adata.raw = sc.AnnData(X=raw_x, var=pd.DataFrame(index=index))
 
         detect_sex(adata, _MockCFG(tmp_path), logging.getLogger("test"))
         assert (adata.obs["predicted_sex"] == "Female").sum() == 10
@@ -199,15 +196,15 @@ class TestPrediction:
         var_names[1] = "RPS4Y1"
         index = pd.Index(var_names)
 
-        raw_X = np.zeros((50, 100), dtype=np.float32)
-        raw_X[:15, 0] = 1.0  # cells  0…14 XIST⁺    → Female
-        raw_X[25:40, 1] = 1.0  # cells 25…39 RPS4Y1⁺  → Male
+        raw_x = np.zeros((50, 100), dtype=np.float32)
+        raw_x[:15, 0] = 1.0  # cells  0…14 XIST⁺    → Female
+        raw_x[25:40, 1] = 1.0  # cells 25…39 RPS4Y1⁺  → Male
 
         adata = sc.AnnData(
             X=np.zeros((50, 100), dtype=np.float32),
             var=pd.DataFrame(index=index),
         )
-        adata.raw = sc.AnnData(X=raw_X, var=pd.DataFrame(index=index))
+        adata.raw = sc.AnnData(X=raw_x, var=pd.DataFrame(index=index))
 
         detect_sex(adata, _MockCFG(tmp_path), logging.getLogger("test"))
         assert (adata.obs["predicted_sex"] == "Female").sum() == 15
@@ -220,18 +217,14 @@ class TestPrediction:
 class TestLogging:
     """Verify key log messages emitted by detect_sex."""
 
-    def test_logs_existing_column(
-        self, caplog: pytest.LogCaptureFixture, tmp_path: Path
-    ) -> None:
+    def test_logs_existing_column(self, caplog: pytest.LogCaptureFixture, tmp_path: Path) -> None:
         caplog.set_level(logging.INFO)
         adata = _make_test_adata()
         adata.obs["sex"] = ["Male"] * 50 + ["Female"] * 50
         detect_sex(adata, _MockCFG(tmp_path), logging.getLogger("test"))
         assert "already present" in caplog.text
 
-    def test_logs_no_raw_warning(
-        self, caplog: pytest.LogCaptureFixture, tmp_path: Path
-    ) -> None:
+    def test_logs_no_raw_warning(self, caplog: pytest.LogCaptureFixture, tmp_path: Path) -> None:
         caplog.set_level(logging.WARNING)
         adata = _make_test_adata(with_raw=False)
         detect_sex(adata, _MockCFG(tmp_path), logging.getLogger("test"))
@@ -241,36 +234,30 @@ class TestLogging:
         self, caplog: pytest.LogCaptureFixture, tmp_path: Path
     ) -> None:
         caplog.set_level(logging.WARNING)
-        adata = _make_test_adata(
-            with_raw=True, include_xist=False, include_y=False
-        )
+        adata = _make_test_adata(with_raw=True, include_xist=False, include_y=False)
         detect_sex(adata, _MockCFG(tmp_path), logging.getLogger("test"))
         assert "No sex-linked genes" in caplog.text
 
-    def test_logs_mouse_panel(
-        self, caplog: pytest.LogCaptureFixture, tmp_path: Path
-    ) -> None:
+    def test_logs_mouse_panel(self, caplog: pytest.LogCaptureFixture, tmp_path: Path) -> None:
         caplog.set_level(logging.INFO)
         adata = _make_test_adata()
         detect_sex(adata, _MockCFG(tmp_path), logging.getLogger("test"))
         assert "mouse panel" in caplog.text
 
-    def test_logs_human_panel(
-        self, caplog: pytest.LogCaptureFixture, tmp_path: Path
-    ) -> None:
+    def test_logs_human_panel(self, caplog: pytest.LogCaptureFixture, tmp_path: Path) -> None:
         caplog.set_level(logging.INFO)
         var_names = [f"Gene_{i}" for i in range(50)]
         var_names[0] = "XIST"
         var_names[1] = "DDX3Y"
         index = pd.Index(var_names)
-        raw_X = np.zeros((50, 50), dtype=np.float32)
-        raw_X[:10, 0] = 1.0
-        raw_X[20:30, 1] = 1.0
+        raw_x = np.zeros((50, 50), dtype=np.float32)
+        raw_x[:10, 0] = 1.0
+        raw_x[20:30, 1] = 1.0
         adata = sc.AnnData(
             X=np.zeros((50, 50), dtype=np.float32),
             var=pd.DataFrame(index=index),
         )
-        adata.raw = sc.AnnData(X=raw_X, var=pd.DataFrame(index=index))
+        adata.raw = sc.AnnData(X=raw_x, var=pd.DataFrame(index=index))
         detect_sex(adata, _MockCFG(tmp_path), logging.getLogger("test"))
         assert "human panel" in caplog.text
 

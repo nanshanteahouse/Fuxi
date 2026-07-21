@@ -5,18 +5,16 @@ without depending on real pipeline outputs or the full retina KB.
 """
 
 from __future__ import annotations
-import sys
-import copy
-from pathlib import Path
 
+import copy
+import sys
+from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
 import pytest
 from anndata import AnnData
-
-
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Mock KB — minimal controlled subset for deterministic tests
@@ -56,16 +54,16 @@ def _make_mock_adata() -> AnnData:
     """
     genes = ["RHO", "GNAT1", "SAG", "NRL", "POU4F1", "POU4F2", "RBPMS"]
     n_cells = 10
-    X = np.zeros((n_cells, len(genes)), dtype=np.float32)
+    x = np.zeros((n_cells, len(genes)), dtype=np.float32)
 
     # Rod cells (indices 0-4): RHO, GNAT1, SAG expressed; NRL not
-    X[0:5, 0] = 10.0  # RHO   — all 5 express
-    X[1:4, 1] = 5.0   # GNAT1 — cells 1,2,3 (3 of 5)
-    X[2, 2] = 2.0     # SAG   — cell 2 only (1 of 5)
+    x[0:5, 0] = 10.0  # RHO   — all 5 express
+    x[1:4, 1] = 5.0  # GNAT1 — cells 1,2,3 (3 of 5)
+    x[2, 2] = 2.0  # SAG   — cell 2 only (1 of 5)
 
     # RGC cells (indices 5-9): POU4F1, POU4F2 expressed; RBPMS not
-    X[5:10, 4] = 8.0  # POU4F1 — all 5 express
-    X[6:8, 5] = 4.0   # POU4F2 — cells 6,7 (2 of 5)
+    x[5:10, 4] = 8.0  # POU4F1 — all 5 express
+    x[6:8, 5] = 4.0  # POU4F2 — cells 6,7 (2 of 5)
 
     obs = pd.DataFrame(
         {"cell_type": ["Rod_Photoreceptor"] * 5 + ["RGC"] * 5},
@@ -73,7 +71,7 @@ def _make_mock_adata() -> AnnData:
     )
     var = pd.DataFrame(index=genes)
 
-    adata = AnnData(X, obs=obs, var=var)
+    adata = AnnData(x, obs=obs, var=var)
     return adata
 
 
@@ -87,6 +85,7 @@ def mock_adata() -> AnnData:
 def mock_h5ad_path(mock_adata, tmp_path) -> Path:
     """Write mock AnnData to a temporary .h5ad file."""
     import scanpy as sc
+
     path = tmp_path / "test_mock.h5ad"
     sc.readwrite.write(str(path), mock_adata)
     return path
@@ -103,10 +102,12 @@ def _make_validator(kb=None, use_ontology: bool = False):
         kb = copy.deepcopy(MOCK_KB)
     with patch("core.kb_validator.load_kb", return_value=kb):
         from core.kb_validator import KbValidator
+
         return KbValidator(tissue="retina", use_ontology=use_ontology)
     """Create KbValidator with mocked load_kb and controlled ontology flag."""
     with patch("core.kb_validator.load_kb", return_value=kb):
         from core.kb_validator import KbValidator
+
         return KbValidator(tissue="retina", use_ontology=use_ontology)
 
 
@@ -173,8 +174,14 @@ class TestKbValidatorCore:
         validator = _make_validator()
         result = validator.validate(mock_adata, annotation_col="cell_type")
 
-        expected_cols = {"cell_type", "gene", "tier", "validated",
-                         "pct_expressed", "mean_expression"}
+        expected_cols = {
+            "cell_type",
+            "gene",
+            "tier",
+            "validated",
+            "pct_expressed",
+            "mean_expression",
+        }
         assert set(result.columns) >= expected_cols
         # 2 confirm + 1 add + 1 refine (Rod) + 2 confirm + 1 add (RGC) = 7
         assert len(result) == 7
@@ -232,20 +239,20 @@ class TestCaseInsensitiveGeneMatching:
         genes_upper = ["RHO", "GNAT1", "SAG", "NRL", "POU4F1", "POU4F2", "RBPMS"]
         genes_lower = [g.lower() for g in genes_upper]
         n_cells = 10
-        X = np.zeros((n_cells, len(genes_lower)), dtype=np.float32)
+        x = np.zeros((n_cells, len(genes_lower)), dtype=np.float32)
 
-        X[0:5, 0] = 10.0  # rho — all Rod express
-        X[1:4, 1] = 5.0   # gnat1
-        X[2, 2] = 2.0     # sag
-        X[5:10, 4] = 8.0  # pou4f1 — all RGC
-        X[6:8, 5] = 4.0   # pou4f2
+        x[0:5, 0] = 10.0  # rho — all Rod express
+        x[1:4, 1] = 5.0  # gnat1
+        x[2, 2] = 2.0  # sag
+        x[5:10, 4] = 8.0  # pou4f1 — all RGC
+        x[6:8, 5] = 4.0  # pou4f2
 
         obs = pd.DataFrame(
             {"cell_type": ["Rod_Photoreceptor"] * 5 + ["RGC"] * 5},
             index=[f"cell_{i}" for i in range(n_cells)],
         )
         var = pd.DataFrame(index=genes_lower)
-        return AnnData(X, obs=obs, var=var)
+        return AnnData(x, obs=obs, var=var)
 
     def test_case_insensitive_lowercase_mouse_genes(self):
         """Lowercase mouse gene names match uppercase KB markers."""
@@ -277,6 +284,7 @@ class TestCLI:
     def test_cli_outputs_csv(self, tmp_path):
         """CLI with --no-ontology and --output writes CSV."""
         import scanpy as sc
+
         adata = _make_mock_adata()
         h5ad_path = tmp_path / "test.h5ad"
         sc.readwrite.write(str(h5ad_path), adata)
@@ -284,15 +292,19 @@ class TestCLI:
         output_path = tmp_path / "out.csv"
         args = [
             "kb_validator.py",
-            "--h5ad", str(h5ad_path),
-            "--annotation", "cell_type",
+            "--h5ad",
+            str(h5ad_path),
+            "--annotation",
+            "cell_type",
             "--no-ontology",
-            "--output", str(output_path),
+            "--output",
+            str(output_path),
         ]
         _orig = sys.argv[:]
         sys.argv = args
         try:
             import core.kb_validator as kbm
+
             with patch.object(kbm, "load_kb", return_value=copy.deepcopy(MOCK_KB)):
                 kbm.main()
         finally:
@@ -304,23 +316,28 @@ class TestCLI:
         assert "cell_type" in df.columns
         assert "gene" in df.columns
         assert "validated" in df.columns
+
     def test_cli_prints_summary(self, tmp_path, capsys):
         """CLI without --output prints summary."""
         import scanpy as sc
+
         adata = _make_mock_adata()
         h5ad_path = tmp_path / "test2.h5ad"
         sc.readwrite.write(str(h5ad_path), adata)
 
         args = [
             "kb_validator.py",
-            "--h5ad", str(h5ad_path),
-            "--annotation", "cell_type",
+            "--h5ad",
+            str(h5ad_path),
+            "--annotation",
+            "cell_type",
             "--no-ontology",
         ]
         _orig = sys.argv[:]
         sys.argv = args
         try:
             import core.kb_validator as kbm
+
             with patch.object(kbm, "load_kb", return_value=copy.deepcopy(MOCK_KB)):
                 kbm.main()
         finally:
@@ -328,6 +345,8 @@ class TestCLI:
 
         captured = capsys.readouterr()
         assert "confirm" in captured.out.lower() or "validated" in captured.out.lower()
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 # Additional edge-case tests
 # ═════════════════════════════════════════════════════════════════════════════
@@ -353,8 +372,9 @@ class TestEdgeCases:
         validator = _make_validator()
         adata = AnnData(
             X=np.zeros((3, 2), dtype=np.float32),
-            obs=pd.DataFrame({"cell_type": ["Unknown_Type"] * 3},
-                            index=pd.Index(["c1", "c2", "c3"])),
+            obs=pd.DataFrame(
+                {"cell_type": ["Unknown_Type"] * 3}, index=pd.Index(["c1", "c2", "c3"])
+            ),
         )
         result = validator.validate(adata, annotation_col="cell_type")
         assert len(result) == 0

@@ -26,14 +26,12 @@ if str(REPO_ROOT) not in sys.path:
 
 # Module under test (will raise ImportError until implemented in T2)
 from rna.utils.batch_diagnostics import (  # noqa: E402
-    diagnose_batch_candidates,
-    validate_harmony_preservation,
-    plot_diagnosis_report,
-    _compute_gini_criterion,
-    _compute_cramer_v,
-    _compute_purity_one_shot,
     BatchDiagnosisReport,
     ColumnDiagnosis,
+    _compute_cramer_v,
+    _compute_gini_criterion,
+    _compute_purity_one_shot,
+    diagnose_batch_candidates,
 )
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -50,13 +48,13 @@ def _make_adata(
 ) -> AnnData:
     """Build a synthetic AnnData with PCA."""
     rng = np.random.RandomState(seed)
-    X_raw = rng.randn(n_cells, n_genes).astype(np.float32)
+    x_raw = rng.randn(n_cells, n_genes).astype(np.float32)
     adata = AnnData(
         X=csr_matrix(rng.negative_binomial(2, 0.5, size=(n_cells, n_genes)).astype(np.float32)),
         obs=pd.DataFrame(obs_dict, index=[f"cell_{i}" for i in range(n_cells)]),
     )
     pca = PCA(n_components=n_pcs, random_state=seed)
-    adata.obsm["X_pca"] = pca.fit_transform(X_raw)
+    adata.obsm["X_pca"] = pca.fit_transform(x_raw)
     return adata
 
 
@@ -78,15 +76,15 @@ def adata_clean() -> AnnData:
     n_cells, n_genes = 500, 20
 
     # Base expression
-    X_raw = np.random.randn(n_cells, n_genes).astype(np.float32)
+    x_raw = np.random.randn(n_cells, n_genes).astype(np.float32)
 
     # Obs columns
     batch_labels = np.random.choice(["A", "B", "C", "D"], n_cells)
     biology_labels = np.random.choice(["TissueA", "TissueB"], n_cells)
 
     # Add structured biology signal in first 5 genes (concentrated → high Gini)
-    X_raw[biology_labels == "TissueA", :5] += 2.0
-    X_raw[biology_labels == "TissueB", :5] -= 1.0
+    x_raw[biology_labels == "TissueA", :5] += 2.0
+    x_raw[biology_labels == "TissueB", :5] -= 1.0
 
     adata = AnnData(
         X=csr_matrix(
@@ -96,9 +94,7 @@ def adata_clean() -> AnnData:
             {
                 "batch": pd.Categorical(batch_labels),
                 "biology": pd.Categorical(biology_labels),
-                "sample_id": pd.Categorical(
-                    np.random.choice(["S1", "S2", "S3"], n_cells)
-                ),
+                "sample_id": pd.Categorical(np.random.choice(["S1", "S2", "S3"], n_cells)),
                 "n_counts": np.random.poisson(1000, n_cells).astype(float),
             },
             index=[f"cell_{i}" for i in range(n_cells)],
@@ -107,7 +103,7 @@ def adata_clean() -> AnnData:
 
     # Compute PCA — biology structure is captured in first few components
     pca = PCA(n_components=10, random_state=42)
-    adata.obsm["X_pca"] = pca.fit_transform(X_raw)
+    adata.obsm["X_pca"] = pca.fit_transform(x_raw)
 
     return adata
 
@@ -117,14 +113,12 @@ def adata_collinear() -> AnnData:
     """``batch`` and ``biology`` columns are identical → Cramer's V = 1.0."""
     np.random.seed(42)
     labels = np.random.choice(["X", "Y"], 100)
-    X_raw = np.random.randn(100, 10).astype(np.float32)
-    X_raw[labels == "X", :3] += 1.5
-    X_raw[labels == "Y", :3] -= 1.0
+    x_raw = np.random.randn(100, 10).astype(np.float32)
+    x_raw[labels == "X", :3] += 1.5
+    x_raw[labels == "Y", :3] -= 1.0
 
     adata = AnnData(
-        X=csr_matrix(
-            np.random.negative_binomial(2, 0.5, size=(100, 10)).astype(np.float32)
-        ),
+        X=csr_matrix(np.random.negative_binomial(2, 0.5, size=(100, 10)).astype(np.float32)),
         obs=pd.DataFrame(
             {
                 "batch": pd.Categorical(labels),
@@ -134,7 +128,7 @@ def adata_collinear() -> AnnData:
         ),
     )
     pca = PCA(n_components=5, random_state=42)
-    adata.obsm["X_pca"] = pca.fit_transform(X_raw)
+    adata.obsm["X_pca"] = pca.fit_transform(x_raw)
     return adata
 
 
@@ -158,9 +152,7 @@ def adata_all_batch() -> AnnData:
         obs_dict={
             "batch1": pd.Categorical(np.random.choice(["A", "B", "C"], 200)),
             "batch2": pd.Categorical(np.random.choice(["X", "Y", "Z"], 200)),
-            "donor": pd.Categorical(
-                np.random.choice(["D1", "D2", "D3", "D4", "D5"], 200)
-            ),
+            "donor": pd.Categorical(np.random.choice(["D1", "D2", "D3", "D4", "D5"], 200)),
         },
         n_pcs=10,
     )
@@ -173,9 +165,7 @@ def adata_single_col() -> AnnData:
         n_cells=100,
         n_genes=10,
         obs_dict={
-            "condition": pd.Categorical(
-                np.random.choice(["control", "treated"], 100)
-            ),
+            "condition": pd.Categorical(np.random.choice(["control", "treated"], 100)),
         },
         n_pcs=5,
     )
@@ -190,12 +180,8 @@ def test_diagnose_classifies_batch_correctly(adata_clean: AnnData) -> None:
     """batch column (diffuse signal) → low Gini, judged ``'batch'``."""
     report = diagnose_batch_candidates(adata_clean)
     diag = next(d for d in report.column_diagnoses if d.column == "batch")
-    assert diag.gini_criterion < 0.3, (
-        f"Expected low Gini for batch, got {diag.gini_criterion:.4f}"
-    )
-    assert diag.judgment == "batch", (
-        f"Expected judgment='batch', got {diag.judgment!r}"
-    )
+    assert diag.gini_criterion < 0.3, f"Expected low Gini for batch, got {diag.gini_criterion:.4f}"
+    assert diag.judgment == "batch", f"Expected judgment='batch', got {diag.judgment!r}"
 
 
 def test_diagnose_classifies_biology_correctly(adata_clean: AnnData) -> None:
@@ -205,9 +191,7 @@ def test_diagnose_classifies_biology_correctly(adata_clean: AnnData) -> None:
     assert diag.gini_criterion > 0.5, (
         f"Expected high Gini for biology, got {diag.gini_criterion:.4f}"
     )
-    assert diag.judgment == "biology", (
-        f"Expected judgment='biology', got {diag.judgment!r}"
-    )
+    assert diag.judgment == "biology", f"Expected judgment='biology', got {diag.judgment!r}"
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -273,9 +257,7 @@ def test_empty_obs_graceful(adata_empty_obs: AnnData) -> None:
 def test_all_batch_no_biology(adata_all_batch: AnnData) -> None:
     """All columns are random/diffuse → batch_cols populated, biology_cols empty."""
     report = diagnose_batch_candidates(adata_all_batch)
-    assert len(report.batch_cols) > 0, (
-        "Expected at least one column classified as batch"
-    )
+    assert len(report.batch_cols) > 0, "Expected at least one column classified as batch"
     assert len(report.biology_cols) == 0, (
         "Expected no biology columns when all signals are diffuse"
     )
@@ -285,17 +267,17 @@ def test_single_unique_value_skipped() -> None:
     """Column with exactly 1 unique value → skipped silently, not errored."""
     n_cells, n_genes = 50, 10
     rng = np.random.RandomState(42)
-    X_raw = rng.randn(n_cells, n_genes).astype(np.float32)
+    x_raw = rng.randn(n_cells, n_genes).astype(np.float32)
 
     adata = AnnData(
-        X=csr_matrix(X_raw.copy()),
+        X=csr_matrix(x_raw.copy()),
         obs=pd.DataFrame(
             {"constant": pd.Categorical(["A"] * n_cells)},
             index=[f"cell_{i}" for i in range(n_cells)],
         ),
     )
     pca = PCA(n_components=5, random_state=42)
-    adata.obsm["X_pca"] = pca.fit_transform(X_raw)
+    adata.obsm["X_pca"] = pca.fit_transform(x_raw)
 
     report = diagnose_batch_candidates(adata)
     # The single-value column should be skipped entirely
@@ -307,27 +289,27 @@ def test_permutation_test_ambiguous() -> None:
     """Column with moderate signal triggers permutation-based judgment."""
     np.random.seed(123)
     n_cells, n_genes = 200, 15
-    X = np.random.randn(n_cells, n_genes).astype(np.float32)
+    x = np.random.randn(n_cells, n_genes).astype(np.float32)
 
     # Create a column with moderate structured signal (less than biology)
     labels = np.array(["G1"] * (n_cells // 2) + ["G2"] * (n_cells - n_cells // 2))
     np.random.shuffle(labels)
-    X[labels == "G1", :3] += 0.5  # moderate offset (biology used 2.0)
+    x[labels == "G1", :3] += 0.5  # moderate offset (biology used 2.0)
 
     adata = AnnData(
-        X=csr_matrix(X),
-        obs=pd.DataFrame({"moderate": pd.Categorical(labels)}, index=[f"cell_{i}" for i in range(n_cells)]),
+        X=csr_matrix(x),
+        obs=pd.DataFrame(
+            {"moderate": pd.Categorical(labels)}, index=[f"cell_{i}" for i in range(n_cells)]
+        ),
     )
     pca = PCA(n_components=5, random_state=123)
-    adata.obsm["X_pca"] = pca.fit_transform(X)
+    adata.obsm["X_pca"] = pca.fit_transform(x)
 
     report = diagnose_batch_candidates(adata, permute_n=100)
     assert len(report.column_diagnoses) == 1
     diag = report.column_diagnoses[0]
     # Permutation p-value should be populated (not None)
-    assert diag.permutation_pval is not None, (
-        "Ambiguous column should have a permutation p-value"
-    )
+    assert diag.permutation_pval is not None, "Ambiguous column should have a permutation p-value"
     assert 0.0 <= diag.permutation_pval <= 1.0, (
         f"Permutation p-value out of range: {diag.permutation_pval}"
     )
@@ -365,21 +347,19 @@ def test_pca_not_computed_raises() -> None:
 def test_small_ncells_fallback_purity() -> None:
     """<3 cells → purity defaults to 1.0 (too few for neighbours/clustering)."""
     np.random.seed(42)
-    X_raw = np.random.randn(2, 5).astype(np.float32)
+    x_raw = np.random.randn(2, 5).astype(np.float32)
     adata = AnnData(
-        X=csr_matrix(X_raw.copy()),
+        X=csr_matrix(x_raw.copy()),
         obs=pd.DataFrame(
             {"batch": pd.Categorical(["A", "B"])},
             index=[f"cell_{i}" for i in range(2)],
         ),
     )
     pca = PCA(n_components=2, random_state=42)
-    adata.obsm["X_pca"] = pca.fit_transform(X_raw)
+    adata.obsm["X_pca"] = pca.fit_transform(x_raw)
 
     purity = _compute_purity_one_shot(adata, "batch")
-    assert purity == pytest.approx(1.0), (
-        f"Expected purity=1.0 for <3 cells, got {purity}"
-    )
+    assert purity == pytest.approx(1.0), f"Expected purity=1.0 for <3 cells, got {purity}"
 
 
 def test_purity_readonly_contract(adata_clean: AnnData) -> None:

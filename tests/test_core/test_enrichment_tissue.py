@@ -9,7 +9,6 @@ Functions under test
 
 from __future__ import annotations
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -18,7 +17,6 @@ from core.pipeline.enrichment import (
     compute_pathway_relevance,
     filter_enrichment_by_tissue,
 )
-
 
 # ======================================================================
 #  compute_pathway_relevance tests
@@ -53,7 +51,12 @@ class TestComputePathwayRelevance:
         result = compute_pathway_relevance(df, kb_markers)
 
         # -- Column presence --
-        for col in ("kb_overlap_genes", "kb_overlap_count", "kb_overlap_ratio", "kb_relevance_score"):
+        for col in (
+            "kb_overlap_genes",
+            "kb_overlap_count",
+            "kb_overlap_ratio",
+            "kb_relevance_score",
+        ):
             assert col in result.columns, f"Missing column: {col}"
 
         # -- kb_overlap_count --
@@ -299,20 +302,20 @@ class TestFilterEnrichmentByTissue:
         assert "tissue_relevance_score" in result.columns
 
         # Row 0: whitelist → True
-        assert result["tissue_relevant"].iloc[0] == True
+        assert result["tissue_relevant"].iloc[0]
         assert result["tissue_relevance_score"].iloc[0] == 1.0
 
         # Row 1: blacklist → False
-        assert result["tissue_relevant"].iloc[1] == False
+        assert not result["tissue_relevant"].iloc[1]
         assert result["tissue_relevance_score"].iloc[1] == -1.0
 
         # Unbiased rows: [3.0, 0.1], median = 1.55
         # Row 2 (3.0 > 1.55): True, normalised = (3.0-0.1)/(3.0-0.1) = 1.0
-        assert result["tissue_relevant"].iloc[2] == True
+        assert result["tissue_relevant"].iloc[2]
         assert result["tissue_relevance_score"].iloc[2] == pytest.approx(1.0, rel=1e-5)
 
         # Row 3 (0.1 ≯ 1.55): False, score=0.0
-        assert result["tissue_relevant"].iloc[3] == False
+        assert not result["tissue_relevant"].iloc[3]
         assert result["tissue_relevance_score"].iloc[3] == 0.0
 
         # Verify the copy semantic (not the same object)
@@ -358,7 +361,7 @@ class TestFilterEnrichmentByTissue:
         # Whitelist priority: Phototransduction kept; Ribosome filtered
         assert len(result) == 1
         assert result["Term"].iloc[0] == "Phototransduction"
-        assert result["tissue_relevant"].iloc[0] == True
+        assert result["tissue_relevant"].iloc[0]
 
     # ------------------------------------------------------------------
     #  Invalid mode raises

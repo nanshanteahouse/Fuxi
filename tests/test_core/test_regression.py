@@ -15,24 +15,20 @@ W2 fixes:
 """
 
 import json
-import os
 import re
-import shutil
-import sys
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
-import pytest
 
-from core.utils import safe_write
-from core.preprocess.format_detector import guess_genome
 from core.interaction.cell_interaction import format_cci_results
-
+from core.preprocess.format_detector import guess_genome
+from core.utils import safe_write
 
 # ══════════════════════════════════════════════════════════════════════════
 # W1-01: safe_write WSL
 # ══════════════════════════════════════════════════════════════════════════
+
 
 def test_safe_write_wsl():
     """W1-01: tmp+mv strategy on /mnt/ paths (WSL fix).
@@ -53,19 +49,16 @@ def test_safe_write_wsl():
                 mock_makedirs.assert_called_once_with("/tmp/Fuxi", exist_ok=True)
 
                 # adata.write called with tmp path (not target)
-                mock_adata.write.assert_called_once_with(
-                    "/tmp/Fuxi/test.h5ad", compression="gzip"
-                )
+                mock_adata.write.assert_called_once_with("/tmp/Fuxi/test.h5ad", compression="gzip")
 
                 # shutil.move called with tmp -> target
-                mock_move.assert_called_once_with(
-                    "/tmp/Fuxi/test.h5ad", "/mnt/data/test.h5ad"
-                )
+                mock_move.assert_called_once_with("/tmp/Fuxi/test.h5ad", "/mnt/data/test.h5ad")
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # W1-02: format_cci_results descending sort
 # ══════════════════════════════════════════════════════════════════════════
+
 
 def test_format_cci_results_descending():
     """W1-02: top row has highest morans value when ascending=False.
@@ -73,13 +66,15 @@ def test_format_cci_results_descending():
     Creates a DataFrame with morans [0.1, 0.9, 0.5]; the 0.9 row must
     appear first after descending sort.
     """
-    df = pd.DataFrame({
-        "ligand":     ["A", "B", "C"],
-        "receptor":   ["X", "Y", "Z"],
-        "source":     ["S1", "S2", "S3"],
-        "target":     ["T1", "T2", "T3"],
-        "morans":     [0.1, 0.9, 0.5],
-    })
+    df = pd.DataFrame(
+        {
+            "ligand": ["A", "B", "C"],
+            "receptor": ["X", "Y", "Z"],
+            "source": ["S1", "S2", "S3"],
+            "target": ["T1", "T2", "T3"],
+            "morans": [0.1, 0.9, 0.5],
+        }
+    )
     result = format_cci_results(df, ascending=False, pval_col="morans")
     assert result.iloc[0]["morans"] == 0.9, (
         f"Expected top morans=0.9, got {result.iloc[0]['morans']}"
@@ -90,20 +85,21 @@ def test_format_cci_results_descending():
 # W1-03: guess_genome pipeline keys
 # ══════════════════════════════════════════════════════════════════════════
 
+
 def test_guess_genome_pipeline_keys():
     """W1-03: all 11 known species return correct genome strings."""
     expected = {
-        "human":      "hg38",
-        "mouse":      "mm10",
-        "rat":        "rn6",
-        "zebrafish":  "danRer11",
-        "cow":        "bosTau9",
-        "pig":        "susScr11",
-        "macaque":    "rheMac10",
-        "chicken":    "galGal6",
+        "human": "hg38",
+        "mouse": "mm10",
+        "rat": "rn6",
+        "zebrafish": "danRer11",
+        "cow": "bosTau9",
+        "pig": "susScr11",
+        "macaque": "rheMac10",
+        "chicken": "galGal6",
         "drosophila": "dm6",
-        "c_elegans":  "ce11",
-        "frog":       "xenTro10",
+        "c_elegans": "ce11",
+        "frog": "xenTro10",
     }
     for species, expected_genome in expected.items():
         result = guess_genome(species)
@@ -123,6 +119,7 @@ def test_guess_genome_unknown_species():
 # W2-01 (C6): raw guard in spatial 05_annotate
 # ══════════════════════════════════════════════════════════════════════════
 
+
 def test_raw_guard_spatial():
     """W2-01: spatial score_genes_mode guard — adata.raw is None → use var_names."""
     # -- Case 1: adata.raw is None → fallback to adata.var_names --
@@ -131,9 +128,7 @@ def test_raw_guard_spatial():
     adata_no_raw.var_names = ["GAPDH", "TP53", "EGFR"]
 
     var_names = (
-        adata_no_raw.raw.var_names
-        if adata_no_raw.raw is not None
-        else adata_no_raw.var_names
+        adata_no_raw.raw.var_names if adata_no_raw.raw is not None else adata_no_raw.var_names
     )
     assert list(var_names) == ["GAPDH", "TP53", "EGFR"], (
         "Should fall back to adata.var_names when adata.raw is None"
@@ -158,6 +153,7 @@ def test_raw_guard_spatial():
 # ══════════════════════════════════════════════════════════════════════════
 # W2-02 (C7): raw guard in label_transfer
 # ══════════════════════════════════════════════════════════════════════════
+
 
 def test_raw_guard_label_transfer():
     """W2-02: label_transfer has_raw guard — query.raw is None → fallback."""
@@ -198,14 +194,13 @@ def test_raw_guard_label_transfer():
 
     assert has_raw2 is False
     assert list(common2) == ["GAPDH", "TP53"]
-    assert raw_copy2 == "copied_adata", (
-        "Should fall back to query.copy() when query.raw is None"
-    )
+    assert raw_copy2 == "copied_adata", "Should fall back to query.copy() when query.raw is None"
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # W2-03 (M3): multi-species Ensembl ID regex
 # ══════════════════════════════════════════════════════════════════════════
+
 
 def _ensembl_regex() -> str:
     """Return the regex pattern used by ensure_gene_symbols."""
@@ -218,42 +213,39 @@ def test_ensembl_detection_multi_species():
 
     # Known Ensembl gene IDs (must match)
     ensembl_ids = [
-        ("ENSG00000139618", "human"),        # 0 letters between ENS and G
-        ("ENSMUSG00000057147", "mouse"),      # 3 letters: MUS
+        ("ENSG00000139618", "human"),  # 0 letters between ENS and G
+        ("ENSMUSG00000057147", "mouse"),  # 3 letters: MUS
         ("ENSDARG00000079245", "zebrafish"),  # 4 letters: DARG
-        ("ENSRNOG00000012345", "rat"),        # 3 letters: RNO
-        ("ENSCAFG00000012345", "dog"),        # 3 letters: CAF
-        ("ENSXETG00000012345", "frog"),       # 3 letters: XET
-        ("ENSGGAG00000012345", "chicken"),    # 3 letters: GGA
+        ("ENSRNOG00000012345", "rat"),  # 3 letters: RNO
+        ("ENSCAFG00000012345", "dog"),  # 3 letters: CAF
+        ("ENSXETG00000012345", "frog"),  # 3 letters: XET
+        ("ENSGGAG00000012345", "chicken"),  # 3 letters: GGA
     ]
 
     for eid, species in ensembl_ids:
-        assert re.match(pattern, eid), (
-            f"Failed to match {species} Ensembl ID: {eid!r}"
-        )
+        assert re.match(pattern, eid), f"Failed to match {species} Ensembl ID: {eid!r}"
 
     # Non-Ensembl identifiers (must NOT match)
     non_ensembl = [
         "TP53",
         "GAPDH",
-        "ENSG0000013961",      # only 10 digits
-        "ENSG000001396188",    # 12 digits
-        "ENSG0000013961A",     # letter in digit block
-        "ENS!G00000139618",    # special char in prefix
-        "ENSMUSG0000057147",   # only 10 digits
-        "ENSDARG0000079245",   # only 10 digits
-        "ENS0123G00000123456", # digits in species prefix block
+        "ENSG0000013961",  # only 10 digits
+        "ENSG000001396188",  # 12 digits
+        "ENSG0000013961A",  # letter in digit block
+        "ENS!G00000139618",  # special char in prefix
+        "ENSMUSG0000057147",  # only 10 digits
+        "ENSDARG0000079245",  # only 10 digits
+        "ENS0123G00000123456",  # digits in species prefix block
     ]
 
     for bad in non_ensembl:
-        assert not re.match(pattern, bad), (
-            f"Incorrectly matched non-Ensembl string: {bad!r}"
-        )
+        assert not re.match(pattern, bad), f"Incorrectly matched non-Ensembl string: {bad!r}"
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # W2-04 (N3): int(c) guard for non-integer cluster labels
 # ══════════════════════════════════════════════════════════════════════════
+
 
 def test_atac_non_integer_labels():
     """W2-04: int(c) guard prevents crash on non-integer labels like '0_1'."""
@@ -285,6 +277,7 @@ def test_atac_non_integer_labels():
 # W2-05 (M6): subcluster exit code 2
 # ══════════════════════════════════════════════════════════════════════════
 
+
 def test_step06_exit_code_2():
     """W2-05: 06_subcluster exits with code 2 when subcluster_types not set."""
     import importlib
@@ -300,12 +293,13 @@ def test_step06_exit_code_2():
     # Trigger condition: cell_type is None AND subcluster_types is empty/falsy
     assert (None is None and not []) is True, "Guard should trigger exit"
     assert (None is None and not [1, 2, 3]) is False, "Non-empty list prevents exit"
-    assert ("T cell" is not None or not []) is True, "Non-None cell_type prevents exit"
+    assert ("T cell" != None or not []) is True, "Non-None cell_type prevents exit"
 
 
 # ══════════════════════════════════════════════════════════════════════════
 # W2-06 (M12): LLM annotation validation
 # ══════════════════════════════════════════════════════════════════════════
+
 
 def test_atac_annotation_validation():
     """W2-06: malformed LLM JSON triggers fallback to empty dict.

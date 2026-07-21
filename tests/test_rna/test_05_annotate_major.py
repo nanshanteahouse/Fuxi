@@ -21,15 +21,9 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 # ── Load the 05_annotate_major module via file path ───────────────────
-_STEP_PATH = os.path.join(
-    _REPO_ROOT, "rna", "steps", "05_annotate_major.py"
-)
-_spec = importlib.util.spec_from_file_location(
-    "rna.steps._05_annotate_major_test", _STEP_PATH
-)
-assert _spec is not None and _spec.loader is not None, (
-    f"Could not load {_STEP_PATH}"
-)
+_STEP_PATH = os.path.join(_REPO_ROOT, "rna", "steps", "05_annotate_major.py")
+_spec = importlib.util.spec_from_file_location("rna.steps._05_annotate_major_test", _STEP_PATH)
+assert _spec is not None and _spec.loader is not None, f"Could not load {_STEP_PATH}"
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 ai_annotate = _mod.ai_annotate
@@ -45,16 +39,16 @@ def _make_test_adata(with_raw: bool = True) -> AnnData:
     n_cells = 30
     n_genes = 100
 
-    X = rng.poisson(lam=1.0, size=(n_cells, n_genes)).astype(np.float32)
-    adata = AnnData(X)
+    x = rng.poisson(lam=1.0, size=(n_cells, n_genes)).astype(np.float32)
+    adata = AnnData(x)
     adata.var_names = [f"GENE_{i}" for i in range(n_genes)]
     adata.obs["leiden"] = rng.choice(["0", "1", "2"], n_cells)
     adata.obsm["X_umap"] = rng.randn(n_cells, 2)
 
     if with_raw:
         n_raw = 200
-        raw_X = rng.poisson(lam=1.0, size=(n_cells, n_raw)).astype(np.float32)
-        raw = AnnData(raw_X)
+        raw_x = rng.poisson(lam=1.0, size=(n_cells, n_raw)).astype(np.float32)
+        raw = AnnData(raw_x)
         raw.var_names = [f"RAW_{i}" for i in range(n_raw)]
         adata.raw = raw
 
@@ -81,7 +75,7 @@ def _setup_rgg_result(adata: AnnData) -> None:
     one per group.  Shape is (n_top_genes,).
     """
     groups = sorted(adata.obs["leiden"].unique(), key=lambda x: int(x))
-    n_groups = len(groups)
+    len(groups)
     n_top = 5
 
     # dtype: one object field per group name
@@ -137,23 +131,31 @@ def test_T1_ai_annotate_use_raw() -> None:
         call_kwargs.update(kwargs)
         _setup_rgg_result(adata_)
 
-    ai_return = json.dumps({
-        "0": {
-            "cell_type": "T cell", "state": "active",
-            "subtype": "CD8+", "confidence": "high",
-            "reasoning": "markers match",
-        },
-        "1": {
-            "cell_type": "B cell", "state": "resting",
-            "subtype": "naive", "confidence": "high",
-            "reasoning": "markers match",
-        },
-        "2": {
-            "cell_type": "NK cell", "state": "active",
-            "subtype": "CD56+", "confidence": "high",
-            "reasoning": "markers match",
-        },
-    })
+    ai_return = json.dumps(
+        {
+            "0": {
+                "cell_type": "T cell",
+                "state": "active",
+                "subtype": "CD8+",
+                "confidence": "high",
+                "reasoning": "markers match",
+            },
+            "1": {
+                "cell_type": "B cell",
+                "state": "resting",
+                "subtype": "naive",
+                "confidence": "high",
+                "reasoning": "markers match",
+            },
+            "2": {
+                "cell_type": "NK cell",
+                "state": "active",
+                "subtype": "CD56+",
+                "confidence": "high",
+                "reasoning": "markers match",
+            },
+        }
+    )
 
     with (
         patch.object(_mod.sc.tl, "rank_genes_groups", side_effect=_tracking_rgg),
@@ -183,7 +185,7 @@ def test_T2_pass_rate_gate_passes_when_threshold_met() -> None:
     """
     n = 80
     adata = AnnData(np.zeros((n, 10)))
-    adata.obs['cell_type'] = ['T cell'] * 64 + ['Unknown'] * 16
+    adata.obs["cell_type"] = ["T cell"] * 64 + ["Unknown"] * 16
 
     cfg = MagicMock()
     cfg.marker = MagicMock()
@@ -203,7 +205,7 @@ def test_T2_pass_rate_gate_fires_at_zero_pass_rate() -> None:
     """
     n = 30
     adata = AnnData(np.zeros((n, 10)))
-    adata.obs['cell_type'] = ['Unknown'] * n
+    adata.obs["cell_type"] = ["Unknown"] * n
 
     cfg = MagicMock()
     cfg.marker = MagicMock()
@@ -224,7 +226,7 @@ def test_T2_score_genes_path_gate_coverage_when_std_none() -> None:
     Then:  SystemExit is raised regardless of standardizer availability.
     """
     adata = AnnData(np.zeros((30, 10)))
-    adata.obs['cell_type'] = ['Unknown'] * 30
+    adata.obs["cell_type"] = ["Unknown"] * 30
 
     cfg = MagicMock()
     cfg.marker = MagicMock()

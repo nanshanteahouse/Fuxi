@@ -2,27 +2,25 @@
 
 Regression baseline: these tests must pass on the CURRENT (unmodified) code.
 """
+
 from __future__ import annotations
 
 import importlib.util
 import logging
 import os
 from unittest.mock import patch
-from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
+
+from core.config.schema import Config
 
 # ── Load the 11_grn module ─────────────────────────────────────────────
 # conftest.py adds repo root to sys.path; the rna/steps/* modules use a
 # sys.path.insert(0, ...) trick at the top level, so we load via importlib
 # to avoid executing that statement at import time.
-_STEP_PATH = os.path.join(
-    os.path.dirname(__file__), "..", "..", "rna", "steps", "11_grn.py"
-)
-_spec = importlib.util.spec_from_file_location(
-    "rna.steps._11_grn_test", _STEP_PATH
-)
+_STEP_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "rna", "steps", "11_grn.py")
+_spec = importlib.util.spec_from_file_location("rna.steps._11_grn_test", _STEP_PATH)
 if _spec is None or _spec.loader is None:
     raise ImportError(f"Could not load 11_grn module at {_STEP_PATH}")
 grn = importlib.util.module_from_spec(_spec)
@@ -30,9 +28,6 @@ _spec.loader.exec_module(grn)
 
 top_variable_tfs = grn.top_variable_tfs
 export_results = grn.export_results
-
-
-from core.config.schema import Config
 
 # ======================================================================
 #  top_variable_tfs tests
@@ -89,11 +84,13 @@ def test_export_results_output_format(tmp_path) -> None:
         index=estimates_df.index,
         columns=estimates_df.columns,
     )
-    net_top = pd.DataFrame({
-        "source": ["TF0", "TF0", "TF1", "TF2"],
-        "target": [f"GENE_{i}" for i in range(4)],
-        "weight": [1, 1, 1, 1],
-    })
+    net_top = pd.DataFrame(
+        {
+            "source": ["TF0", "TF0", "TF1", "TF2"],
+            "target": [f"GENE_{i}" for i in range(4)],
+            "weight": [1, 1, 1, 1],
+        }
+    )
     log = logging.getLogger("test_export_results")
 
     # ── Run export (mock safe_write to avoid real h5ad I/O) ──────
@@ -113,6 +110,7 @@ def test_export_results_output_format(tmp_path) -> None:
     assert os.path.exists(os.path.join(grn_dir, "tf_activity_pvals.csv"))
     assert os.path.exists(os.path.join(grn_dir, "tf_target_edges.csv"))
     assert os.path.exists(os.path.join(grn_dir, "tf_target_counts.csv"))
+
 
 # ======================================================================
 #  Mode gating tests (T9)
@@ -146,11 +144,13 @@ def test_soft_mode_adds_annotation_column() -> None:
         index=pd.Index([f"CT{i}" for i in range(3)]),
         columns=pd.Index([f"TF{i}" for i in range(4)]),
     )
-    net = pd.DataFrame({
-        "source": ["TF0", "TF0", "TF1", "TF2"],
-        "target": ["GENE_1", "GENE_2", "GENE_3", "GENE_4"],
-        "weight": [1.0, 1.0, 1.0, 1.0],
-    })
+    net = pd.DataFrame(
+        {
+            "source": ["TF0", "TF0", "TF1", "TF2"],
+            "target": ["GENE_1", "GENE_2", "GENE_3", "GENE_4"],
+            "weight": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
     kb_markers: set[str] = {"GENE_1", "GENE_2"}
     log = logging.getLogger("test_soft_mode")
     _, tf_ann = grn.compute_tf_relevance(estimates_df, net, kb_markers, log)
@@ -163,20 +163,23 @@ def test_soft_mode_adds_annotation_column() -> None:
 def test_hard_mode_filters_tfs() -> None:
     """mode='hard' selects top TFs by combined variance + KB rank, preferring KB-overlap TFs."""
     data = {
-        "TF0": [3.0, 2.9, 3.1, 3.0],   # high activity, KB overlap
-        "TF1": [1.0, 0.9, 1.1, 1.0],   # low activity, KB overlap
+        "TF0": [3.0, 2.9, 3.1, 3.0],  # high activity, KB overlap
+        "TF1": [1.0, 0.9, 1.1, 1.0],  # low activity, KB overlap
         "TF2": [2.0, -2.0, 2.0, -2.0],  # high variance, no KB overlap
         "TF3": [0.1, -0.1, 0.1, -0.1],  # low variance, no KB overlap
-        "TF4": [2.1, 2.2, 1.9, 2.0],   # med activity, KB overlap
+        "TF4": [2.1, 2.2, 1.9, 2.0],  # med activity, KB overlap
     }
     estimates_df = pd.DataFrame(
-        data, index=pd.Index([f"CT{i}" for i in range(4)]),
+        data,
+        index=pd.Index([f"CT{i}" for i in range(4)]),
     )
-    net = pd.DataFrame({
-        "source": ["TF0", "TF0", "TF1", "TF4"],
-        "target": ["GENE_1", "GENE_2", "GENE_1", "GENE_1"],
-        "weight": [1.0, 1.0, 1.0, 1.0],
-    })
+    net = pd.DataFrame(
+        {
+            "source": ["TF0", "TF0", "TF1", "TF4"],
+            "target": ["GENE_1", "GENE_2", "GENE_1", "GENE_1"],
+            "weight": [1.0, 1.0, 1.0, 1.0],
+        }
+    )
     kb_markers: set[str] = {"GENE_1"}
     log = logging.getLogger("test_hard_mode")
     _, tf_ann = grn.compute_tf_relevance(estimates_df, net, kb_markers, log)

@@ -18,7 +18,6 @@ from core.cluster.grid_search import (
     umap_sweep,
 )
 
-
 # ---------------------------------------------------------------------------
 #  Test fixtures — mock data & callables
 # ---------------------------------------------------------------------------
@@ -28,8 +27,8 @@ from core.cluster.grid_search import (
 def mock_adata() -> AnnData:
     """Small synthetic AnnData with 100 cells × 20 genes and a PCA embedding."""
     rng = np.random.RandomState(42)
-    X = rng.normal(size=(100, 20))
-    adata = AnnData(X)
+    x = rng.normal(size=(100, 20))
+    adata = AnnData(x)
     adata.obsm["X_pca"] = rng.normal(size=(100, 10))
     return adata
 
@@ -320,9 +319,7 @@ class TestUmapSweep:
             raise RuntimeError("no UMAP for you")
 
         param_sweep: dict = {"min_dist": [0.1]}
-        results = umap_sweep(
-            mock_adata, param_sweep, umap_fn=failing_umap, random_seed=42
-        )
+        results = umap_sweep(mock_adata, param_sweep, umap_fn=failing_umap, random_seed=42)
         assert len(results) == 1
         assert results[0]["score"] is None
         assert results[0]["error"] == "UMAP failed"
@@ -350,9 +347,7 @@ class TestUmapSweep:
     def test_sweep_shape_matches_product(self, mock_adata: AnnData) -> None:
         """Result count equals product of sweep dimensions."""
         param_sweep: dict = {"min_dist": [0.1, 0.3], "spread": [0.5, 1.0, 2.0]}
-        results = umap_sweep(
-            mock_adata, param_sweep, umap_fn=_mock_umap_fn, random_seed=42
-        )
+        results = umap_sweep(mock_adata, param_sweep, umap_fn=_mock_umap_fn, random_seed=42)
         assert len(results) == 2 * 3  # 6 combinations
 
 
@@ -386,12 +381,14 @@ class TestEndToEnd:
         # Convert to the summary format expected by select_best_params
         summary = []
         for r in raw:
-            summary.append({
-                "n_neighbors": r["n_neighbors"],
-                "resolution": r["resolution"],
-                "n_clusters": r["n_clusters"],
-                "silhouette_score": r["score"],
-            })
+            summary.append(
+                {
+                    "n_neighbors": r["n_neighbors"],
+                    "resolution": r["resolution"],
+                    "n_clusters": r["n_clusters"],
+                    "silhouette_score": r["score"],
+                }
+            )
 
         best_n, best_r, method_label, reason = select_best_params(summary, method="pareto_elbow")
         assert best_n in (15, 20)

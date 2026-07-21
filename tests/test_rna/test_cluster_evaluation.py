@@ -1,22 +1,22 @@
 """Numerical tests for rna/utils/cluster_evaluation.py."""
 
 import logging
-import numpy as np
-
-import pytest
-
 from unittest.mock import MagicMock, patch
 
+import numpy as np
+import pytest
+
 from core.cluster.evaluation import (
-    select_best_params,
-    select_best_umap_params,
-    _compute_stability,
     _compute_cluster_coherence,
     _compute_splitting_gain,
-    _select_multi_metric,
+    _compute_stability,
     _detect_granularity,
     _select_de_gated,
+    _select_multi_metric,
+    select_best_params,
+    select_best_umap_params,
 )
+from core.config.schema import Config
 
 
 class TestClusterEvaluationImport:
@@ -44,20 +44,27 @@ class TestSelectBestParams:
         """
         results = [
             {
-                "n_neighbors": 10, "resolution": 0.5,
-                "n_clusters": 3, "silhouette_score": 0.4,
+                "n_neighbors": 10,
+                "resolution": 0.5,
+                "n_clusters": 3,
+                "silhouette_score": 0.4,
             },
             {
-                "n_neighbors": 20, "resolution": 0.8,
-                "n_clusters": 6, "silhouette_score": 0.55,
+                "n_neighbors": 20,
+                "resolution": 0.8,
+                "n_clusters": 6,
+                "silhouette_score": 0.55,
             },
             {
-                "n_neighbors": 30, "resolution": 1.0,
-                "n_clusters": 9, "silhouette_score": 0.6,
+                "n_neighbors": 30,
+                "resolution": 1.0,
+                "n_clusters": 9,
+                "silhouette_score": 0.6,
             },
         ]
         best_n, best_r, method, reason = select_best_params(
-            results, method="pareto_elbow",
+            results,
+            method="pareto_elbow",
         )
 
         assert best_n == 20
@@ -69,12 +76,15 @@ class TestSelectBestParams:
         """Single result -> single_pareto_point code path."""
         results = [
             {
-                "n_neighbors": 10, "resolution": 0.5,
-                "n_clusters": 3, "silhouette_score": 0.4,
+                "n_neighbors": 10,
+                "resolution": 0.5,
+                "n_clusters": 3,
+                "silhouette_score": 0.4,
             },
         ]
         best_n, best_r, method, reason = select_best_params(
-            results, method="pareto_elbow",
+            results,
+            method="pareto_elbow",
         )
 
         assert best_n == 10
@@ -85,20 +95,27 @@ class TestSelectBestParams:
         """method='silhouette' -> entry with highest silhouette_score."""
         results = [
             {
-                "n_neighbors": 10, "resolution": 0.5,
-                "n_clusters": 3, "silhouette_score": 0.4,
+                "n_neighbors": 10,
+                "resolution": 0.5,
+                "n_clusters": 3,
+                "silhouette_score": 0.4,
             },
             {
-                "n_neighbors": 20, "resolution": 0.8,
-                "n_clusters": 5, "silhouette_score": 0.7,
+                "n_neighbors": 20,
+                "resolution": 0.8,
+                "n_clusters": 5,
+                "silhouette_score": 0.7,
             },
             {
-                "n_neighbors": 30, "resolution": 1.0,
-                "n_clusters": 8, "silhouette_score": 0.6,
+                "n_neighbors": 30,
+                "resolution": 1.0,
+                "n_clusters": 8,
+                "silhouette_score": 0.6,
             },
         ]
         best_n, best_r, method, _reason = select_best_params(
-            results, method="silhouette",
+            results,
+            method="silhouette",
         )
 
         assert best_n == 20
@@ -114,8 +131,10 @@ class TestSelectBestParams:
             select_best_params(
                 [
                     {
-                        "n_neighbors": 10, "resolution": 0.5,
-                        "n_clusters": 3, "silhouette_score": float("nan"),
+                        "n_neighbors": 10,
+                        "resolution": 0.5,
+                        "n_clusters": 3,
+                        "silhouette_score": float("nan"),
                     },
                 ],
                 method="silhouette",
@@ -125,28 +144,34 @@ class TestSelectBestParams:
         """method=None with best_resolution selects correct row."""
         results = [
             {
-                "n_neighbors": 10, "resolution": 0.5,
-                "n_clusters": 3, "silhouette_score": 0.4,
+                "n_neighbors": 10,
+                "resolution": 0.5,
+                "n_clusters": 3,
+                "silhouette_score": 0.4,
             },
             {
-                "n_neighbors": 20, "resolution": 0.8,
-                "n_clusters": 6, "silhouette_score": 0.7,
+                "n_neighbors": 20,
+                "resolution": 0.8,
+                "n_clusters": 6,
+                "silhouette_score": 0.7,
             },
             {
-                "n_neighbors": 30, "resolution": 1.2,
-                "n_clusters": 9, "silhouette_score": 0.6,
+                "n_neighbors": 30,
+                "resolution": 1.2,
+                "n_clusters": 9,
+                "silhouette_score": 0.6,
             },
         ]
         best_n, best_r, method, _reason = select_best_params(
-            results, method=None, best_resolution=0.8,
+            results,
+            method=None,
+            best_resolution=0.8,
         )
 
         assert best_n == 20
         assert best_r == pytest.approx(0.8)
         assert method == "manual"
 
-
-from core.config.schema import Config
 
 class TestSelectBestUmapParams:
     """Numerical assertions for select_best_umap_params."""
@@ -155,17 +180,19 @@ class TestSelectBestUmapParams:
         """method=None -> returns CFG.umap_min_dist and CFG.umap_spread directly."""
         logger = logging.getLogger(__name__)
 
-        best_md, best_sp, method_label, sweep_results = (
-            select_best_umap_params(
-                adata=None,
-                best_n=10,
-                min_dist_grid=None,
-                spread_grid=None,
-                method=None,
-                CFG=Config.model_validate({"clustering": {"umap_min_dist": 0.5, "umap_spread": 1.5}}),
-                use_rep="X_pca",
-                log=logger,
-            )
+        best_md, best_sp, method_label, sweep_results = select_best_umap_params(
+            adata=None,
+            best_n=10,
+            min_dist_grid=None,
+            spread_grid=None,
+            method=None,
+            CFG=Config.model_validate(
+                {
+                    "clustering": {"umap_min_dist": 0.5, "umap_spread": 1.5},
+                }
+            ),
+            use_rep="X_pca",
+            log=logger,
         )
 
         assert best_md == pytest.approx(0.5)
@@ -184,12 +211,12 @@ class TestComputeStability:
         n_cells = 300
         n_genes = 50
         rng = np.random.RandomState(42)
-        X = rng.normal(0, 0.3, (n_cells, n_genes))
+        x = rng.normal(0, 0.3, (n_cells, n_genes))
         # Create 3 well-separated clusters
-        X[:100, :10] += rng.normal(5, 0.3, (100, 10))
-        X[100:200, 10:20] += rng.normal(5, 0.3, (100, 10))
-        X[200:300, 20:30] += rng.normal(5, 0.3, (100, 10))
-        adata = sc.AnnData(X)
+        x[:100, :10] += rng.normal(5, 0.3, (100, 10))
+        x[100:200, 10:20] += rng.normal(5, 0.3, (100, 10))
+        x[200:300, 20:30] += rng.normal(5, 0.3, (100, 10))
+        adata = sc.AnnData(x)
 
         sc.pp.pca(adata, n_comps=10)
         sc.pp.neighbors(adata, n_neighbors=15)
@@ -204,8 +231,8 @@ class TestComputeStability:
         n_cells = 100
         n_genes = 20
         rng = np.random.RandomState(42)
-        X = rng.normal(0, 0.05, (n_cells, n_genes))
-        adata = sc.AnnData(X)
+        x = rng.normal(0, 0.05, (n_cells, n_genes))
+        adata = sc.AnnData(x)
 
         sc.pp.pca(adata, n_comps=5)
         sc.pp.neighbors(adata, n_neighbors=10)
@@ -223,11 +250,11 @@ class TestComputeStability:
         n_cells = 200
         n_genes = 30
         rng = np.random.RandomState(42)
-        X = rng.normal(0, 0.5, (n_cells, n_genes))
+        x = rng.normal(0, 0.5, (n_cells, n_genes))
         # Make 2 moderate clusters
-        X[:100, :8] += rng.normal(4, 0.3, (100, 8))
-        X[100:, 8:16] += rng.normal(4, 0.3, (100, 8))
-        adata = sc.AnnData(X)
+        x[:100, :8] += rng.normal(4, 0.3, (100, 8))
+        x[100:, 8:16] += rng.normal(4, 0.3, (100, 8))
+        adata = sc.AnnData(x)
 
         sc.pp.pca(adata, n_comps=10)
         sc.pp.neighbors(adata, n_neighbors=15)
@@ -238,9 +265,7 @@ class TestComputeStability:
 
         # n_seeds=3 should produce a valid float between 0 and 1
         stab_3 = _compute_stability(adata, resolution=0.3, n_seeds=3)
-        assert 0.0 <= stab_3 <= 1.0, (
-            f"n_seeds=3 should be in [0,1], got {stab_3}"
-        )
+        assert 0.0 <= stab_3 <= 1.0, f"n_seeds=3 should be in [0,1], got {stab_3}"
 
 
 class TestComputeClusterCoherence:
@@ -255,9 +280,7 @@ class TestComputeClusterCoherence:
 
         # 3 clusters, 100 cells each
         adata = sc.AnnData(X=rng.randn(n_cells, 20))
-        adata.obs["leiden_15_0.5"] = (
-            ["0"] * 100 + ["1"] * 100 + ["2"] * 100
-        )
+        adata.obs["leiden_15_0.5"] = ["0"] * 100 + ["1"] * 100 + ["2"] * 100
 
         # per_cell_scores: each cell type boosted in its matching cluster
         per_cell_scores: dict[str, np.ndarray] = {}
@@ -268,12 +291,11 @@ class TestComputeClusterCoherence:
             per_cell_scores[f"Type{i}"] = scores
 
         coverage = _compute_cluster_coherence(
-            adata, cluster_key="leiden_15_0.5",
+            adata,
+            cluster_key="leiden_15_0.5",
             per_cell_scores=per_cell_scores,
         )
-        assert coverage > 0.8, (
-            f"Expected coverage > 0.8 for perfect match, got {coverage}"
-        )
+        assert coverage > 0.8, f"Expected coverage > 0.8 for perfect match, got {coverage}"
 
     def test_cluster_coherence_random(self) -> None:
         """Random expression → coverage < 0.5."""
@@ -283,22 +305,17 @@ class TestComputeClusterCoherence:
         rng = np.random.RandomState(42)
 
         adata = sc.AnnData(X=rng.randn(n_cells, 20))
-        adata.obs["leiden_15_0.5"] = (
-            ["0"] * 50 + ["1"] * 50 + ["2"] * 50 + ["3"] * 50
-        )
+        adata.obs["leiden_15_0.5"] = ["0"] * 50 + ["1"] * 50 + ["2"] * 50 + ["3"] * 50
 
         # 5 cell types → harder for any single type to randomly dominate a cluster
-        per_cell_scores = {
-            f"Type{c}": rng.randn(n_cells) for c in range(5)
-        }
+        per_cell_scores = {f"Type{c}": rng.randn(n_cells) for c in range(5)}
 
         coverage = _compute_cluster_coherence(
-            adata, cluster_key="leiden_15_0.5",
+            adata,
+            cluster_key="leiden_15_0.5",
             per_cell_scores=per_cell_scores,
         )
-        assert coverage < 0.6, (
-            f"Expected coverage < 0.6 for random scores, got {coverage}"
-        )
+        assert coverage < 0.6, f"Expected coverage < 0.6 for random scores, got {coverage}"
 
     def test_cluster_coherence_empty_scores(self) -> None:
         """Empty per_cell_scores dict → returns 1.0."""
@@ -308,12 +325,11 @@ class TestComputeClusterCoherence:
         adata.obs["leiden"] = ["0"] * 50
 
         coverage = _compute_cluster_coherence(
-            adata, cluster_key="leiden",
+            adata,
+            cluster_key="leiden",
             per_cell_scores={},
         )
-        assert coverage == 1.0, (
-            f"Empty scores should return 1.0, got {coverage}"
-        )
+        assert coverage == 1.0, f"Empty scores should return 1.0, got {coverage}"
 
     def test_cluster_coherence_missing_genes(self) -> None:
         """Cell type scores with None entries → graceful, still returns valid coverage."""
@@ -335,7 +351,8 @@ class TestComputeClusterCoherence:
         }
 
         coverage = _compute_cluster_coherence(
-            adata, cluster_key="leiden",
+            adata,
+            cluster_key="leiden",
             per_cell_scores=per_cell_scores,
         )
         assert 0.0 <= coverage <= 1.0, (
@@ -351,18 +368,24 @@ class TestSelectMultiMetric:
         # ── Without marker_coverage ──
         valid_no_mc = [
             {
-                "n_neighbors": 10, "resolution": 0.5,
-                "n_clusters": 3, "silhouette_score": 0.4,
+                "n_neighbors": 10,
+                "resolution": 0.5,
+                "n_clusters": 3,
+                "silhouette_score": 0.4,
                 "stability_score": 0.8,
             },
             {
-                "n_neighbors": 20, "resolution": 0.8,
-                "n_clusters": 6, "silhouette_score": 0.7,
+                "n_neighbors": 20,
+                "resolution": 0.8,
+                "n_clusters": 6,
+                "silhouette_score": 0.7,
                 "stability_score": 0.9,
             },
             {
-                "n_neighbors": 30, "resolution": 1.0,
-                "n_clusters": 9, "silhouette_score": 0.6,
+                "n_neighbors": 30,
+                "resolution": 1.0,
+                "n_clusters": 9,
+                "silhouette_score": 0.6,
                 "stability_score": 0.7,
             },
         ]
@@ -377,19 +400,28 @@ class TestSelectMultiMetric:
         # -- With cluster_coherence --
         valid_with_mc = [
             {
-                "n_neighbors": 10, "resolution": 0.5,
-                "n_clusters": 3, "silhouette_score": 0.4,
-                "stability_score": 0.8, "cluster_coherence": 0.6,
+                "n_neighbors": 10,
+                "resolution": 0.5,
+                "n_clusters": 3,
+                "silhouette_score": 0.4,
+                "stability_score": 0.8,
+                "cluster_coherence": 0.6,
             },
             {
-                "n_neighbors": 20, "resolution": 0.8,
-                "n_clusters": 6, "silhouette_score": 0.7,
-                "stability_score": 0.9, "cluster_coherence": 0.5,
+                "n_neighbors": 20,
+                "resolution": 0.8,
+                "n_clusters": 6,
+                "silhouette_score": 0.7,
+                "stability_score": 0.9,
+                "cluster_coherence": 0.5,
             },
             {
-                "n_neighbors": 30, "resolution": 1.0,
-                "n_clusters": 9, "silhouette_score": 0.6,
-                "stability_score": 0.7, "cluster_coherence": 0.7,
+                "n_neighbors": 30,
+                "resolution": 1.0,
+                "n_clusters": 9,
+                "silhouette_score": 0.6,
+                "stability_score": 0.7,
+                "cluster_coherence": 0.7,
             },
         ]
 
@@ -402,9 +434,12 @@ class TestSelectMultiMetric:
         # ── Single entry (edge case) ──
         valid_single = [
             {
-                "n_neighbors": 15, "resolution": 0.6,
-                "n_clusters": 4, "silhouette_score": 0.5,
-                "stability_score": 0.85, "cluster_coherence": 0.4,
+                "n_neighbors": 15,
+                "resolution": 0.6,
+                "n_clusters": 4,
+                "silhouette_score": 0.5,
+                "stability_score": 0.85,
+                "cluster_coherence": 0.4,
             },
         ]
 
@@ -412,7 +447,6 @@ class TestSelectMultiMetric:
         assert best_n3 == 15
         assert best_r3 == pytest.approx(0.6)
         assert method3 == "multi_metric"
-
 
 
 class TestSelectMultiMetricIntegration:
@@ -425,24 +459,60 @@ class TestSelectMultiMetricIntegration:
     def test_select_multi_metric_with_markers(self) -> None:
         """6 entries with marker_coverage -> returns valid 4-tuple; mc influences winner."""
         valid = [
-            {"n_neighbors": 10, "resolution": 0.5, "n_clusters": 3,
-             "silhouette_score": 0.4, "stability_score": 0.7,
-             "cluster_coherence": 0.3, "cluster_key": "leiden_10_0.5"},
-            {"n_neighbors": 10, "resolution": 1.0, "n_clusters": 5,
-             "silhouette_score": 0.4, "stability_score": 0.7,
-             "cluster_coherence": 0.6, "cluster_key": "leiden_10_1.0"},
-            {"n_neighbors": 20, "resolution": 0.5, "n_clusters": 6,
-             "silhouette_score": 0.6, "stability_score": 0.85,
-             "cluster_coherence": 0.5, "cluster_key": "leiden_20_0.5"},
-            {"n_neighbors": 20, "resolution": 1.0, "n_clusters": 8,
-             "silhouette_score": 0.6, "stability_score": 0.85,
-             "cluster_coherence": 0.8, "cluster_key": "leiden_20_1.0"},
-            {"n_neighbors": 30, "resolution": 0.5, "n_clusters": 9,
-             "silhouette_score": 0.5, "stability_score": 0.75,
-             "cluster_coherence": 0.7, "cluster_key": "leiden_30_0.5"},
-            {"n_neighbors": 30, "resolution": 1.0, "n_clusters": 12,
-             "silhouette_score": 0.5, "stability_score": 0.75,
-             "cluster_coherence": 0.9, "cluster_key": "leiden_30_1.0"},
+            {
+                "n_neighbors": 10,
+                "resolution": 0.5,
+                "n_clusters": 3,
+                "silhouette_score": 0.4,
+                "stability_score": 0.7,
+                "cluster_coherence": 0.3,
+                "cluster_key": "leiden_10_0.5",
+            },
+            {
+                "n_neighbors": 10,
+                "resolution": 1.0,
+                "n_clusters": 5,
+                "silhouette_score": 0.4,
+                "stability_score": 0.7,
+                "cluster_coherence": 0.6,
+                "cluster_key": "leiden_10_1.0",
+            },
+            {
+                "n_neighbors": 20,
+                "resolution": 0.5,
+                "n_clusters": 6,
+                "silhouette_score": 0.6,
+                "stability_score": 0.85,
+                "cluster_coherence": 0.5,
+                "cluster_key": "leiden_20_0.5",
+            },
+            {
+                "n_neighbors": 20,
+                "resolution": 1.0,
+                "n_clusters": 8,
+                "silhouette_score": 0.6,
+                "stability_score": 0.85,
+                "cluster_coherence": 0.8,
+                "cluster_key": "leiden_20_1.0",
+            },
+            {
+                "n_neighbors": 30,
+                "resolution": 0.5,
+                "n_clusters": 9,
+                "silhouette_score": 0.5,
+                "stability_score": 0.75,
+                "cluster_coherence": 0.7,
+                "cluster_key": "leiden_30_0.5",
+            },
+            {
+                "n_neighbors": 30,
+                "resolution": 1.0,
+                "n_clusters": 12,
+                "silhouette_score": 0.5,
+                "stability_score": 0.75,
+                "cluster_coherence": 0.9,
+                "cluster_key": "leiden_30_1.0",
+            },
         ]
         best_n, best_r, method, reason = _select_multi_metric(valid)
         assert method == "multi_metric"
@@ -456,24 +526,54 @@ class TestSelectMultiMetricIntegration:
     def test_select_multi_metric_without_markers(self) -> None:
         """6 entries without marker_coverage -> degrades to sil+stab (0.5/0.5)."""
         valid = [
-            {"n_neighbors": 10, "resolution": 0.5, "n_clusters": 3,
-             "silhouette_score": 0.3, "stability_score": 0.6,
-             "cluster_key": "leiden_10_0.5"},
-            {"n_neighbors": 10, "resolution": 1.0, "n_clusters": 5,
-             "silhouette_score": 0.4, "stability_score": 0.7,
-             "cluster_key": "leiden_10_1.0"},
-            {"n_neighbors": 20, "resolution": 0.5, "n_clusters": 6,
-             "silhouette_score": 0.8, "stability_score": 0.95,
-             "cluster_key": "leiden_20_0.5"},
-            {"n_neighbors": 20, "resolution": 1.0, "n_clusters": 8,
-             "silhouette_score": 0.6, "stability_score": 0.8,
-             "cluster_key": "leiden_20_1.0"},
-            {"n_neighbors": 30, "resolution": 0.5, "n_clusters": 9,
-             "silhouette_score": 0.5, "stability_score": 0.75,
-             "cluster_key": "leiden_30_0.5"},
-            {"n_neighbors": 30, "resolution": 1.0, "n_clusters": 12,
-             "silhouette_score": 0.55, "stability_score": 0.7,
-             "cluster_key": "leiden_30_1.0"},
+            {
+                "n_neighbors": 10,
+                "resolution": 0.5,
+                "n_clusters": 3,
+                "silhouette_score": 0.3,
+                "stability_score": 0.6,
+                "cluster_key": "leiden_10_0.5",
+            },
+            {
+                "n_neighbors": 10,
+                "resolution": 1.0,
+                "n_clusters": 5,
+                "silhouette_score": 0.4,
+                "stability_score": 0.7,
+                "cluster_key": "leiden_10_1.0",
+            },
+            {
+                "n_neighbors": 20,
+                "resolution": 0.5,
+                "n_clusters": 6,
+                "silhouette_score": 0.8,
+                "stability_score": 0.95,
+                "cluster_key": "leiden_20_0.5",
+            },
+            {
+                "n_neighbors": 20,
+                "resolution": 1.0,
+                "n_clusters": 8,
+                "silhouette_score": 0.6,
+                "stability_score": 0.8,
+                "cluster_key": "leiden_20_1.0",
+            },
+            {
+                "n_neighbors": 30,
+                "resolution": 0.5,
+                "n_clusters": 9,
+                "silhouette_score": 0.5,
+                "stability_score": 0.75,
+                "cluster_key": "leiden_30_0.5",
+            },
+            {
+                "n_neighbors": 30,
+                "resolution": 1.0,
+                "n_clusters": 12,
+                "silhouette_score": 0.55,
+                "stability_score": 0.7,
+                "cluster_key": "leiden_30_1.0",
+            },
         ]
         best_n, best_r, method, reason = _select_multi_metric(valid)
         assert method == "multi_metric"
@@ -485,12 +585,22 @@ class TestSelectMultiMetricIntegration:
     def test_select_multi_metric_no_marker_degrade(self) -> None:
         """All entries lack marker_coverage -> weights degrade to {sil:0.5, stab:0.5}."""
         valid = [
-            {"n_neighbors": 15, "resolution": 0.6, "n_clusters": 4,
-             "silhouette_score": 0.5, "stability_score": 0.8,
-             "cluster_key": "leiden_15_0.6"},
-            {"n_neighbors": 25, "resolution": 1.2, "n_clusters": 7,
-             "silhouette_score": 0.7, "stability_score": 0.9,
-             "cluster_key": "leiden_25_1.2"},
+            {
+                "n_neighbors": 15,
+                "resolution": 0.6,
+                "n_clusters": 4,
+                "silhouette_score": 0.5,
+                "stability_score": 0.8,
+                "cluster_key": "leiden_15_0.6",
+            },
+            {
+                "n_neighbors": 25,
+                "resolution": 1.2,
+                "n_clusters": 7,
+                "silhouette_score": 0.7,
+                "stability_score": 0.9,
+                "cluster_key": "leiden_25_1.2",
+            },
         ]
         best_n, best_r, method, reason = _select_multi_metric(valid)
         assert method == "multi_metric"
@@ -502,15 +612,20 @@ class TestSelectMultiMetricIntegration:
     def test_select_multi_metric_single_entry(self) -> None:
         """Single valid entry -> returns that entry unchanged."""
         valid = [
-            {"n_neighbors": 15, "resolution": 0.6, "n_clusters": 4,
-             "silhouette_score": 0.5, "stability_score": 0.85,
-             "cluster_coherence": 0.4, "cluster_key": "leiden_15_0.6"},
+            {
+                "n_neighbors": 15,
+                "resolution": 0.6,
+                "n_clusters": 4,
+                "silhouette_score": 0.5,
+                "stability_score": 0.85,
+                "cluster_coherence": 0.4,
+                "cluster_key": "leiden_15_0.6",
+            },
         ]
         best_n, best_r, method, _reason = _select_multi_metric(valid)
         assert best_n == 15
         assert best_r == pytest.approx(0.6)
         assert method == "multi_metric"
-
 
 
 class TestAdaptiveBehaviors:
@@ -524,19 +639,28 @@ class TestAdaptiveBehaviors:
         """All entries have marker_coverage < 0.1 → warning + degrade to sil+stab."""
         entries = [
             {
-                "n_neighbors": 10, "resolution": 0.5,
-                "n_clusters": 3, "silhouette_score": 0.4,
-                "stability_score": 0.8, "cluster_coherence": 0.0,
+                "n_neighbors": 10,
+                "resolution": 0.5,
+                "n_clusters": 3,
+                "silhouette_score": 0.4,
+                "stability_score": 0.8,
+                "cluster_coherence": 0.0,
             },
             {
-                "n_neighbors": 20, "resolution": 0.8,
-                "n_clusters": 6, "silhouette_score": 0.7,
-                "stability_score": 0.9, "cluster_coherence": 0.02,
+                "n_neighbors": 20,
+                "resolution": 0.8,
+                "n_clusters": 6,
+                "silhouette_score": 0.7,
+                "stability_score": 0.9,
+                "cluster_coherence": 0.02,
             },
             {
-                "n_neighbors": 30, "resolution": 1.0,
-                "n_clusters": 9, "silhouette_score": 0.6,
-                "stability_score": 0.7, "cluster_coherence": 0.05,
+                "n_neighbors": 30,
+                "resolution": 1.0,
+                "n_clusters": 9,
+                "silhouette_score": 0.6,
+                "stability_score": 0.7,
+                "cluster_coherence": 0.05,
             },
         ]
 
@@ -545,8 +669,7 @@ class TestAdaptiveBehaviors:
 
         # ── Warning emitted ──
         assert any(
-            "mismatch" in rec.message or "Degrading" in rec.message
-            for rec in caplog.records
+            "mismatch" in rec.message or "Degrading" in rec.message for rec in caplog.records
         ), "Expected a warning about marker mismatch degrade"
 
         # ── Valid 4-tuple with multi_metric method ──
@@ -566,13 +689,17 @@ class TestAdaptiveBehaviors:
         # ── Absence path: entries lack marker_coverage key entirely ──
         no_mc_entries = [
             {
-                "n_neighbors": 10, "resolution": 0.5,
-                "n_clusters": 3, "silhouette_score": 0.4,
+                "n_neighbors": 10,
+                "resolution": 0.5,
+                "n_clusters": 3,
+                "silhouette_score": 0.4,
                 "stability_score": 0.8,
             },
             {
-                "n_neighbors": 20, "resolution": 0.8,
-                "n_clusters": 6, "silhouette_score": 0.7,
+                "n_neighbors": 20,
+                "resolution": 0.8,
+                "n_clusters": 6,
+                "silhouette_score": 0.7,
                 "stability_score": 0.9,
             },
         ]
@@ -584,21 +711,26 @@ class TestAdaptiveBehaviors:
         assert "coherence=0.000" in reason1
         # Absence path logs no mismatch warning
         assert not any(
-            "mismatch" in rec.message or "Degrading" in rec.message
-            for rec in caplog.records
+            "mismatch" in rec.message or "Degrading" in rec.message for rec in caplog.records
         ), "Absence path should NOT log a mismatch warning"
 
         # ── Mismatch path: entries have marker_coverage but all < 0.1 ──
         mismatch_entries = [
             {
-                "n_neighbors": 15, "resolution": 0.6,
-                "n_clusters": 4, "silhouette_score": 0.5,
-                "stability_score": 0.85, "cluster_coherence": 0.0,
+                "n_neighbors": 15,
+                "resolution": 0.6,
+                "n_clusters": 4,
+                "silhouette_score": 0.5,
+                "stability_score": 0.85,
+                "cluster_coherence": 0.0,
             },
             {
-                "n_neighbors": 25, "resolution": 1.2,
-                "n_clusters": 7, "silhouette_score": 0.7,
-                "stability_score": 0.9, "cluster_coherence": 0.01,
+                "n_neighbors": 25,
+                "resolution": 1.2,
+                "n_clusters": 7,
+                "silhouette_score": 0.7,
+                "stability_score": 0.9,
+                "cluster_coherence": 0.01,
             },
         ]
         caplog.clear()
@@ -609,9 +741,9 @@ class TestAdaptiveBehaviors:
         assert "coherence=0.000" in reason2
         # Mismatch path DOES log a warning
         assert any(
-            "mismatch" in rec.message or "Degrading" in rec.message
-            for rec in caplog.records
+            "mismatch" in rec.message or "Degrading" in rec.message for rec in caplog.records
         ), "Mismatch path SHOULD log a warning about marker mismatch degrade"
+
 
 class TestDetectGranularity:
     """Tests for _detect_granularity function."""
@@ -619,21 +751,21 @@ class TestDetectGranularity:
     def test_detect_granularity_tissue_level(self) -> None:
         """High CV + many clusters → tissue-level."""
         r = [
-            {'n_neighbors': 15, 'resolution': 0.3, 'n_clusters': 5, 'silhouette_score': 0.20},
-            {'n_neighbors': 15, 'resolution': 0.5, 'n_clusters': 8, 'silhouette_score': 0.18},
-            {'n_neighbors': 15, 'resolution': 0.8, 'n_clusters': 12, 'silhouette_score': 0.12},
-            {'n_neighbors': 15, 'resolution': 1.0, 'n_clusters': 14, 'silhouette_score': 0.09},
-            {'n_neighbors': 15, 'resolution': 1.5, 'n_clusters': 18, 'silhouette_score': 0.06},
+            {"n_neighbors": 15, "resolution": 0.3, "n_clusters": 5, "silhouette_score": 0.20},
+            {"n_neighbors": 15, "resolution": 0.5, "n_clusters": 8, "silhouette_score": 0.18},
+            {"n_neighbors": 15, "resolution": 0.8, "n_clusters": 12, "silhouette_score": 0.12},
+            {"n_neighbors": 15, "resolution": 1.0, "n_clusters": 14, "silhouette_score": 0.09},
+            {"n_neighbors": 15, "resolution": 1.5, "n_clusters": 18, "silhouette_score": 0.06},
         ]
         assert _detect_granularity(r) == "tissue"
 
     def test_detect_granularity_subtype_level(self) -> None:
         """Low CV + few clusters → subtype-level. Flat silhouette across resolutions."""
         r = [
-            {'n_neighbors': 15, 'resolution': 0.3, 'n_clusters': 4, 'silhouette_score': 0.08},
-            {'n_neighbors': 15, 'resolution': 0.5, 'n_clusters': 5, 'silhouette_score': 0.08},
-            {'n_neighbors': 15, 'resolution': 0.8, 'n_clusters': 6, 'silhouette_score': 0.08},
-            {'n_neighbors': 15, 'resolution': 1.0, 'n_clusters': 7, 'silhouette_score': 0.08},
+            {"n_neighbors": 15, "resolution": 0.3, "n_clusters": 4, "silhouette_score": 0.08},
+            {"n_neighbors": 15, "resolution": 0.5, "n_clusters": 5, "silhouette_score": 0.08},
+            {"n_neighbors": 15, "resolution": 0.8, "n_clusters": 6, "silhouette_score": 0.08},
+            {"n_neighbors": 15, "resolution": 1.0, "n_clusters": 7, "silhouette_score": 0.08},
         ]
         assert _detect_granularity(r) == "subtype"
 
@@ -643,7 +775,7 @@ class TestDetectGranularity:
 
     def test_detect_granularity_single_entry(self) -> None:
         """Single entry → tissue (conservative default)."""
-        r = [{'n_neighbors': 15, 'resolution': 0.5, 'n_clusters': 5, 'silhouette_score': 0.10}]
+        r = [{"n_neighbors": 15, "resolution": 0.5, "n_clusters": 5, "silhouette_score": 0.10}]
         assert _detect_granularity(r) == "tissue"
 
 
@@ -653,10 +785,10 @@ class TestComputeSplittingGain:
     def test_splitting_gain_identical(self) -> None:
         """Same n_clusters across all resolutions → gain=0 for all entries."""
         entries = [
-            {'resolution': 0.3, 'n_clusters': 5},
-            {'resolution': 0.5, 'n_clusters': 5},
-            {'resolution': 0.8, 'n_clusters': 5},
-            {'resolution': 1.0, 'n_clusters': 5},
+            {"resolution": 0.3, "n_clusters": 5},
+            {"resolution": 0.5, "n_clusters": 5},
+            {"resolution": 0.8, "n_clusters": 5},
+            {"resolution": 1.0, "n_clusters": 5},
         ]
         gains = _compute_splitting_gain(entries)
         assert gains == {0.5: 0.0, 0.8: 0.0, 1.0: 0.0}
@@ -664,10 +796,10 @@ class TestComputeSplittingGain:
     def test_splitting_gain_positive(self) -> None:
         """Increasing n_clusters → positive splitting gain."""
         entries = [
-            {'resolution': 0.3, 'n_clusters': 3},
-            {'resolution': 0.5, 'n_clusters': 5},
-            {'resolution': 0.8, 'n_clusters': 10},
-            {'resolution': 1.0, 'n_clusters': 12},
+            {"resolution": 0.3, "n_clusters": 3},
+            {"resolution": 0.5, "n_clusters": 5},
+            {"resolution": 0.8, "n_clusters": 10},
+            {"resolution": 1.0, "n_clusters": 12},
         ]
         # gain(0.5) = max(0, (5-3)/(0.5-0.3)) = 2/0.2 = 10.0
         # gain(0.8) = max(0, (10-5)/(0.8-0.5)) = 5/0.3 ≈ 16.667
@@ -679,16 +811,16 @@ class TestComputeSplittingGain:
 
     def test_splitting_gain_single(self) -> None:
         """Single resolution → empty dict."""
-        entries = [{'resolution': 0.5, 'n_clusters': 3}]
+        entries = [{"resolution": 0.5, "n_clusters": 3}]
         gains = _compute_splitting_gain(entries)
         assert gains == {}
 
     def test_splitting_gain_unsorted_input(self) -> None:
         """Unsorted input → function sorts internally, produces correct gains."""
         entries = [
-            {'resolution': 1.0, 'n_clusters': 12},
-            {'resolution': 0.3, 'n_clusters': 3},
-            {'resolution': 0.5, 'n_clusters': 5},
+            {"resolution": 1.0, "n_clusters": 12},
+            {"resolution": 0.3, "n_clusters": 3},
+            {"resolution": 0.5, "n_clusters": 5},
         ]
         gains = _compute_splitting_gain(entries)
         assert gains[0.5] == pytest.approx(10.0)
@@ -697,16 +829,19 @@ class TestComputeSplittingGain:
     def test_detect_granularity_missing_keys(self) -> None:
         """Entries missing silhouette_score → gracefully handled."""
         r = [
-            {'n_neighbors': 15, 'resolution': 0.5, 'n_clusters': 5},
-            {'n_neighbors': 15, 'resolution': 1.0, 'n_clusters': 7, 'silhouette_score': None},
+            {"n_neighbors": 15, "resolution": 0.5, "n_clusters": 5},
+            {"n_neighbors": 15, "resolution": 1.0, "n_clusters": 7, "silhouette_score": None},
         ]
         assert _detect_granularity(r) == "tissue"
+
 
 # ── Helper for DE-gated tests ──
 
 
 def _make_mock_rank_results(
-    n_clusters: int, n_genes: int = 50, n_de_genes: int = 30,
+    n_clusters: int,
+    n_genes: int = 50,
+    n_de_genes: int = 30,
     rng: np.random.RandomState | None = None,
 ) -> dict:
     """Create mock rank_genes_groups results dict with structured arrays.
@@ -741,21 +876,33 @@ class TestSelectMultiMetricKBRate:
         """Entries with kb_annotatable_rate -> 5-metric scoring selects correctly."""
         valid = [
             {
-                "n_neighbors": 10, "resolution": 0.5, "n_clusters": 3,
-                "silhouette_score": 0.3, "stability_score": 0.6,
-                "cluster_coherence": 0.4, "splitting_gain": 1.0,
+                "n_neighbors": 10,
+                "resolution": 0.5,
+                "n_clusters": 3,
+                "silhouette_score": 0.3,
+                "stability_score": 0.6,
+                "cluster_coherence": 0.4,
+                "splitting_gain": 1.0,
                 "kb_annotatable_rate": 0.2,
             },
             {
-                "n_neighbors": 20, "resolution": 0.8, "n_clusters": 6,
-                "silhouette_score": 0.7, "stability_score": 0.9,
-                "cluster_coherence": 0.8, "splitting_gain": 3.0,
+                "n_neighbors": 20,
+                "resolution": 0.8,
+                "n_clusters": 6,
+                "silhouette_score": 0.7,
+                "stability_score": 0.9,
+                "cluster_coherence": 0.8,
+                "splitting_gain": 3.0,
                 "kb_annotatable_rate": 0.9,
             },
             {
-                "n_neighbors": 30, "resolution": 1.0, "n_clusters": 9,
-                "silhouette_score": 0.5, "stability_score": 0.7,
-                "cluster_coherence": 0.6, "splitting_gain": 2.0,
+                "n_neighbors": 30,
+                "resolution": 1.0,
+                "n_clusters": 9,
+                "silhouette_score": 0.5,
+                "stability_score": 0.7,
+                "cluster_coherence": 0.6,
+                "splitting_gain": 2.0,
                 "kb_annotatable_rate": 0.5,
             },
         ]
@@ -769,19 +916,31 @@ class TestSelectMultiMetricKBRate:
         """Entries lack kb_annotatable_rate -> degrade to 4-metric weights."""
         valid = [
             {
-                "n_neighbors": 10, "resolution": 0.5, "n_clusters": 3,
-                "silhouette_score": 0.3, "stability_score": 0.6,
-                "cluster_coherence": 0.4, "splitting_gain": 1.0,
+                "n_neighbors": 10,
+                "resolution": 0.5,
+                "n_clusters": 3,
+                "silhouette_score": 0.3,
+                "stability_score": 0.6,
+                "cluster_coherence": 0.4,
+                "splitting_gain": 1.0,
             },
             {
-                "n_neighbors": 20, "resolution": 0.8, "n_clusters": 6,
-                "silhouette_score": 0.7, "stability_score": 0.9,
-                "cluster_coherence": 0.8, "splitting_gain": 3.0,
+                "n_neighbors": 20,
+                "resolution": 0.8,
+                "n_clusters": 6,
+                "silhouette_score": 0.7,
+                "stability_score": 0.9,
+                "cluster_coherence": 0.8,
+                "splitting_gain": 3.0,
             },
             {
-                "n_neighbors": 30, "resolution": 1.0, "n_clusters": 9,
-                "silhouette_score": 0.5, "stability_score": 0.7,
-                "cluster_coherence": 0.6, "splitting_gain": 2.0,
+                "n_neighbors": 30,
+                "resolution": 1.0,
+                "n_clusters": 9,
+                "silhouette_score": 0.5,
+                "stability_score": 0.7,
+                "cluster_coherence": 0.6,
+                "splitting_gain": 2.0,
             },
         ]
         best_n, best_r, method, reason = _select_multi_metric(valid)
@@ -796,9 +955,13 @@ class TestSelectMultiMetricKBRate:
         # Single entry with kb_annotatable_rate
         single = [
             {
-                "n_neighbors": 15, "resolution": 0.6, "n_clusters": 4,
-                "silhouette_score": 0.5, "stability_score": 0.85,
-                "cluster_coherence": 0.4, "splitting_gain": 1.5,
+                "n_neighbors": 15,
+                "resolution": 0.6,
+                "n_clusters": 4,
+                "silhouette_score": 0.5,
+                "stability_score": 0.85,
+                "cluster_coherence": 0.4,
+                "splitting_gain": 1.5,
                 "kb_annotatable_rate": 0.7,
             },
         ]
@@ -810,21 +973,33 @@ class TestSelectMultiMetricKBRate:
         # All entries share identical kb_annotatable_rate
         same_kb = [
             {
-                "n_neighbors": 10, "resolution": 0.5, "n_clusters": 3,
-                "silhouette_score": 0.3, "stability_score": 0.5,
-                "cluster_coherence": 0.3, "splitting_gain": 1.0,
+                "n_neighbors": 10,
+                "resolution": 0.5,
+                "n_clusters": 3,
+                "silhouette_score": 0.3,
+                "stability_score": 0.5,
+                "cluster_coherence": 0.3,
+                "splitting_gain": 1.0,
                 "kb_annotatable_rate": 0.5,
             },
             {
-                "n_neighbors": 20, "resolution": 0.8, "n_clusters": 6,
-                "silhouette_score": 0.8, "stability_score": 0.9,
-                "cluster_coherence": 0.9, "splitting_gain": 4.0,
+                "n_neighbors": 20,
+                "resolution": 0.8,
+                "n_clusters": 6,
+                "silhouette_score": 0.8,
+                "stability_score": 0.9,
+                "cluster_coherence": 0.9,
+                "splitting_gain": 4.0,
                 "kb_annotatable_rate": 0.5,
             },
             {
-                "n_neighbors": 30, "resolution": 1.0, "n_clusters": 9,
-                "silhouette_score": 0.4, "stability_score": 0.6,
-                "cluster_coherence": 0.4, "splitting_gain": 2.0,
+                "n_neighbors": 30,
+                "resolution": 1.0,
+                "n_clusters": 9,
+                "silhouette_score": 0.4,
+                "stability_score": 0.6,
+                "cluster_coherence": 0.4,
+                "splitting_gain": 2.0,
                 "kb_annotatable_rate": 0.5,
             },
         ]
@@ -844,16 +1019,22 @@ class TestSelectDeGated:
         """High-res entries have DE >= threshold -> highest selected."""
         valid = [
             {
-                "n_clusters": 5, "resolution": 0.5,
-                "cluster_key": "leiden_0.5", "n_neighbors": 15,
+                "n_clusters": 5,
+                "resolution": 0.5,
+                "cluster_key": "leiden_0.5",
+                "n_neighbors": 15,
             },
             {
-                "n_clusters": 10, "resolution": 1.0,
-                "cluster_key": "leiden_1.0", "n_neighbors": 15,
+                "n_clusters": 10,
+                "resolution": 1.0,
+                "cluster_key": "leiden_1.0",
+                "n_neighbors": 15,
             },
             {
-                "n_clusters": 20, "resolution": 2.0,
-                "cluster_key": "leiden_2.0", "n_neighbors": 15,
+                "n_clusters": 20,
+                "resolution": 2.0,
+                "cluster_key": "leiden_2.0",
+                "n_neighbors": 15,
             },
         ]
         adata = MagicMock()
@@ -876,7 +1057,10 @@ class TestSelectDeGated:
             nk = n_clusters_by_key.get(groupby, 5)
             nd = de_by_key.get(groupby, 0)
             mock_results = _make_mock_rank_results(
-                nk, n_genes=50, n_de_genes=nd, rng=rng,
+                nk,
+                n_genes=50,
+                n_de_genes=nd,
+                rng=rng,
             )
             adata.uns["rank_genes_groups"] = mock_results
 
@@ -894,16 +1078,22 @@ class TestSelectDeGated:
         """All DE counts below threshold -> fallback to lowest resolution."""
         valid = [
             {
-                "n_clusters": 5, "resolution": 0.5,
-                "cluster_key": "leiden_0.5", "n_neighbors": 15,
+                "n_clusters": 5,
+                "resolution": 0.5,
+                "cluster_key": "leiden_0.5",
+                "n_neighbors": 15,
             },
             {
-                "n_clusters": 10, "resolution": 1.0,
-                "cluster_key": "leiden_1.0", "n_neighbors": 15,
+                "n_clusters": 10,
+                "resolution": 1.0,
+                "cluster_key": "leiden_1.0",
+                "n_neighbors": 15,
             },
             {
-                "n_clusters": 20, "resolution": 2.0,
-                "cluster_key": "leiden_2.0", "n_neighbors": 15,
+                "n_clusters": 20,
+                "resolution": 2.0,
+                "cluster_key": "leiden_2.0",
+                "n_neighbors": 15,
             },
         ]
         adata = MagicMock()
@@ -926,7 +1116,10 @@ class TestSelectDeGated:
             nk = n_clusters_by_key.get(groupby, 5)
             nd = de_by_key.get(groupby, 0)
             mock_results = _make_mock_rank_results(
-                nk, n_genes=50, n_de_genes=nd, rng=rng,
+                nk,
+                n_genes=50,
+                n_de_genes=nd,
+                rng=rng,
             )
             adata.uns["rank_genes_groups"] = mock_results
 
@@ -944,8 +1137,10 @@ class TestSelectDeGated:
         """Single entry -> returned as-is, no rank_genes_groups call."""
         valid = [
             {
-                "n_clusters": 8, "resolution": 1.0,
-                "cluster_key": "leiden_1.0", "n_neighbors": 20,
+                "n_clusters": 8,
+                "resolution": 1.0,
+                "cluster_key": "leiden_1.0",
+                "n_neighbors": 20,
             },
         ]
         adata = MagicMock()
@@ -965,12 +1160,16 @@ class TestSelectDeGated:
         """Returns 4-tuple (n_clusters, resolution, cluster_key, reason)."""
         valid = [
             {
-                "n_clusters": 5, "resolution": 0.5,
-                "cluster_key": "leiden_0.5", "n_neighbors": 15,
+                "n_clusters": 5,
+                "resolution": 0.5,
+                "cluster_key": "leiden_0.5",
+                "n_neighbors": 15,
             },
             {
-                "n_clusters": 10, "resolution": 1.0,
-                "cluster_key": "leiden_1.0", "n_neighbors": 15,
+                "n_clusters": 10,
+                "resolution": 1.0,
+                "cluster_key": "leiden_1.0",
+                "n_neighbors": 15,
             },
         ]
         adata = MagicMock()
@@ -980,7 +1179,10 @@ class TestSelectDeGated:
 
         def rank_side_effect(adata, groupby, **kwargs):
             mock_results = _make_mock_rank_results(
-                n_clusters=10, n_genes=50, n_de_genes=30, rng=rng,
+                n_clusters=10,
+                n_genes=50,
+                n_de_genes=30,
+                rng=rng,
             )
             adata.uns["rank_genes_groups"] = mock_results
 
@@ -1003,24 +1205,39 @@ class TestSelectMultiMetricT5:
         """5 entries with varying scores → 3-tier log with coarse<balanced<fine resolution."""
         valid = [
             {
-                "n_neighbors": 15, "resolution": 0.1, "n_clusters": 3,
-                "silhouette_score": 0.05, "stability_score": 0.70,
+                "n_neighbors": 15,
+                "resolution": 0.1,
+                "n_clusters": 3,
+                "silhouette_score": 0.05,
+                "stability_score": 0.70,
             },
             {
-                "n_neighbors": 15, "resolution": 0.3, "n_clusters": 5,
-                "silhouette_score": 0.30, "stability_score": 0.80,
+                "n_neighbors": 15,
+                "resolution": 0.3,
+                "n_clusters": 5,
+                "silhouette_score": 0.30,
+                "stability_score": 0.80,
             },
             {
-                "n_neighbors": 15, "resolution": 0.5, "n_clusters": 8,
-                "silhouette_score": 0.70, "stability_score": 0.85,
+                "n_neighbors": 15,
+                "resolution": 0.5,
+                "n_clusters": 8,
+                "silhouette_score": 0.70,
+                "stability_score": 0.85,
             },
             {
-                "n_neighbors": 15, "resolution": 0.8, "n_clusters": 10,
-                "silhouette_score": 0.60, "stability_score": 0.90,
+                "n_neighbors": 15,
+                "resolution": 0.8,
+                "n_clusters": 10,
+                "silhouette_score": 0.60,
+                "stability_score": 0.90,
             },
             {
-                "n_neighbors": 15, "resolution": 1.0, "n_clusters": 12,
-                "silhouette_score": 0.20, "stability_score": 0.88,
+                "n_neighbors": 15,
+                "resolution": 1.0,
+                "n_clusters": 12,
+                "silhouette_score": 0.20,
+                "stability_score": 0.88,
             },
         ]
 
@@ -1029,8 +1246,7 @@ class TestSelectMultiMetricT5:
 
         # Find the 3-tier log line
         tier_msgs = [
-            rec.message for rec in caplog.records
-            if "[multi_metric 3-tier]" in rec.message
+            rec.message for rec in caplog.records if "[multi_metric 3-tier]" in rec.message
         ]
         assert len(tier_msgs) >= 1, "3-tier log not emitted"
 
@@ -1046,24 +1262,39 @@ class TestSelectMultiMetricT5:
         """Verify return tuple (int, float, str, str) unchanged by 3-tier addition."""
         valid = [
             {
-                "n_neighbors": 15, "resolution": 0.1, "n_clusters": 3,
-                "silhouette_score": 0.05, "stability_score": 0.70,
+                "n_neighbors": 15,
+                "resolution": 0.1,
+                "n_clusters": 3,
+                "silhouette_score": 0.05,
+                "stability_score": 0.70,
             },
             {
-                "n_neighbors": 15, "resolution": 0.3, "n_clusters": 5,
-                "silhouette_score": 0.30, "stability_score": 0.80,
+                "n_neighbors": 15,
+                "resolution": 0.3,
+                "n_clusters": 5,
+                "silhouette_score": 0.30,
+                "stability_score": 0.80,
             },
             {
-                "n_neighbors": 15, "resolution": 0.5, "n_clusters": 8,
-                "silhouette_score": 0.70, "stability_score": 0.85,
+                "n_neighbors": 15,
+                "resolution": 0.5,
+                "n_clusters": 8,
+                "silhouette_score": 0.70,
+                "stability_score": 0.85,
             },
             {
-                "n_neighbors": 15, "resolution": 0.8, "n_clusters": 10,
-                "silhouette_score": 0.60, "stability_score": 0.90,
+                "n_neighbors": 15,
+                "resolution": 0.8,
+                "n_clusters": 10,
+                "silhouette_score": 0.60,
+                "stability_score": 0.90,
             },
             {
-                "n_neighbors": 15, "resolution": 1.0, "n_clusters": 12,
-                "silhouette_score": 0.20, "stability_score": 0.88,
+                "n_neighbors": 15,
+                "resolution": 1.0,
+                "n_clusters": 12,
+                "silhouette_score": 0.20,
+                "stability_score": 0.88,
             },
         ]
         result = _select_multi_metric(valid)
@@ -1078,12 +1309,18 @@ class TestSelectMultiMetricT5:
         """Two entries only → no exception, 3-tier log still emitted."""
         valid = [
             {
-                "n_neighbors": 15, "resolution": 0.3, "n_clusters": 5,
-                "silhouette_score": 0.40, "stability_score": 0.80,
+                "n_neighbors": 15,
+                "resolution": 0.3,
+                "n_clusters": 5,
+                "silhouette_score": 0.40,
+                "stability_score": 0.80,
             },
             {
-                "n_neighbors": 15, "resolution": 0.8, "n_clusters": 10,
-                "silhouette_score": 0.70, "stability_score": 0.90,
+                "n_neighbors": 15,
+                "resolution": 0.8,
+                "n_clusters": 10,
+                "silhouette_score": 0.70,
+                "stability_score": 0.90,
             },
         ]
 
@@ -1092,8 +1329,7 @@ class TestSelectMultiMetricT5:
 
         # No exception → 3-tier log present
         tier_msgs = [
-            rec.message for rec in caplog.records
-            if "[multi_metric 3-tier]" in rec.message
+            rec.message for rec in caplog.records if "[multi_metric 3-tier]" in rec.message
         ]
         assert len(tier_msgs) >= 1, "3-tier log not emitted for 2 entries"
         # Return value still valid
@@ -1103,16 +1339,25 @@ class TestSelectMultiMetricT5:
         """All stability_scores = 0 → stab removed from weights, fine_entry=None."""
         valid = [
             {
-                "n_neighbors": 15, "resolution": 0.5, "n_clusters": 8,
-                "silhouette_score": 0.70, "stability_score": 0.0,
+                "n_neighbors": 15,
+                "resolution": 0.5,
+                "n_clusters": 8,
+                "silhouette_score": 0.70,
+                "stability_score": 0.0,
             },
             {
-                "n_neighbors": 15, "resolution": 0.8, "n_clusters": 10,
-                "silhouette_score": 0.60, "stability_score": 0.0,
+                "n_neighbors": 15,
+                "resolution": 0.8,
+                "n_clusters": 10,
+                "silhouette_score": 0.60,
+                "stability_score": 0.0,
             },
             {
-                "n_neighbors": 15, "resolution": 1.0, "n_clusters": 12,
-                "silhouette_score": 0.50, "stability_score": 0.0,
+                "n_neighbors": 15,
+                "resolution": 1.0,
+                "n_clusters": 12,
+                "silhouette_score": 0.50,
+                "stability_score": 0.0,
             },
         ]
 
@@ -1121,8 +1366,7 @@ class TestSelectMultiMetricT5:
 
         # No crash → fine_entry=None in log
         tier_msgs = [
-            rec.message for rec in caplog.records
-            if "[multi_metric 3-tier]" in rec.message
+            rec.message for rec in caplog.records if "[multi_metric 3-tier]" in rec.message
         ]
         assert len(tier_msgs) >= 1, "3-tier log not emitted"
         assert "fine: r=nan" in tier_msgs[0], f"Expected fine nan, got: {tier_msgs[0]}"

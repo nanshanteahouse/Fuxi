@@ -163,7 +163,9 @@ class TestParseToKb:
         total_rgc_genes = len(rgc_confirm) + len(rgc_add)
         assert total_rgc_genes >= 1, "Should have at least some RGC markers"
         # NEFM is a well-known RGC marker
-        assert "NEFM" in rgc_confirm, f"NEFM should be in RGC confirm, got: {list(rgc_confirm.keys())[:5]}"
+        assert "NEFM" in rgc_confirm, (
+            f"NEFM should be in RGC confirm, got: {list(rgc_confirm.keys())[:5]}"
+        )
 
     def test_parse_zuo_per_type_sheet(self, parser, source_meta):
         """Zuo MOESM6: cell type sheets, markers with logfoldchanges."""
@@ -196,6 +198,7 @@ class TestParseToKb:
         meta["short_name"] = "Peng 2019 Cell"
 
         import pandas as pd
+
         # Test internal parsing directly to bypass detect_format state issue
         with pd.ExcelFile(str(path)) as xls_inner:
             fmt = parser._detect_format_internal(xls_inner)
@@ -219,8 +222,13 @@ class TestParseToKb:
 
         # Parse S7A sheet directly (avoid timeout from 100+ sheets)
         import pandas as pd
+
         with pd.ExcelFile(str(path)) as xls:
-            markers = parser._parse_grouped_sheet(xls, "Table S7A - Top genes", meta["pmid"], {}) if False else {}  # noqa
+            markers = (
+                parser._parse_grouped_sheet(xls, "Table S7A - Top genes", meta["pmid"], {})
+                if False
+                else {}
+            )  # noqa
 
         # Use internal API focusing on S7A only
         with pd.ExcelFile(str(path)) as xls:
@@ -263,6 +271,7 @@ class TestErrorHandling:
         """Empty xlsx with no recognizable sheets → empty result, no crash."""
         # Create a minimal empty excel file
         import openpyxl
+
         fd, tmp_path = tempfile.mkstemp(suffix=".xlsx")
         os.close(fd)
         try:
@@ -311,6 +320,7 @@ class TestToYamlSource:
 
         # Read back and verify structure
         import yaml
+
         with open(result_path) as f:
             data = yaml.safe_load(f)
 

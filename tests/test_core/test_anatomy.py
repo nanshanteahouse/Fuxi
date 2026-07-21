@@ -12,9 +12,9 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from core.pipeline.anatomy import load_adjacency as load_adj, filter_cci_by_adjacency
 from core.kb import load_adjacency as load_tissue_adj
-
+from core.pipeline.anatomy import filter_cci_by_adjacency
+from core.pipeline.anatomy import load_adjacency as load_adj
 
 # ======================================================================
 #  load_adjacency tests
@@ -59,10 +59,7 @@ class TestLoadAdjacency:
         """Custom CSV file is loaded and returned with correct shape."""
         csv_path = tmp_path / "adjacency.csv"
         csv_path.write_text(
-            "source,target,adjacency_type\n"
-            "A,X,synaptic\n"
-            "B,Y,gap_junction\n"
-            "C,Z,physical\n"
+            "source,target,adjacency_type\nA,X,synaptic\nB,Y,gap_junction\nC,Z,physical\n"
         )
         df = load_adj(tissue="", custom_file=str(csv_path))
         assert isinstance(df, pd.DataFrame)
@@ -108,9 +105,7 @@ class TestFilterCCI:
     #  Hard mode
     # ------------------------------------------------------------------
 
-    def test_filter_cci_hard(
-        self, lr_res: pd.DataFrame, adjacency: pd.DataFrame
-    ) -> None:
+    def test_filter_cci_hard(self, lr_res: pd.DataFrame, adjacency: pd.DataFrame) -> None:
         """Hard mode keeps only rows whose (source, target) exists in adjacency."""
         result = filter_cci_by_adjacency(lr_res, adjacency, mode="hard")
         assert len(result) == 2
@@ -124,9 +119,7 @@ class TestFilterCCI:
     #  Soft mode
     # ------------------------------------------------------------------
 
-    def test_filter_cci_soft(
-        self, lr_res: pd.DataFrame, adjacency: pd.DataFrame
-    ) -> None:
+    def test_filter_cci_soft(self, lr_res: pd.DataFrame, adjacency: pd.DataFrame) -> None:
         """Soft mode retains all rows and annotates with adjacent / adjacency_type."""
         result = filter_cci_by_adjacency(lr_res, adjacency, mode="soft")
         assert len(result) == 4
@@ -145,9 +138,7 @@ class TestFilterCCI:
     #  Off mode
     # ------------------------------------------------------------------
 
-    def test_filter_cci_off(
-        self, lr_res: pd.DataFrame, adjacency: pd.DataFrame
-    ) -> None:
+    def test_filter_cci_off(self, lr_res: pd.DataFrame, adjacency: pd.DataFrame) -> None:
         """Off mode returns the identical object (no copy)."""
         result = filter_cci_by_adjacency(lr_res, adjacency, mode="off")
         assert result is lr_res
@@ -199,17 +190,13 @@ class TestFilterCCI:
         )
 
         # Hard mode — only synaptic
-        hard_result = filter_cci_by_adjacency(
-            lr, adj, mode="hard", adjacency_types=["synaptic"]
-        )
+        hard_result = filter_cci_by_adjacency(lr, adj, mode="hard", adjacency_types=["synaptic"])
         assert len(hard_result) == 1
         assert hard_result.iloc[0]["source"] == "A"
         assert hard_result.iloc[0]["target"] == "X"
 
         # Soft mode — only synaptic is adjacent
-        soft_result = filter_cci_by_adjacency(
-            lr, adj, mode="soft", adjacency_types=["synaptic"]
-        )
+        soft_result = filter_cci_by_adjacency(lr, adj, mode="soft", adjacency_types=["synaptic"])
         assert len(soft_result) == 2
         assert list(soft_result["adjacent"]) == [True, False]
         assert list(soft_result["adjacency_type"]) == ["synaptic", ""]

@@ -4,11 +4,12 @@ import importlib.util
 import logging
 import os
 
-
 import numpy as np
 import pandas as pd
 import scanpy as sc
 from anndata import AnnData
+
+from core.config.schema import Config
 
 # ── Load the trajectory module ────────────────────────────────────────────
 # conftest.py adds repo root to sys.path, but rna/steps/__init__.py does not
@@ -16,9 +17,7 @@ from anndata import AnnData
 _STEP_PATH = os.path.join(
     os.path.dirname(__file__), "..", "..", "rna", "steps", "08_trajectory.py"
 )
-_spec = importlib.util.spec_from_file_location(
-    "rna.steps._08_trajectory_test", _STEP_PATH
-)
+_spec = importlib.util.spec_from_file_location("rna.steps._08_trajectory_test", _STEP_PATH)
 if _spec is None or _spec.loader is None:
     raise ImportError(f"Could not load trajectory module at {_STEP_PATH}")
 trajectory = importlib.util.module_from_spec(_spec)
@@ -28,16 +27,11 @@ gene_trends = trajectory.gene_trends
 _select_pseudotime_correlated = trajectory._select_pseudotime_correlated
 
 
-from core.config.schema import Config
-
-# ── Test helpers ──────────────────────────────────────────────────────────
-
-
 def _make_mock_adata(n_cells: int = 100, n_genes: int = 20, seed: int = 42) -> AnnData:
     """Create mock AnnData with raw, dpt_pseudotime, cell_type."""
     rng = np.random.RandomState(seed)
-    X = rng.poisson(lam=1.0, size=(n_cells, n_genes)).astype(np.float32)
-    adata = AnnData(X)
+    x = rng.poisson(lam=1.0, size=(n_cells, n_genes)).astype(np.float32)
+    adata = AnnData(x)
     adata.raw = adata.copy()
     adata.obs["dpt_pseudotime"] = rng.uniform(0, 1, n_cells)
     adata.obs["cell_type"] = rng.choice(["A", "B", "C"], n_cells)
@@ -63,7 +57,9 @@ class TestGeneTrends:
     """Tests for the gene_trends() main function."""
 
     def test_gene_trends_happy(
-        self, tmp_path, caplog,
+        self,
+        tmp_path,
+        caplog,
     ) -> None:
         """Happy path: branch DE + CFG override produce a union of genes."""
         caplog.set_level(logging.INFO)
@@ -72,15 +68,17 @@ class TestGeneTrends:
         adata = _make_mock_adata(n_cells=100, n_genes=20)
         branch_results = _make_mock_branch_results(n_genes=5)
 
-        cfg = Config.model_validate({
-            "trajectory": {
-                "pseudotime_n_branch_de": 10,
-                "pseudotime_n_correlated": 10,
-                "pseudotime_cor_pval": 0.05,
-                "pseudotime_genes": ["GENE_0", "GENE_1"],
-            },
-            "table_dir": str(tmp_path),
-        })
+        cfg = Config.model_validate(
+            {
+                "trajectory": {
+                    "pseudotime_n_branch_de": 10,
+                    "pseudotime_n_correlated": 10,
+                    "pseudotime_cor_pval": 0.05,
+                    "pseudotime_genes": ["GENE_0", "GENE_1"],
+                },
+                "table_dir": str(tmp_path),
+            }
+        )
 
         log = logging.getLogger("test_gene_trends_happy")
         gene_trends(adata, cfg, log, branch_results=branch_results)
@@ -102,7 +100,8 @@ class TestGeneTrends:
         )
 
     def test_gene_trends_no_dpt(
-        self, caplog,
+        self,
+        caplog,
     ) -> None:
         """Missing dpt_pseudotime in obs → early return."""
         caplog.set_level(logging.INFO)
@@ -118,7 +117,8 @@ class TestGeneTrends:
         assert "No DPT" in caplog.text
 
     def test_gene_trends_no_raw(
-        self, caplog,
+        self,
+        caplog,
     ) -> None:
         """raw = None → early return."""
         caplog.set_level(logging.INFO)
@@ -146,8 +146,8 @@ class TestSelectPseudotimeCorrelated:
         n_cells = 100
         n_genes = 20
 
-        X = rng.poisson(lam=1.0, size=(n_cells, n_genes)).astype(np.float32)
-        adata = AnnData(X)
+        x = rng.poisson(lam=1.0, size=(n_cells, n_genes)).astype(np.float32)
+        adata = AnnData(x)
         adata.var_names = [f"GENE_{i}" for i in range(n_genes)]
 
         # Pseudotime: linear ramp from 0.1 to 0.9
@@ -158,7 +158,11 @@ class TestSelectPseudotimeCorrelated:
         adata.raw = adata.copy()
         adata.raw.X[:, :3] = pseudotime[:, None] * 10
 
-        cfg = Config.model_validate({"trajectory": {"pseudotime_n_correlated": 10, "pseudotime_cor_pval": 0.05}})
+        cfg = Config.model_validate(
+            {
+                "trajectory": {"pseudotime_n_correlated": 10, "pseudotime_cor_pval": 0.05},
+            }
+        )
         result, corr_df = _select_pseudotime_correlated(adata, cfg)
 
         assert isinstance(result, list), f"Expected list, got {type(result)}"
@@ -169,7 +173,7 @@ class TestSelectPseudotimeCorrelated:
             )
 
         assert isinstance(corr_df, pd.DataFrame), f"Expected DataFrame, got {type(corr_df)}"
-        expected_cols = ['gene', 'rho', 'pval_raw', 'pval_adj']
+        expected_cols = ["gene", "rho", "pval_raw", "pval_adj"]
         assert list(corr_df.columns) == expected_cols, (
             f"Unexpected columns: {list(corr_df.columns)}"
         )
@@ -178,21 +182,24 @@ class TestSelectPseudotimeCorrelated:
     def test_select_correlated_constant_pseudotime(self) -> None:
         """Constant pseudotime -> empty list (Spearman requires variance)."""
         import warnings
+
         from scipy.stats import ConstantInputWarning
 
         adata = _make_mock_adata()
         adata.obs["dpt_pseudotime"] = np.full(100, 0.5)
 
-        cfg = Config.model_validate({"trajectory": {"pseudotime_n_correlated": 10, "pseudotime_cor_pval": 0.05}})
+        cfg = Config.model_validate(
+            {
+                "trajectory": {"pseudotime_n_correlated": 10, "pseudotime_cor_pval": 0.05},
+            }
+        )
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", ConstantInputWarning)
             result, corr_df = _select_pseudotime_correlated(adata, cfg)
 
         assert isinstance(result, list), f"Expected list, got {type(result)}"
-        assert len(result) == 0, (
-            f"Expected empty result for constant pseudotime, got {result}"
-        )
+        assert len(result) == 0, f"Expected empty result for constant pseudotime, got {result}"
 
         assert isinstance(corr_df, pd.DataFrame), f"Expected DataFrame, got {type(corr_df)}"
         assert corr_df.empty, f"Expected empty DataFrame, got {len(corr_df)} rows"
@@ -205,15 +212,17 @@ class TestGenePriorityOrder:
     """Gene deduplication preserves source priority order 1→2→3→4."""
 
     def test_gene_priority_order(
-        self, tmp_path, caplog,
+        self,
+        tmp_path,
+        caplog,
     ) -> None:
         """Same gene from branch DE + CFG override appears only once."""
         caplog.set_level(logging.INFO)
         sc.settings.figdir = str(tmp_path)
         # Build adata manually so "TOP" is in both adata and raw var_names
         rng = np.random.RandomState(0)
-        X = rng.poisson(lam=1.0, size=(100, 20)).astype(np.float32)
-        adata = AnnData(X)
+        x = rng.poisson(lam=1.0, size=(100, 20)).astype(np.float32)
+        adata = AnnData(x)
         adata.var_names = ["TOP"] + [f"GENE_{i}" for i in range(1, 20)]
         adata.obs["dpt_pseudotime"] = rng.uniform(0, 1, 100)
         adata.obs["cell_type"] = rng.choice(["A", "B", "C"], 100)
@@ -228,16 +237,18 @@ class TestGenePriorityOrder:
             }
         )
 
-        cfg = Config.model_validate({
-            "trajectory": {
-                "pseudotime_n_branch_de": 10,
-                "pseudotime_n_correlated": 10,
-                "pseudotime_cor_pval": 0.05,
-                "pseudotime_genes": ["TOP"],
-            },
-            "tissue_kb": "",
-            "table_dir": str(tmp_path),
-        })
+        cfg = Config.model_validate(
+            {
+                "trajectory": {
+                    "pseudotime_n_branch_de": 10,
+                    "pseudotime_n_correlated": 10,
+                    "pseudotime_cor_pval": 0.05,
+                    "pseudotime_genes": ["TOP"],
+                },
+                "tissue_kb": "",
+                "table_dir": str(tmp_path),
+            }
+        )
 
         log = logging.getLogger("test_gene_priority_order")
         gene_trends(adata, cfg, log, branch_results=branch_results)
@@ -253,7 +264,8 @@ class TestHeatmapBinning:
     """Heatmap binning with small number of unique pseudotime values."""
 
     def test_heatmap_binning(
-        self, tmp_path,
+        self,
+        tmp_path,
     ) -> None:
         """5 unique pseudotime values + 6 union_genes → n_bins = 4."""
         sc.settings.figdir = str(tmp_path)
@@ -274,14 +286,16 @@ class TestHeatmapBinning:
             }
         )
 
-        cfg = Config.model_validate({
-            "trajectory": {
-                "pseudotime_n_branch_de": 10,
-                "pseudotime_n_correlated": 10,
-                "pseudotime_cor_pval": 0.05,
-            },
-            "table_dir": str(tmp_path),
-        })
+        cfg = Config.model_validate(
+            {
+                "trajectory": {
+                    "pseudotime_n_branch_de": 10,
+                    "pseudotime_n_correlated": 10,
+                    "pseudotime_cor_pval": 0.05,
+                },
+                "table_dir": str(tmp_path),
+            }
+        )
         log = logging.getLogger("test_heatmap_binning")
         gene_trends(adata, cfg, log, branch_results=branch_results)
 

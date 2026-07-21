@@ -13,7 +13,6 @@ import pytest
 
 from core.pipeline.grn import compute_tf_relevance
 
-
 # ======================================================================
 #  compute_tf_relevance tests
 # ======================================================================
@@ -34,14 +33,18 @@ class TestComputeTFRelevance:
             index=pd.Index(["CT0", "CT1", "CT2"]),
             columns=pd.Index(["TF_A", "TF_B", "TF_C"]),
         )
-        net = pd.DataFrame({
-            "source": ["TF_A", "TF_A", "TF_B", "TF_C"],
-            "target": ["GENE_1", "GENE_2", "GENE_3", "GENE_4"],
-        })
+        net = pd.DataFrame(
+            {
+                "source": ["TF_A", "TF_A", "TF_B", "TF_C"],
+                "target": ["GENE_1", "GENE_2", "GENE_3", "GENE_4"],
+            }
+        )
         kb_markers = {"GENE_1", "GENE_2", "GENE_4"}
 
         annotated_activity_df, tf_annotation = compute_tf_relevance(
-            activity_df, net, kb_markers,
+            activity_df,
+            net,
+            kb_markers,
         )
 
         # -- Annotation table shape --
@@ -77,20 +80,25 @@ class TestComputeTFRelevance:
             index=pd.Index(["CT0", "CT1", "CT2"]),
             columns=pd.Index(["TF_A", "TF_B", "TF_C"]),
         )
-        net = pd.DataFrame({
-            "source": ["TF_A", "TF_A", "TF_B", "TF_C"],
-            "target": ["GENE_1", "GENE_2", "GENE_3", "GENE_4"],
-        })
+        net = pd.DataFrame(
+            {
+                "source": ["TF_A", "TF_A", "TF_B", "TF_C"],
+                "target": ["GENE_1", "GENE_2", "GENE_3", "GENE_4"],
+            }
+        )
 
         annotated_activity_df, tf_annotation = compute_tf_relevance(
-            activity_df, net, kb_markers=None,
+            activity_df,
+            net,
+            kb_markers=None,
         )
 
         assert (tf_annotation["kb_overlap_count"] == 0).all()
         assert (tf_annotation["kb_overlap_ratio"] == 0.0).all()
         # When ratio is 0, weighted = abs(activity) * 1.0
         pd.testing.assert_frame_equal(
-            annotated_activity_df, activity_df.abs(),
+            annotated_activity_df,
+            activity_df.abs(),
         )
 
     # ------------------------------------------------------------------
@@ -105,10 +113,12 @@ class TestComputeTFRelevance:
             index=pd.Index(["CT0", "CT1", "CT2"]),
             columns=pd.Index(["TF_A", "TF_B", "TF_C"]),
         )
-        net = pd.DataFrame({
-            "source": ["TF_A", "TF_A", "TF_B", "TF_C"],
-            "target": ["GENE_1", "GENE_2", "GENE_3", "GENE_4"],
-        })
+        net = pd.DataFrame(
+            {
+                "source": ["TF_A", "TF_A", "TF_B", "TF_C"],
+                "target": ["GENE_1", "GENE_2", "GENE_3", "GENE_4"],
+            }
+        )
         kb_markers = {"NONEXISTENT_GENE"}
 
         _, tf_annotation = compute_tf_relevance(activity_df, net, kb_markers)
@@ -131,12 +141,15 @@ class TestComputeTFRelevance:
         kb_markers = {"GENE_1"}
 
         annotated_activity_df, tf_annotation = compute_tf_relevance(
-            activity_df, net, kb_markers,
+            activity_df,
+            net,
+            kb_markers,
         )
 
         assert (tf_annotation["kb_overlap_count"] == 0).all()
         pd.testing.assert_frame_equal(
-            annotated_activity_df, activity_df.abs(),
+            annotated_activity_df,
+            activity_df.abs(),
         )
 
     # ------------------------------------------------------------------
@@ -149,10 +162,12 @@ class TestComputeTFRelevance:
             {"TF_A": [1.0], "TF_B": [1.0], "TF_C": [1.0]},
             index=pd.Index(["CT0"]),
         )
-        net = pd.DataFrame({
-            "source": ["TF_A", "TF_B", "TF_C"],
-            "target": ["gene_1", "GENE_2", "Gene_3"],
-        })
+        net = pd.DataFrame(
+            {
+                "source": ["TF_A", "TF_B", "TF_C"],
+                "target": ["gene_1", "GENE_2", "Gene_3"],
+            }
+        )
         kb_markers = {"GENE_1", "GENE_2", "GENE_3"}
 
         _, tf_annotation = compute_tf_relevance(activity_df, net, kb_markers)
@@ -170,10 +185,12 @@ class TestComputeTFRelevance:
             {"TF_A": [1.0], "TF_B": [1.0]},
             index=pd.Index(["CT0"]),
         )
-        net = pd.DataFrame({
-            "source": ["TF_A", "TF_B"],
-            "target": ["GENE_1", "GENE_2"],
-        })
+        net = pd.DataFrame(
+            {
+                "source": ["TF_A", "TF_B"],
+                "target": ["GENE_1", "GENE_2"],
+            }
+        )
         kb_markers = {"GENE_1", "GENE_2"}
 
         result = compute_tf_relevance(activity_df, net, kb_markers)
@@ -199,10 +216,12 @@ class TestComputeTFRelevance:
             {"TF_X": [1.0], "TF_Y": [1.0]},
             index=pd.Index(["CT0"]),
         )
-        net = pd.DataFrame({
-            "source": ["TF_Z"],
-            "target": ["GENE_1"],
-        })
+        net = pd.DataFrame(
+            {
+                "source": ["TF_Z"],
+                "target": ["GENE_1"],
+            }
+        )
         kb_markers = {"GENE_1"}
 
         _, tf_annotation = compute_tf_relevance(activity_df, net, kb_markers)
@@ -219,18 +238,25 @@ class TestComputeTFRelevance:
     def test_invalid_activity_df(self) -> None:
         """Empty activity_df (no columns) returns empty results without crashing."""
         activity_df = pd.DataFrame()
-        net = pd.DataFrame({
-            "source": ["TF_A"],
-            "target": ["GENE_1"],
-        })
+        net = pd.DataFrame(
+            {
+                "source": ["TF_A"],
+                "target": ["GENE_1"],
+            }
+        )
         kb_markers = {"GENE_1"}
 
         annotated_activity_df, tf_annotation = compute_tf_relevance(
-            activity_df, net, kb_markers,
+            activity_df,
+            net,
+            kb_markers,
         )
 
         assert annotated_activity_df.empty
         assert tf_annotation.empty
         assert list(tf_annotation.columns) == [
-            "tf", "n_targets", "kb_overlap_count", "kb_overlap_ratio",
+            "tf",
+            "n_targets",
+            "kb_overlap_count",
+            "kb_overlap_ratio",
         ]

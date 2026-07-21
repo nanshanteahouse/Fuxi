@@ -1,4 +1,5 @@
-"""Tests for rna/utils/evidence_fusion.py — private helper _is_transition_state and public API fuse_all_clusters/FusionDecision/DiagnosticInfo."""
+"""Tests for rna/utils/evidence_fusion.py — private helper
+_is_transition_state and public API fuse_all_clusters/FusionDecision/DiagnosticInfo."""
 
 import pytest
 

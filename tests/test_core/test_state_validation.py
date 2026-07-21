@@ -2,12 +2,12 @@
 
 Checks that required obs/obsm/obsp columns are enforced per step boundary.
 """
+
 import numpy as np
 import pytest
 from anndata import AnnData
 
-from core.utils import validate_pipeline_state, _STEP_REQUIREMENTS
-
+from core.utils import _STEP_REQUIREMENTS, validate_pipeline_state
 
 # ── Helpers ────────────────────────────────────────────────────────────
 
@@ -18,9 +18,9 @@ def _make_adata(obs_cols=None, obsm_keys=None, obsp_keys=None):
         X=np.zeros((10, 5)),
         obs={k: ["a"] * 10 for k in (obs_cols or [])},
     )
-    for k in (obsm_keys or []):
+    for k in obsm_keys or []:
         adata.obsm[k] = np.zeros((10, 2))
-    for k in (obsp_keys or []):
+    for k in obsp_keys or []:
         adata.obsp[k] = np.eye(10)
     return adata
 

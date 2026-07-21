@@ -23,7 +23,6 @@ import sys
 from unittest.mock import MagicMock, patch
 
 import numpy as np
-import pytest
 from anndata import AnnData
 
 # ── Ensure repo root is on sys.path ──────────────────────────────
@@ -34,11 +33,10 @@ if _REPO_ROOT not in sys.path:
 # ── Load the 03_integrate module via file path ───────────────────
 _STEP_PATH = os.path.join(_REPO_ROOT, "rna", "steps", "03_integrate.py")
 _spec = importlib.util.spec_from_file_location(
-    "rna.steps._03_integrate_test", _STEP_PATH,
+    "rna.steps._03_integrate_test",
+    _STEP_PATH,
 )
-assert _spec is not None and _spec.loader is not None, (
-    f"Could not load {_STEP_PATH}"
-)
+assert _spec is not None and _spec.loader is not None, f"Could not load {_STEP_PATH}"
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
@@ -55,8 +53,8 @@ def _make_adata(
 ) -> AnnData:
     """Create a minimal AnnData with X_pca pre-computed."""
     rng = np.random.RandomState(seed)
-    X = rng.poisson(lam=1.0, size=(n_cells, n_genes)).astype(np.float32)
-    adata = AnnData(X)
+    x = rng.poisson(lam=1.0, size=(n_cells, n_genes)).astype(np.float32)
+    adata = AnnData(x)
     adata.var_names = [f"GENE_{i}" for i in range(n_genes)]
     adata.obs["sample"] = rng.choice(["S1", "S2"], n_cells)
     adata.obs["genotype"] = ["WT"] * (n_cells // 2) + ["KO"] * (n_cells // 2)
@@ -138,8 +136,10 @@ def _capture_adata_on_save(
     captured: list,
 ) -> callable:
     """Return a safe_write side-effect that captures the final adata."""
+
     def _side_effect(adata, *args, **kwargs):
         captured.append(adata)
+
     return _side_effect
 
 
@@ -157,16 +157,19 @@ def test_T3_collinearity_guard_aborts_harmony() -> None:
     """
     adata = _make_adata()
     cfg = _make_cfg(collinearity_guard=True, diagnose=True)
-    report = _make_report(warnings=[
-        "Column 'sample' is perfectly collinear with 'genotype' (V=1.0) — redundant column.",
-    ])
+    report = _make_report(
+        warnings=[
+            "Column 'sample' is perfectly collinear with 'genotype' (V=1.0) — redundant column.",
+        ]
+    )
 
     captured: list[AnnData] = []
     harmonize_mock = MagicMock()
 
     with (
         patch.object(
-            _mod.argparse.ArgumentParser, "parse_args",
+            _mod.argparse.ArgumentParser,
+            "parse_args",
             return_value=argparse.Namespace(config="/tmp/test.yaml"),
         ),
         patch.object(_mod, "resolve_config", return_value=cfg),
@@ -190,9 +193,7 @@ def test_T3_collinearity_guard_aborts_harmony() -> None:
     result = captured[0]
 
     # Guard must have fired
-    assert "harmony_skipped" in result.uns, (
-        "harmony_skipped should be set when guard fires"
-    )
+    assert "harmony_skipped" in result.uns, "harmony_skipped should be set when guard fires"
     assert result.uns["harmony_skipped"]["reason"] == "collinearity"
     assert len(result.uns["harmony_skipped"]["warnings"]) > 0
 
@@ -214,18 +215,21 @@ def test_T3_collinearity_guard_disabled_harmony_runs() -> None:
     """
     adata = _make_adata()
     cfg = _make_cfg(collinearity_guard=False, diagnose=True)
-    report = _make_report(warnings=[
-        "Column 'sample' is perfectly collinear with 'genotype' (V=1.0) — redundant column.",
-    ])
+    report = _make_report(
+        warnings=[
+            "Column 'sample' is perfectly collinear with 'genotype' (V=1.0) — redundant column.",
+        ]
+    )
 
     captured: list[AnnData] = []
 
-    def _fake_harmonize(Z, *args, **kwargs):
-        return np.random.RandomState(42).randn(Z.shape[0], 50)
+    def _fake_harmonize(z, *args, **kwargs):
+        return np.random.RandomState(42).randn(z.shape[0], 50)
 
     with (
         patch.object(
-            _mod.argparse.ArgumentParser, "parse_args",
+            _mod.argparse.ArgumentParser,
+            "parse_args",
             return_value=argparse.Namespace(config="/tmp/test.yaml"),
         ),
         patch.object(_mod, "resolve_config", return_value=cfg),
@@ -242,7 +246,8 @@ def test_T3_collinearity_guard_disabled_harmony_runs() -> None:
         ),
         patch("harmony.harmonize", side_effect=_fake_harmonize),
         patch.object(
-            _mod.sc.pl, "embedding",
+            _mod.sc.pl,
+            "embedding",
             return_value=None,
         ),
         patch(
@@ -257,9 +262,7 @@ def test_T3_collinearity_guard_disabled_harmony_runs() -> None:
     result = captured[0]
 
     # Harmony must have run
-    assert "X_pca_harmony" in result.obsm, (
-        "X_pca_harmony should be created when guard is disabled"
-    )
+    assert "X_pca_harmony" in result.obsm, "X_pca_harmony should be created when guard is disabled"
 
     # Guard must NOT have fired
     assert "harmony_skipped" not in result.uns, (
@@ -279,12 +282,13 @@ def test_T3_collinearity_report_none_skips_guard() -> None:
 
     captured: list[AnnData] = []
 
-    def _fake_harmonize(Z, *args, **kwargs):
-        return np.random.RandomState(42).randn(Z.shape[0], 50)
+    def _fake_harmonize(z, *args, **kwargs):
+        return np.random.RandomState(42).randn(z.shape[0], 50)
 
     with (
         patch.object(
-            _mod.argparse.ArgumentParser, "parse_args",
+            _mod.argparse.ArgumentParser,
+            "parse_args",
             return_value=argparse.Namespace(config="/tmp/test.yaml"),
         ),
         patch.object(_mod, "resolve_config", return_value=cfg),
@@ -297,7 +301,8 @@ def test_T3_collinearity_report_none_skips_guard() -> None:
         patch("core.utils.validate_adata", return_value=False),
         patch("harmony.harmonize", side_effect=_fake_harmonize),
         patch.object(
-            _mod.sc.pl, "embedding",
+            _mod.sc.pl,
+            "embedding",
             return_value=None,
         ),
         patch.object(_mod, "safe_write", side_effect=_capture_adata_on_save(captured)),
@@ -313,9 +318,7 @@ def test_T3_collinearity_report_none_skips_guard() -> None:
     )
 
     # Harmony must have run normally
-    assert "X_pca_harmony" in result.obsm, (
-        "X_pca_harmony should be created when guard no-ops"
-    )
+    assert "X_pca_harmony" in result.obsm, "X_pca_harmony should be created when guard no-ops"
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -334,8 +337,8 @@ def _make_adata_t6(
     P2RY12 is placed at index 900 (NOT highly_variable).
     """
     rng = np.random.RandomState(seed)
-    X = rng.poisson(lam=1.0, size=(n_cells, n_genes)).astype(np.float32)
-    adata = AnnData(X)
+    x = rng.poisson(lam=1.0, size=(n_cells, n_genes)).astype(np.float32)
+    adata = AnnData(x)
     gene_names = [f"GENE_{i}" for i in range(n_genes)]
     gene_names[10] = "AIF1"
     gene_names[20] = "CSF1R"
@@ -379,7 +382,8 @@ def test_T6_forced_genes_retains_low_expression_marker() -> None:
 
     with (
         patch.object(
-            _mod.argparse.ArgumentParser, "parse_args",
+            _mod.argparse.ArgumentParser,
+            "parse_args",
             return_value=argparse.Namespace(config="/tmp/test.yaml"),
         ),
         patch.object(_mod, "resolve_config", return_value=cfg),
@@ -412,15 +416,18 @@ def test_T6_marker_dict_genes_force_kept() -> None:
     Then:   P2RY12 is marked highly_variable (via marker_dict).
     """
     adata = _make_adata_t6()
-    cfg = _make_cfg_t6(marker_dict={
-        "Microglia": ["AIF1", "P2RY12", "CSF1R"],
-    })
+    cfg = _make_cfg_t6(
+        marker_dict={
+            "Microglia": ["AIF1", "P2RY12", "CSF1R"],
+        }
+    )
 
     captured: list[AnnData] = []
 
     with (
         patch.object(
-            _mod.argparse.ArgumentParser, "parse_args",
+            _mod.argparse.ArgumentParser,
+            "parse_args",
             return_value=argparse.Namespace(config="/tmp/test.yaml"),
         ),
         patch.object(_mod, "resolve_config", return_value=cfg),
@@ -460,7 +467,8 @@ def test_T6_forced_genes_typo_silently_skipped() -> None:
 
     with (
         patch.object(
-            _mod.argparse.ArgumentParser, "parse_args",
+            _mod.argparse.ArgumentParser,
+            "parse_args",
             return_value=argparse.Namespace(config="/tmp/test.yaml"),
         ),
         patch.object(_mod, "resolve_config", return_value=cfg),
@@ -481,9 +489,7 @@ def test_T6_forced_genes_typo_silently_skipped() -> None:
 
     # No genes should be forced since NOPE_TYPO doesn't exist
     n_hv = result.var["highly_variable"].sum()
-    assert n_hv == 100, (
-        f"HVG count should remain 100 when forced gene doesn't exist, got {n_hv}"
-    )
+    assert n_hv == 100, f"HVG count should remain 100 when forced gene doesn't exist, got {n_hv}"
 
 
 def test_T6_forced_genes_empty_no_effect() -> None:
@@ -500,7 +506,8 @@ def test_T6_forced_genes_empty_no_effect() -> None:
 
     with (
         patch.object(
-            _mod.argparse.ArgumentParser, "parse_args",
+            _mod.argparse.ArgumentParser,
+            "parse_args",
             return_value=argparse.Namespace(config="/tmp/test.yaml"),
         ),
         patch.object(_mod, "resolve_config", return_value=cfg),
@@ -520,6 +527,4 @@ def test_T6_forced_genes_empty_no_effect() -> None:
     result = captured[0]
 
     n_hv = result.var["highly_variable"].sum()
-    assert n_hv == 100, (
-        f"HVG count should remain 100 when no forced genes, got {n_hv}"
-    )
+    assert n_hv == 100, f"HVG count should remain 100 when no forced genes, got {n_hv}"

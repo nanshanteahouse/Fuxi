@@ -4,14 +4,14 @@ import pandas as pd
 import pytest
 
 from core.annotation.scoring import (
-    score_cluster_against_kb,
     Score,
-    detect_low_quality_cluster,
     _negative_marker_penalty,
+    detect_low_quality_cluster,
+    score_cluster_against_kb,
 )
 from rna.utils.marker_expert_rules import (
-    resolve_expert_rule_params,
     apply_expert_rules,
+    resolve_expert_rule_params,
 )
 
 
@@ -74,12 +74,13 @@ class TestScoreClusterAgainstKB:
         conf_mult = 0.8 (5 type markers, not > 5).
         final approx 0.9821 * 0.8 = 0.7857.
         """
-        cluster_markers = pd.DataFrame({
-            "names": ["T1", "T2", "T3", "T4", "T5"]
-                     + [f"X{i}" for i in range(15)],
-            "logfoldchanges": [3.0 - i * 0.1 for i in range(20)],
-            "pvals_adj": [1e-10] * 20,
-        })
+        cluster_markers = pd.DataFrame(
+            {
+                "names": ["T1", "T2", "T3", "T4", "T5"] + [f"X{i}" for i in range(15)],
+                "logfoldchanges": [3.0 - i * 0.1 for i in range(20)],
+                "pvals_adj": [1e-10] * 20,
+            }
+        )
         result = score_cluster_against_kb(self.KB_LOOKUP, cluster_markers)
 
         t = result["T_cell"]
@@ -97,16 +98,16 @@ class TestScoreClusterAgainstKB:
 
     def test_no_kb_overlap_returns_zero(self) -> None:
         """Cluster markers not overlapping any KB type -> all scores 0."""
-        cluster_markers = pd.DataFrame({
-            "names": [f"GENE{i}" for i in range(20)],
-            "logfoldchanges": [1.0] * 20,
-            "pvals_adj": [0.05] * 20,
-        })
+        cluster_markers = pd.DataFrame(
+            {
+                "names": [f"GENE{i}" for i in range(20)],
+                "logfoldchanges": [1.0] * 20,
+                "pvals_adj": [0.05] * 20,
+            }
+        )
         result = score_cluster_against_kb(self.KB_LOOKUP, cluster_markers)
         for cell_type, sc in result.items():
-            assert sc.score == pytest.approx(0.0, abs=1e-6), (
-                f"{cell_type} score={sc.score}"
-            )
+            assert sc.score == pytest.approx(0.0, abs=1e-6), f"{cell_type} score={sc.score}"
             assert sc.p_value == pytest.approx(1.0, abs=1e-6)
 
     def test_no_positive_markers_score_zero(self) -> None:
@@ -122,11 +123,13 @@ class TestScoreClusterAgainstKB:
                 "consensus_levels": {},
             },
         }
-        cluster_markers = pd.DataFrame({
-            "names": ["T1", "T2", "T3"] + [f"X{i}" for i in range(17)],
-            "logfoldchanges": [2.0] * 20,
-            "pvals_adj": [1e-5] * 20,
-        })
+        cluster_markers = pd.DataFrame(
+            {
+                "names": ["T1", "T2", "T3"] + [f"X{i}" for i in range(17)],
+                "logfoldchanges": [2.0] * 20,
+                "pvals_adj": [1e-5] * 20,
+            }
+        )
         result = score_cluster_against_kb(kb, cluster_markers)
         sc = result["Null_type"]
         assert sc.score == pytest.approx(0.0)
@@ -152,8 +155,7 @@ class TestPhylogeneticWeighting:
     # background (d > 0).
     KB_WITH_TAXONOMY = {
         "Mammal_Cell": {
-            "positive": ["M1", "M2", "M3", "M4", "M5"]
-                     + [f"Mm_extra_{i}" for i in range(10)],
+            "positive": ["M1", "M2", "M3", "M4", "M5"] + [f"Mm_extra_{i}" for i in range(10)],
             "negative": [],
             "species": ["human"],
             "synonyms": [],
@@ -166,8 +168,7 @@ class TestPhylogeneticWeighting:
             "orders": ["Primates"],
         },
         "Bird_Cell": {
-            "positive": ["B1", "B2", "B3"]
-                     + [f"Bb_extra_{i}" for i in range(10)],
+            "positive": ["B1", "B2", "B3"] + [f"Bb_extra_{i}" for i in range(10)],
             "negative": [],
             "species": ["chicken"],
             "synonyms": [],
@@ -181,17 +182,20 @@ class TestPhylogeneticWeighting:
         },
     }
 
-    MARKER_DF = pd.DataFrame({
-        "names": ["M1", "M2", "M3", "M4", "M5", "B1", "B2", "B3"]
-                 + [f"X{i}" for i in range(12)],
-        "logfoldchanges": [3.0 - i * 0.1 for i in range(20)],
-        "pvals_adj": [1e-10] * 20,
-    })
+    MARKER_DF = pd.DataFrame(
+        {
+            "names": ["M1", "M2", "M3", "M4", "M5", "B1", "B2", "B3"]
+            + [f"X{i}" for i in range(12)],
+            "logfoldchanges": [3.0 - i * 0.1 for i in range(20)],
+            "pvals_adj": [1e-10] * 20,
+        }
+    )
 
     def _unweighted_score(self, scores: dict) -> float:
         """Return the raw score from a result dict without phylogenetic weight."""
         raw = score_cluster_against_kb(
-            self.KB_WITH_TAXONOMY, self.MARKER_DF,
+            self.KB_WITH_TAXONOMY,
+            self.MARKER_DF,
         )
         return raw[sorted(raw.keys())[0]].score
 
@@ -201,10 +205,12 @@ class TestPhylogeneticWeighting:
         The weighted score should equal the unweighted score.
         """
         unweighted = score_cluster_against_kb(
-            self.KB_WITH_TAXONOMY, self.MARKER_DF,
+            self.KB_WITH_TAXONOMY,
+            self.MARKER_DF,
         )["Mammal_Cell"].score
         weighted = score_cluster_against_kb(
-            self.KB_WITH_TAXONOMY, self.MARKER_DF,
+            self.KB_WITH_TAXONOMY,
+            self.MARKER_DF,
             target_class="Mammalia",
         )["Mammal_Cell"].score
         assert weighted == pytest.approx(unweighted, rel=1e-6), (
@@ -217,10 +223,12 @@ class TestPhylogeneticWeighting:
         Matching Mammalia + Primates gets the full unweighted score.
         """
         unweighted = score_cluster_against_kb(
-            self.KB_WITH_TAXONOMY, self.MARKER_DF,
+            self.KB_WITH_TAXONOMY,
+            self.MARKER_DF,
         )["Mammal_Cell"].score
         weighted = score_cluster_against_kb(
-            self.KB_WITH_TAXONOMY, self.MARKER_DF,
+            self.KB_WITH_TAXONOMY,
+            self.MARKER_DF,
             target_class="Mammalia",
             target_order="Primates",
         )["Mammal_Cell"].score
@@ -236,10 +244,12 @@ class TestPhylogeneticWeighting:
         source in a different class).
         """
         unweighted = score_cluster_against_kb(
-            self.KB_WITH_TAXONOMY, self.MARKER_DF,
+            self.KB_WITH_TAXONOMY,
+            self.MARKER_DF,
         )["Bird_Cell"].score
         weighted = score_cluster_against_kb(
-            self.KB_WITH_TAXONOMY, self.MARKER_DF,
+            self.KB_WITH_TAXONOMY,
+            self.MARKER_DF,
             target_class="Mammalia",
         )["Bird_Cell"].score
         assert weighted < unweighted, (
@@ -258,7 +268,8 @@ class TestPhylogeneticWeighting:
         than Mammal_Cell (Mammalia) against the same Mammalia target.
         """
         result = score_cluster_against_kb(
-            self.KB_WITH_TAXONOMY, self.MARKER_DF,
+            self.KB_WITH_TAXONOMY,
+            self.MARKER_DF,
             target_class="Mammalia",
         )
         mammal_score = result["Mammal_Cell"].score
@@ -275,10 +286,9 @@ class TestPhylogeneticWeighting:
         means all scores are unweighted.
         """
         result = score_cluster_against_kb(
-            self.KB_WITH_TAXONOMY, self.MARKER_DF,
+            self.KB_WITH_TAXONOMY,
+            self.MARKER_DF,
         )
         bird_score = result["Bird_Cell"].score
         # Bird_Cell markers are in the top-20, so score should be > 0
-        assert bird_score > 0, (
-            f"Bird_Cell score should be > 0 without filtering, got {bird_score}"
-        )
+        assert bird_score > 0, f"Bird_Cell score should be > 0 without filtering, got {bird_score}"

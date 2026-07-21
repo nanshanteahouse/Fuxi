@@ -6,12 +6,14 @@ Covers:
 - Idempotency (replacement vs. append)
 - Backward compatibility (no paper_context → identical behavior)
 """
+
 from __future__ import annotations
 
 import ast
 import os
 from pathlib import Path
 from typing import Any
+
 import pytest
 from pytest import MonkeyPatch
 
@@ -219,9 +221,7 @@ class TestPostProcessConfig:
         _post_process_config(str(config_path), None)  # type: ignore[arg-type]
         assert config_path.read_text() == original
 
-    def test_mixed_replace_and_append(
-        self, tmp_path: Path, sample_config_source: str
-    ) -> None:
+    def test_mixed_replace_and_append(self, tmp_path: Path, sample_config_source: str) -> None:
         """Replace marker_dict and append is_nuclei in one call."""
         from core.preprocess.matrix_loader import _post_process_config
 
@@ -270,9 +270,7 @@ class TestPostProcessConfig:
         tree = ast.parse(source)
         assert tree is not None
 
-    def test_source_without_marker_dict(
-        self, tmp_path: Path, sample_config_source: str
-    ) -> None:
+    def test_source_without_marker_dict(self, tmp_path: Path, sample_config_source: str) -> None:
         """Config without marker_dict — append it via ast."""
         from core.preprocess.matrix_loader import _post_process_config
 
@@ -320,8 +318,12 @@ class TestGenerateConfigPaperContext:
         the format detection returns 'unknown' and generate_config skips.
         """
         import core.preprocess.matrix_loader as ml
-        monkeypatch.setattr(ml, '_detect_primary_format', lambda *a, **kw: '10X_h5')
-    def test_heuristic_overrides(self, tmp_path: Path, fake_classification: dict[str, Any], fake_file_list: list[str]) -> None:
+
+        monkeypatch.setattr(ml, "_detect_primary_format", lambda *a, **kw: "10X_h5")
+
+    def test_heuristic_overrides(
+        self, tmp_path: Path, fake_classification: dict[str, Any], fake_file_list: list[str]
+    ) -> None:
         """Paper_context values override heuristic replacements."""
         from core.preprocess.matrix_loader import generate_config
 
@@ -471,7 +473,11 @@ class TestGenerateConfigPaperContext:
         assert mtime2 >= mtime1, "File should have been re-written"
 
     def test_dry_run_with_paper_context(
-        self, tmp_path: Path, fake_classification: dict[str, Any], fake_file_list: list[str], capsys
+        self,
+        tmp_path: Path,
+        fake_classification: dict[str, Any],
+        fake_file_list: list[str],
+        capsys,
     ) -> None:
         """Dry-run with paper_context does not write files."""
         from core.preprocess.matrix_loader import generate_config
@@ -492,6 +498,7 @@ class TestGenerateConfigPaperContext:
         assert not os.path.exists(result)
         captured = capsys.readouterr()
         assert "[DRY-RUN]" in captured.out
+
 
 # ═══════════════════════════════════════════════════════════════════════
 #  _post_process_config — inject parameter tests

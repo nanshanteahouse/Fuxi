@@ -5,15 +5,19 @@ T1 (P0-CRITICAL) from cross-batch-critical-fixes plan:
   with a null-guard for adata without .raw.
 """
 
-import sys
+import copy as _copy_mod
+import logging
 import os
+import sys
+from unittest.mock import patch
 
 import numpy as np
-import pytest
+import pandas as pd
 import scanpy as sc
 from anndata import AnnData
 
-# ── Ensure repo root is on sys.path (conftest.py also does this) ──────
+from core.annotation.scoring import Score
+
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
@@ -33,13 +37,13 @@ def test_T1_use_raw_uses_raw_layer() -> None:
     rng = np.random.RandomState(42)
 
     # .X: 100 HVG-subset genes (no "FOO")
-    X = rng.poisson(lam=1.0, size=(n_cells, n_hvg)).astype(np.float32)
-    adata = AnnData(X)
+    x = rng.poisson(lam=1.0, size=(n_cells, n_hvg)).astype(np.float32)
+    adata = AnnData(x)
     adata.var_names = [f"HVG_{i}" for i in range(n_hvg)]
 
     # .raw: 1000 full genes, last one is "FOO"
-    raw_X = rng.poisson(lam=1.0, size=(n_cells, n_full)).astype(np.float32)
-    raw = AnnData(raw_X)
+    raw_x = rng.poisson(lam=1.0, size=(n_cells, n_full)).astype(np.float32)
+    raw = AnnData(raw_x)
     raw_var_names = [f"GENE_{i}" for i in range(n_full)]
     raw_var_names[-1] = "FOO"
     raw.var_names = raw_var_names
@@ -83,8 +87,8 @@ def test_T1_use_raw_null_guard() -> None:
     n_genes = 100
     rng = np.random.RandomState(42)
 
-    X = rng.poisson(lam=1.0, size=(n_cells, n_genes)).astype(np.float32)
-    adata = AnnData(X)
+    x = rng.poisson(lam=1.0, size=(n_cells, n_genes)).astype(np.float32)
+    adata = AnnData(x)
     adata.var_names = [f"GENE_{i}" for i in range(n_genes)]
     adata.obs["leiden"] = rng.choice(["0", "1"], n_cells)
 
@@ -104,23 +108,18 @@ def test_T1_use_raw_null_guard() -> None:
     df = sc.get.rank_genes_groups_df(adata, group="0")
     assert len(df) > 0, "DE results should be present when falling back to .X"
 
+
 # ═══════════════════════════════════════════════════════════════════════
 #  T4 — Case-insensitive gene-name matching and zero-score warning
 # ═══════════════════════════════════════════════════════════════════════
-
-import copy as _copy_mod
-import logging
-from unittest.mock import patch
-
-import pandas as pd
-from core.annotation.scoring import Score
-
-
 def _make_zero_scores(n_clusters: int = 5) -> dict:
     """Build all_scores dict where every cluster has zero KB hits."""
     return {
-        str(i): {"CT": Score(score=0.0, p_value=1.0, method="none",
-                              n_markers_found=0, negative_penalty=False)}
+        str(i): {
+            "CT": Score(
+                score=0.0, p_value=1.0, method="none", n_markers_found=0, negative_penalty=False
+            )
+        }
         for i in range(n_clusters)
     }
 
@@ -146,12 +145,14 @@ def _make_marker_df(n_clusters: int = 5) -> pd.DataFrame:
     for cl in range(n_clusters):
         genes = ["RHO", "GNAT1", "GENE3", "GENE4", "GENE5"]
         for i, g in enumerate(genes):
-            rows.append({
-                "names": g,
-                "logfoldchanges": 5.0 - i * 0.5,
-                "pvals_adj": 1e-50,
-                "cluster": str(cl),
-            })
+            rows.append(
+                {
+                    "names": g,
+                    "logfoldchanges": 5.0 - i * 0.5,
+                    "pvals_adj": 1e-50,
+                    "cluster": str(cl),
+                }
+            )
     return pd.DataFrame(rows)
 
 
@@ -164,17 +165,32 @@ def _make_logger() -> logging.Logger:
 
 
 def _check_zero_scores_and_retry_wrapper(
-    kb, all_scores, marker_df, clusters, species,
-    target_class, target_order, tissue_kb, logger,
+    kb,
+    all_scores,
+    marker_df,
+    clusters,
+    species,
+    target_class,
+    target_order,
+    tissue_kb,
+    logger,
 ):
     """Lazy-import and call _check_zero_scores_and_retry.
 
     Avoids circular-import issues at module level by importing only when called.
     """
     from core.annotation.engine import _check_zero_scores_and_retry
+
     return _check_zero_scores_and_retry(
-        kb, all_scores, marker_df, clusters, species,
-        target_class, target_order, tissue_kb, logger,
+        kb,
+        all_scores,
+        marker_df,
+        clusters,
+        species,
+        target_class,
+        target_order,
+        tissue_kb,
+        logger,
     )
 
 
@@ -193,17 +209,21 @@ def test_T4_case_insensitive_retry_succeeds() -> None:
     # Mock score_cluster_against_kb to return hits on retry
     with patch(
         "core.annotation.scoring.score_cluster_against_kb",
-        return_value={"CT": Score(0.85, 0.001, "hypergeometric", 2, False)}
+        return_value={"CT": Score(0.85, 0.001, "hypergeometric", 2, False)},
     ):
         result_scores, total_hits, n_clusters = _check_zero_scores_and_retry_wrapper(
-            kb, all_scores, marker_df, clusters, species="human",
-            target_class="", target_order="", tissue_kb="test_kb",
+            kb,
+            all_scores,
+            marker_df,
+            clusters,
+            species="human",
+            target_class="",
+            target_order="",
+            tissue_kb="test_kb",
             logger=logger,
         )
 
-    assert total_hits > 0, (
-        f"Expected retry to improve hits, got total_hits={total_hits}"
-    )
+    assert total_hits > 0, f"Expected retry to improve hits, got total_hits={total_hits}"
     assert n_clusters == 5
     # The original all_scores must be unchanged
     for v in all_scores.values():
@@ -217,8 +237,15 @@ def test_T4_case_insensitive_skip_when_already_matching() -> None:
     retry block entirely and return the original all_scores unchanged.
     """
     all_scores = {
-        str(i): {"CT": Score(score=0.5, p_value=0.01, method="hypergeometric",
-                              n_markers_found=1, negative_penalty=False)}
+        str(i): {
+            "CT": Score(
+                score=0.5,
+                p_value=0.01,
+                method="hypergeometric",
+                n_markers_found=1,
+                negative_penalty=False,
+            )
+        }
         for i in range(5)
     }
     kb = _make_kb_lowercase()
@@ -229,8 +256,14 @@ def test_T4_case_insensitive_skip_when_already_matching() -> None:
     # Patch score_cluster_against_kb to track if it gets called
     with patch("core.annotation.scoring.score_cluster_against_kb") as mock_sc:
         result_scores, total_hits, n_clusters = _check_zero_scores_and_retry_wrapper(
-            kb, all_scores, marker_df, clusters, species="human",
-            target_class="", target_order="", tissue_kb="test_kb",
+            kb,
+            all_scores,
+            marker_df,
+            clusters,
+            species="human",
+            target_class="",
+            target_order="",
+            tissue_kb="test_kb",
             logger=logger,
         )
 
@@ -253,15 +286,21 @@ def test_T4_zero_score_warning_fires() -> None:
     # Mock score_cluster_against_kb to return ZERO hits (retry doesn't help)
     with patch(
         "core.annotation.scoring.score_cluster_against_kb",
-        return_value={"CT": Score(0.0, 1.0, "none", 0, False)}
+        return_value={"CT": Score(0.0, 1.0, "none", 0, False)},
     ):
         logger = logging.getLogger("test_T4_warning")
         logger.setLevel(logging.DEBUG)
         logger.addHandler(logging.NullHandler())
         with patch.object(logger, "error") as mock_err:
             _check_zero_scores_and_retry_wrapper(
-                kb, all_scores, marker_df, clusters, species="danio_rerio",
-                target_class="", target_order="", tissue_kb="test_kb",
+                kb,
+                all_scores,
+                marker_df,
+                clusters,
+                species="danio_rerio",
+                target_class="",
+                target_order="",
+                tissue_kb="test_kb",
                 logger=logger,
             )
 
@@ -287,11 +326,17 @@ def test_T4_kb_dict_not_mutated() -> None:
 
     with patch(
         "core.annotation.scoring.score_cluster_against_kb",
-        return_value={"CT": Score(0.85, 0.001, "hypergeometric", 2, False)}
+        return_value={"CT": Score(0.85, 0.001, "hypergeometric", 2, False)},
     ):
         _check_zero_scores_and_retry_wrapper(
-            kb, all_scores, marker_df, clusters, species="human",
-            target_class="", target_order="", tissue_kb="test_kb",
+            kb,
+            all_scores,
+            marker_df,
+            clusters,
+            species="human",
+            target_class="",
+            target_order="",
+            tissue_kb="test_kb",
             logger=logger,
         )
 
@@ -309,7 +354,9 @@ def test_T4_audit_report_deferred_section_present() -> None:
     Verifies the notes/audit file has the expected section header.
     """
     audit_path = os.path.join(
-        _REPO_ROOT, "notes", "audit",
+        _REPO_ROOT,
+        "notes",
+        "audit",
         "2026-07-15_cross_batch_critical_issues_audit.md",
     )
     assert os.path.exists(audit_path), f"Audit file not found: {audit_path}"

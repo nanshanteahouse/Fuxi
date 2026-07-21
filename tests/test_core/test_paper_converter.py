@@ -8,34 +8,34 @@ Covers:
 - ``PaperInsights`` integration
 - CLI argument handling
 """
-import json
-import yaml
-import os
+
+import re
 import subprocess
 import sys
-import re
 from pathlib import Path
-from typing import Any
-from unittest.mock import patch
 
 import pytest
+import yaml
 
+from core.ai.prompts import (
+    PAPER_FIGURE_SYSTEM_PROMPT,
+    PAPER_META_SYSTEM_PROMPT,
+    PAPER_METHODS_SYSTEM_PROMPT,
+)
 from core.paper.converter import (
-    clean_text,
+    MarkdownSource,
     PaperSource,
     PmcXmlSource,
-    MarkdownSource,
     Pymupdf4llmSource,
+    clean_text,
 )
 from core.paper.insights import (
-    PaperInsights, _parse_filename_meta,
-    _extract_geo_ids, _extract_data_access,
-    _extract_key_methods, _extract_methods_summary,
-)
-from core.ai.prompts import (
-    PAPER_META_SYSTEM_PROMPT,
-    PAPER_FIGURE_SYSTEM_PROMPT,
-    PAPER_METHODS_SYSTEM_PROMPT,
+    PaperInsights,
+    _extract_data_access,
+    _extract_geo_ids,
+    _extract_key_methods,
+    _extract_methods_summary,
+    _parse_filename_meta,
 )
 
 # ── Fixture paths ────────────────────────────────────────────────────────────
@@ -50,6 +50,7 @@ MENON_MD = PAPERS_DIR / "2019_Menon_NatCommun_Human-Retina-AMD-Atlas.md"
 _PYMUPDF4LLM_AVAILABLE: bool = False
 try:
     import pymupdf4llm  # noqa: F401
+
     _PYMUPDF4LLM_AVAILABLE = True
 except ImportError:
     pass
@@ -274,6 +275,7 @@ class TestPymupdf4llmSource:
         """Class can be imported without ImportError from module level."""
         # Import succeeds at module top; instantiation is what fails
         from core.paper.converter import Pymupdf4llmSource as Cls  # noqa: F811
+
         assert Cls is not None
 
     def test_instantiation_raises_import_error(self) -> None:
@@ -284,7 +286,7 @@ class TestPymupdf4llmSource:
     @skipif_no_pymupdf4llm
     def test_pdf_source_with_pymupdf4llm(self) -> None:
         """If pymupdf4llm IS installed, constructing with a real PDF works.
-        
+
         This test is skipped unless pymupdf4llm is available.
         """
         # Find a PDF in the test fixtures or papers directory
@@ -308,6 +310,7 @@ class TestPymupdf4llmSource:
 
 class _FakeLLMConfig:
     """Minimal config stub to let PaperInsights methods run without real LLM."""
+
     model = "test-model"
     api_base = "http://test"
     api_key = "test-key"
@@ -404,8 +407,14 @@ class TestPaperInsights:
             paper_meta={"year": "2019", "first_author": "Menon"},
         )
         expected_keys = {
-            "paper_meta", "experimental_design", "key_findings",
-            "data_access", "methods", "data_notes", "figures", "reproduction_status",
+            "paper_meta",
+            "experimental_design",
+            "key_findings",
+            "data_access",
+            "methods",
+            "data_notes",
+            "figures",
+            "reproduction_status",
         }
         assert set(insights.keys()) == expected_keys
 
@@ -428,7 +437,6 @@ class TestPaperInsights:
         assert insights["methods"]["software_versions"] == {"Seurat": "4.0"}
         assert insights["methods"]["reference_genome"] == "hg38"
         assert insights["methods"]["sequencing_platforms"] == ["NovaSeq 6000"]
-
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -545,7 +553,9 @@ class TestExtractMethodsSummary:
 
     def test_fallback_full_text_when_key_methods_empty(self) -> None:
         """When key_methods empty after LLM, falls back to regex on full_text."""
-        result = _extract_methods_summary({"key_methods": []}, full_text="We used UMAP for visualization")
+        result = _extract_methods_summary(
+            {"key_methods": []}, full_text="We used UMAP for visualization"
+        )
         assert "UMAP" in result["key_methods"]
 
     def test_fallback_full_text_when_methods_none(self) -> None:
@@ -563,9 +573,13 @@ class TestExtractMethodsSummary:
     def test_software_versions_preserved(self) -> None:
         """Non-key_methods fields from methods_data are preserved after fallback."""
         result = _extract_methods_summary(
-            {"key_methods": [], "software_versions": {"Seurat": "4.0"},
-             "reference_genome": "hg38", "sequencing_platforms": ["NovaSeq"]},
-            full_text="We used UMAP"
+            {
+                "key_methods": [],
+                "software_versions": {"Seurat": "4.0"},
+                "reference_genome": "hg38",
+                "sequencing_platforms": ["NovaSeq"],
+            },
+            full_text="We used UMAP",
         )
         assert "UMAP" in result["key_methods"]
         assert result["software_versions"] == {"Seurat": "4.0"}
@@ -650,7 +664,6 @@ class TestEndToEnd:
 
     def test_end_to_end_mock_merge(self, tmp_path: Path) -> None:
         """Mock LLM extraction outputs, merge via merge_to_insights, verify YAML output."""
-        import yaml
 
         paper_meta = {
             "year": "2023",
@@ -662,8 +675,11 @@ class TestEndToEnd:
         meta = {
             "paper_type": "research",
             "experimental_design": {
-                "species": "homo_sapiens", "tissue": "retina",
-                "tissue_info": "", "models": [], "conditions": [],
+                "species": "homo_sapiens",
+                "tissue": "retina",
+                "tissue_info": "",
+                "models": [],
+                "conditions": [],
                 "modalities": ["snRNA-seq"],
                 "summary": "Test summary.",
             },
@@ -672,14 +688,25 @@ class TestEndToEnd:
             "data_notes": [],
         }
 
-        figures = [{
-            "id": "Fig_1", "caption": "UMAP embedding.",
-            "type": "umap", "panels": ["1a"],
-            "parameters": {"features": [], "resolution": None, "method": None,
-                          "conditions": [], "n_value": None, "error_bar_type": None},
-            "purpose": "UMAP overview.", "reproducible": True,
-            "reproducibility_reasoning": "Computational visualization.",
-        }]
+        figures = [
+            {
+                "id": "Fig_1",
+                "caption": "UMAP embedding.",
+                "type": "umap",
+                "panels": ["1a"],
+                "parameters": {
+                    "features": [],
+                    "resolution": None,
+                    "method": None,
+                    "conditions": [],
+                    "n_value": None,
+                    "error_bar_type": None,
+                },
+                "purpose": "UMAP overview.",
+                "reproducible": True,
+                "reproducibility_reasoning": "Computational visualization.",
+            }
+        ]
 
         methods_data = {
             "key_methods": ["10x Genomics", "CellRanger"],
@@ -717,6 +744,7 @@ class TestEndToEnd:
         assert data["methods"]["key_methods"] == ["10x Genomics", "CellRanger"]
         assert data["reproduction_status"]["total_figures"] == 1
         assert data["reproduction_status"]["reproducible_count"] == 1
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 #  6.  CLI tests
@@ -759,7 +787,7 @@ class TestCli:
         only if LLM API key is missing, not because of argparse failure)."""
         if not MENON_MD.exists():
             pytest.skip("Menon .md not found")
-        result = self._run(str(MENON_MD), "--help")  # just test parsing, use --help
+        self._run(str(MENON_MD), "--help")  # just test parsing, use --help
         # Actually test positional-only mode: the script should parse without error
         # (it may fail later due to missing LLM key, but argparse should succeed)
         result2 = self._run(str(MENON_MD))
@@ -795,7 +823,8 @@ class TestPmcFixture:
         assert PMC_FIXTURE.exists(), (
             f"PMC fixture not found at {PMC_FIXTURE}. "
             "Run: curl -s -H 'User-Agent: Fuxi/1.0' "
-            "'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&id=6814749&rettype=xml' "
+            "'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?"
+            "db=pmc&id=6814749&rettype=xml' "
             f"-o {PMC_FIXTURE}"
         )
 
@@ -812,6 +841,7 @@ class TestPmcFixture:
     def test_fixture_parses_as_xml(self) -> None:
         """Fixture should be valid XML parseable by xml.etree.ElementTree."""
         import xml.etree.ElementTree as ET
+
         root = ET.parse(str(PMC_FIXTURE)).getroot()
         assert root.tag == "article"
         assert root.find("body") is not None
@@ -827,7 +857,7 @@ class TestCleanTextNewPatterns:
     """New clean_text patterns: char-spacing, watermark, line-number, garbage-char suppression."""
 
     def test_character_spacing_suppressed(self) -> None:
-        """Character-spaced text: ``A u t h o r   M a n u s c r i p t`` → single letters collapsed."""
+        """Character-spaced text: ``A u t h o r   M a n u s c r i p t`` → single letters."""
         result = clean_text("A u t h o r   M a n u s c r i p t")
         assert "A u" not in result
 

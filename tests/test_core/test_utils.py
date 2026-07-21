@@ -1,16 +1,17 @@
 """Skeleton tests for core/utils.py."""
+
 import os
 
 from core.utils import (
-    safe_write,
-    safe_plot,
-    setup_logger,
-    resolve_config,
-    validate_adata,
-    repo_root,
     find_rna_h5ad,
     find_rna_marker_csv,
     load_scRNA_markers,
+    repo_root,
+    resolve_config,
+    safe_plot,
+    safe_write,
+    setup_logger,
+    validate_adata,
 )
 
 

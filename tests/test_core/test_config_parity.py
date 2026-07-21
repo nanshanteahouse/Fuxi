@@ -12,7 +12,6 @@ import yaml
 
 from core.config.schema import Config
 
-
 # ═══════════════════════════════════════════════════════════════════════
 #  Defaults parity
 # ═══════════════════════════════════════════════════════════════════════
@@ -420,12 +419,14 @@ class TestConfigSerialization:
 
     def test_model_dump_round_trip(self) -> None:
         """Config.model_dump() → model_validate recovers the same values."""
-        cfg = Config.model_validate({
-            "modality": "atac",
-            "tissue": "brain",
-            "hvg": {"n_top_genes": 2000},
-            "qc": {"min_genes": 300},
-        })
+        cfg = Config.model_validate(
+            {
+                "modality": "atac",
+                "tissue": "brain",
+                "hvg": {"n_top_genes": 2000},
+                "qc": {"min_genes": 300},
+            }
+        )
         dumped = cfg.model_dump()
         restored = Config.model_validate(dumped)
 
