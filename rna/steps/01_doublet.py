@@ -59,6 +59,11 @@ def run_scrublet_sample(adata_sub, sample_name, cfg):
                 f"falling back to manual threshold={fallback}"
             )
             predicted = scrub.call_doublets(threshold=fallback)
+            if predicted is None:
+                warnings.warn(
+                    f"Scrublet threshold fallback failed for {sample_name}, assuming no doublets"
+                )
+                predicted = np.zeros(adata_sub.n_obs, dtype=bool)
         return scores, predicted
     except Exception as e:
         warnings.warn(f"Scrublet failed for {sample_name}: {e}")

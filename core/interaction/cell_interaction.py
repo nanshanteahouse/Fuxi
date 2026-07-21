@@ -18,6 +18,7 @@ Dependencies: liana>=1.0.0, anndata, pandas, mygene
 
 import os
 import time
+from typing import cast
 
 import pandas as pd
 
@@ -242,6 +243,8 @@ def run_cci_permutation(
         inplace=False,
         verbose=False,
     )
+    if lr_res is None:
+        raise RuntimeError("LIANA rank_aggregate returned no result table")
 
     if log:
         n_interactions = len(lr_res)
@@ -329,8 +332,10 @@ def run_cci_spatial(
         seed=seed,
     )
 
+    if result_adata is None:
+        raise RuntimeError("LIANA bivariate returned no result AnnData")
     # Extract the interaction table from var
-    lr_res = result_adata.var.copy()
+    lr_res = cast(pd.DataFrame, result_adata.var.copy())
     lr_res.reset_index(drop=True, inplace=True)
 
     if log:

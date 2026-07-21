@@ -41,17 +41,14 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.14"
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/uv
-          key: ${{ runner.os }}-uv-${{ hashFiles('requirements/*.txt') }}
-          restore-keys: ${{ runner.os }}-uv-
+          enable-cache: true
+          cache-dependency-glob: "requirements/*.txt"
       - name: Install system deps
         run: sudo apt-get update && sudo apt-get install -y libopenblas-dev cmake
       - name: Install deps
         run: uv pip install -r requirements/all.txt
       - name: Pyright
-        run: uv pip install pyright && uv run pyright
+        run: uv pip install pyright==1.1.411 && uv run pyright
 
   # ════════════════════════════════════════════════════════════════════════
   # Smoke test (fast gate)
@@ -64,11 +61,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.14"
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/uv
-          key: ${{ runner.os }}-uv-${{ hashFiles('requirements/*.txt') }}
-          restore-keys: ${{ runner.os }}-uv-
+          enable-cache: true
+          cache-dependency-glob: "requirements/*.txt"
       - name: Install system deps
         run: sudo apt-get update && sudo apt-get install -y libopenblas-dev cmake
       - name: Install deps
@@ -88,11 +82,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.14"
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/uv
-          key: ${{ runner.os }}-uv-${{ hashFiles('requirements/*.txt') }}
-          restore-keys: ${{ runner.os }}-uv-
+          enable-cache: true
+          cache-dependency-glob: "requirements/*.txt"
       - name: Install system deps
         run: sudo apt-get update && sudo apt-get install -y libopenblas-dev cmake
       - name: Install deps
@@ -109,11 +100,8 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.14"
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/uv
-          key: ${{ runner.os }}-uv-${{ hashFiles('requirements/*.txt') }}
-          restore-keys: ${{ runner.os }}-uv-
+          enable-cache: true
+          cache-dependency-glob: "requirements/*.txt"
       - name: Install system deps
         run: sudo apt-get update && sudo apt-get install -y libopenblas-dev cmake
       - name: Install deps
