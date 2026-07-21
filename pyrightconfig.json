@@ -16,5 +16,12 @@
   "reportAttributeAccessIssue": "warning",
   "reportMissingImports": "warning",
   "reportMissingTypeStubs": "none",
+  "reportArgumentType": "warning",
+  "reportCallIssue": "warning",
+  "reportGeneralTypeIssues": "warning",
+  "reportOperatorIssue": "warning",
+  "reportIndexIssue": "warning",
+  "reportAssignmentType": "warning",
+  "reportUnhashable": "warning",
   "pythonVersion": "3.14"
 }

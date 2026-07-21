@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Optional
+from typing import Optional, cast
 
 import pandas as pd
 
@@ -90,7 +90,7 @@ def load_adjacency(
                 custom_file,
                 len(df),
             )
-            return df[["source", "target", "adjacency_type"]]
+            return cast(pd.DataFrame, df[["source", "target", "adjacency_type"]])
         else:
             logger.warning(
                 "Custom adjacency file not found: '%s'. Falling through to tissue default.",

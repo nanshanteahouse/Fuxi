@@ -20,6 +20,7 @@ import argparse
 import os
 import sys
 import time
+from typing import cast
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 import matplotlib.pyplot as plt
@@ -93,7 +94,7 @@ def filter_regulon_net(net: pd.DataFrame, min_genes: int = 5, log: object = None
     net_filt = net[net["source"].isin(keep)].copy()
     if log:
         log.info("Regulon filter (>=%d targets): %d -> %d TFs", min_genes, n_before, len(keep))
-    return net_filt
+    return cast(pd.DataFrame, net_filt)
 
 
 def run_grn(pseudo_df: pd.DataFrame, net: pd.DataFrame, log: object) -> tuple:
@@ -157,7 +158,7 @@ def top_variable_tfs(
         var = estimates_df.var(axis=0)
         top = var.nlargest(n_top).index
         log.info("Top %d TFs by variance: %s", n_top, ", ".join(top[:20].tolist()))
-        return estimates_df[top]
+        return cast(pd.DataFrame, estimates_df[top])
 
     # ── soft mode: variance-based ranking with KB overlap logging ─────
     if mode == "soft":
@@ -174,7 +175,7 @@ def top_variable_tfs(
         else:
             log.warning("soft mode: tf_annotation not provided — skipping KB overlap logging")
 
-        return estimates_df[top]
+        return cast(pd.DataFrame, estimates_df[top])
 
     # ── hard mode: multi-axis ranking (variance + KB overlap) ────────
     if mode == "hard":
@@ -183,7 +184,7 @@ def top_variable_tfs(
             var = estimates_df.var(axis=0)
             top = var.nlargest(n_top).index
             log.info("Top %d TFs by variance: %s", n_top, ", ".join(top[:20].tolist()))
-            return estimates_df[top]
+            return cast(pd.DataFrame, estimates_df[top])
 
         # Variance rank (1 = highest variance)
         var = estimates_df.var(axis=0)
@@ -206,13 +207,13 @@ def top_variable_tfs(
         log.info("hard mode: selecting top %d TFs by combined variance+KB rank", n_top)
         log.info("Top %d TFs (hard mode): %s", n_top, ", ".join(top[:20].tolist()))
 
-        return estimates_df[top]
+        return cast(pd.DataFrame, estimates_df[top])
 
     # ── Fallback (shouldn't reach here due to main() validation) ─────
     log.warning("Unknown mode '%s' — falling back to off mode", mode)
     var = estimates_df.var(axis=0)
     top = var.nlargest(n_top).index
-    return estimates_df[top]
+    return cast(pd.DataFrame, estimates_df[top])
 
 
 def export_results(estimates_df, top_df, pvals_df, net_top, cfg, log, kb_markers=None):

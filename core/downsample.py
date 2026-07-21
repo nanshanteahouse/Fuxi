@@ -223,7 +223,7 @@ def downsample_by_config(adata: AnnData, cfg, logger) -> AnnData:
         adata = downsample_max_per_sample(adata, max_per, sample_key or "sample", rng, logger)
 
     # 可选 float32 节省内存
-    if getattr(cfg, "use_float32", False):
+    if getattr(cfg, "use_float32", False) and adata.X is not None:
         if sp.issparse(adata.X):
             adata.X = adata.X.astype("float32", copy=False)
         else:

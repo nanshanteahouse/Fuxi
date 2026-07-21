@@ -119,9 +119,9 @@ def run_spatial_autocorr(adata, cfg, log):
 
 def plot_top_svg(adata, moran_df, cfg, log):
     """Spatial plot of top spatially variable genes."""
-    top_n = min(6, len(moran_df) if moran_df is not None else 0)
-    if top_n == 0 or "spatial" not in adata.obsm:
+    if moran_df is None or len(moran_df) == 0 or "spatial" not in adata.obsm:
         return
+    top_n = min(6, len(moran_df))
 
     top_genes = [g for g in moran_df.head(top_n).index.tolist() if g in adata.var_names]
     if not top_genes:

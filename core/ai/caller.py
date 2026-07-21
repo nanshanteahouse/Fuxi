@@ -47,7 +47,7 @@ def _query_available_models(api_base: str, api_key: str) -> list[str]:
 
 def ai_query(
     system_prompt: str, user_prompt: str, cfg, log=None, expect_json: bool = False
-) -> str:
+) -> str | None:
     """
     统一的 LLM 查询接口。
 

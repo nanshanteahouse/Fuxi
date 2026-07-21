@@ -277,6 +277,7 @@ class TestErrorHandling:
         try:
             wb = openpyxl.Workbook()
             ws = wb.active
+            assert ws is not None
             ws.title = "Sheet1"
             ws.cell(row=1, column=1, value="A")
             ws.cell(row=1, column=2, value="B")

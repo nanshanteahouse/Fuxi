@@ -297,7 +297,7 @@ def main():
             adata = downsample_max_per_sample(adata, args.max_per_sample, sample_col, rng, log)
 
     # 可选 float32 节省内存
-    if cfg and getattr(cfg.execution, "use_float32", False):
+    if cfg and getattr(cfg.execution, "use_float32", False) and adata.X is not None:
         if sp.issparse(adata.X):
             adata.X = adata.X.astype("float32", copy=False)
         else:

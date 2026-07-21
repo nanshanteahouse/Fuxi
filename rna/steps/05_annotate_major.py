@@ -262,6 +262,10 @@ def ai_annotate(adata, cfg, logger, std=None):
         logger.warning("LLM query failed: %s — falling back to score_genes method", exc)
         return None
 
+    if response is None:
+        logger.warning("LLM returned empty response — falling back to score_genes method")
+        return None
+
     # ── f. 解析 JSON ──────────────────────────────────────────────────
     try:
         annotations = json.loads(response)

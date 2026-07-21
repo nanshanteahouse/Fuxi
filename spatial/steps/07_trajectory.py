@@ -86,7 +86,10 @@ def main():
             # Find cells with highest expression of root markers
             root_markers_present = [g for g in cfg.trajectory.root_markers if g in adata.var_names]
             if root_markers_present:
-                root_score = adata[:, root_markers_present].X.mean(axis=1)
+                sub_x = adata[:, root_markers_present].X
+                if sub_x is None:
+                    raise ValueError("adata.X is None — cannot score root markers")
+                root_score = sub_x.mean(axis=1)
                 if scipy.sparse.issparse(root_score):
                     root_score = root_score.toarray()
                 adata.uns["iroot"] = int(np.argmax(root_score))

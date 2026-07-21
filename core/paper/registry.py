@@ -1563,7 +1563,7 @@ def main() -> None:
             )
         else:
             print("\u274c Must specify --pmid, --gse, --xml, --pdf, or --paper-dir")
-            return registry
+            return
         if not args.dry_run:
             save_master_registry(registry, reg_path)
             _auto_verify(registry)

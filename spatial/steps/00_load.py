@@ -125,7 +125,7 @@ def main():
         sys.exit(1)
 
     # ── Ensure CSR format ────────────────────────────────────────────────
-    if getattr(cfg.execution, "force_csr", True) and sp.issparse(adata.X):
+    if getattr(cfg.execution, "force_csr", True) and sp.issparse(adata.X) and adata.X is not None:
         if not sp.isspmatrix_csr(adata.X):
             adata.X = adata.X.tocsr()
             log.info("X format converted to CSR")

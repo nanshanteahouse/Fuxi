@@ -494,8 +494,6 @@ def download_file(
     try:
         result = subprocess.run(cmd, capture_output=False)
         return result.returncode == 0
-    except Exception:
-        return False
     except Exception as exc:
         log.error("Download error: %s — %s", url, exc)
         return False

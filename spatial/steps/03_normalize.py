@@ -92,6 +92,8 @@ def main():
     if not hvg_selected:
         log.info("Falling back to manual variance-based HVG selection...")
         x = adata.X
+        if x is None:
+            raise ValueError("adata.X is None — cannot compute manual variance HVG")
         if scipy.sparse.issparse(x):
             mean = np.array(x.mean(axis=0)).flatten()
             var = np.array(x.multiply(x).mean(axis=0)).flatten() - mean**2

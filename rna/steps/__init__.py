@@ -21,6 +21,8 @@ def _load_step_module(filename: str, mod_name: str):
     """Load a step .py file by path (num-starting filename workaround)."""
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
     spec = importlib.util.spec_from_file_location(mod_name, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load step module {mod_name!r} from {path}")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod

@@ -1009,13 +1009,11 @@ def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, C
         )
 
     # ── Auto-sweep: convex_hull ──
-    do_sweep = True
-    if min_dist_grid is None or spread_grid is None:
-        do_sweep = False
-    elif len(min_dist_grid) <= 1 and len(spread_grid) <= 1:
-        do_sweep = False
-
-    if not do_sweep:
+    if (
+        min_dist_grid is None
+        or spread_grid is None
+        or (len(min_dist_grid) <= 1 and len(spread_grid) <= 1)
+    ):
         md = getattr(CFG.clustering, "umap_min_dist", 0.3)
         sp = getattr(CFG.clustering, "umap_spread", 1.0)
         log.info(

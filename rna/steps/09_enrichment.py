@@ -586,6 +586,7 @@ def plot_prerank_bubble(
 ) -> None:
     """Pre-ranked GSEA 气泡图: color=NES, size=-log10(FDR)"""
     import matplotlib.pyplot as plt
+    from matplotlib.colors import Normalize
 
     sig = df[df["FDR q-val"] < cfg.enrichment.pval_cutoff].copy()
     if sig.empty:
@@ -602,7 +603,7 @@ def plot_prerank_bubble(
     top_per_cluster["-log10_fdr"] = -np.log10(top_per_cluster["FDR q-val"].clip(lower=1e-300))
     # NES 颜色: 红色=上调, 蓝色=下调
     vmax = max(abs(top_per_cluster["NES"].min()), abs(top_per_cluster["NES"].max()))
-    norm = plt.Normalize(-vmax, vmax)
+    norm = Normalize(-vmax, vmax)
 
     fig, ax = plt.subplots(
         figsize=(
@@ -762,6 +763,9 @@ def main():
                 from core.ai.caller import ai_query
 
                 interpretation = ai_query(system_prompt, user_prompt, cfg=cfg.ai)
+
+                if interpretation is None:
+                    raise ValueError("LLM returned empty interpretation")
 
                 interp_path = os.path.join(cfg.table_dir, "09_enrichment", "ai_interpretation.txt")
                 os.makedirs(os.path.dirname(interp_path), exist_ok=True)

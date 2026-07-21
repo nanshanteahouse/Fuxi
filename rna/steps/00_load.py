@@ -517,7 +517,7 @@ def main():
         log.info("Backed mode detected — loading fully into memory for processing")
         adata = adata.to_memory()
     force_csr = getattr(cfg.execution, "force_csr", True)
-    if force_csr:
+    if force_csr and adata.X is not None:
         if sp.issparse(adata.X):
             if not sp.isspmatrix_csr(adata.X):
                 adata.X = adata.X.tocsr()
@@ -528,7 +528,7 @@ def main():
             log.info("  CSR conversion complete")
 
     # ── 可选 float32 精度 ──
-    if getattr(cfg.execution, "use_float32", False):
+    if getattr(cfg.execution, "use_float32", False) and adata.X is not None:
         adata.X = adata.X.astype("float32", copy=False) if sp.issparse(adata.X) else adata.X
         log.info("X precision converted to float32")
 

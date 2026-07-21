@@ -592,10 +592,11 @@ class PaperInsights:
         output_path: str | None = None,
         force: bool = False,
         extract_methodology: bool = False,
-    ) -> str:
+    ) -> str | None:
         """Full pipeline: read, split, extract, merge, write.
 
-        Returns path to written file, or "SKIPPED" if output exists and not force.
+        Returns path to written file, "SKIPPED" if output exists and not force,
+        or None if the source could not be read.
 
         Auto-creates subdirectory for output if needed.
 
@@ -617,7 +618,7 @@ class PaperInsights:
             md_text = source.get_text()
         except (RuntimeError, HTTPError, URLError) as exc:
             logger.error("Failed to read source: %s", exc)
-            return {}
+            return None
         sections = self.split_sections(md_text)
         logger.info("Found sections: %s", [k for k, v in sections.items() if v])
 
@@ -774,6 +775,8 @@ def main() -> None:
         force=args.force,
         extract_methodology=args.methodology,
     )
+    if result is None:
+        sys.exit(1)
     print("SKIPPED" if result == "SKIPPED" else f"Done: {result}")
 
 

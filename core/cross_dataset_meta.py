@@ -37,7 +37,7 @@ import argparse
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 import networkx as nx
 import numpy as np
@@ -203,7 +203,7 @@ def load_clusters(
 
 def compute_idf_vectors(
     all_clusters: dict[str, dict],
-) -> tuple[np.ndarray, list[str], dict[str, float]]:
+) -> tuple[csr_matrix, list[str], dict[str, float]]:
     """Build IDF-weighted TF vectors from cluster marker sets.
 
     Returns ``(tfidf_norm, cluster_names, idf)``.
@@ -233,7 +233,7 @@ def compute_idf_vectors(
             cols.append(g2i[g])
 
     x = csr_matrix((data, (rows, cols)), shape=(n, m))
-    x_norm = normalize(x, norm="l2", axis=1)
+    x_norm = cast(csr_matrix, normalize(x, norm="l2", axis=1))
     return x_norm, names, idf
 
 

@@ -209,6 +209,8 @@ def main():
 
     if not hvg_found:
         log.warning("All standard HVG flavors failed, falling back to manual variance method")
+        if adata.X is None:
+            raise ValueError("adata.X is None — cannot compute manual variance HVG")
         x_mean = adata.X.mean(axis=0).A1
         x_sq = (adata.X.multiply(adata.X)).mean(axis=0).A1
         gene_var = x_sq - x_mean**2
@@ -315,7 +317,7 @@ def main():
     # 如果 regress_out_genes 已在 covariate_list 中，跳过重复
 
     # ── regress_out 后降回 float32（regress_out 会产生 float64 中间体）──
-    if getattr(cfg.execution, "use_float32", False):
+    if getattr(cfg.execution, "use_float32", False) and adata.X is not None:
         if sp.issparse(adata.X):
             adata.X = adata.X.astype("float32", copy=False)
         else:

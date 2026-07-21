@@ -201,8 +201,9 @@ class KbValidator:
 
         # Extract expression vector
         x = cell_subset[:, matched_var].X
+        if x is None:
+            raise ValueError("Expression matrix is None for matched marker slice")
         if hasattr(x, "toarray"):
-            expr = x.toarray().flatten()  # type: ignore[union-attr]
             expr = x.toarray().flatten()
         else:
             expr = x.flatten()
