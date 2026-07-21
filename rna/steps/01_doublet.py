@@ -7,12 +7,19 @@ Step 01a: Scrublet 双细胞检测 (per sample, joblib 并行)
 输入: 00_raw.h5ad
 输出: 01_doublet.h5ad (含 doublet_scores / predicted_doublet 列)
 """
-import sys, os, time, argparse, warnings
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
-from core.utils import setup_logger, resolve_config, safe_write
+
+import argparse
+import os
+import sys
+import time
+import warnings
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 import numpy as np
 import scanpy as sc
 from joblib import Parallel, delayed
+
+from core.utils import resolve_config, safe_write, setup_logger
 
 
 def _resolve_doublet_rate(cfg, n_cells: int) -> float:
@@ -30,8 +37,9 @@ def _resolve_doublet_rate(cfg, n_cells: int) -> float:
 
 def run_scrublet_sample(adata_sub, sample_name, cfg):
     try:
-        import scrublet as scr
         import scipy.sparse as sp
+        import scrublet as scr
+
         expected_rate = _resolve_doublet_rate(cfg, adata_sub.n_obs)
         scrub = scr.Scrublet(
             adata_sub.X if isinstance(adata_sub.X, sp.spmatrix) else sp.csr_matrix(adata_sub.X),
@@ -46,8 +54,10 @@ def run_scrublet_sample(adata_sub, sample_name, cfg):
         )
         if predicted is None:
             fallback = expected_rate
-            warnings.warn(f"Scrublet auto-threshold failed for {sample_name}, "
-                          f"falling back to manual threshold={fallback}")
+            warnings.warn(
+                f"Scrublet auto-threshold failed for {sample_name}, "
+                f"falling back to manual threshold={fallback}"
+            )
             predicted = scrub.call_doublets(threshold=fallback)
         return scores, predicted
     except Exception as e:
@@ -58,8 +68,8 @@ def run_scrublet_sample(adata_sub, sample_name, cfg):
 def detect_doublets_parallel(adata, cfg, log):
     if not cfg.scrublet.run:
         log.info("Scrublet disabled, skipping doublet detection.")
-        adata.obs['doublet_scores'] = 0.0
-        adata.obs['predicted_doublet'] = False
+        adata.obs["doublet_scores"] = 0.0
+        adata.obs["predicted_doublet"] = False
         return
 
     # TPM/CPM/FPKM/log1p 数据 → Scrublet 的负二项分布假设不成立
@@ -68,10 +78,10 @@ def detect_doublets_parallel(adata, cfg, log):
             "Scrublet is designed for raw UMI counts. "
             "expression_type='%s' violates the negative-binomial assumption. "
             "Disabling Scrublet. Set run_scrublet=False to suppress this warning.",
-            cfg.expression_type
+            cfg.expression_type,
         )
-        adata.obs['doublet_scores'] = 0.0
-        adata.obs['predicted_doublet'] = False
+        adata.obs["doublet_scores"] = 0.0
+        adata.obs["predicted_doublet"] = False
         return
 
     log.info("Running Scrublet (per sample, parallel)...")
@@ -80,27 +90,30 @@ def detect_doublets_parallel(adata, cfg, log):
         groupby_col = configured_key
         log.info("  Using configured batch column: %s", groupby_col)
     else:
-        log.warning("Configured batch column '%s' not in adata.obs, falling back to 'sample'/'stage'",
-                    configured_key)
-        groupby_col = 'sample' if 'sample' in adata.obs else 'stage'
+        log.warning(
+            "Configured batch column '%s' not in adata.obs, falling back to 'sample'/'stage'",
+            configured_key,
+        )
+        groupby_col = "sample" if "sample" in adata.obs else "stage"
     if groupby_col not in adata.obs:
         log.warning("Group column (%s) not found, running Scrublet on all data.", groupby_col)
         scores, pred = run_scrublet_sample(adata, "all", cfg)
-        adata.obs['doublet_scores'] = scores
-        adata.obs['predicted_doublet'] = pred
-        log.info("  Predicted doublets: %d / %d (%.1f%%)",
-                 pred.sum(), adata.n_obs, 100 * pred.mean())
+        adata.obs["doublet_scores"] = scores
+        adata.obs["predicted_doublet"] = pred
+        log.info(
+            "  Predicted doublets: %d / %d (%.1f%%)", pred.sum(), adata.n_obs, 100 * pred.mean()
+        )
         return
 
     sample_groups = adata.obs.groupby(groupby_col, observed=True)
 
     # Memory-aware scheduling: large samples (>15000 cells) serially,
     # small samples (<=15000) in parallel to avoid OOM on big groups.
-    MEMORY_THRESHOLD = 15000
+    memory_threshold = 15000
     large_names, large_subsets, large_idxs = [], [], []
     small_names, small_subsets, small_idxs = [], [], []
     for name, idx in sample_groups.indices.items():
-        if len(idx) > MEMORY_THRESHOLD:
+        if len(idx) > memory_threshold:
             large_names.append(name)
             large_subsets.append(adata[idx])
             large_idxs.append(idx)
@@ -112,15 +125,20 @@ def detect_doublets_parallel(adata, cfg, log):
     results = []
 
     if large_names:
-        log.info("  Large groups (%s) — processing serially",
-                 ", ".join(f"{n}({len(i)} cells)" for n, i in zip(large_names, large_idxs)))
+        log.info(
+            "  Large groups (%s) — processing serially",
+            ", ".join(f"{n}({len(i)} cells)" for n, i in zip(large_names, large_idxs)),
+        )
     for sub, name in zip(large_subsets, large_names):
         results.append(run_scrublet_sample(sub, name, cfg))
 
     if small_subsets:
         n_jobs = min(cfg.execution.n_jobs or os.cpu_count() or 1, len(small_names))
-        log.info("  Small samples — processing %d groups in parallel (n_jobs=%d)",
-                 len(small_names), n_jobs)
+        log.info(
+            "  Small samples — processing %d groups in parallel (n_jobs=%d)",
+            len(small_names),
+            n_jobs,
+        )
         small_results = Parallel(n_jobs=n_jobs)(
             delayed(run_scrublet_sample)(sub, name, cfg)
             for sub, name in zip(small_subsets, small_names)
@@ -135,13 +153,23 @@ def detect_doublets_parallel(adata, cfg, log):
         all_scores[idx] = scores
         all_pred[idx] = pred
         used_rate = _resolve_doublet_rate(cfg, len(idx))
-        log.info("  Sample %s: %d / %d doublets (%.1f%%) [expected_rate=%.4f]",
-                 name, pred.sum(), len(idx), 100 * pred.mean(), used_rate)
+        log.info(
+            "  Sample %s: %d / %d doublets (%.1f%%) [expected_rate=%.4f]",
+            name,
+            pred.sum(),
+            len(idx),
+            100 * pred.mean(),
+            used_rate,
+        )
 
-    adata.obs['doublet_scores'] = all_scores
-    adata.obs['predicted_doublet'] = all_pred
-    log.info("  Total predicted doublets: %d / %d (%.1f%%)",
-             all_pred.sum(), adata.n_obs, 100 * all_pred.mean())
+    adata.obs["doublet_scores"] = all_scores
+    adata.obs["predicted_doublet"] = all_pred
+    log.info(
+        "  Total predicted doublets: %d / %d (%.1f%%)",
+        all_pred.sum(),
+        adata.n_obs,
+        100 * all_pred.mean(),
+    )
 
 
 def main():
@@ -149,20 +177,19 @@ def main():
     args_parser = argparse.ArgumentParser()
     args_parser.add_argument("--config", default="../config.py")
     args = args_parser.parse_args()
-    CFG = resolve_config(args.config)
-    log = setup_logger("01_doublet", os.path.join(CFG.log_dir, "01_doublet.log"))
+    cfg = resolve_config(args.config)
+    log = setup_logger("01_doublet", os.path.join(cfg.log_dir, "01_doublet.log"))
     log.info("Step 01a: Scrublet doublet detection")
 
-    adata = sc.read(CFG.raw_h5ad)
-    log.info("Loaded: %s — %d cells × %d genes",
-             CFG.raw_h5ad, adata.n_obs, adata.n_vars)
+    adata = sc.read(cfg.raw_h5ad)
+    log.info("Loaded: %s — %d cells × %d genes", cfg.raw_h5ad, adata.n_obs, adata.n_vars)
 
-    detect_doublets_parallel(adata, CFG, log)
+    detect_doublets_parallel(adata, cfg, log)
 
-    out_path = os.path.join(CFG.h5ad_dir, "01_doublet.h5ad")
-    safe_write(adata, out_path, cfg=CFG)
+    out_path = os.path.join(cfg.h5ad_dir, "01_doublet.h5ad")
+    safe_write(adata, out_path, cfg=cfg)
     log.info("Step 01a complete, took %.1fs", time.time() - t0)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

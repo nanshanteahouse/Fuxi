@@ -97,9 +97,7 @@ def load_hierarchy_yaml(path: str) -> dict[str, Any]:
         raise ValueError("Hierarchy YAML must contain a top-level mapping")
 
     if "categories" not in cfg:
-        raise ValueError(
-            "Hierarchy YAML must have a 'categories' key at the top level"
-        )
+        raise ValueError("Hierarchy YAML must have a 'categories' key at the top level")
 
     categories = cfg["categories"]
     if not isinstance(categories, dict):
@@ -109,24 +107,16 @@ def load_hierarchy_yaml(path: str) -> dict[str, Any]:
         if not isinstance(cat_def, dict):
             raise ValueError(f"Category {cat_key!r} must be a dict")
         if "label" not in cat_def:
-            raise ValueError(
-                f"Category {cat_key!r} is missing required 'label' field"
-            )
+            raise ValueError(f"Category {cat_key!r} is missing required 'label' field")
         if "members" not in cat_def:
-            raise ValueError(
-                f"Category {cat_key!r} is missing required 'members' list"
-            )
+            raise ValueError(f"Category {cat_key!r} is missing required 'members' list")
         if not isinstance(cat_def["members"], list):
             raise ValueError(
                 f"Category {cat_key!r} 'members' must be a list, "
                 f"got {type(cat_def['members']).__name__}"
             )
-        if "fallback_markers" in cat_def and not isinstance(
-            cat_def["fallback_markers"], list
-        ):
-            raise ValueError(
-                f"Category {cat_key!r} 'fallback_markers' must be a list"
-            )
+        if "fallback_markers" in cat_def and not isinstance(cat_def["fallback_markers"], list):
+            raise ValueError(f"Category {cat_key!r} 'fallback_markers' must be a list")
 
     if "incompatible_transitions" in cfg:
         it = cfg["incompatible_transitions"]
@@ -134,9 +124,7 @@ def load_hierarchy_yaml(path: str) -> dict[str, Any]:
             raise ValueError("'incompatible_transitions' must be a list")
         for i, pair in enumerate(it):
             if not isinstance(pair, list) or len(pair) != 2:
-                raise ValueError(
-                    f"incompatible_transitions[{i}] must be a 2-element list"
-                )
+                raise ValueError(f"incompatible_transitions[{i}] must be a 2-element list")
 
     return cfg
 
@@ -203,11 +191,7 @@ def derive_category_markers(
     if len(markers) < n_min:
         third = n_members * 0.3
         candidates = sorted(
-            [
-                (cnt, gene)
-                for gene, cnt in gene_type_count.items()
-                if cnt >= third
-            ],
+            [(cnt, gene) for gene, cnt in gene_type_count.items() if cnt >= third],
             reverse=True,
         )
         markers = [gene for _, gene in candidates[:5]][:n_min]
@@ -246,8 +230,7 @@ def compute_private_markers(kb: dict[str, Any], hierarchy: dict[str, Any]) -> No
     fine_types = [
         k
         for k in kb
-        if k not in ("expert_rules", "_meta", "_hierarchy")
-        and not k.startswith(CATEGORY_PREFIX)
+        if k not in ("expert_rules", "_meta", "_hierarchy") and not k.startswith(CATEGORY_PREFIX)
     ]
 
     # Only process types that have not already been computed
@@ -392,8 +375,9 @@ def get_incompatible_pairs(kb: dict[str, Any]) -> list[list[str]]:
     return hierarchy.get("incompatible_transitions", [])
 
 
-def _validate_pair_names(pairs: list[list[str]], kb: dict[str, Any],
-                     path: str = "hierarchy.yaml") -> None:
+def _validate_pair_names(
+    pairs: list[list[str]], kb: dict[str, Any], path: str = "hierarchy.yaml"
+) -> None:
     """Validate that all names in incompatible pairs exist in the KB.
 
     Raises ValueError with a clear diagnostic listing every name that

@@ -13,8 +13,8 @@ Usage::
     from rna.steps import run_ora, run_prerank
 """
 
-import os, sys, importlib.util
-
+import importlib.util
+import os
 
 
 def _load_step_module(filename: str, mod_name: str):
@@ -24,7 +24,6 @@ def _load_step_module(filename: str, mod_name: str):
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
-
 
 
 # ── Enrichment (Step 09) ────────────────────────────────────────────────────

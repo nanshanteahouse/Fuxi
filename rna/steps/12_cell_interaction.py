@@ -17,14 +17,18 @@ Output:
 
 Dependencies: pip install liana>=1.0.0
 """
-import sys, os, time, argparse
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
-from core.utils import setup_logger, resolve_config
-import numpy as np
-import pandas as pd
-import scanpy as sc
-import matplotlib.pyplot as plt
+
+import argparse
+import os
+import sys
+import time
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 import matplotlib
+import matplotlib.pyplot as plt
+import scanpy as sc
+
+from core.utils import resolve_config, setup_logger
 
 # Agg backend for headless environments
 matplotlib.use("Agg")
@@ -34,9 +38,10 @@ matplotlib.use("Agg")
 #  Export
 # ═══════════════════════════════════════════════════════════════════════
 
-def export_results(lr_res, top_df, CFG, log):
+
+def export_results(lr_res, top_df, cfg, log):
     """Save CCI interaction tables to CSV."""
-    table_dir = os.path.join(CFG.table_dir, "12_cell_interaction")
+    table_dir = os.path.join(cfg.table_dir, "12_cell_interaction")
     os.makedirs(table_dir, exist_ok=True)
 
     path = os.path.join(table_dir, "cci_interactions.csv")
@@ -52,25 +57,20 @@ def export_results(lr_res, top_df, CFG, log):
 #  Plots
 # ═══════════════════════════════════════════════════════════════════════
 
-def plot_heatmap(top_df, CFG, log):
-    """Heatmap of top interaction scores (source→target cell type pairs)."""
-    from core.interaction.cell_interaction import format_cci_results
 
-    fig_dir = os.path.join(CFG.figure_dir, "12_cell_interaction")
+def plot_heatmap(top_df, cfg, log):
+    """Heatmap of top interaction scores (source→target cell type pairs)."""
+
+    fig_dir = os.path.join(cfg.figure_dir, "12_cell_interaction")
     os.makedirs(fig_dir, exist_ok=True)
 
     # Pivot to (source x target) matrix using magnitude_rank or similar
     if "interaction" not in top_df.columns:
         top_df = top_df.copy()
-        top_df["interaction"] = (
-            top_df["source"].astype(str) + "→" + top_df["target"].astype(str)
-        )
+        top_df["interaction"] = top_df["source"].astype(str) + "→" + top_df["target"].astype(str)
 
     # Count interactions per source→target pair
-    st_counts = (
-        top_df.groupby(["source", "target"]).size()
-        .reset_index(name="n_interactions")
-    )
+    st_counts = top_df.groupby(["source", "target"]).size().reset_index(name="n_interactions")
     pivot = st_counts.pivot(index="source", columns="target", values="n_interactions")
     pivot = pivot.fillna(0)
 
@@ -104,9 +104,9 @@ def plot_heatmap(top_df, CFG, log):
     log.info("Saved: %s", path)
 
 
-def plot_dotplot(top_df, CFG, log):
+def plot_dotplot(top_df, cfg, log):
     """Dotplot of top ligand-receptor pairs across source→target pairs."""
-    fig_dir = os.path.join(CFG.figure_dir, "12_cell_interaction")
+    fig_dir = os.path.join(cfg.figure_dir, "12_cell_interaction")
     os.makedirs(fig_dir, exist_ok=True)
 
     if "interaction" not in top_df.columns:
@@ -121,9 +121,7 @@ def plot_dotplot(top_df, CFG, log):
 
     # Build a pivot: rows = LR pairs, columns = source→target pairs
     top_df = top_df.copy()
-    top_df["source_target"] = (
-        top_df["source"].astype(str) + "→" + top_df["target"].astype(str)
-    )
+    top_df["source_target"] = top_df["source"].astype(str) + "→" + top_df["target"].astype(str)
 
     # Determine value column for color
     score_col = None
@@ -137,8 +135,10 @@ def plot_dotplot(top_df, CFG, log):
         return
 
     pivot = top_df.pivot_table(
-        index="interaction", columns="source_target",
-        values=score_col, aggfunc="mean",
+        index="interaction",
+        columns="source_target",
+        values=score_col,
+        aggfunc="mean",
     )
     pivot = pivot.fillna(0)
 
@@ -156,8 +156,7 @@ def plot_dotplot(top_df, CFG, log):
     if vmin == vmax:
         vmin, vmax = vmin - 0.1, vmax + 0.1
 
-    im = ax.imshow(pivot.values, aspect="auto", cmap="RdYlBu_r",
-                   vmin=vmin, vmax=vmax)
+    im = ax.imshow(pivot.values, aspect="auto", cmap="RdYlBu_r", vmin=vmin, vmax=vmax)
 
     ax.set_xticks(range(n_cols))
     ax.set_xticklabels(pivot.columns, rotation=45, ha="right", fontsize=7)
@@ -181,23 +180,24 @@ def plot_dotplot(top_df, CFG, log):
 #  Main
 # ═══════════════════════════════════════════════════════════════════════
 
+
 def main():
     t0 = time.time()
     args_parser = argparse.ArgumentParser()
     args_parser.add_argument("--config", default="../config.py")
     args = args_parser.parse_args()
 
-    CFG = resolve_config(args.config)
-    log = setup_logger("12_cci", os.path.join(CFG.log_dir, "12_cci.log"))
+    cfg = resolve_config(args.config)
+    log = setup_logger("12_cci", os.path.join(cfg.log_dir, "12_cci.log"))
     log.info("Step 12: Cell-Cell Interaction (CCI) analysis via LIANA+")
 
     # ── Gate check ──────────────────────────────────────────────────────
-    if not getattr(CFG.cci, "run", True):
+    if not getattr(cfg.cci, "run", True):
         log.info("run_cci=False — skipping")
         return
 
     # ── Load input ──────────────────────────────────────────────────────
-    adata_path = CFG.annotated_h5ad
+    adata_path = cfg.annotated_h5ad
     if not os.path.exists(adata_path):
         log.error("Input not found: %s (run Step 05 first)", adata_path)
         sys.exit(1)
@@ -213,39 +213,44 @@ def main():
     if use_raw:
         log.info("Using adata.raw for expression (raw counts)")
     else:
-        log.warning("adata.raw is not available — using adata.X; "
-                     "ensure it contains raw/normalized counts suitable for LIANA")
+        log.warning(
+            "adata.raw is not available — using adata.X; "
+            "ensure it contains raw/normalized counts suitable for LIANA"
+        )
 
-    n_jobs = getattr(CFG.execution, "n_jobs", 1) or 1
+    n_jobs = getattr(cfg.execution, "n_jobs", 1) or 1
     if n_jobs == 0:
         n_jobs = os.cpu_count() or 4
         log.info("n_jobs=0 → auto-detected %d cores", n_jobs)
 
     # ── Load anatomical adjacency (v4.0+) ────────────────────────────
     from core.pipeline.anatomy import load_adjacency
-    adj_tissue = getattr(CFG.cci, "tissue", "") or CFG.tissue
-    adj_file = getattr(CFG.cci, "adjacency_file", "")
+
+    adj_tissue = getattr(cfg.cci, "tissue", "") or cfg.tissue
+    adj_file = getattr(cfg.cci, "adjacency_file", "")
     adjacency_df = load_adjacency(tissue=adj_tissue, custom_file=adj_file, log=log)
-    adj_mode = getattr(CFG.cci, "adjacency", "off")
+    adj_mode = getattr(cfg.cci, "adjacency", "off")
     if adj_mode != "off":
         log.info(
             "CCI adjacency constraint: mode=%s, tissue=%s, %d adjacency pairs",
-            adj_mode, adj_tissue, len(adjacency_df),
+            adj_mode,
+            adj_tissue,
+            len(adjacency_df),
         )
 
     # ── Run CCI permutation testing ─────────────────────────────────────
     from core.interaction.cell_interaction import (
         ensure_gene_symbols,
-        run_cci_permutation,
         format_cci_results,
+        run_cci_permutation,
     )
 
     # ── Ensure gene symbols (LIANA uses HGNC symbols) ───────────────────
-    adata = ensure_gene_symbols(adata, species=CFG.species, log=log)
+    adata = ensure_gene_symbols(adata, species=cfg.species, log=log)
 
     # Auto-select mouse-compatible LR database
-    lr_db = CFG.cci.lr_database
-    if lr_db == "consensus" and CFG.species.lower() in ("mouse", "mus musculus"):
+    lr_db = cfg.cci.lr_database
+    if lr_db == "consensus" and cfg.species.lower() in ("mouse", "mus musculus"):
         lr_db = "mouseconsensus"
         log.info("Switched CCI LR database for mouse: consensus → mouseconsensus")
 
@@ -253,7 +258,7 @@ def main():
         adata,
         groupby_col=group_col,
         resource_name=lr_db,
-        n_perms=CFG.cci.permutations,
+        n_perms=cfg.cci.permutations,
         use_raw=use_raw,
         n_jobs=n_jobs,
         log=log,
@@ -262,17 +267,17 @@ def main():
     # ── Format & export ─────────────────────────────────────────────────
     top_df = format_cci_results(
         lr_res,
-        n_top=CFG.cci.n_top_interactions,
+        n_top=cfg.cci.n_top_interactions,
         log=log,
         adjacency=adjacency_df if adj_mode != "off" else None,
         adjacency_mode=adj_mode,
     )
 
-    export_results(lr_res, top_df, CFG, log)
+    export_results(lr_res, top_df, cfg, log)
 
     # ── Plot ────────────────────────────────────────────────────────────
-    plot_heatmap(top_df, CFG, log)
-    plot_dotplot(top_df, CFG, log)
+    plot_heatmap(top_df, cfg, log)
+    plot_dotplot(top_df, cfg, log)
 
     log.info("Step 12 complete, took %.1fs", time.time() - t0)
 

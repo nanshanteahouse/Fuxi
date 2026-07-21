@@ -12,57 +12,86 @@ Step 08: 轨迹分析 — PAGA + 扩散伪时间 + 分支分析
 输入: 04_clustered.h5ad (需要 Stage 05 注释结果)
 输出: 05_final.h5ad (含 PAGA, DPT, 分支结果) + tables + figures
 """
-import sys, os, time, argparse
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
-from core.utils import setup_logger, resolve_config, safe_write, safe_plot
+
+import argparse
+import os
+import sys
+import time
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+from typing import List, Optional, Tuple
+
 import numpy as np
 import pandas as pd
 import scanpy as sc
 from scipy.sparse import issparse
-from typing import Optional, List, Tuple
 from scipy.stats import spearmanr
 from statsmodels.stats.multitest import multipletests
-from core.kb import load_kb
 
-def recompute_neighbors(adata, CFG, log):
+from core.kb import load_kb
+from core.utils import resolve_config, safe_plot, safe_write, setup_logger
+
+
+def recompute_neighbors(adata, cfg, log):
     """确保邻居图和 UMAP 存在"""
-    if 'neighbors' not in adata.uns:
+    if "neighbors" not in adata.uns:
         log.info("Recomputing neighbors...")
-        use_rep = 'X_pca_harmony' if 'X_pca_harmony' in adata.obsm else 'X_pca'
-        sc.pp.neighbors(adata, n_pcs=CFG.pca.n_pcs_use,
-                        n_neighbors=CFG.clustering.n_neighbors,
-                        use_rep=use_rep, random_state=CFG.execution.random_seed)
-    if 'X_umap' not in adata.obsm:
+        use_rep = "X_pca_harmony" if "X_pca_harmony" in adata.obsm else "X_pca"
+        sc.pp.neighbors(
+            adata,
+            n_pcs=cfg.pca.n_pcs_use,
+            n_neighbors=cfg.clustering.n_neighbors,
+            use_rep=use_rep,
+            random_state=cfg.execution.random_seed,
+        )
+    if "X_umap" not in adata.obsm:
         log.info("Recomputing UMAP...")
-        sc.tl.umap(adata, random_state=CFG.execution.random_seed)
+        sc.tl.umap(adata, random_state=cfg.execution.random_seed)
     log.info("Neighbors + UMAP ready")
 
-def run_paga(adata, CFG, log):
+
+def run_paga(adata, cfg, log):
     """PAGA 轨迹拓扑"""
-    group_col = 'cell_type_sub' if 'cell_type_sub' in adata.obs else \
-                ('cell_type' if 'cell_type' in adata.obs else 'leiden')
+    group_col = (
+        "cell_type_sub"
+        if "cell_type_sub" in adata.obs
+        else ("cell_type" if "cell_type" in adata.obs else "leiden")
+    )
     log.info("PAGA (groupby=%s)...", group_col)
     sc.tl.paga(adata, groups=group_col)
-    n_edges = np.sum(adata.uns['paga']['connectivities'].data > 0)
+    n_edges = np.sum(adata.uns["paga"]["connectivities"].data > 0)
     log.info("  PAGA edges: %d", n_edges)
-    safe_plot(sc.pl.paga, adata, color=group_col, show=False,
-              save='_08_paga_graph.pdf', title='PAGA trajectory')
-    safe_plot(sc.pl.paga_compare, adata, basis='umap', color=group_col,
-              show=False, save='_08_paga_umap.pdf',
-              edge_width_scale=0.5, title='PAGA on UMAP')
+    safe_plot(
+        sc.pl.paga,
+        adata,
+        color=group_col,
+        show=False,
+        save="_08_paga_graph.pdf",
+        title="PAGA trajectory",
+    )
+    safe_plot(
+        sc.pl.paga_compare,
+        adata,
+        basis="umap",
+        color=group_col,
+        show=False,
+        save="_08_paga_umap.pdf",
+        edge_width_scale=0.5,
+        title="PAGA on UMAP",
+    )
 
-def find_root_cells(adata, CFG, log):
+
+def find_root_cells(adata, cfg, log):
     """自动识别根细胞"""
     # 方法 1: 指定根细胞类型
-    if CFG.trajectory.root_cell_types:
-        log.info("Root cells: type %s + earliest stage", CFG.trajectory.root_cell_types)
-        if 'stage' in adata.obs and CFG.sample_meta.stage_order:
-            root_mask = (
-                adata.obs['cell_type'].isin(CFG.trajectory.root_cell_types)
-                & (adata.obs['stage'] == CFG.sample_meta.stage_order[0])
+    if cfg.trajectory.root_cell_types:
+        log.info("Root cells: type %s + earliest stage", cfg.trajectory.root_cell_types)
+        if "stage" in adata.obs and cfg.sample_meta.stage_order:
+            root_mask = adata.obs["cell_type"].isin(cfg.trajectory.root_cell_types) & (
+                adata.obs["stage"] == cfg.sample_meta.stage_order[0]
             )
         else:
-            root_mask = adata.obs['cell_type'].isin(CFG.trajectory.root_cell_types)
+            root_mask = adata.obs["cell_type"].isin(cfg.trajectory.root_cell_types)
         if root_mask.sum() > 0:
             log.info("  Root cells: %d", root_mask.sum())
             return root_mask.values
@@ -70,11 +99,11 @@ def find_root_cells(adata, CFG, log):
             log.warning("  Root cells of specified type not found, trying marker gene method")
 
     # 方法 2: 标记基因自动检测
-    if CFG.trajectory.root_markers:
-        log.info("Root cells: marker gene method %s", CFG.trajectory.root_markers)
-        markers_present = [g for g in CFG.trajectory.root_markers if g in adata.raw.var_names]
+    if cfg.trajectory.root_markers:
+        log.info("Root cells: marker gene method %s", cfg.trajectory.root_markers)
+        markers_present = [g for g in cfg.trajectory.root_markers if g in adata.raw.var_names]
         if markers_present:
-            group_col = 'cell_type' if 'cell_type' in adata.obs else 'leiden'
+            group_col = "cell_type" if "cell_type" in adata.obs else "leiden"
             cluster_scores = []
             for cl in adata.obs[group_col].cat.categories:
                 mask = adata.obs[group_col] == cl
@@ -95,9 +124,11 @@ def find_root_cells(adata, CFG, log):
 
     # 方法 3: 回退到最早阶段的细胞
     log.warning("  Cannot auto-determine root, using earliest stage cells.")
-    if 'stage' in adata.obs and CFG.sample_meta.stage_order:
-        root_mask = adata.obs['stage'] == CFG.sample_meta.stage_order[0]
-        log.info("  Root cells: %d (earliest stage %s)", root_mask.sum(), CFG.sample_meta.stage_order[0])
+    if "stage" in adata.obs and cfg.sample_meta.stage_order:
+        root_mask = adata.obs["stage"] == cfg.sample_meta.stage_order[0]
+        log.info(
+            "  Root cells: %d (earliest stage %s)", root_mask.sum(), cfg.sample_meta.stage_order[0]
+        )
         return root_mask.values
     # 最终回退: 第一个细胞
     log.warning("  Final fallback: using first cell as root.")
@@ -105,49 +136,67 @@ def find_root_cells(adata, CFG, log):
     root_mask[0] = True
     return root_mask
 
-def compute_dpt(adata, root_mask, CFG, log):
+
+def compute_dpt(adata, root_mask, cfg, log):
     """扩散图 + 扩散伪时间"""
-    log.info("Diffusion map (n_comps=%d)...", CFG.trajectory.n_diffmap_comps)
-    sc.tl.diffmap(adata, n_comps=CFG.trajectory.n_diffmap_comps)
+    log.info("Diffusion map (n_comps=%d)...", cfg.trajectory.n_diffmap_comps)
+    sc.tl.diffmap(adata, n_comps=cfg.trajectory.n_diffmap_comps)
 
     log.info("Diffusion pseudotime...")
-    adata.uns['iroot'] = np.flatnonzero(root_mask)[0]
-    for nb in [CFG.trajectory.n_branchings, 1, 0]:
+    adata.uns["iroot"] = np.flatnonzero(root_mask)[0]
+    for nb in [cfg.trajectory.n_branchings, 1, 0]:
         try:
             sc.tl.dpt(adata, n_branchings=nb)
             log.info("  DPT complete (n_branchings=%d)", nb)
             break
         except ValueError:
-            log.warning("DPT n_branchings=%d failed, trying n_branchings=%d", nb, 1 if nb > 1 else 0)
+            log.warning(
+                "DPT n_branchings=%d failed, trying n_branchings=%d", nb, 1 if nb > 1 else 0
+            )
             continue
-    log.info("  DPT range: %.3f – %.3f",
-             adata.obs['dpt_pseudotime'].min(),
-             adata.obs['dpt_pseudotime'].max())
+    log.info(
+        "  DPT range: %.3f – %.3f",
+        adata.obs["dpt_pseudotime"].min(),
+        adata.obs["dpt_pseudotime"].max(),
+    )
 
-    safe_plot(sc.pl.umap, adata, color='dpt_pseudotime', show=False,
-              save='_08_pseudotime.pdf', cmap='plasma')
-    safe_plot(sc.pl.diffmap, adata, color='dpt_pseudotime', show=False,
-              save='_08_pseudotime_diffmap.pdf', cmap='plasma')
+    safe_plot(
+        sc.pl.umap,
+        adata,
+        color="dpt_pseudotime",
+        show=False,
+        save="_08_pseudotime.pdf",
+        cmap="plasma",
+    )
+    safe_plot(
+        sc.pl.diffmap,
+        adata,
+        color="dpt_pseudotime",
+        show=False,
+        save="_08_pseudotime_diffmap.pdf",
+        cmap="plasma",
+    )
 
-def branch_analysis(adata, CFG, log) -> Optional[pd.DataFrame]:
+
+def branch_analysis(adata, cfg, log) -> Optional[pd.DataFrame]:
     """分支间差异表达 (分支间配对比较策略)"""
-    if 'cell_type' not in adata.obs:
+    if "cell_type" not in adata.obs:
         log.info("No cell_type annotation, skipping branch analysis.")
         return
 
-    if hasattr(CFG, 'trajectory_branches') and CFG.trajectory_branches:
-        branches = CFG.trajectory_branches
+    if hasattr(cfg, "trajectory_branches") and cfg.trajectory_branches:
+        branches = cfg.trajectory_branches
     else:
         # Auto-detect: use cell type pairs from PAGA graph
-        if 'cell_type' in adata.obs:
-            avail_types = list(adata.obs['cell_type'].cat.categories)
+        if "cell_type" in adata.obs:
+            avail_types = list(adata.obs["cell_type"].cat.categories)
             branches = []
             for i in range(len(avail_types) - 1):
                 branches.append((avail_types[i], avail_types[i + 1]))
         else:
             branches = []
     # 仅保留数据中存在的分支
-    avail_types = set(adata.obs['cell_type'].cat.categories)
+    avail_types = set(adata.obs["cell_type"].cat.categories)
     branches = [(p, c) for p, c in branches if p in avail_types and c in avail_types]
 
     if not branches:
@@ -157,46 +206,53 @@ def branch_analysis(adata, CFG, log) -> Optional[pd.DataFrame]:
     log.info("Branch differential expression analysis...")
     branch_results = []
     for parent, child in branches:
-        mask = adata.obs['cell_type'].isin([parent, child])
+        mask = adata.obs["cell_type"].isin([parent, child])
         sub = adata[mask].copy()
-        if sub.obs['cell_type'].value_counts().min() < 10:
+        if sub.obs["cell_type"].value_counts().min() < 10:
             log.info("  %s → %s: insufficient cells", parent, child)
             continue
         try:
             sc.tl.rank_genes_groups(
-                sub, groupby='cell_type', groups=[child], reference=parent,
-                method='wilcoxon', n_genes=50, use_raw=True,
-                random_state=CFG.execution.random_seed,
+                sub,
+                groupby="cell_type",
+                groups=[child],
+                reference=parent,
+                method="wilcoxon",
+                n_genes=50,
+                use_raw=True,
+                random_state=cfg.execution.random_seed,
             )
             de_df = sc.get.rank_genes_groups_df(sub, group=child)
-            if CFG.de.pval_cutoff is not None:
-                de_df = de_df[de_df['pvals_adj'] < CFG.de.pval_cutoff].copy()
-            de_df['branch'] = f'{child}_vs_{parent}'
+            if cfg.de.pval_cutoff is not None:
+                de_df = de_df[de_df["pvals_adj"] < cfg.de.pval_cutoff].copy()
+            de_df["branch"] = f"{child}_vs_{parent}"
             branch_results.append(de_df)
-            n_up = (de_df['logfoldchanges'] > 0).sum()
-            n_down = (de_df['logfoldchanges'] < 0).sum()
-            log.info("  %s → %s: %d DEGs (%d up, %d down)",
-                     parent, child, len(de_df), n_up, n_down)
+            n_up = (de_df["logfoldchanges"] > 0).sum()
+            n_down = (de_df["logfoldchanges"] < 0).sum()
+            log.info(
+                "  %s → %s: %d DEGs (%d up, %d down)", parent, child, len(de_df), n_up, n_down
+            )
         except Exception as e:
             log.debug("  %s → %s failed: %s", parent, child, e)
 
     if branch_results:
         combined = pd.concat(branch_results, ignore_index=True)
-        out_path = os.path.join(CFG.table_dir, 'branch_deg.csv')
+        out_path = os.path.join(cfg.table_dir, "branch_deg.csv")
         combined.to_csv(out_path, index=False)
         log.info("  Branch DEG exported: %s (%d rows)", out_path, len(combined))
         return combined
 
     return None
 
-def _select_pseudotime_correlated(adata, CFG) -> Tuple[List[str], pd.DataFrame]:
+
+def _select_pseudotime_correlated(adata, cfg) -> Tuple[List[str], pd.DataFrame]:
     """Select top genes correlated with dpt_pseudotime via Spearman correlation.
 
     Pre-filters to expressed genes and top HVGs, applies BH correction,
     balances positive and negative correlations.
     """
     if adata.raw is None:
-        return [], pd.DataFrame(columns=('gene', 'rho', 'pval_raw', 'pval_adj'))  # type: ignore[arg-type]
+        return [], pd.DataFrame(columns=("gene", "rho", "pval_raw", "pval_adj"))  # type: ignore[arg-type]
 
     # 1. Pre-filter: expressed in >=1% of cells
     if issparse(adata.raw.X):
@@ -207,27 +263,27 @@ def _select_pseudotime_correlated(adata, CFG) -> Tuple[List[str], pd.DataFrame]:
     expressed_mask = expr_frac >= 0.01
 
     # Restrict to HVGs if available, else top 3000 by mean expression
-    if 'highly_variable' in adata.raw.var:
-        hvgs = adata.raw.var['highly_variable'].values
+    if "highly_variable" in adata.raw.var:
+        hvgs = adata.raw.var["highly_variable"].values
         candidate_mask = expressed_mask & hvgs
     else:
         expr_mean = np.array(adata.raw.X.mean(axis=0)).ravel()
         top_n = min(3000, int(expressed_mask.sum()))
         if top_n == 0:
-            return [], pd.DataFrame(columns=('gene', 'rho', 'pval_raw', 'pval_adj'))  # type: ignore[arg-type]
+            return [], pd.DataFrame(columns=("gene", "rho", "pval_raw", "pval_adj"))  # type: ignore[arg-type]
         expr_mean_sorted_idx = np.argsort(-expr_mean)
-        top_idx = set(expr_mean_sorted_idx[:top_n * 3])
+        top_idx = set(expr_mean_sorted_idx[: top_n * 3])
         candidate_mask = np.array([i in top_idx for i in range(adata.raw.n_vars)]) & expressed_mask
 
     candidate_indices = np.where(candidate_mask)[0]
     if len(candidate_indices) == 0:
-        return [], pd.DataFrame(columns=('gene', 'rho', 'pval_raw', 'pval_adj'))  # type: ignore[arg-type]
+        return [], pd.DataFrame(columns=("gene", "rho", "pval_raw", "pval_adj"))  # type: ignore[arg-type]
 
     # 2. Extract pseudotime (drop NaN)
-    pseudotime = adata.obs['dpt_pseudotime'].values
+    pseudotime = adata.obs["dpt_pseudotime"].values
     pt_mask = ~np.isnan(pseudotime)
     if pt_mask.sum() < 2:
-        return [], pd.DataFrame(columns=('gene', 'rho', 'pval_raw', 'pval_adj'))  # type: ignore[arg-type]
+        return [], pd.DataFrame(columns=("gene", "rho", "pval_raw", "pval_adj"))  # type: ignore[arg-type]
     pseudotime_clean = pseudotime[pt_mask]
 
     # 3. Compute Spearman correlation per candidate gene
@@ -256,30 +312,36 @@ def _select_pseudotime_correlated(adata, CFG) -> Tuple[List[str], pd.DataFrame]:
         gene_names.append(adata.raw.var_names[idx])
 
     if len(rhos) == 0:
-        return [], pd.DataFrame(columns=('gene', 'rho', 'pval_raw', 'pval_adj'))  # type: ignore[arg-type]
+        return [], pd.DataFrame(columns=("gene", "rho", "pval_raw", "pval_adj"))  # type: ignore[arg-type]
 
     # 4. BH correction
-    _pvals_adj = multipletests(pvals, method='fdr_bh')  # type: ignore[var-annotated]
+    _pvals_adj = multipletests(pvals, method="fdr_bh")  # type: ignore[var-annotated]
     _, pvals_adj, _, _ = _pvals_adj
 
-    full_df = pd.DataFrame({
-        'gene': gene_names,
-        'rho': rhos,
-        'pval_raw': pvals,
-        'pval_adj': pvals_adj if pvals_adj is not None else [1.0] * len(gene_names),
-    })
+    full_df = pd.DataFrame(
+        {
+            "gene": gene_names,
+            "rho": rhos,
+            "pval_raw": pvals,
+            "pval_adj": pvals_adj if pvals_adj is not None else [1.0] * len(gene_names),
+        }
+    )
 
     # 5. Filter by adjusted p-value and correlation strength
     selected = []
     for i in range(len(gene_names)):
-        if pvals_adj is not None and pvals_adj[i] < CFG.trajectory.pseudotime_cor_pval and abs(rhos[i]) > 0.2:
+        if (
+            pvals_adj is not None
+            and pvals_adj[i] < cfg.trajectory.pseudotime_cor_pval
+            and abs(rhos[i]) > 0.2
+        ):
             selected.append((gene_names[i], rhos[i]))
 
     # 6. Sort by |rho| descending
     selected.sort(key=lambda x: abs(x[1]), reverse=True)
 
     # 7. Balanced split: up to half from each sign
-    n = CFG.trajectory.pseudotime_n_correlated
+    n = cfg.trajectory.pseudotime_n_correlated
     half_n = n // 2
     pos = [(g, r) for g, r in selected if r > 0]
     neg = [(g, r) for g, r in selected if r < 0]
@@ -288,13 +350,15 @@ def _select_pseudotime_correlated(adata, CFG) -> Tuple[List[str], pd.DataFrame]:
     result.extend(g for g, _ in pos[:half_n])
     result.extend(g for g, _ in neg[:half_n])
     return result, full_df
-def gene_trends(adata, CFG, log, branch_results: Optional[pd.DataFrame] = None):
+
+
+def gene_trends(adata, cfg, log, branch_results: Optional[pd.DataFrame] = None):
     """基因表达沿伪时间趋势——四源数据驱动选择"""
     # Guard A: DPT exists and has variance
-    if 'dpt_pseudotime' not in adata.obs:
+    if "dpt_pseudotime" not in adata.obs:
         log.info("No DPT, skipping gene trends.")
         return
-    if adata.obs['dpt_pseudotime'].dropna().nunique() < 2:
+    if adata.obs["dpt_pseudotime"].dropna().nunique() < 2:
         log.info("DPT has insufficient variance, skipping gene trends.")
         return
 
@@ -310,54 +374,61 @@ def gene_trends(adata, CFG, log, branch_results: Optional[pd.DataFrame] = None):
     # Source 1: Branch DE
     if branch_results is not None and not branch_results.empty:
         try:
-            if all(c in branch_results.columns for c in ['names', 'scores', 'pvals_adj']):
-                branch_de = branch_results.sort_values('scores', ascending=False)
-                branch_top = branch_de['names'].drop_duplicates().head(CFG.trajectory.pseudotime_n_branch_de).tolist()
+            if all(c in branch_results.columns for c in ["names", "scores", "pvals_adj"]):
+                branch_de = branch_results.sort_values("scores", ascending=False)
+                branch_top = (
+                    branch_de["names"]
+                    .drop_duplicates()
+                    .head(cfg.trajectory.pseudotime_n_branch_de)
+                    .tolist()
+                )
                 branch_top = [g for g in branch_top if g in adata.raw.var_names]
                 selected_genes.extend(branch_top)
-                source_counts['branch_DE'] = len(branch_top)
+                source_counts["branch_DE"] = len(branch_top)
             else:
                 log.warning("branch_results has unexpected columns, skipping branch DE source")
         except Exception as e:
             log.warning("Failed to extract branch DE genes: %s", e)
 
     corr_genes: List[str] = []
-    corr_df: pd.DataFrame = pd.DataFrame(columns=('gene', 'rho', 'pval_raw', 'pval_adj'))  # type: ignore[arg-type]
+    corr_df: pd.DataFrame = pd.DataFrame(columns=("gene", "rho", "pval_raw", "pval_adj"))  # type: ignore[arg-type]
     # Source 2: Pseudotime correlation
     try:
-        corr_genes, corr_df = _select_pseudotime_correlated(adata, CFG)
+        corr_genes, corr_df = _select_pseudotime_correlated(adata, cfg)
         selected_genes.extend(corr_genes)
-        source_counts['pseudotime_correlation'] = len(corr_genes)
+        source_counts["pseudotime_correlation"] = len(corr_genes)
     except Exception as e:
         log.warning("Failed to compute pseudotime correlation: %s", e)
 
     # Source 3: CFG override
-    if CFG.trajectory.pseudotime_genes:
-        override = [g for g in CFG.trajectory.pseudotime_genes if g in adata.raw.var_names]
-        excluded = set(CFG.trajectory.pseudotime_genes) - set(override)
+    if cfg.trajectory.pseudotime_genes:
+        override = [g for g in cfg.trajectory.pseudotime_genes if g in adata.raw.var_names]
+        excluded = set(cfg.trajectory.pseudotime_genes) - set(override)
         if excluded:
-            log.warning("CFG.trajectory.pseudotime_genes excluded (not in var_names): %s", excluded)
+            log.warning(
+                "CFG.trajectory.pseudotime_genes excluded (not in var_names): %s", excluded
+            )
         selected_genes.extend(override)
-        source_counts['CFG_override'] = len(override)
+        source_counts["CFG_override"] = len(override)
 
     kb_genes = []
     # Source 4: KB markers
-    if CFG.tissue_kb:
+    if cfg.tissue_kb:
         try:
-            kb = load_kb(CFG.tissue_kb)
+            kb = load_kb(cfg.tissue_kb)
             kb_genes = set()
             for cell_type, info in kb.items():
-                if cell_type in ('expert_rules', '_meta'):
+                if cell_type in ("expert_rules", "_meta"):
                     continue
-                if 'markers' in info:
-                    for cat in ('confirm', 'add'):
-                        if cat in info['markers']:
-                            kb_genes.update(info['markers'][cat].keys())
+                if "markers" in info:
+                    for cat in ("confirm", "add"):
+                        if cat in info["markers"]:
+                            kb_genes.update(info["markers"][cat].keys())
             kb_genes = [g for g in kb_genes if g in adata.raw.var_names]
             selected_genes.extend(kb_genes)
-            source_counts['KB_markers'] = len(kb_genes)
+            source_counts["KB_markers"] = len(kb_genes)
         except ValueError as e:
-            log.warning("Unsupported tissue_kb '%s': %s. Skipping KB markers.", CFG.tissue_kb, e)
+            log.warning("Unsupported tissue_kb '%s': %s. Skipping KB markers.", cfg.tissue_kb, e)
         except Exception as e:
             log.warning("Failed to load KB markers: %s", e)
 
@@ -370,26 +441,33 @@ def gene_trends(adata, CFG, log, branch_results: Optional[pd.DataFrame] = None):
             union_genes.append(g)
 
     # Cap total
-    max_genes = CFG.trajectory.pseudotime_n_correlated * 2
+    max_genes = cfg.trajectory.pseudotime_n_correlated * 2
     union_genes = union_genes[:max_genes]
 
     # Export Spearman correlation full results
     if not corr_df.empty:
-        corr_csv = os.path.join(CFG.table_dir, 'pseudotime_trend_genes.csv')
+        corr_csv = os.path.join(cfg.table_dir, "pseudotime_trend_genes.csv")
         corr_df.to_csv(corr_csv, index=False)
         log.info("  Pseudotime trend genes exported: %s (%d rows)", corr_csv, len(corr_df))
 
     # Export selected union with source annotation
     source_map = {}
     for g in union_genes:
-        if g in branch_top: source_map.setdefault(g, set()).add('branch_DE')
-        if g in corr_genes: source_map.setdefault(g, set()).add('pseudotime_correlation')
-        if g in CFG.trajectory.pseudotime_genes: source_map.setdefault(g, set()).add('CFG_override')
-        if g in kb_genes: source_map.setdefault(g, set()).add('KB_markers')
+        if g in branch_top:
+            source_map.setdefault(g, set()).add("branch_DE")
+        if g in corr_genes:
+            source_map.setdefault(g, set()).add("pseudotime_correlation")
+        if g in cfg.trajectory.pseudotime_genes:
+            source_map.setdefault(g, set()).add("CFG_override")
+        if g in kb_genes:
+            source_map.setdefault(g, set()).add("KB_markers")
     sel_df = pd.DataFrame(
-        {'gene': list(source_map.keys()), 'source': ['+'.join(sorted(v)) for v in source_map.values()]},
+        {
+            "gene": list(source_map.keys()),
+            "source": ["+".join(sorted(v)) for v in source_map.values()],
+        },
     )
-    sel_csv = os.path.join(CFG.table_dir, 'pseudotime_trend_genes_selected.csv')
+    sel_csv = os.path.join(cfg.table_dir, "pseudotime_trend_genes_selected.csv")
     sel_df.to_csv(sel_csv, index=False)
     log.info("  Selected pseudotime trend genes exported: %s (%d rows)", sel_csv, len(sel_df))
     log.info(
@@ -404,95 +482,108 @@ def gene_trends(adata, CFG, log, branch_results: Optional[pd.DataFrame] = None):
 
     # Scatter plots: first 6 genes
     for gene in union_genes[:6]:
-        safe_plot(sc.pl.scatter, adata, x='dpt_pseudotime', y=gene,
-                  use_raw=True, show=False, save=f'_08_trend_{gene}.pdf')
+        safe_plot(
+            sc.pl.scatter,
+            adata,
+            x="dpt_pseudotime",
+            y=gene,
+            use_raw=True,
+            show=False,
+            save=f"_08_trend_{gene}.pdf",
+        )
 
     # Heatmap: if >=5 genes, with binned pseudotime
     if len(union_genes) >= 5:
-        n_bins = min(10, int(adata.obs['dpt_pseudotime'].dropna().nunique() - 1))
+        n_bins = min(10, int(adata.obs["dpt_pseudotime"].dropna().nunique() - 1))
         if n_bins >= 2:
-            adata_sub = adata[adata.obs['dpt_pseudotime'].notna()].copy()
-            adata_sub.obs['dpt_pseudotime_bin'] = pd.qcut(
-                adata_sub.obs['dpt_pseudotime'], q=n_bins, duplicates='drop'
+            adata_sub = adata[adata.obs["dpt_pseudotime"].notna()].copy()
+            adata_sub.obs["dpt_pseudotime_bin"] = pd.qcut(
+                adata_sub.obs["dpt_pseudotime"], q=n_bins, duplicates="drop"
             ).astype(str)  # type: ignore[union-attr]
-            safe_plot(sc.pl.heatmap,
-                      adata_sub,
-                      var_names=union_genes, groupby='dpt_pseudotime_bin',
-                      use_raw=True, show=False, save='_08_dev_genes_heatmap.pdf')
+            safe_plot(
+                sc.pl.heatmap,
+                adata_sub,
+                var_names=union_genes,
+                groupby="dpt_pseudotime_bin",
+                use_raw=True,
+                show=False,
+                save="_08_dev_genes_heatmap.pdf",
+            )
         else:
             log.info("Not enough unique pseudotime values (%d) for heatmap binning.", n_bins)
+
 
 def main():
     t0 = time.time()
     args_parser = argparse.ArgumentParser()
     args_parser.add_argument("--config", default="../config.py")
     args = args_parser.parse_args()
-    CFG = resolve_config(args.config)
-    log = setup_logger("08_trajectory", os.path.join(CFG.log_dir, "08_trajectory.log"))
+    cfg = resolve_config(args.config)
+    log = setup_logger("08_trajectory", os.path.join(cfg.log_dir, "08_trajectory.log"))
     log.info("Step 08: Trajectory analysis")
 
-    input_path = CFG.annotated_h5ad if os.path.exists(CFG.annotated_h5ad) else CFG.cluster_h5ad
+    input_path = cfg.annotated_h5ad if os.path.exists(cfg.annotated_h5ad) else cfg.cluster_h5ad
     adata = sc.read(input_path)
     log.info("Loaded: %s — %d cells", input_path, adata.n_obs)
 
     # 设置图输出目录（必须在 plot 调用之前，否则 scanpy save= 默认写到 ./figures/）
-    sc.settings.figdir = os.path.join(CFG.figure_dir, '08_trajectory')
+    sc.settings.figdir = os.path.join(cfg.figure_dir, "08_trajectory")
     os.makedirs(sc.settings.figdir, exist_ok=True)
 
     # 当 marker_validation PASS 率极低时，退回到 leiden 聚类
-    if 'marker_validation' in adata.obs and adata.n_obs > 0:
-        pass_cells = (adata.obs['marker_validation'] == 'PASS').sum()
+    if "marker_validation" in adata.obs and adata.n_obs > 0:
+        pass_cells = (adata.obs["marker_validation"] == "PASS").sum()
         pass_rate = pass_cells / adata.n_obs
-        pass_rate_min = getattr(CFG.marker, 'validation_pass_rate_min', 0.1)
+        pass_rate_min = getattr(cfg.marker, "validation_pass_rate_min", 0.1)
         if pass_rate < pass_rate_min:
-            if getattr(CFG, 'interactive', False):
-                print(
-                    f"\n⚠  Annotation validation PASS rate = "
-                    f"{pass_rate * 100:.1f}%"
-                )
+            if getattr(cfg, "interactive", False):
+                print(f"\n⚠  Annotation validation PASS rate = {pass_rate * 100:.1f}%")
                 try:
-                    choice = input(
-                        "Trajectory analysis options:\n"
-                        "  [l] Use leiden clusters (safe fallback)\n"
-                        "  [c] Use cell_type labels anyway\n"
-                        "Choice> "
-                    ).strip().lower()
+                    choice = (
+                        input(
+                            "Trajectory analysis options:\n"
+                            "  [l] Use leiden clusters (safe fallback)\n"
+                            "  [c] Use cell_type labels anyway\n"
+                            "Choice> "
+                        )
+                        .strip()
+                        .lower()
+                    )
                 except (EOFError, KeyboardInterrupt):
-                    choice = 'l'
-                if choice == 'c':
+                    choice = "l"
+                if choice == "c":
                     log.warning(
                         "User chose cell_type labels despite %.1f%% PASS rate",
                         pass_rate * 100,
                     )
                 else:
-                    adata.obs['cell_type'] = adata.obs['leiden'].astype(str)
-                    log.info(
-                        "Falling back to leiden clusters for trajectory"
-                    )
+                    adata.obs["cell_type"] = adata.obs["leiden"].astype(str)
+                    log.info("Falling back to leiden clusters for trajectory")
             else:
                 log.warning(
                     "marker_validation PASS rate %.1f%% (<%.0f%%) — "
                     "cell_type labels are unreliable, falling back to "
                     "leiden clusters",
-                    pass_rate * 100, pass_rate_min * 100,
+                    pass_rate * 100,
+                    pass_rate_min * 100,
                 )
-                adata.obs['cell_type'] = adata.obs['leiden'].astype(str)
+                adata.obs["cell_type"] = adata.obs["leiden"].astype(str)
 
-    recompute_neighbors(adata, CFG, log)
-    run_paga(adata, CFG, log)
-    root_mask = find_root_cells(adata, CFG, log)
-    compute_dpt(adata, root_mask, CFG, log)
-    branch_results = branch_analysis(adata, CFG, log)
-    gene_trends(adata, CFG, log, branch_results=branch_results)
+    recompute_neighbors(adata, cfg, log)
+    run_paga(adata, cfg, log)
+    root_mask = find_root_cells(adata, cfg, log)
+    compute_dpt(adata, root_mask, cfg, log)
+    branch_results = branch_analysis(adata, cfg, log)
+    gene_trends(adata, cfg, log, branch_results=branch_results)
 
     # 最终可视化 (figdir 已在上面设置)
-    for color in ['stage', 'cell_type', 'cell_type_sub', 'dpt_pseudotime']:
+    for color in ["stage", "cell_type", "cell_type_sub", "dpt_pseudotime"]:
         if color in adata.obs or color in adata.obsm:
-            safe_plot(sc.pl.umap, adata, color=color, show=False,
-                      save=f'_08_final_{color}.pdf')
+            safe_plot(sc.pl.umap, adata, color=color, show=False, save=f"_08_final_{color}.pdf")
 
-    safe_write(adata, CFG.final_h5ad, cfg=CFG)
+    safe_write(adata, cfg.final_h5ad, cfg=cfg)
     log.info("Step 08 complete, took %.1fs", time.time() - t0)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

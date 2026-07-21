@@ -11,13 +11,22 @@ import pandas as pd
 
 FEMALE_GENES = ["Xist", "XIST"]
 MALE_GENES = [
-    "Eif2s3y", "Ddx3y", "Uty", "Kdm5d",     # mouse
-    "RPS4Y1", "DDX3Y", "UTY", "KDM5D",       # human
-    "EIF2S3Y", "SRY", "ZFY", "RPS4Y2",       # additional human
+    "Eif2s3y",
+    "Ddx3y",
+    "Uty",
+    "Kdm5d",  # mouse
+    "RPS4Y1",
+    "DDX3Y",
+    "UTY",
+    "KDM5D",  # human
+    "EIF2S3Y",
+    "SRY",
+    "ZFY",
+    "RPS4Y2",  # additional human
 ]
 
 
-def detect_sex(adata, CFG, log):
+def detect_sex(adata, cfg, log):
     """Auto-detect biological sex by scanning sex-linked gene expression.
 
     Adds a ``predicted_sex`` column to ``adata.obs`` with values
@@ -39,8 +48,7 @@ def detect_sex(adata, CFG, log):
             log.info("Sex column '%s' already present in adata.obs", col)
             counts = adata.obs[col].value_counts()
             for val, cnt in counts.items():
-                log.info("  %s: %d (%.1f%%)", val, cnt,
-                         cnt / adata.n_obs * 100)
+                log.info("  %s: %d (%.1f%%)", val, cnt, cnt / adata.n_obs * 100)
             return
 
     # ── 2. Need raw data ───────────────────────────────────────────────
@@ -97,11 +105,16 @@ def detect_sex(adata, CFG, log):
     n_total = adata.n_obs
 
     log.info(
-        "Sex detection: Female=%.1f%% (%d/%d), Male=%.1f%% (%d/%d), "
-        "Ambiguous=%.1f%% (%d/%d)",
-        n_female / n_total * 100, n_female, n_total,
-        n_male / n_total * 100, n_male, n_total,
-        n_ambig / n_total * 100, n_ambig, n_total,
+        "Sex detection: Female=%.1f%% (%d/%d), Male=%.1f%% (%d/%d), Ambiguous=%.1f%% (%d/%d)",
+        n_female / n_total * 100,
+        n_female,
+        n_total,
+        n_male / n_total * 100,
+        n_male,
+        n_total,
+        n_ambig / n_total * 100,
+        n_ambig,
+        n_total,
     )
 
     female_ratio = n_female / n_total
@@ -111,34 +124,27 @@ def detect_sex(adata, CFG, log):
         _gene_hint = ", ".join(repr(g) for g in _genes[:6])
         if len(_genes) > 6:
             _gene_hint += ", ..."
-        log.warning(
-            "Mixed-sex dataset detected — sex may act as batch effect."
-        )
-        log.warning(
-            "  Option 1 (mild):  CFG.harmony.batch_key = 'predicted_sex'"
-        )
-        log.warning(
-            "  Option 2 (strong): CFG.normalization.regress_out_genes = [%s]", _gene_hint
-        )
+        log.warning("Mixed-sex dataset detected — sex may act as batch effect.")
+        log.warning("  Option 1 (mild):  CFG.harmony.batch_key = 'predicted_sex'")
+        log.warning("  Option 2 (strong): CFG.normalization.regress_out_genes = [%s]", _gene_hint)
 
     if "sample" in adata.obs:
         for sample_name, group in adata.obs.groupby("sample"):
             sex_counts = group["predicted_sex"].value_counts()
             total = len(group)
-            parts = [
-                f"{v}: {c} ({c / total * 100:.1f}%)"
-                for v, c in sex_counts.items()
-            ]
+            parts = [f"{v}: {c} ({c / total * 100:.1f}%)" for v, c in sex_counts.items()]
             log.info("  Sample %s: %s", sample_name, ", ".join(parts))
 
     # ── 6. Save CSV report ─────────────────────────────────────────────
-    report = pd.DataFrame({
-        "barcode": adata.obs_names,
-        "predicted_sex": predicted,
-        "female_marker_positive": female_mask,
-        "male_marker_positive": male_mask,
-    })
-    os.makedirs(CFG.table_dir, exist_ok=True)
-    report_path = os.path.join(CFG.table_dir, "sex_report.csv")
+    report = pd.DataFrame(
+        {
+            "barcode": adata.obs_names,
+            "predicted_sex": predicted,
+            "female_marker_positive": female_mask,
+            "male_marker_positive": male_mask,
+        }
+    )
+    os.makedirs(cfg.table_dir, exist_ok=True)
+    report_path = os.path.join(cfg.table_dir, "sex_report.csv")
     report.to_csv(report_path, index=False)
     log.info("Sex report saved: %s", report_path)

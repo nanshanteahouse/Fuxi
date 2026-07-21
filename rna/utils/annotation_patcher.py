@@ -72,56 +72,56 @@ def apply_annotation_patches(
         _log.info("No patches to apply.")
         return adata
 
-    leiden_str = adata.obs['leiden'].astype(str)
+    leiden_str = adata.obs["leiden"].astype(str)
 
     for cluster_id, new_ct in patches.items():
         mask = leiden_str == str(cluster_id)
         n_cells = mask.sum()
         if n_cells == 0:
             _log.warning(
-                "Cluster '%s' not found in data, skipping.", cluster_id,
+                "Cluster '%s' not found in data, skipping.",
+                cluster_id,
             )
             continue
 
-        old_ct = adata.obs.loc[mask, 'cell_type'].iloc[0]
+        old_ct = adata.obs.loc[mask, "cell_type"].iloc[0]
         _log.info(
             "Patching cluster %s: '%s' -> '%s' (%d cells)",
-            cluster_id, old_ct, new_ct, n_cells,
+            cluster_id,
+            old_ct,
+            new_ct,
+            n_cells,
         )
 
         # Update core annotation columns
-        adata.obs.loc[mask, 'cell_type'] = new_ct
-        if 'annot_confidence' in adata.obs:
-            adata.obs.loc[mask, 'annot_confidence'] = 'patched'
-        if 'annot_method' in adata.obs:
-            adata.obs.loc[mask, 'annot_method'] = 'manual_patch'
+        adata.obs.loc[mask, "cell_type"] = new_ct
+        if "annot_confidence" in adata.obs:
+            adata.obs.loc[mask, "annot_confidence"] = "patched"
+        if "annot_method" in adata.obs:
+            adata.obs.loc[mask, "annot_method"] = "manual_patch"
 
         # Preserve old reasoning as context
-        if 'annot_reasoning' in adata.obs:
-            old_reasoning = adata.obs.loc[mask, 'annot_reasoning'].iloc[0]
-            adata.obs.loc[mask, 'annot_reasoning'] = (
-                f"[PATCHED from '{old_ct}'] {old_reasoning}"
-            )
+        if "annot_reasoning" in adata.obs:
+            old_reasoning = adata.obs.loc[mask, "annot_reasoning"].iloc[0]
+            adata.obs.loc[mask, "annot_reasoning"] = f"[PATCHED from '{old_ct}'] {old_reasoning}"
 
     # ── Recalculate marker_validation ───────────────────────────────────
     if std is not None:
         try:
             validation_results = std.validate(adata)
-            validation_map = {
-                r['cluster']: r['status'] for r in validation_results
-            }
-            adata.obs['marker_validation'] = leiden_str.map(
+            validation_map = {r["cluster"]: r["status"] for r in validation_results}
+            adata.obs["marker_validation"] = leiden_str.map(
                 lambda c: validation_map.get(c, "NO_ONTOLOGY")
             )
             _log.info(
                 "marker_validation recalculated: %d/%d PASS",
-                sum(1 for r in validation_results if r['status'] == 'PASS'),
+                sum(1 for r in validation_results if r["status"] == "PASS"),
                 len(validation_results),
             )
         except Exception as exc:
             _log.warning(
-                "marker_validation recalculation failed: %s — "
-                "validation column may be stale", exc,
+                "marker_validation recalculation failed: %s — validation column may be stale",
+                exc,
             )
 
     # ── Re-write annotation CSV ─────────────────────────────────────────
@@ -139,49 +139,54 @@ def apply_annotation_patches(
 
 def _rewrite_annotation_csv(adata, cfg, log):
     """Re-write ``cell_type_annotations.csv`` from current adata.obs."""
-    leiden_str = adata.obs['leiden'].astype(str)
+    leiden_str = adata.obs["leiden"].astype(str)
     cluster_ids = sorted(
-        adata.obs['leiden'].unique(),
+        adata.obs["leiden"].unique(),
         key=lambda x: int(x) if str(x).isdigit() else str(x),
     )
     records = []
     for cl in cluster_ids:
         mask = leiden_str == str(cl)
-        records.append({
-            'cluster': str(cl),
-            'cell_type': adata.obs.loc[mask, 'cell_type'].iloc[0],
-            'confidence': (
-                adata.obs.loc[mask, 'annot_confidence'].iloc[0]
-                if 'annot_confidence' in adata.obs else 'N/A'
-            ),
-            'method': (
-                adata.obs.loc[mask, 'annot_method'].iloc[0]
-                if 'annot_method' in adata.obs else 'N/A'
-            ),
-            'reasoning': (
-                adata.obs.loc[mask, 'annot_reasoning'].iloc[0]
-                if 'annot_reasoning' in adata.obs else ''
-            ),
-        })
+        records.append(
+            {
+                "cluster": str(cl),
+                "cell_type": adata.obs.loc[mask, "cell_type"].iloc[0],
+                "confidence": (
+                    adata.obs.loc[mask, "annot_confidence"].iloc[0]
+                    if "annot_confidence" in adata.obs
+                    else "N/A"
+                ),
+                "method": (
+                    adata.obs.loc[mask, "annot_method"].iloc[0]
+                    if "annot_method" in adata.obs
+                    else "N/A"
+                ),
+                "reasoning": (
+                    adata.obs.loc[mask, "annot_reasoning"].iloc[0]
+                    if "annot_reasoning" in adata.obs
+                    else ""
+                ),
+            }
+        )
     ann_df = pd.DataFrame(records)
-    ann_csv = os.path.join(cfg.table_dir, 'cell_type_annotations.csv')
+    ann_csv = os.path.join(cfg.table_dir, "cell_type_annotations.csv")
     ann_df.to_csv(ann_csv, index=False)
     log.info("Annotation table re-written: %s", ann_csv)
 
 
 def _rewrite_quality_report(adata, cfg, log):
     """Re-write ``05_annotation_quality.json`` from current adata.obs."""
-    if 'marker_validation' not in adata.obs:
+    if "marker_validation" not in adata.obs:
         log.info("No marker_validation column — skipping quality report.")
         return
-    pass_cells = (adata.obs['marker_validation'] == 'PASS').sum()
+    pass_cells = (adata.obs["marker_validation"] == "PASS").sum()
     pass_rate = pass_cells / max(adata.n_obs, 1)
     quality = {
         "pass_rate": round(pass_rate, 4),
-        "total_clusters": adata.obs['leiden'].nunique(),
+        "total_clusters": adata.obs["leiden"].nunique(),
         "note": "Generated by annotation_patcher — some clusters manually patched.",
     }
-    q_path = os.path.join(cfg.table_dir, '05_annotation_quality.json')
-    with open(q_path, 'w') as f:
+    q_path = os.path.join(cfg.table_dir, "05_annotation_quality.json")
+    with open(q_path, "w") as f:
         json.dump(quality, f, indent=2, ensure_ascii=False)
     log.info("Quality report re-written: %s", q_path)

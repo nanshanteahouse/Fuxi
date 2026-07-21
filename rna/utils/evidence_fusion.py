@@ -31,6 +31,7 @@ class DiagnosticInfo(NamedTuple):
     detail : str
         Human-readable diagnostic detail.
     """
+
     category: str
     top_competitors: list
     detail: str
@@ -64,6 +65,7 @@ class FusionDecision(NamedTuple):
         Diagnostic context for Unknown/Uncertain clusters (v3.1.0+).
         ``None`` for all non-Unknown decisions.
     """
+
     cell_type: str
     confidence: str
     score: float
@@ -75,7 +77,6 @@ class FusionDecision(NamedTuple):
     alternative_rules: list
     diagnostic: Optional[DiagnosticInfo] = None
     cell_category: str = ""
-
 
 
 def _is_transition_state(
@@ -130,9 +131,9 @@ def _is_transition_state(
     """
     if len(marker_scores) < 2:
         return None
-    sorted_types = sorted(marker_scores.items(),
-                          key=lambda x: _resolve_score(marker_scores, x[0])[0],
-                          reverse=True)
+    sorted_types = sorted(
+        marker_scores.items(), key=lambda x: _resolve_score(marker_scores, x[0])[0], reverse=True
+    )
     top1_key, _ = sorted_types[0]
     top2_key, _ = sorted_types[1]
     score1, _ = _resolve_score(marker_scores, top1_key)
@@ -173,25 +174,26 @@ def _is_transition_state(
 
     return (top1_key, top2_key)
 
+
 # Decision priority tiers — evaluated in order.
 # Each tier is a (name, callable) where
 # callable(score, expert_rule_result, ai_suggestion) → bool.
 DECISION_TIERS = [
-    ('expert_rule',           lambda s, e, a: e is not None),          # Tier 0
-    ('transition_state',   lambda s, e, a: False),               # Tier 1 (detected pre-loop)
-    ('marker_scoring_high',   lambda s, e, a: s >= 0.7),               # Tier 1
-    ('marker_scoring_medium', lambda s, e, a: 0.5 <= s < 0.7),         # Tier 2
-    ('marker_scoring_low',    lambda s, e, a: 0.25 <= s < 0.5),        # Tier 3
-    ('unknown',               lambda s, e, a: True),                    # Tier 4
+    ("expert_rule", lambda s, e, a: e is not None),  # Tier 0
+    ("transition_state", lambda s, e, a: False),  # Tier 1 (detected pre-loop)
+    ("marker_scoring_high", lambda s, e, a: s >= 0.7),  # Tier 1
+    ("marker_scoring_medium", lambda s, e, a: 0.5 <= s < 0.7),  # Tier 2
+    ("marker_scoring_low", lambda s, e, a: 0.25 <= s < 0.5),  # Tier 3
+    ("unknown", lambda s, e, a: True),  # Tier 4
 ]
 
 _CONFIDENCE_MAP = {
-    'expert_rule': 'rule',
-    'marker_scoring_high': 'high',
-    'marker_scoring_medium': 'medium',
-    'marker_scoring_low': 'low',
-    'unknown': 'unknown',
-    'transition_state': 'transition',
+    "expert_rule": "rule",
+    "marker_scoring_high": "high",
+    "marker_scoring_medium": "medium",
+    "marker_scoring_low": "low",
+    "unknown": "unknown",
+    "transition_state": "transition",
 }
 
 
@@ -201,6 +203,7 @@ _CONFIDENCE_MAP = {
 # Normalise both sides to a canonical form before comparison so that
 # ai_agreed reflects genuine biological disagreement rather than
 # formatting differences.
+
 
 def _normalise_label(label: Optional[str]) -> str:
     """Canonicalise a cell-type label for fuzzy comparison.
@@ -214,13 +217,14 @@ def _normalise_label(label: Optional[str]) -> str:
         return ""
     import re
     import unicodedata
+
     # NFKD decomposes accents / umlauts: ü -> u + combining diaeresis
-    nfkd = unicodedata.normalize('NFKD', label)
+    nfkd = unicodedata.normalize("NFKD", label)
     # Drop combining chars and other non-ASCII
-    ascii_label = nfkd.encode('ascii', 'ignore').decode('ascii')
+    ascii_label = nfkd.encode("ascii", "ignore").decode("ascii")
     # Replace all non-alphanumeric runs with a single underscore.
-    normalised = re.sub(r'[^a-zA-Z0-9]+', '_', ascii_label)
-    return normalised.strip('_').lower()
+    normalised = re.sub(r"[^a-zA-Z0-9]+", "_", ascii_label)
+    return normalised.strip("_").lower()
 
 
 def _labels_match(a: Optional[str], b: Optional[str]) -> bool:
@@ -276,14 +280,14 @@ def _explain(
     alternative_rules: Optional[list] = None,
 ) -> str:
     """Build a human-readable explanation."""
-    if method == 'expert_rule':
+    if method == "expert_rule":
         parts = [f"Expert rule matched: {cell_type}"]
         if alternative_rules and len(alternative_rules) > 1:
             alt_names = [r.get("action") for r in alternative_rules[1:]]
             parts.append(f"(also matched rules: {', '.join(alt_names)})")
         if score > 0:
             parts.append(f"(marker score: {score:.3f})")
-    elif method == 'unknown':
+    elif method == "unknown":
         parts = ["No cell type could be confidently assigned"]
         if best_type and score > 0:
             parts.append(f"(best match: {best_type}, score: {score:.3f})")
@@ -297,8 +301,7 @@ def _explain(
 
     else:
         parts = [
-            f"Marker scoring selected {cell_type} "
-            f"with score {score:.3f}",
+            f"Marker scoring selected {cell_type} with score {score:.3f}",
         ]
         if n_markers > 0:
             parts.append(f"({n_markers} KB markers found in cluster top-20)")
@@ -308,8 +311,7 @@ def _explain(
             parts.append("\u2014 AI agreed with this assignment")
         else:
             parts.append(
-                f"\u2014 AI suggested '{ai_suggestion}' "
-                f"(different from marker-based result)"
+                f"\u2014 AI suggested '{ai_suggestion}' (different from marker-based result)"
             )
 
     return " ".join(parts)
@@ -343,37 +345,31 @@ def _classify_unknown(
     -------
     DiagnosticInfo
     """
-    scored = [(k, _resolve_score(marker_scores, k))
-              for k in marker_scores]
+    scored = [(k, _resolve_score(marker_scores, k)) for k in marker_scores]
     scored.sort(key=lambda x: -x[1][0])
 
     top3 = [(t, round(s, 4)) for t, (s, _) in scored[:3] if s > 0]
 
     if low_quality_reason:
         return DiagnosticInfo(
-            category='low_quality_data',
+            category="low_quality_data",
             top_competitors=top3,
-            detail=(
-                f"Cluster flagged as low-quality: {low_quality_reason}"
-            ),
+            detail=(f"Cluster flagged as low-quality: {low_quality_reason}"),
         )
 
     if scored and scored[0][1][0] >= 0.25:
-        ambiguous_candidates = [(t, round(s, 4))
-                                for t, (s, _) in scored if s >= 0.25]
+        ambiguous_candidates = [(t, round(s, 4)) for t, (s, _) in scored if s >= 0.25]
         if len(ambiguous_candidates) >= 2:
             names = ", ".join(t for t, _ in ambiguous_candidates[:5])
             return DiagnosticInfo(
-                category='ambiguous',
+                category="ambiguous",
                 top_competitors=top3,
-                detail=(
-                    f"Multiple cell types with score >= 0.25: {names}"
-                ),
+                detail=(f"Multiple cell types with score >= 0.25: {names}"),
             )
 
     if scored and 0 < scored[0][1][0] < 0.25:
         return DiagnosticInfo(
-            category='weak_signal',
+            category="weak_signal",
             top_competitors=top3,
             detail=(
                 f"Best score {scored[0][1][0]:.4f} below 0.25 threshold "
@@ -383,13 +379,13 @@ def _classify_unknown(
 
     if not any(s > 0 for _, (s, _) in scored):
         return DiagnosticInfo(
-            category='no_kb_match',
+            category="no_kb_match",
             top_competitors=[],
             detail="No KB cell type had any marker overlap with this cluster.",
         )
 
     return DiagnosticInfo(
-        category='true_unknown',
+        category="true_unknown",
         top_competitors=top3,
         detail="Could not determine cell type by any method.",
     )
@@ -411,7 +407,7 @@ def fuse_evidence(
     unconstrained: bool = False,
     allows_transitions: bool = False,
     incompatible_transitions: Optional[list] = None,
-) -> 'FusionDecision':
+) -> "FusionDecision":
     """Combine marker scores, expert rules, and AI into one decision.
 
     Parameters
@@ -456,54 +452,65 @@ def fuse_evidence(
         # a gene buried at rank 4000 in relaxed mode) from outranking well-
         # scored Fisher matches in downstream analysis.
         if rule_score < 0.25 and rule_n == 0:
-            conf = 'low'
+            conf = "low"
             warning_note = (
                 f"Expert rule matched '{expert_rule_result}' but independent "
                 f"marker scoring found zero KB marker overlap (score={rule_score:.3f}, "
                 f"n_markers=0). Downgrading confidence from 'rule' to 'low'."
             )
         else:
-            conf = 'rule'
+            conf = "rule"
             warning_note = ""
 
         explanation_parts = []
         if warning_note:
             explanation_parts.append(warning_note)
-        explanation_parts.append(_explain(
-            expert_rule_result, 'expert_rule', rule_score, rule_n,
-            expert_rule_result, ai_suggestion, ai_agreed,
-            alternative_rules=alternative_rules,
-        ))
+        explanation_parts.append(
+            _explain(
+                expert_rule_result,
+                "expert_rule",
+                rule_score,
+                rule_n,
+                expert_rule_result,
+                ai_suggestion,
+                ai_agreed,
+                alternative_rules=alternative_rules,
+            )
+        )
 
         return FusionDecision(
             cell_type=expert_rule_result,
             confidence=conf,
             score=rule_score,
-            method='expert_rule',
+            method="expert_rule",
             n_markers_found=rule_n,
             ai_agreed=ai_agreed,
-            ai_suggested=ai_suggestion or '',
+            ai_suggested=ai_suggestion or "",
             explanation=" | ".join(explanation_parts),
             alternative_rules=alternative_rules or [],
         )
 
     # ── Unconstrained AI mode: accept AI suggestion directly ──────────
-    if unconstrained and ai_suggestion and (
-        not marker_scores
-        or max((_resolve_score(marker_scores, k)[0] for k in marker_scores), default=0) < 0.25
+    if (
+        unconstrained
+        and ai_suggestion
+        and (
+            not marker_scores
+            or max((_resolve_score(marker_scores, k)[0] for k in marker_scores), default=0) < 0.25
+        )
     ):
         return FusionDecision(
             cell_type=ai_suggestion,
-            confidence='medium',
+            confidence="medium",
             score=0.0,
-            method='ai_unconstrained',
+            method="ai_unconstrained",
             n_markers_found=0,
             ai_agreed=True,
             ai_suggested=ai_suggestion,
             explanation=f"Unconstrained AI mode — accepted AI suggestion '{ai_suggestion}' (no KB match).",
             alternative_rules=[],
             diagnostic=DiagnosticInfo(
-                category='weak_signal' if marker_scores else 'no_kb_match',
+                category="weak_signal" if marker_scores else "no_kb_match",
                 top_competitors=[],
                 detail=f"AI assigned '{ai_suggestion}' in unconstrained mode.",
             ),
@@ -512,17 +519,17 @@ def fuse_evidence(
     # ── No scores → early exit ─────────────────────────────────────────
     if not marker_scores:
         return FusionDecision(
-            cell_type='Unknown',
-            confidence='unknown',
+            cell_type="Unknown",
+            confidence="unknown",
             score=0.0,
-            method='unknown',
+            method="unknown",
             n_markers_found=0,
             ai_agreed=False,
-            ai_suggested=ai_suggestion or '',
+            ai_suggested=ai_suggestion or "",
             explanation="No marker scores available for this cluster.",
             alternative_rules=[],
             diagnostic=DiagnosticInfo(
-                category='true_unknown',
+                category="true_unknown",
                 top_competitors=[],
                 detail="No marker scores calculated — empty or missing data.",
             ),
@@ -539,14 +546,14 @@ def fuse_evidence(
     # _is_transition_state() only see fine-grained types.
     if kb is not None and allows_transitions:
         transition = _is_transition_state(
-            marker_scores, kb,
+            marker_scores,
+            kb,
             incompatible_transitions=incompatible_transitions,
         )
         if transition is not None:
             t1, t2 = transition
             delta = abs(
-                _resolve_score(marker_scores, t1)[0] -
-                _resolve_score(marker_scores, t2)[0]
+                _resolve_score(marker_scores, t1)[0] - _resolve_score(marker_scores, t2)[0]
             )
             parent = kb.get(t1, {}).get("parent", "")
             explanation = _explain(
@@ -580,36 +587,42 @@ def fuse_evidence(
 
     # ── Apply tiers 1–4 ────────────────────────────────────────────────
     for tier_name, tier_fn in DECISION_TIERS:
-        if tier_name == 'expert_rule':
+        if tier_name == "expert_rule":
             continue  # already handled above
 
         if not tier_fn(best_score, expert_rule_result, ai_suggestion):
             continue
 
-        if tier_name == 'unknown':
+        if tier_name == "unknown":
             diagnostic = _classify_unknown(
-                marker_scores, low_quality_reason=low_quality_reason,
+                marker_scores,
+                low_quality_reason=low_quality_reason,
             )
             return FusionDecision(
-                cell_type='Unknown',
-                confidence='unknown',
+                cell_type="Unknown",
+                confidence="unknown",
                 score=best_score,
-                method='unknown',
+                method="unknown",
                 n_markers_found=n_markers,
                 ai_agreed=False,
-                ai_suggested=ai_suggestion or '',
+                ai_suggested=ai_suggestion or "",
                 explanation=_explain(
-                    'Unknown', 'unknown', best_score, n_markers,
-                    best_type, ai_suggestion, False,
+                    "Unknown",
+                    "unknown",
+                    best_score,
+                    n_markers,
+                    best_type,
+                    ai_suggestion,
+                    False,
                 ),
                 alternative_rules=alternative_rules or [],
                 diagnostic=diagnostic,
             )
 
         # Tiers 1–3: marker-scoring-based decisions
-        if tier_name == 'marker_scoring_medium':
+        if tier_name == "marker_scoring_medium":
             ai_agreed = _labels_match(ai_suggestion, best_type) if ai_suggestion else True
-        elif tier_name == 'marker_scoring_low':
+        elif tier_name == "marker_scoring_low":
             ai_agreed = _labels_match(ai_suggestion, best_type) if ai_suggestion else False
         else:
             # marker_scoring_high — AI not required for agreement
@@ -622,17 +635,23 @@ def fuse_evidence(
             method=tier_name,
             n_markers_found=n_markers,
             ai_agreed=ai_agreed,
-            ai_suggested=ai_suggestion or '',
+            ai_suggested=ai_suggestion or "",
             explanation=_explain(
-                best_type, tier_name, best_score, n_markers,
-                best_type, ai_suggestion, ai_agreed,
+                best_type,
+                tier_name,
+                best_score,
+                n_markers,
+                best_type,
+                ai_suggestion,
+                ai_agreed,
             ),
             alternative_rules=[],
         )
 
     # Fallback (should never reach here — 'unknown' always matches)
-    return FusionDecision('Unknown', 'unknown', 0.0, 'unknown', 0, False, '',
-                          'Fallback: no tier matched.', [])
+    return FusionDecision(
+        "Unknown", "unknown", 0.0, "unknown", 0, False, "", "Fallback: no tier matched.", []
+    )
 
 
 def fuse_all_clusters(
@@ -695,8 +714,8 @@ def fuse_all_clusters(
 
     for cl in clusters:
         cl_markers = None
-        if all_marker_dfs is not None and 'cluster' in all_marker_dfs.columns:
-            cl_mask = all_marker_dfs['cluster'] == cl
+        if all_marker_dfs is not None and "cluster" in all_marker_dfs.columns:
+            cl_mask = all_marker_dfs["cluster"] == cl
             cl_markers = all_marker_dfs[cl_mask].copy()
 
         rule_value = all_rules.get(cl)
@@ -721,18 +740,12 @@ def fuse_all_clusters(
 
     if return_quality:
         quality = {
-            "annotated_by_rule": sum(
-                1 for d in decisions if d.method == "expert_rule"
-            ),
+            "annotated_by_rule": sum(1 for d in decisions if d.method == "expert_rule"),
             "annotated_by_scoring": sum(
                 1 for d in decisions if d.method.startswith("marker_scoring")
             ),
-            "unknown": sum(
-                1 for d in decisions if d.confidence == "unknown"
-            ),
-            "ambiguity": sum(
-                1 for d in decisions if len(d.alternative_rules) >= 3
-            ),
+            "unknown": sum(1 for d in decisions if d.confidence == "unknown"),
+            "ambiguity": sum(1 for d in decisions if len(d.alternative_rules) >= 3),
             "ai_agreed": sum(1 for d in decisions if d.ai_agreed),
             "total": len(decisions),
             "diagnostic_summary": _build_diagnostic_summary(decisions),

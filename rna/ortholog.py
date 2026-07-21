@@ -32,14 +32,13 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 
 logger = logging.getLogger(__name__)
 
 # ── Ensembl gene ID pattern ────────────────────────────────────────────
 # ENS + 0-4 species prefix chars + G + 11 digits
-_ENSEMBL_PATTERN = re.compile(r'^ENS[A-Z]{0,4}G\d{11}$')
-
+_ENSEMBL_PATTERN = re.compile(r"^ENS[A-Z]{0,4}G\d{11}$")
 
 
 # ── Species name → taxonomic class (纲) ──────────────────────────────
@@ -48,29 +47,30 @@ _ENSEMBL_PATTERN = re.compile(r'^ENS[A-Z]{0,4}G\d{11}$')
 # score_cluster_against_kb() compares target_class against source classes
 # to apply taxonomic-distance weighting.
 SPECIES_TO_CLASS: Dict[str, str] = {
-    "human":        "Mammalia",
-    "mouse":        "Mammalia",
-    "macaque":      "Mammalia",
-    "marmoset":     "Mammalia",
-    "tree_shrew":   "Mammalia",
-    "cow":          "Mammalia",
-    "pig":          "Mammalia",
-    "sheep":        "Mammalia",
-    "ferret":       "Mammalia",
-    "squirrel":     "Mammalia",
-    "opossum":      "Mammalia",
-    "peromyscus":   "Mammalia",
-    "lizard":       "Reptilia",
-    "chicken":      "Aves",
-    "frog":         "Amphibia",
-    "zebrafish":    "Teleostei",
-    "lamprey":      "Petromyzontida",
+    "human": "Mammalia",
+    "mouse": "Mammalia",
+    "macaque": "Mammalia",
+    "marmoset": "Mammalia",
+    "tree_shrew": "Mammalia",
+    "cow": "Mammalia",
+    "pig": "Mammalia",
+    "sheep": "Mammalia",
+    "ferret": "Mammalia",
+    "squirrel": "Mammalia",
+    "opossum": "Mammalia",
+    "peromyscus": "Mammalia",
+    "lizard": "Reptilia",
+    "chicken": "Aves",
+    "frog": "Amphibia",
+    "zebrafish": "Teleostei",
+    "lamprey": "Petromyzontida",
 }
 
 
 # ═══════════════════════════════════════════════════════════════════════
 #  Gene ID type detection
 # ═══════════════════════════════════════════════════════════════════════
+
 
 def detect_gene_id_type(var_names) -> str:
     """Detect whether gene names are Ensembl IDs, standard symbols, or mixed.
@@ -87,7 +87,7 @@ def detect_gene_id_type(var_names) -> str:
         ``"mixed"``          — some Ensembl IDs, some symbols.
         ``"gene_symbol"``    — no or very few Ensembl IDs.
     """
-    sample = list(var_names[:200]) if hasattr(var_names, '__iter__') else []
+    sample = list(var_names[:200]) if hasattr(var_names, "__iter__") else []
     if not sample:
         return "gene_symbol"
 
@@ -110,16 +110,17 @@ def detect_gene_id_type(var_names) -> str:
 
 # Genes matching these patterns won't be treated as recognisable symbols
 _ORPHAN_PATTERNS = [
-    re.compile(r'^FUN-\d+$'),        # Rhabdomys unannotated
-    re.compile(r'^LOC\d+$'),         # NCBI uncharacterised loci
-    re.compile(r'^LINC-.*$'),        # Long intergenic non-coding RNAs (provisional)
-    re.compile(r'^LORF\d+.*$'),      # Large open reading frames
-    re.compile(r'^RF\d+$'),          # RNA family
-    re.compile(r'^C\d+orf\d+$', re.IGNORECASE),  # Chromosome ORF
-    re.compile(r'^AC\d+\.\d+$'),     # Clone-based gene models
-    re.compile(r'^AP\d+\.\d+$'),     # Clone-based gene models
-    re.compile(r'^RP\d+[-.]'),       # Ribosomal protein (pseudogene-like)
+    re.compile(r"^FUN-\d+$"),  # Rhabdomys unannotated
+    re.compile(r"^LOC\d+$"),  # NCBI uncharacterised loci
+    re.compile(r"^LINC-.*$"),  # Long intergenic non-coding RNAs (provisional)
+    re.compile(r"^LORF\d+.*$"),  # Large open reading frames
+    re.compile(r"^RF\d+$"),  # RNA family
+    re.compile(r"^C\d+orf\d+$", re.IGNORECASE),  # Chromosome ORF
+    re.compile(r"^AC\d+\.\d+$"),  # Clone-based gene models
+    re.compile(r"^AP\d+\.\d+$"),  # Clone-based gene models
+    re.compile(r"^RP\d+[-.]"),  # Ribosomal protein (pseudogene-like)
 ]
+
 
 def _is_orphan_name(gene: str) -> bool:
     """Return True if *gene* looks like a non-standard provisional ID."""
@@ -132,6 +133,7 @@ def _is_orphan_name(gene: str) -> bool:
 # ═══════════════════════════════════════════════════════════════════════
 #  OrthologMapper
 # ═══════════════════════════════════════════════════════════════════════
+
 
 class OrthologMapper:
     """Apply cached 1:1 ortholog mappings to convert gene names across species.
@@ -192,17 +194,14 @@ class OrthologMapper:
         logger.info("Gene ID type for %s: %s", species, gene_type)
 
         original_names = adata.var_names.astype(str).tolist()
-        adata.var['original_gene'] = original_names
+        adata.var["original_gene"] = original_names
 
         # Strategy depends on gene ID type:
         # - ensembl_species / mixed: use ortholog mapping
         # - gene_symbol: most genes already use standard symbols → keep as-is
         if gene_type == "gene_symbol":
             # Only replace truly orphan identifiers (FUN-*, LOC*, etc.)
-            new_names = [
-                f"UNMAPPED_{g}" if _is_orphan_name(g) else g
-                for g in original_names
-            ]
+            new_names = [f"UNMAPPED_{g}" if _is_orphan_name(g) else g for g in original_names]
             n_mapped = len(original_names) - sum(1 for g in original_names if _is_orphan_name(g))
             n_ensembl_mapped = 0
         else:
@@ -226,9 +225,13 @@ class OrthologMapper:
         adata.var_names = new_names
         pct = n_mapped / max(len(original_names), 1) * 100
         logger.info(
-            "Ortholog conversion (%s→%s): %d/%d genes mapped (%.1f%%, "
-            "ensembl_mapped=%d)",
-            species, target, n_mapped, len(original_names), pct, n_ensembl_mapped,
+            "Ortholog conversion (%s→%s): %d/%d genes mapped (%.1f%%, ensembl_mapped=%d)",
+            species,
+            target,
+            n_mapped,
+            len(original_names),
+            pct,
+            n_ensembl_mapped,
         )
         return adata
 
@@ -237,8 +240,10 @@ class OrthologMapper:
 #  Convenience function
 # ═══════════════════════════════════════════════════════════════════════
 
-def convert_species_gene_names(adata, species: str, target: str = "human",
-                               cache_dir: str = "data/orthologs"):
+
+def convert_species_gene_names(
+    adata, species: str, target: str = "human", cache_dir: str = "data/orthologs"
+):
     """Convert gene names in *adata* from *species* identifiers to *target*.
 
     Convenience wrapper around :class:`OrthologMapper`.

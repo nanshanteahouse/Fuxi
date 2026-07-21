@@ -16,16 +16,17 @@ logger = logging.getLogger(__name__)
 # ── Strictness template constants ─────────────────────────────────
 
 _STRICTNESS_TEMPLATES: Dict[str, tuple] = {
-    "strict":   (50,    0.01),
-    "default":  (50,    0.05),
-    "deep":     (200,   0.05),
-    "wide":     (1000,  0.05),
-    "relaxed":  (5000,  0.05),
-    "manual":   (None,  None),
+    "strict": (50, 0.01),
+    "default": (50, 0.05),
+    "deep": (200, 0.05),
+    "wide": (1000, 0.05),
+    "relaxed": (5000, 0.05),
+    "manual": (None, None),
 }
 
 
 # ── Public API ────────────────────────────────────────────────────
+
 
 def resolve_expert_rule_params(
     strictness: str = "default",
@@ -137,17 +138,16 @@ def apply_expert_rules(
 
     # ── Constrain to top-N statistically-significant DE genes ──────────
     de_subset = cluster_markers.head(top_n)
-    if 'pvals_adj' in de_subset.columns:
-        de_subset = de_subset[de_subset['pvals_adj'] < pval_cutoff]
+    if "pvals_adj" in de_subset.columns:
+        de_subset = de_subset[de_subset["pvals_adj"] < pval_cutoff]
 
     # Sort by priority descending (higher = more specific).
-    sorted_rules = sorted(
-        rules, key=lambda r: r.get("priority", 0), reverse=True
-    )
+    sorted_rules = sorted(rules, key=lambda r: r.get("priority", 0), reverse=True)
     # Build a fast lookup: gene_name -> logfoldchanges.
     # Normalise gene names to strip Macaca _p/_n/.digit suffixes so KB
     # rule conditions (which use canonical human symbols) match correctly.
     from core.annotation.scoring import _normalize_gene_name
+
     marker_map: Dict[str, float] = {}
     for _, row in de_subset.iterrows():
         gene_name = _normalize_gene_name(str(row["names"]))

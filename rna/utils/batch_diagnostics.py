@@ -117,7 +117,14 @@ def _compute_purity_one_shot(adata, col: str, use_rep: str = "X_pca") -> float:
     adata = adata.copy()
     try:
         sc.pp.neighbors(adata, n_neighbors=15, use_rep=use_rep)
-        sc.tl.leiden(adata, resolution=1.0, key_added="_diag_leiden", flavor='igraph', directed=False, n_iterations=2)
+        sc.tl.leiden(
+            adata,
+            resolution=1.0,
+            key_added="_diag_leiden",
+            flavor="igraph",
+            directed=False,
+            n_iterations=2,
+        )
     except Exception:
         return 1.0
     ct = pd.crosstab(adata.obs["_diag_leiden"], adata.obs[col])
@@ -186,8 +193,7 @@ def diagnose_batch_candidates(
     pca_mat = adata.obsm["X_pca"][:, : min(n_pcs, adata.obsm["X_pca"].shape[1])]
 
     cat_cols = [
-        col for col in adata.obs.columns
-        if isinstance(adata.obs[col].dtype, pd.CategoricalDtype)
+        col for col in adata.obs.columns if isinstance(adata.obs[col].dtype, pd.CategoricalDtype)
     ]
 
     diagnoses: list[ColumnDiagnosis] = []
@@ -233,12 +239,18 @@ def diagnose_batch_candidates(
             )
             judgment = _categorize(gini, perm_pval, gini_batch_threshold, gini_biology_threshold)
 
-        diagnoses.append(ColumnDiagnosis(
-            column=col, gini_criterion=gini, purity_score=purity,
-            n_unique=n_unique, cramer_v=cramer_v, judgment=judgment,
-            permutation_pval=perm_pval,
-            recommendation=_build_rec(judgment, col, gini, purity),
-        ))
+        diagnoses.append(
+            ColumnDiagnosis(
+                column=col,
+                gini_criterion=gini,
+                purity_score=purity,
+                n_unique=n_unique,
+                cramer_v=cramer_v,
+                judgment=judgment,
+                permutation_pval=perm_pval,
+                recommendation=_build_rec(judgment, col, gini, purity),
+            )
+        )
 
         if judgment == "batch":
             batch_cols.append(col)
@@ -248,9 +260,12 @@ def diagnose_batch_candidates(
             ambiguous_cols.append(col)
 
     return BatchDiagnosisReport(
-        column_diagnoses=diagnoses, batch_cols=batch_cols,
-        biology_cols=biology_cols, ambiguous_cols=ambiguous_cols,
-        suggested_batch_key=list(batch_cols), warnings=warnings,
+        column_diagnoses=diagnoses,
+        batch_cols=batch_cols,
+        biology_cols=biology_cols,
+        ambiguous_cols=ambiguous_cols,
+        suggested_batch_key=list(batch_cols),
+        warnings=warnings,
     )
 
 
@@ -324,8 +339,15 @@ def plot_diagnosis_report(report: BatchDiagnosisReport, save_path: str) -> None:
     if report.warnings:
         lines.extend(["", "Warnings:"] + [f"  \u26a0 {w}" for w in report.warnings])
 
-    ax2.text(0, 0.95, "\n".join(lines), transform=ax2.transAxes,
-             fontsize=9, verticalalignment="top", family="monospace")
+    ax2.text(
+        0,
+        0.95,
+        "\n".join(lines),
+        transform=ax2.transAxes,
+        fontsize=9,
+        verticalalignment="top",
+        family="monospace",
+    )
 
     fig.tight_layout()
     fig.savefig(save_path, dpi=150, bbox_inches="tight")

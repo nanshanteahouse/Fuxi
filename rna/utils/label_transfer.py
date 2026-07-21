@@ -26,8 +26,8 @@ core/label_transfer.py — 可复用的 Label Transfer 验证工具
 """
 
 import json
-import os
 import logging
+import os
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -49,11 +49,11 @@ class LabelTransferReport:
     """
 
     query_adata: "sc.AnnData"  # 已标注转移标签的 query（含原始 obs）
-    ref_adata: "sc.AnnData"    # 训练用的 reference 子集（含 PCA/UMAP）
-    label_map: dict            # ref 标签名 → KB 细胞类型名
-    kb_map: dict               # cluster → KB 细胞类型名
-    cluster_col: str           # query 的 cluster 列名
-    _ref_label_col: str        # reference 的标签列名（summary 用）
+    ref_adata: "sc.AnnData"  # 训练用的 reference 子集（含 PCA/UMAP）
+    label_map: dict  # ref 标签名 → KB 细胞类型名
+    kb_map: dict  # cluster → KB 细胞类型名
+    cluster_col: str  # query 的 cluster 列名
+    _ref_label_col: str  # reference 的标签列名（summary 用）
 
     per_cluster_df: pd.DataFrame = field(init=False)
     cell_agreement: int = field(init=False)
@@ -75,13 +75,9 @@ class LabelTransferReport:
         kb_to_ref = {v: k for k, v in self.label_map.items()}
 
         q.obs["kb_cell_type"] = q.obs[cc].map(self.kb_map)
-        q.obs["kb_ref_label"] = (
-            q.obs["kb_cell_type"].map(kb_to_ref).fillna("Unknown")
-        )
+        q.obs["kb_ref_label"] = q.obs["kb_cell_type"].map(kb_to_ref).fillna("Unknown")
         q.obs["transfer_label"] = q.obs["transfer_label"]  # already set
-        q.obs["kb_x_transfer_match"] = (
-            q.obs["kb_ref_label"] == q.obs["transfer_label"]
-        )
+        q.obs["kb_x_transfer_match"] = q.obs["kb_ref_label"] == q.obs["transfer_label"]
 
         # Per-cluster
         rows = []
@@ -92,11 +88,7 @@ class LabelTransferReport:
             tc = q.obs.loc[mask, "transfer_label"].value_counts()
             top = tc.index[0]
             top_pct = tc.iloc[0] / n * 100
-            second = (
-                f"{tc.index[1]}({tc.iloc[1]/n*100:.0f}%)"
-                if len(tc) > 1
-                else ""
-            )
+            second = f"{tc.index[1]}({tc.iloc[1] / n * 100:.0f}%)" if len(tc) > 1 else ""
             kb_r = kb_to_ref.get(kb_label, "N/A")
             match_icon = "✓" if top == kb_r else "✗"
             rows.append(
@@ -176,12 +168,12 @@ class LabelTransferReport:
         print(
             f"\nCluster-level agreement: "
             f"{self.cluster_agreement}/{self.cluster_total} "
-            f"({self.cluster_agreement/self.cluster_total*100:.1f}%)"
+            f"({self.cluster_agreement / self.cluster_total * 100:.1f}%)"
         )
         print(
             f"Cell-level agreement:   "
             f"{self.cell_agreement}/{self.cell_total} "
-            f"({self.cell_agreement/self.cell_total*100:.1f}%)"
+            f"({self.cell_agreement / self.cell_total * 100:.1f}%)"
         )
 
     def print_mismatches(self):
@@ -213,9 +205,7 @@ class LabelTransferReport:
                 agree = 0
                 pct = 0
             else:
-                agree = (
-                    self.query_adata.obs.loc[mask, "transfer_label"] == ct_name
-                ).sum()
+                agree = (self.query_adata.obs.loc[mask, "transfer_label"] == ct_name).sum()
                 pct = agree / n * 100
             print(f"  {ct_name:15s}  {agree:>6d}/{n:<6d} ({pct:5.1f}%)")
 
@@ -252,15 +242,9 @@ class LabelTransferReport:
     def write_tables(self, output_dir: str, prefix: str = "label_transfer"):
         """写所有 CSV + JSON 到 output_dir。"""
         os.makedirs(output_dir, exist_ok=True)
-        self.per_cluster_df.to_csv(
-            os.path.join(output_dir, f"{prefix}_results.csv"), index=False
-        )
-        self.confusion.to_csv(
-            os.path.join(output_dir, f"{prefix}_confusion.csv")
-        )
-        self.confusion_pct.to_csv(
-            os.path.join(output_dir, f"{prefix}_confusion_pct.csv")
-        )
+        self.per_cluster_df.to_csv(os.path.join(output_dir, f"{prefix}_results.csv"), index=False)
+        self.confusion.to_csv(os.path.join(output_dir, f"{prefix}_confusion.csv"))
+        self.confusion_pct.to_csv(os.path.join(output_dir, f"{prefix}_confusion_pct.csv"))
         # per-cell mapping
         self.query_adata.obs[
             [
@@ -272,9 +256,7 @@ class LabelTransferReport:
             ]
         ].to_csv(os.path.join(output_dir, f"{prefix}_per_cell.csv"))
 
-        with open(
-            os.path.join(output_dir, f"{prefix}_summary.json"), "w"
-        ) as f:
+        with open(os.path.join(output_dir, f"{prefix}_summary.json"), "w") as f:
             json.dump(self.to_dict(), f, indent=2)
 
     def save_annotated_query(self, output_h5ad: str):
@@ -350,7 +332,9 @@ def run_label_transfer(
     has_raw = query.raw is not None
     if not has_raw:
         logger.warning("query.raw is None; falling back to query.var_names / query.copy()")
-    print(f"Query:     {query.n_obs}c × {query.n_vars}g (raw={query.raw.n_vars if has_raw else 0}g)")
+    print(
+        f"Query:     {query.n_obs}c × {query.n_vars}g (raw={query.raw.n_vars if has_raw else 0}g)"
+    )
 
     # ── 2. 共有基因子集 ──────────────────────────────────────────────
     common = np.intersect1d(ref.var_names, query.raw.var_names if has_raw else query.var_names)
@@ -369,9 +353,7 @@ def run_label_transfer(
 
     # ── 4. Ingest ─────────────────────────────────────────────────────
     print("Running sc.tl.ingest ...", end=" ", flush=True)
-    sc.tl.ingest(
-        query_raw, ref_sub, obs=ref_label_col, embedding_method=embedding_method
-    )
+    sc.tl.ingest(query_raw, ref_sub, obs=ref_label_col, embedding_method=embedding_method)
     print("Done.")
 
     # ══ 整理 obs 列名 ══
@@ -386,10 +368,7 @@ def run_label_transfer(
 
     if label_map is None:
         # 默认：ref 标签名 = KB 细胞类型名
-        label_map = {
-            ct: ct
-            for ct in sorted(ref.obs[ref_label_col].unique())
-        }
+        label_map = {ct: ct for ct in sorted(ref.obs[ref_label_col].unique())}
 
     # ── 6. 构建报告 ──────────────────────────────────────────────────
     report = LabelTransferReport(

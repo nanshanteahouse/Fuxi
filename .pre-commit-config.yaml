@@ -17,13 +17,21 @@ repos:
       - id: check-added-large-files
         args: [--maxkb=500]
 
-  # ── Python linting & formatting ───────────────────────────────────────
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.0
+  # ── Python linting & formatting (use .venv ruff) ──────────────────
+  - repo: local
     hooks:
       - id: ruff
-        args: [--fix]
+        name: ruff check
+        entry: .venv/bin/ruff check --fix
+        language: system
+        types: [python]
+        stages: [pre-commit]
       - id: ruff-format
+        name: ruff format
+        entry: .venv/bin/ruff format
+        language: system
+        types: [python]
+        stages: [pre-commit]
 
   # ── Type checking (local, slower — pre-push only) ─────────────────────
   - repo: local
