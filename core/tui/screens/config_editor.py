@@ -54,7 +54,7 @@ SECTION_LABELS: dict[str, str] = {
     "normalization": "Normalization",
     "hvg": "HVG",
     "pca": "PCA",
-    "harmony": "Harmony",
+    "integration": "Integration",
     "clustering": "Clustering",
     "marker": "Marker",
     "de": "Differential Expression",
