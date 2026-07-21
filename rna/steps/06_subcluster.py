@@ -254,7 +254,7 @@ def main():
 
                 # Harmony batch correction
                 if cfg.harmony.use_harmony and cfg.harmony.batch_key in sub_raw.obs.columns:
-                    from harmonypy import harmonize
+                    import harmonypy as hm
 
                     n_pcs_use = min(cfg.pca.n_pcs_use, n_comps_sub)
                     log.info(
@@ -263,14 +263,14 @@ def main():
                         n_pcs_use,
                     )
                     try:
-                        z = harmonize(
+                        ho = hm.run_harmony(
                             sub_raw.obsm["X_pca"][:, :n_pcs_use],
                             sub_raw.obs,
-                            batch_key=cfg.harmony.batch_key,
+                            vars_use=cfg.harmony.batch_key,
                             random_state=cfg.execution.random_seed,
                             max_iter_harmony=cfg.harmony.max_iter,
                         )
-                        sub_raw.obsm["X_pca_harmony"] = z
+                        sub_raw.obsm["X_pca_harmony"] = ho.Z_corr
                     except Exception as e:
                         log.warning("Subset Harmony failed (%s), using raw PCA", e)
                         sub_raw.obsm["X_pca_harmony"] = sub_raw.obsm["X_pca"].copy()

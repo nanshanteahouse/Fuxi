@@ -17,6 +17,7 @@ from core.config.dataset import (
     save_dataset,
     update_pipeline_status,
 )
+from core.paper.registry import MasterRegistry
 from core.pipeline.reproduce import (
     REPRODUCE_TIMEOUT,
     _detect_modality,
@@ -122,7 +123,7 @@ class TestRunPipelineForGse:
     def test_success(self, tmp_path: Path) -> None:
         config_path = self._make_config(tmp_path, "rna")
 
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="pipeline done", stderr="")
             result = _run_pipeline_for_gse("GSE001", config_path)
 
@@ -136,7 +137,7 @@ class TestRunPipelineForGse:
     def test_failure(self, tmp_path: Path) -> None:
         config_path = self._make_config(tmp_path, "atac")
 
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="error occurred")
             result = _run_pipeline_for_gse("GSE002", config_path)
 
@@ -147,7 +148,7 @@ class TestRunPipelineForGse:
     def test_timeout(self, tmp_path: Path) -> None:
         config_path = self._make_config(tmp_path, "rna")
 
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             mock_run.side_effect = subprocess.TimeoutExpired("cmd", REPRODUCE_TIMEOUT)
             result = _run_pipeline_for_gse("GSE003", config_path)
 
@@ -159,7 +160,7 @@ class TestRunPipelineForGse:
         config_path = tmp_path / "config.py"
         config_path.write_text("x = 1\n")  # no CFG.modality
 
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             result = _run_pipeline_for_gse("GSE004", str(config_path))
 
         assert result["status"] == "failed"
@@ -170,7 +171,7 @@ class TestRunPipelineForGse:
     def test_subprocess_called_with_correct_args(self, tmp_path: Path) -> None:
         config_path = self._make_config(tmp_path, "spatial")
 
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
             _run_pipeline_for_gse("GSE005", config_path)
 
@@ -188,7 +189,7 @@ class TestRunPipelineForGse:
         # Config says "rna", but we pass "atac" explicitly
         config_path = self._make_config(tmp_path, "rna")
 
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
             result = _run_pipeline_for_gse("GSE010", config_path, modality="atac")
 
@@ -203,7 +204,7 @@ class TestRunPipelineForGse:
         """Passing modality=None falls back to config detection."""
         config_path = self._make_config(tmp_path, "atac")
 
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
             result = _run_pipeline_for_gse("GSE011", config_path, modality=None)
 
@@ -225,7 +226,7 @@ class TestRunPipelineForGse:
             status=DatasetStatus.CONFIG_EXISTS,
         )
 
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="eg_ok", stderr="")
             result = _run_pipeline_for_gse("GSE012", config_path, experiment_group=eg)
 
@@ -236,7 +237,7 @@ class TestRunPipelineForGse:
         """Call with only _gse_id and config_path works identically to before."""
         config_path = self._make_config(tmp_path, "spatial")
 
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="spatial_ok", stderr="")
             result = _run_pipeline_for_gse("GSE013", config_path)
 
@@ -266,9 +267,9 @@ class TestRunPipelineForGse:
             )
         )
 
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
-            with patch("core.run_reproduce.update_pipeline_status") as mock_update:
+            with patch("core.pipeline.reproduce.update_pipeline_status") as mock_update:
                 result = _run_pipeline_for_gse("GSE001", config_path)
 
         assert result["status"] == "success"
@@ -283,9 +284,9 @@ class TestRunPipelineForGse:
         config_path = self._make_config(tmp_path, "rna")
         # No dataset.yaml created
 
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
-            with patch("core.run_reproduce.update_pipeline_status") as mock_update:
+            with patch("core.pipeline.reproduce.update_pipeline_status") as mock_update:
                 result = _run_pipeline_for_gse("GSE002", config_path)
 
         assert result["status"] == "success"
@@ -300,7 +301,7 @@ class TestRunPipelineForGse:
 
         caplog.set_level(logging.WARNING)
 
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
             result = _run_pipeline_for_gse("GSE003", config_path)
 
@@ -337,17 +338,41 @@ def _make_registry(
     datasets: list[dict],
     pmid: str = "12345678",
     paper_dir: str = "TestPaper",
-) -> dict:
-    """Build a minimal registry dict."""
-    return {
-        "papers": [
-            {
-                "pmid": pmid,
-                "paper_dir": paper_dir,
-                "datasets": datasets,
-            }
-        ]
-    }
+) -> MasterRegistry:
+    """Build a minimal MasterRegistry for testing."""
+    from core.paper.registry import (
+        DatasetConfig,
+        DatasetEntry,
+        LinkRole,
+        MasterRegistry,
+        ModalityInfo,
+        PaperDatasetLink,
+        PaperEntry,
+    )
+
+    paper_id = paper_dir
+    paper = PaperEntry(paper_id=paper_id, slug=paper_dir, pmid=pmid, paper_dir=paper_dir)
+
+    dataset_entries: dict[str, DatasetEntry] = {}
+    links: list[PaperDatasetLink] = []
+
+    for ds in datasets:
+        gse_id = ds["gse_id"]
+        modality = ds.get("modality", "rna")
+        status = ds.get("status", "unknown")
+        config_path = ds.get("config_path", "")
+        experiments = ds.get("experiments")
+
+        ds_config = DatasetConfig(path=config_path)
+        if experiments is not None:
+            ds_config.experiments = experiments
+
+        mod_info = ModalityInfo(status=status, configs=[ds_config])
+        dataset_entry = DatasetEntry(modalities={modality: mod_info})
+        dataset_entries[gse_id] = dataset_entry
+        links.append(PaperDatasetLink(paper_id=paper_id, dataset_id=gse_id, role=LinkRole.PRIMARY))
+
+    return MasterRegistry(papers=[paper], datasets=dataset_entries, links=links)
 
 
 class TestRunReproduceErrors:
@@ -377,7 +402,7 @@ class TestRunReproduceErrors:
     def test_no_registry_entry(self, tmp_path: Path) -> None:
         """Paper PMID not found in registry → empty results."""
         paper_dir = _make_paper_dir(tmp_path, name="NoReg", pmid="99999999")
-        results = run_reproduce(paper_dir, registry={"papers": []})
+        results = run_reproduce(paper_dir, registry=MasterRegistry())
         assert results == {}
 
     def test_gse_filter_excludes_others(self, tmp_path: Path) -> None:
@@ -421,7 +446,7 @@ class TestRunReproduceStates:
                 }
             ]
         )
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
             results = run_reproduce(paper_dir, registry=registry)
 
@@ -441,7 +466,7 @@ class TestRunReproduceStates:
                 }
             ]
         )
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             results = run_reproduce(paper_dir, registry=registry)
 
         assert results["GSE001"]["status"] == "not_configured"
@@ -461,7 +486,7 @@ class TestRunReproduceStates:
                 }
             ]
         )
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             results = run_reproduce(paper_dir, registry=registry)
 
         assert results["GSE001"]["status"] == "not_configured"
@@ -479,7 +504,7 @@ class TestRunReproduceStates:
                 }
             ]
         )
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             results = run_reproduce(paper_dir, registry=registry)
 
         assert results["GSE001"]["status"] == "skipped"
@@ -499,7 +524,7 @@ class TestRunReproduceStates:
                 }
             ]
         )
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             results = run_reproduce(paper_dir, registry=registry)
 
         assert results["GSE001"]["status"] == "skipped"
@@ -518,7 +543,7 @@ class TestRunReproduceStates:
                 }
             ]
         )
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             results = run_reproduce(paper_dir, registry=registry)
 
         assert results["GSE001"]["status"] == "skipped"
@@ -537,7 +562,7 @@ class TestRunReproduceStates:
                 }
             ]
         )
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             results = run_reproduce(paper_dir, registry=registry)
 
         assert results["GSE001"]["status"] == "skipped"
@@ -560,7 +585,7 @@ class TestRunReproduceDryRun:
                 }
             ]
         )
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             results = run_reproduce(paper_dir, registry=registry, dry_run=True)
 
         assert results["GSE001"]["status"] == "dry_run"
@@ -580,7 +605,7 @@ class TestRunReproduceDryRun:
                 }
             ]
         )
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             results = run_reproduce(paper_dir, registry=registry, dry_run=True)
 
         assert results["GSE001"]["status"] == "dry_run"
@@ -699,8 +724,10 @@ class TestCLI:
         # Patch the registry loader to return our test registry
         # and redirect projects/papers to tmp_path
         with (
-            patch("core.run_reproduce.load_registry", return_value=registry) as mock_load,
-            patch("core.run_reproduce.Path.is_dir", return_value=True),
+            patch(
+                "core.pipeline.reproduce.load_master_registry", return_value=registry
+            ) as mock_load,
+            patch("core.pipeline.reproduce.Path.is_dir", return_value=True),
         ):
             from core.pipeline.reproduce import main
 
@@ -750,7 +777,7 @@ class TestRunReproduceWithExperimentGroups:
             ]
         )
 
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
             results = run_reproduce(paper_dir, registry=registry)
 
@@ -788,7 +815,7 @@ class TestRunReproduceWithExperimentGroups:
             ]
         )
 
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
             results = run_reproduce(paper_dir, registry=registry)
 
@@ -845,7 +872,7 @@ class TestRunReproduceWithExperimentGroups:
             ]
         )
 
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
             results = run_reproduce(paper_dir, registry=registry)
 
@@ -880,7 +907,7 @@ class TestRunReproduceWithExperimentGroups:
             ]
         )
 
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
             results = run_reproduce(paper_dir, registry=registry)
 
@@ -906,8 +933,10 @@ class TestRunReproduceWithExperimentGroups:
         mod_idx = cmd.index("--modality") + 1
         assert cmd[mod_idx] == "rna"
 
-        # Registry dataset entry has no experiments field (None → flat dispatch)
-        assert "experiments" not in registry["papers"][0]["datasets"][0]
+        # Config's experiments list is empty → flat dispatch
+        ds_entry = registry.datasets["GSE004"]
+        cfg = ds_entry.modalities["rna"].configs[0]
+        assert cfg.experiments == []
 
     def test_mixed_datasets(self, tmp_path: Path) -> None:
         """Some datasets with experiments, some without."""
@@ -943,7 +972,7 @@ class TestRunReproduceWithExperimentGroups:
             ]
         )
 
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
             results = run_reproduce(paper_dir, registry=registry)
 
@@ -986,11 +1015,11 @@ class TestRunReproduceWithExperimentGroups:
         )
 
         with (
-            patch("core.run_reproduce.subprocess.run") as mock_subproc,
+            patch("core.pipeline.reproduce.subprocess.run") as mock_subproc,
             patch("core.preprocess.preprocessor.run_preprocess", return_value=0) as mock_preproc,
-            patch("core.run_reproduce.shutil.copy2") as mock_copy,
+            patch("core.pipeline.reproduce.shutil.copy2") as mock_copy,
             patch("core.preprocess.matrix_loader._post_process_config") as mock_post,
-            patch("core.run_reproduce.os.path.exists", return_value=True),
+            patch("core.pipeline.reproduce.os.path.exists", return_value=True),
         ):
             results = run_reproduce(paper_dir, registry=registry)
 
@@ -1079,7 +1108,7 @@ class TestGSE310245ExperimentGroups:
         )
 
         # VP3: Call run_reproduce(paper_dir, dry_run=False) with mocked subprocess
-        with patch("core.run_reproduce.subprocess.run") as mock_run:
+        with patch("core.pipeline.reproduce.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
             results = run_reproduce(paper_dir, registry=registry)
 
@@ -1140,53 +1169,80 @@ class TestPipelineStatusWrite:
         paper_dir = tmp_path / "papers" / "TestPaper"
         paper_dir.mkdir(parents=True)
         reg_path = tmp_path / "papers" / "registry.yaml"
-        registry_data: dict = {
-            "papers": [
-                {
-                    "pmid": "12345678",
-                    "paper_dir": "TestPaper",
-                    "datasets": [
-                        {
-                            "gse_id": "GSE001",
-                            "config_path": "/fake/config.py",
-                            "status": "config_exists",
-                            "modality": "rna",
-                        }
-                    ],
-                }
-            ]
-        }
-        reg_path.write_text(yaml.dump(registry_data))
+
+        from core.paper.registry import (
+            DatasetConfig,
+            DatasetEntry,
+            LinkRole,
+            MasterRegistry,
+            ModalityInfo,
+            PaperDatasetLink,
+            PaperEntry,
+        )
+
+        paper = PaperEntry(
+            paper_id="12345678", slug="TestPaper", pmid="12345678", paper_dir="TestPaper"
+        )
+        dataset = DatasetEntry(
+            modalities={
+                "rna": ModalityInfo(
+                    status="config_exists",
+                    configs=[DatasetConfig(path="/fake/config.py")],
+                )
+            }
+        )
+        test_registry = MasterRegistry(
+            papers=[paper],
+            datasets={"GSE001": dataset},
+            links=[
+                PaperDatasetLink(paper_id="12345678", dataset_id="GSE001", role=LinkRole.PRIMARY)
+            ],
+        )
 
         result = {
             "status": "success",
             "config_path": "/fake/config.py",
             "modality": "rna",
         }
-        _write_pipeline_status(str(reg_path), "GSE001", result, str(paper_dir))
 
-        updated = yaml.safe_load(reg_path.read_text())
-        ds = updated["papers"][0]["datasets"][0]
-        assert ds["status"] == "pipeline_complete"
-        assert ds["gse_id"] == "GSE001"
+        with (
+            patch("core.pipeline.reproduce.load_master_registry", return_value=test_registry),
+            patch("core.pipeline.reproduce.save_master_registry") as mock_save,
+        ):
+            _write_pipeline_status(str(reg_path), "GSE001", result, str(paper_dir))
+
+        saved_registry = mock_save.call_args[0][0]
+        ds = saved_registry.datasets["GSE001"]
+        assert ds.status == "pipeline_complete"
+        assert ds.modalities["rna"].configs[0].pipeline_status == "pipeline_complete"
 
     def test_write_sets_experiment_group_status(self, tmp_path: Path) -> None:
         """Successful experiment group run updates group status."""
         paper_dir = tmp_path / "papers" / "ExpPaper"
         paper_dir.mkdir(parents=True)
         reg_path = tmp_path / "papers" / "registry.yaml"
-        registry_data: dict = {
-            "papers": [
-                {
-                    "pmid": "87654321",
-                    "paper_dir": "ExpPaper",
-                    "datasets": [
-                        {
-                            "gse_id": "GSE002",
-                            "config_path": "/fake/base.py",
-                            "status": "config_exists",
-                            "modality": "rna",
-                            "experiments": [
+
+        from core.paper.registry import (
+            DatasetConfig,
+            DatasetEntry,
+            LinkRole,
+            MasterRegistry,
+            ModalityInfo,
+            PaperDatasetLink,
+            PaperEntry,
+        )
+
+        paper = PaperEntry(
+            paper_id="87654321", slug="ExpPaper", pmid="87654321", paper_dir="ExpPaper"
+        )
+        dataset = DatasetEntry(
+            modalities={
+                "rna": ModalityInfo(
+                    status="config_exists",
+                    configs=[
+                        DatasetConfig(
+                            path="/fake/base.py",
+                            experiments=[
                                 {
                                     "group_name": "Myeloid",
                                     "sample_ids": ["s1"],
@@ -1195,12 +1251,18 @@ class TestPipelineStatusWrite:
                                     "status": "config_exists",
                                 }
                             ],
-                        }
+                        )
                     ],
-                }
-            ]
-        }
-        reg_path.write_text(yaml.dump(registry_data))
+                )
+            }
+        )
+        test_registry = MasterRegistry(
+            papers=[paper],
+            datasets={"GSE002": dataset},
+            links=[
+                PaperDatasetLink(paper_id="87654321", dataset_id="GSE002", role=LinkRole.PRIMARY)
+            ],
+        )
 
         result = {
             "status": "success",
@@ -1208,12 +1270,19 @@ class TestPipelineStatusWrite:
             "modality": "rna",
             "group_name": "Myeloid",
         }
-        _write_pipeline_status(str(reg_path), "GSE002", result, str(paper_dir))
 
-        updated = yaml.safe_load(reg_path.read_text())
-        exp = updated["papers"][0]["datasets"][0]["experiments"][0]
-        assert exp["status"] == "pipeline_complete"
-        assert exp["group_name"] == "Myeloid"
+        with (
+            patch("core.pipeline.reproduce.load_master_registry", return_value=test_registry),
+            patch("core.pipeline.reproduce.save_master_registry") as mock_save,
+        ):
+            _write_pipeline_status(str(reg_path), "GSE002", result, str(paper_dir))
+
+        saved_registry = mock_save.call_args[0][0]
+        ds = saved_registry.datasets["GSE002"]
+        mod_info = ds.modalities["rna"]
+        cfg = mod_info.configs[0]
+        assert cfg.experiments[0]["status"] == "pipeline_complete"
+        assert cfg.experiments[0]["group_name"] == "Myeloid"
 
     def test_write_gse_not_found_logs_warning(self, tmp_path: Path, caplog) -> None:
         """GSE not in registry logs warning without error."""
@@ -1229,8 +1298,8 @@ class TestPipelineStatusWrite:
         assert "GSE999" in caplog.text
         assert "not found" in caplog.text
 
-    def test_write_atomic_write_pattern(self, tmp_path: Path) -> None:
-        """Verify atomic write uses temp file + rename."""
+    def test_write_calls_save_master_registry(self, tmp_path: Path) -> None:
+        """Verify pipeline_complete write calls save_master_registry."""
         paper_dir = tmp_path / "papers" / "AtomicTest"
         paper_dir.mkdir(parents=True)
         reg_path = tmp_path / "papers" / "registry.yaml"
@@ -1239,23 +1308,13 @@ class TestPipelineStatusWrite:
         result: dict = {"status": "success"}
 
         with (
-            patch("core.run_reproduce.load_registry") as mock_load,
-            patch("core.run_reproduce.tempfile.NamedTemporaryFile") as mock_tmp,
-            patch("core.run_reproduce.os.rename") as mock_rename,
+            patch("core.pipeline.reproduce.load_master_registry") as mock_load,
+            patch("core.pipeline.reproduce.save_master_registry") as mock_save,
         ):
-            mock_load.return_value = {
-                "papers": [
-                    {
-                        "paper_dir": "AtomicTest",
-                        "datasets": [
-                            {"gse_id": "GSE001", "status": "config_exists", "config_path": ""}
-                        ],
-                    }
-                ]
-            }
-            mock_tmp.return_value.__enter__.return_value.name = str(tmp_path / "tmp_registry.yaml")
+            from core.paper.registry import DatasetEntry, MasterRegistry
+
+            mock_load.return_value = MasterRegistry(datasets={"GSE001": DatasetEntry()})
 
             _write_pipeline_status(str(reg_path), "GSE001", result, str(paper_dir))
 
-        mock_tmp.assert_called_once()
-        mock_rename.assert_called_once()
+        mock_save.assert_called_once()

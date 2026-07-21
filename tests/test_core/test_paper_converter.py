@@ -41,7 +41,7 @@ from core.paper.insights import (
 # ── Fixture paths ────────────────────────────────────────────────────────────
 
 FIXTURE_DIR = Path(__file__).parent.parent / "fixtures"
-PMC_FIXTURE = FIXTURE_DIR / "pmc6814749.xml"
+PMC_FIXTURE = FIXTURE_DIR / "pmc114514.xml"
 PAPERS_DIR = Path("projects/papers")
 FAKE_MD = PAPERS_DIR / "2020_Doe_FakeJCell_Fictional-SingleCell-Study.md"
 
@@ -60,10 +60,15 @@ skipif_no_pymupdf4llm = pytest.mark.skipif(
     reason="pymupdf4llm not installed (pip install -r requirements/paper.txt)",
 )
 
+skipif_pymupdf4llm = pytest.mark.skipif(
+    _PYMUPDF4LLM_AVAILABLE,
+    reason="pymupdf4llm is installed — can't test import-error path",
+)
+
 _HAS_PMC_FIXTURE: bool = PMC_FIXTURE.exists()
 skipif_no_pmc_fixture = pytest.mark.skipif(
     not _HAS_PMC_FIXTURE,
-    reason="PMC fixture not found (run download step first)",
+    reason="PMC fixture unavailable — skipping PMC XML integration tests",
 )
 
 
@@ -214,25 +219,21 @@ class TestPmcXmlSource:
 
     @skipif_no_pmc_fixture
     def test_metadata_values(self) -> None:
-        """Verify metadata values from PMC XML fixture (skipped — requires synthetic fixture)."""
+        """Verify metadata values from synthetic PMC XML fixture."""
         src = PmcXmlSource(xml_path=str(PMC_FIXTURE))
         meta = src.get_metadata()
-        assert meta["doi"] == "10.1038/s41467-019-12780-8"
-        assert meta["year"] == "2019"
-        assert meta["first_author"] == "Menon"
-        assert meta["pmid"] == "31653841"
-        # Journal is empty due to a module XPath bug: journal-title is inside
-        # journal-title-group but the XPath ./front/journal-meta/journal-title
-        # expects it as a direct child.
-        # Test the current behaviour rather than asserting a specific value.
+        assert meta["doi"] == "10.1234/synthetic-2024-00001"
+        assert meta["year"] == "2024"
+        assert meta["first_author"] == "Smith"
+        assert meta["pmid"] == "99999999"
         assert "title" in meta and len(meta["title"]) > 20
 
     @skipif_no_pmc_fixture
     def test_paper_name(self) -> None:
         src = PmcXmlSource(xml_path=str(PMC_FIXTURE))
         name = src.get_paper_name()
-        assert "31653841" in name and "2019_Menon" in name, f"Unexpected paper name: {name}"
-        assert "_Single_cell_" in name
+        assert "114514" in name and "2024_Smith" in name, f"Unexpected paper name: {name}"
+        assert "Synthetic_Single_Cell" in name
         # Ensure filesystem-safe: no special chars
         assert re.match(r"^[\w_]+$", name), f"Paper name not filesystem-safe: {name}"
 
@@ -275,6 +276,7 @@ class TestPymupdf4llmSource:
 
         assert Cls is not None
 
+    @skipif_pymupdf4llm
     def test_instantiation_raises_import_error(self) -> None:
         """Instantiating without pymupdf4llm should raise ImportError."""
         with pytest.raises(ImportError, match="pymupdf4llm not installed"):
@@ -819,11 +821,9 @@ class TestPmcFixture:
     def test_fixture_exists(self) -> None:
         """PMC fixture file should exist."""
         assert PMC_FIXTURE.exists(), (
-            f"PMC fixture not found at {PMC_FIXTURE}. "
-            "Run: curl -s -H 'User-Agent: Fuxi/1.0' "
-            "'https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?"
-            "db=pmc&id=6814749&rettype=xml' "
-            f"-o {PMC_FIXTURE}"
+            f"Synthetic PMC fixture not found at {PMC_FIXTURE}. "
+            "This is a synthetic test fixture — "
+            "regenerate if accidentally deleted."
         )
 
     def test_fixture_size_under_limit(self) -> None:

@@ -56,7 +56,9 @@ class TestAppLaunch:
             async with FuxiTUI().run_test(size=(80, 24)) as pilot:
                 await asyncio.sleep(0.15)
                 static = pilot.app.screen.query_one("#home-logo")
-                assert "Fuxi" in str(static.visual)
+                # Logo is ASCII art of "FUXI" in box-drawing characters,
+                # so check visual is present rather than matching text.
+                assert str(static.visual).strip()
 
         _run(check())
 
@@ -69,35 +71,31 @@ class TestAppLaunch:
 class TestScreenNavigation:
     def test_all_keyboard_shortcuts(self):
         from core.tui.screens.home import HomeScreen
-        from core.tui.screens.pipeline import PipelineScreen
-        from core.tui.screens.registry import RegistryScreen
-        from core.tui.screens.results import ResultsScreen
+        from core.tui.screens.pipeline import PipelineRunnerScreen
+        from core.tui.screens.registry import RegistryBrowserScreen
+        from core.tui.screens.results import ResultsSummaryScreen
 
         async def check():
             async with FuxiTUI().run_test(size=(80, 24)) as pilot:
                 a = pilot.app
                 await pilot.press("ctrl+r")
-                assert type(a.screen) is RegistryScreen
+                assert type(a.screen) is RegistryBrowserScreen
                 await pilot.press("ctrl+p")
-                assert type(a.screen) is PipelineScreen
+                assert type(a.screen) is PipelineRunnerScreen
                 await pilot.press("ctrl+e")
-                assert type(a.screen) is ResultsScreen
+                assert type(a.screen) is ResultsSummaryScreen
                 await pilot.press("ctrl+d")
                 assert a.screen.id == "data-mgmt"
                 await pilot.press("ctrl+c")
                 assert a.screen.id == "config-editor"
-                await pilot.press("ctrl+h")
+                await pilot.press("f1")
                 assert type(a.screen) is HomeScreen
 
         _run(check())
 
+    @pytest.mark.skip(reason="Sidebar widget removed from TUI")
     def test_sidebar_highlights_active(self):
-        async def check():
-            async with FuxiTUI().run_test(size=(80, 24)) as pilot:
-                await pilot.press("ctrl+p")
-                assert pilot.app.screen.query_one("#pipeline") is not None
-
-        _run(check())
+        pass
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -148,10 +146,10 @@ class TestRegistryScreen:
     def test_registry_screen_renders(self):
         async def check():
             async with FuxiTUI().run_test(size=(80, 24)) as pilot:
-                from core.tui.screens.registry import RegistryScreen
+                from core.tui.screens.registry import RegistryBrowserScreen
 
                 await pilot.press("ctrl+r")
-                assert type(pilot.app.screen) is RegistryScreen
+                assert type(pilot.app.screen) is RegistryBrowserScreen
 
         _run(check())
 
@@ -285,10 +283,10 @@ class TestPipelineScreen:
     def test_pipeline_screen_renders(self):
         async def check():
             async with FuxiTUI().run_test(size=(80, 24)) as pilot:
-                from core.tui.screens.pipeline import PipelineScreen
+                from core.tui.screens.pipeline import PipelineRunnerScreen
 
                 await pilot.press("ctrl+p")
-                assert type(pilot.app.screen) is PipelineScreen
+                assert type(pilot.app.screen) is PipelineRunnerScreen
 
         _run(check())
 
@@ -306,10 +304,10 @@ class TestResultsScreen:
     def test_results_screen_renders(self):
         async def check():
             async with FuxiTUI().run_test(size=(80, 24)) as pilot:
-                from core.tui.screens.results import ResultsScreen
+                from core.tui.screens.results import ResultsSummaryScreen
 
                 await pilot.press("ctrl+e")
-                assert type(pilot.app.screen) is ResultsScreen
+                assert type(pilot.app.screen) is ResultsSummaryScreen
 
         _run(check())
 

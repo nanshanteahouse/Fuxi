@@ -452,7 +452,7 @@ def main():
             "warnings": collinear_warnings,
         }
     elif cfg.harmony.use_harmony and bk_list:
-        from harmonypy import harmonize
+        import harmonypy as hm
 
         # Unified NaN detection across all batch keys
         nan_mask = adata.obs[bk_list].isna().any(axis=1)
@@ -466,15 +466,15 @@ def main():
             adata._inplace_subset_obs(~nan_mask)
         log.info("Harmony correction (batch_keys=%s)...", bk_list)
         try:
-            z = harmonize(
+            ho = hm.run_harmony(
                 adata.obsm["X_pca"][:, : cfg.pca.n_pcs_use],
                 adata.obs,
-                batch_key=bk_list,
+                vars_use=bk_list,
                 random_state=cfg.execution.random_seed,
                 max_iter_harmony=cfg.harmony.max_iter,
             )
-            adata.obsm["X_pca_harmony"] = z
-            log.info("  Harmony complete, output shape: %s", z.shape)
+            adata.obsm["X_pca_harmony"] = ho.Z_corr
+            log.info("  Harmony complete, output shape: %s", ho.Z_corr.shape)
         except Exception as e:
             log.warning("Harmony correction failed (%s) — continuing with raw PCA", e)
             adata.obsm["X_pca_harmony"] = adata.obsm["X_pca"].copy()

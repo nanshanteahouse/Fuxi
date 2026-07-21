@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE article PUBLIC "-//NLM//DTD JATS (Z39.96) Journal Publishing DTD v1.0 20120330//EN" "JATS-journalpublishing1.dtd">
+<article>
+<front>
+<journal-meta>
+<journal-title-group>
+<journal-title>SynthJCell</journal-title>
+</journal-title-group>
+</journal-meta>
+<article-meta>
+<article-id pub-id-type="pmid">114514</article-id>
+<article-id pub-id-type="doi">10.1234/synthetic-2024-00001</article-id>
+<title-group>
+<article-title>Synthetic Single-Cell Study for Testing Purposes</article-title>
+</title-group>
+<contrib-group>
+<contrib contrib-type="author">
+<name><surname>Smith</surname><given-names>J</given-names></name>
+</contrib>
+</contrib-group>
+<pub-date pub-type="epub">
+<year>2024</year>
+</pub-date>
+<abstract>
+<p>This is a fully synthetic abstract for testing. Single-cell RNA sequencing was performed on synthetic retinal data to demonstrate the paper converter infrastructure.</p>
+</abstract>
+</article-meta>
+</front>
+<body>
+<sec>
+<title>Introduction</title>
+<p>Single-cell transcriptomics has transformed our understanding of retinal cell types. This synthetic study uses simulated single-cell data to validate the paper converter pipeline. Retinal biology serves as the thematic backdrop for this test fixture.</p>
+<fig>
+<label>Figure 1</label>
+<caption><title>Synthetic overview of experimental design</title><p>Overview of the simulated single-cell RNA-seq workflow from sample preparation through computational analysis.</p></caption>
+</fig>
+</sec>
+<sec>
+<title>Results</title>
+<p>We analyzed simulated single-cell RNA-seq data representing retinal cell populations. Our analysis identified multiple transcriptionally distinct cell types including rod photoreceptors, cone photoreceptors, bipolar cells, amacrine cells, retinal ganglion cells, and Müller glia. Differential expression analysis revealed cell-type-specific marker genes consistent with known retinal biology. Pathway enrichment analysis highlighted biological processes relevant to photoreceptor function and synaptic transmission. Integration with public datasets confirmed the reproducibility of our synthetic annotations across platforms.</p>
+<p>Clustering analysis at multiple resolutions demonstrated robust separation of major retinal cell classes. We observed that the simulated data recapitulated known hierarchical relationships among retinal cell types, with photoreceptors forming a distinct cluster from inner retinal neurons.</p>
+<fig>
+<label>Figure 2</label>
+<caption><title>UMAP visualization of simulated retinal clusters</title><p>Two-dimensional UMAP embedding of 15 synthetic clusters representing major retinal cell types. Colors indicate cluster membership.</p></caption>
+</fig>
+<fig>
+<label>Figure 3</label>
+<caption><title>Expression heatmap of canonical retinal markers</title><p>Heatmap showing expression patterns of known retinal marker genes across all identified clusters. Rows represent genes, columns represent cells grouped by cluster.</p></caption>
+</fig>
+</sec>
+<sec>
+<title>Discussion</title>
+<p>This synthetic single-cell atlas demonstrates the utility of our paper converter pipeline for processing PMC XML documents. While the data are entirely simulated, the analysis framework and validation procedures mirror those used in real single-cell studies. The pipeline correctly extracts sections, figures, and metadata from the JATS XML format. Future work will extend these capabilities to additional XML schemas and document types.</p>
+</sec>
+<sec>
+<title>Methods</title>
+<p>Simulated single-cell RNA-seq data were generated using the Splatter simulation framework. The simulated dataset contains 5000 cells across 15 cell types with 20000 features. Parameters were calibrated to match typical retinal single-cell datasets in terms of library size, gene detection rate, and biological variability. Quality control filtering removed cells with fewer than 500 detected genes, more than 7500 genes, or mitochondrial content exceeding 20 percent. Data were normalized using scran pooling-based size factor estimation, and log-transformed prior to downstream analysis.</p>
+<p>Highly variable gene selection identified the top 3000 genes using the Seurat v3 variance-stabilizing transformation. Principal component analysis was performed on the scaled expression matrix, and the top 30 principal components were retained for dimensionality reduction and clustering. Cell clustering was performed using the Leiden algorithm implemented in Scanpy with resolution parameters from 0.3 to 2.0. Cluster visualization was performed using UMAP with default parameters. Differential expression analysis was performed using the Wilcoxon rank-sum test implementation in Scanpy.</p>
+<p>Cell-type annotation was performed by comparing cluster marker genes against established retinal cell-type markers from the literature. Key markers included RHO and GNAT1 for rod photoreceptors, ARR3 and GNAT2 for cone photoreceptors, VSX2 and PRKCA for bipolar cells, GAD1 and SLC32A1 for amacrine cells, POU4F1 and NEFL for retinal ganglion cells, and RLBP1 and GLUL for Müller glia. All analyses were performed using Scanpy version 1.10 in a Python 3.14 environment.</p>
+</sec>
+</body>
+</article>

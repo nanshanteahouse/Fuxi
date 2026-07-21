@@ -184,7 +184,7 @@ def test_T3_collinearity_guard_aborts_harmony() -> None:
             "rna.utils.batch_diagnostics.diagnose_batch_candidates",
             return_value=report,
         ),
-        patch("harmonypy.harmonize", harmonize_mock),
+        patch("harmonypy.run_harmony", harmonize_mock),
         patch.object(_mod, "safe_write", side_effect=_capture_adata_on_save(captured)),
     ):
         _mod.main()
@@ -224,7 +224,10 @@ def test_T3_collinearity_guard_disabled_harmony_runs() -> None:
     captured: list[AnnData] = []
 
     def _fake_harmonize(z, *args, **kwargs):
-        return np.random.RandomState(42).randn(z.shape[0], 50)
+        z_corr = np.random.RandomState(42).randn(z.shape[0], 50)
+        mock = MagicMock()
+        mock.Z_corr = z_corr
+        return mock
 
     with (
         patch.object(
@@ -244,7 +247,7 @@ def test_T3_collinearity_guard_disabled_harmony_runs() -> None:
             "rna.utils.batch_diagnostics.diagnose_batch_candidates",
             return_value=report,
         ),
-        patch("harmonypy.harmonize", side_effect=_fake_harmonize),
+        patch("harmonypy.run_harmony", side_effect=_fake_harmonize),
         patch.object(
             _mod.sc.pl,
             "embedding",
@@ -283,7 +286,10 @@ def test_T3_collinearity_report_none_skips_guard() -> None:
     captured: list[AnnData] = []
 
     def _fake_harmonize(z, *args, **kwargs):
-        return np.random.RandomState(42).randn(z.shape[0], 50)
+        z_corr = np.random.RandomState(42).randn(z.shape[0], 50)
+        mock = MagicMock()
+        mock.Z_corr = z_corr
+        return mock
 
     with (
         patch.object(
@@ -299,7 +305,7 @@ def test_T3_collinearity_report_none_skips_guard() -> None:
         patch.object(_mod.sc.pp, "log1p"),
         patch.object(_mod.sc.pp, "pca"),
         patch("core.utils.validate_adata", return_value=False),
-        patch("harmonypy.harmonize", side_effect=_fake_harmonize),
+        patch("harmonypy.run_harmony", side_effect=_fake_harmonize),
         patch.object(
             _mod.sc.pl,
             "embedding",

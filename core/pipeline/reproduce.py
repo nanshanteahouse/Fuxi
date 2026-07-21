@@ -488,6 +488,7 @@ def run_reproduce(
                 "modality": modality,
                 "reason": f"status={status_val}",
             }
+    return results
 
 
 # ──────────────────────────────────────────────

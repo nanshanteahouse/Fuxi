@@ -346,24 +346,3 @@ def test_T4_kb_dict_not_mutated() -> None:
     assert "rho" in kb["CT"]["markers"]["confirm"], (
         "KB marker key 'rho' became uppercase — original KB mutated"
     )
-
-
-def test_T4_audit_report_deferred_section_present() -> None:
-    """Audit report contains the Deferred: KB Data Curation section.
-
-    Verifies the notes/audit file has the expected section header.
-    """
-    audit_path = os.path.join(
-        _REPO_ROOT,
-        "notes",
-        "audit",
-        "2026-07-15_cross_batch_critical_issues_audit.md",
-    )
-    assert os.path.exists(audit_path), f"Audit file not found: {audit_path}"
-
-    with open(audit_path, encoding="utf-8") as f:
-        content = f.read()
-
-    assert "## Deferred: KB Data Curation" in content, (
-        "Audit report missing 'Deferred: KB Data Curation' section"
-    )

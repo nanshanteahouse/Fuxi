@@ -88,7 +88,14 @@ def _maybe_resolve_forward_ref(annotation: Any) -> Any:
     from annotationlib import ForwardRef  # stdlib since Python 3.12
 
     if isinstance(annotation, ForwardRef):
-        resolved = annotation.evaluate()
+        # Pydantic ForwardRefs originate from core/config/schema.py.
+        # Pass the module's globals so forward refs like "PseudobulkDESettings"
+        # resolve correctly when evaluated.
+        import sys
+
+        mod = sys.modules.get("core.config.schema")
+        globals_dict = vars(mod) if mod else None
+        resolved = annotation.evaluate(globals=globals_dict)
         if resolved is not None:
             return resolved
     return annotation
