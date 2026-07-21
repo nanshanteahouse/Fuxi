@@ -309,6 +309,9 @@ def main():
     # ── (e) Neighbors (use Harmony-corrected PCA when available) ─────
     n_pcs_use = min(cfg.pca.n_pcs_use, n_comps_sub)
     use_rep = "X_integrated" if "X_integrated" in sub.obsm else "X_pca"
+    if use_rep in sub.obsm:
+        n_pcs_use = min(n_pcs_use, sub.obsm[use_rep].shape[1])
+    use_rep = "X_integrated" if "X_integrated" in sub.obsm else "X_pca"
     log.info("Computing neighbor graph (use_rep=%s, n_pcs=%d)...", use_rep, n_pcs_use)
     sc.pp.neighbors(sub, n_pcs=n_pcs_use, use_rep=use_rep, random_state=cfg.execution.random_seed)
 

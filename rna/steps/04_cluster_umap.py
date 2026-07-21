@@ -75,10 +75,11 @@ def main():
 
     # Scanpy-specific callables (close over CFG and use_rep)
     def _neighbors_fn(adata, n_neighbors=15, **kwargs):
+        actual_dims = adata.obsm[use_rep].shape[1]
         sc.pp.neighbors(
             adata,
             n_neighbors=n_neighbors,
-            n_pcs=cfg.pca.n_pcs_use,
+            n_pcs=min(cfg.pca.n_pcs_use, actual_dims),
             use_rep=use_rep,
             random_state=cfg.execution.random_seed,
         )
@@ -113,14 +114,16 @@ def main():
             idx = rng.choice(adata.n_obs, SILHOUETTE_SAMPLE_THRESHOLD, replace=False)
             return float(
                 silhouette_score(
-                    adata.obsm[use_rep][idx, : cfg.pca.n_pcs_use],
+                    adata.obsm[use_rep][
+                        idx, : min(cfg.pca.n_pcs_use, adata.obsm[use_rep].shape[1])
+                    ],
                     labels[idx],
                 )
             )
         else:
             return float(
                 silhouette_score(
-                    adata.obsm[use_rep][:, : cfg.pca.n_pcs_use],
+                    adata.obsm[use_rep][:, : min(cfg.pca.n_pcs_use, adata.obsm[use_rep].shape[1])],
                     labels,
                 )
             )
