@@ -248,7 +248,11 @@ def run_cci_permutation(
 
     if log:
         n_interactions = len(lr_res)
-        n_sig = (lr_res.get("pvalue", 1.0) < 0.05).sum() if "pvalue" in lr_res.columns else 0
+        if "pvalue" in lr_res.columns:
+            pvals = cast(pd.Series, lr_res["pvalue"])
+            n_sig = int((pvals < 0.05).sum())
+        else:
+            n_sig = 0
         log.info(
             "CCI permutation done: %d total, %d significant (p<0.05), took %.1fs",
             n_interactions,
