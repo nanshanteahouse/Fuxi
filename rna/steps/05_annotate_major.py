@@ -160,7 +160,8 @@ def run_subclustering(adata, cfg, subcluster_types, resolution, min_cells, logge
 
         logger.info("  Subclustering %s (%d cells)...", parent_type, n_cells)
         sub = adata[mask].copy()
-        sc.pp.neighbors(sub, n_pcs=50, use_rep="X_pca_harmony", random_state=42)
+        use_rep = "X_integrated" if "X_integrated" in sub.obsm else "X_pca"
+        sc.pp.neighbors(sub, n_pcs=50, use_rep=use_rep, random_state=42)
         sc.tl.leiden(
             sub,
             resolution=resolution,

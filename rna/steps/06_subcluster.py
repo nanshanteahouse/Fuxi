@@ -253,33 +253,41 @@ def main():
                 log.info("Subset PCA: n_comps=%d", n_comps_sub)
 
                 # Harmony batch correction
-                if cfg.harmony.use_harmony and cfg.harmony.batch_key in sub_raw.obs.columns:
+                if (
+                    cfg.integration.method == "harmony"
+                    and cfg.integration.batch_key in sub_raw.obs.columns
+                ):
                     import harmonypy as hm
 
                     n_pcs_use = min(cfg.pca.n_pcs_use, n_comps_sub)
                     log.info(
                         "Subset Harmony (batch_key=%s, n_pcs_use=%d)...",
-                        cfg.harmony.batch_key,
+                        cfg.integration.batch_key,
                         n_pcs_use,
                     )
                     try:
                         ho = hm.run_harmony(
                             sub_raw.obsm["X_pca"][:, :n_pcs_use],
                             sub_raw.obs,
-                            vars_use=cfg.harmony.batch_key,
+                            vars_use=cfg.integration.batch_key,
                             random_state=cfg.execution.random_seed,
-                            max_iter_harmony=cfg.harmony.max_iter,
+                            max_iter_harmony=cfg.integration.max_iter,
                         )
-                        sub_raw.obsm["X_pca_harmony"] = ho.Z_corr
+                        sub_raw.obsm["X_integrated"] = ho.Z_corr
                     except Exception as e:
                         log.warning("Subset Harmony failed (%s), using raw PCA", e)
-                        sub_raw.obsm["X_pca_harmony"] = sub_raw.obsm["X_pca"].copy()
+                        sub_raw.obsm["X_integrated"] = sub_raw.obsm["X_pca"].copy()
                 else:
-                    sub_raw.obsm["X_pca_harmony"] = sub_raw.obsm["X_pca"].copy()
+                    log.warning(
+                        "Subcluster Harmony skipped — integration method is '%s', not 'harmony'. "
+                        "Subcluster-level batch effects may persist.",
+                        cfg.integration.method,
+                    )
+                    sub_raw.obsm["X_integrated"] = sub_raw.obsm["X_pca"].copy()
 
                 # Copy embeddings back to sub (already index-aligned)
                 sub.obsm["X_pca"] = sub_raw.obsm["X_pca"]
-                sub.obsm["X_pca_harmony"] = sub_raw.obsm["X_pca_harmony"]
+                sub.obsm["X_integrated"] = sub_raw.obsm["X_integrated"]
             else:
                 log.warning("Subset HVG selection failed, falling back to parent-level PCA")
                 n_comps_sub = min(50, sub.n_obs - 2)
@@ -300,7 +308,7 @@ def main():
 
     # ── (e) Neighbors (use Harmony-corrected PCA when available) ─────
     n_pcs_use = min(cfg.pca.n_pcs_use, n_comps_sub)
-    use_rep = "X_pca_harmony" if "X_pca_harmony" in sub.obsm else "X_pca"
+    use_rep = "X_integrated" if "X_integrated" in sub.obsm else "X_pca"
     log.info("Computing neighbor graph (use_rep=%s, n_pcs=%d)...", use_rep, n_pcs_use)
     sc.pp.neighbors(sub, n_pcs=n_pcs_use, use_rep=use_rep, random_state=cfg.execution.random_seed)
 

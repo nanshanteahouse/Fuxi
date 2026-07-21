@@ -36,7 +36,7 @@ def recompute_neighbors(adata, cfg, log):
     """确保邻居图和 UMAP 存在"""
     if "neighbors" not in adata.uns:
         log.info("Recomputing neighbors...")
-        use_rep = "X_pca_harmony" if "X_pca_harmony" in adata.obsm else "X_pca"
+        use_rep = "X_integrated" if "X_integrated" in adata.obsm else "X_pca"
         sc.pp.neighbors(
             adata,
             n_pcs=cfg.pca.n_pcs_use,

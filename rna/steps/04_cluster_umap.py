@@ -43,7 +43,7 @@ def main():
     adata = sc.read(input_path)
     log.info("  shape: %s", adata.shape)
 
-    use_rep = "X_pca_harmony" if "X_pca_harmony" in adata.obsm else "X_pca"
+    use_rep = "X_integrated" if "X_integrated" in adata.obsm else "X_pca"
     log.info("use_rep: %s", use_rep)
 
     # ── 参数网格 ──

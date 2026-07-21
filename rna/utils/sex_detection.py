@@ -125,7 +125,7 @@ def detect_sex(adata, cfg, log):
         if len(_genes) > 6:
             _gene_hint += ", ..."
         log.warning("Mixed-sex dataset detected — sex may act as batch effect.")
-        log.warning("  Option 1 (mild):  CFG.harmony.batch_key = 'predicted_sex'")
+        log.warning("  Option 1 (mild):  CFG.integration.batch_key = 'predicted_sex'")
         log.warning("  Option 2 (strong): CFG.normalization.regress_out_genes = [%s]", _gene_hint)
 
     if "sample" in adata.obs:
