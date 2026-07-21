@@ -7,9 +7,9 @@ T3 (P0-CRITICAL) from cross-batch-critical-fixes plan:
 Tests
 -----
 - test_T3_collinearity_guard_aborts_harmony — collinear batch_key+biology
-  → harmony_skipped set, X_pca_harmony NOT created
+  → harmony_skipped set, X_integrated NOT created
 - test_T3_collinearity_guard_disabled_harmony_runs — same collinear
-  columns but collinearity_guard=False → Harmony runs (X_pca_harmony created)
+  columns but collinearity_guard=False → Harmony runs (X_integrated created)
 - test_T3_collinearity_report_none_skips_guard — report is None
   (diagnose=False) → guard no-ops safely, Harmony runs
 """
@@ -72,16 +72,16 @@ def _make_cfg(
     """Create a Config mock sufficient for the guard + Harmony section."""
     cfg = MagicMock()
 
-    # Harmony settings
-    cfg.harmony = MagicMock()
-    cfg.harmony.diagnose = diagnose
-    cfg.harmony.collinearity_guard = collinearity_guard
-    cfg.harmony.use_harmony = use_harmony
-    cfg.harmony.batch_key = "sample"
-    cfg.harmony.max_iter = 20
-    cfg.harmony.diagnose_report = False
-    cfg.harmony.gini_batch_threshold = 0.3
-    cfg.harmony.gini_biology_threshold = 0.6
+    # Integration settings
+    cfg.integration = MagicMock()
+    cfg.integration.diagnose = diagnose
+    cfg.integration.collinearity_guard = collinearity_guard
+    cfg.integration.method = "harmony" if use_harmony else "combat"
+    cfg.integration.batch_key = "sample"
+    cfg.integration.max_iter = 20
+    cfg.integration.diagnose_report = False
+    cfg.integration.gini_batch_threshold = 0.3
+    cfg.integration.gini_biology_threshold = 0.6
 
     # PCA settings
     cfg.pca = MagicMock()
@@ -149,11 +149,11 @@ def _capture_adata_on_save(
 
 
 def test_T3_collinearity_guard_aborts_harmony() -> None:
-    """Collinear batch_key+biology → harmony_skipped set, X_pca_harmony NOT created.
+    """Collinear batch_key+biology → harmony_skipped set, X_integrated NOT created.
 
     Given:  diagnose=True, collinearity_guard=True, report has collinearity warning.
     When:   main() runs through the guard section.
-    Then:   adata.uns['harmony_skipped'] is set; X_pca_harmony is absent.
+    Then:   adata.uns['harmony_skipped'] is set; X_integrated is absent.
     """
     adata = _make_adata()
     cfg = _make_cfg(collinearity_guard=True, diagnose=True)
@@ -196,10 +196,9 @@ def test_T3_collinearity_guard_aborts_harmony() -> None:
     assert "harmony_skipped" in result.uns, "harmony_skipped should be set when guard fires"
     assert result.uns["harmony_skipped"]["reason"] == "collinearity"
     assert len(result.uns["harmony_skipped"]["warnings"]) > 0
-
-    # X_pca_harmony must NOT be created when guard fires
-    assert "X_pca_harmony" not in result.obsm, (
-        "X_pca_harmony should NOT be created when guard aborts Harmony"
+    # X_integrated must NOT be created when guard fires
+    assert "X_integrated" not in result.obsm, (
+        "X_integrated should NOT be created when guard aborts Harmony"
     )
 
     # Harmony must NOT have been called
@@ -211,7 +210,7 @@ def test_T3_collinearity_guard_disabled_harmony_runs() -> None:
 
     Given:  diagnose=True, collinearity_guard=False, report has collinearity warning.
     When:   main() runs.
-    Then:   X_pca_harmony is created; harmony_skipped is absent.
+    Then:   X_integrated is created; harmony_skipped is absent.
     """
     adata = _make_adata()
     cfg = _make_cfg(collinearity_guard=False, diagnose=True)
@@ -265,7 +264,7 @@ def test_T3_collinearity_guard_disabled_harmony_runs() -> None:
     result = captured[0]
 
     # Harmony must have run
-    assert "X_pca_harmony" in result.obsm, "X_pca_harmony should be created when guard is disabled"
+    assert "X_integrated" in result.obsm, "X_integrated should be created when guard is disabled"
 
     # Guard must NOT have fired
     assert "harmony_skipped" not in result.uns, (
@@ -278,7 +277,7 @@ def test_T3_collinearity_report_none_skips_guard() -> None:
 
     Given:  diagnose=False (report stays None), collinearity_guard=True.
     When:   main() runs.
-    Then:   Guard no-ops (no AttributeError); X_pca_harmony is created.
+    Then:   Guard no-ops (no AttributeError); X_integrated is created.
     """
     adata = _make_adata()
     cfg = _make_cfg(collinearity_guard=True, diagnose=False)
@@ -324,7 +323,7 @@ def test_T3_collinearity_report_none_skips_guard() -> None:
     )
 
     # Harmony must have run normally
-    assert "X_pca_harmony" in result.obsm, "X_pca_harmony should be created when guard no-ops"
+    assert "X_integrated" in result.obsm, "X_integrated should be created when guard no-ops"
 
 
 # ═══════════════════════════════════════════════════════════════════

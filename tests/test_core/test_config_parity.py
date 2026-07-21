@@ -100,12 +100,12 @@ class TestConfigDefaults:
         assert cfg.pca.n_pcs_full == 100
         assert cfg.pca.n_pcs_use == 50
 
-    def test_harmony_defaults(self) -> None:
-        """Harmony defaults."""
+    def test_integration_defaults(self) -> None:
+        """Integration defaults."""
         cfg = Config()
-        assert cfg.harmony.use_harmony is True
-        assert cfg.harmony.batch_key == "sample"
-        assert cfg.harmony.max_iter == 20
+        assert cfg.integration.method == "harmony"
+        assert cfg.integration.batch_key == "sample"
+        assert cfg.integration.max_iter == 20
 
     def test_clustering_defaults(self) -> None:
         """Clustering defaults."""
@@ -245,7 +245,7 @@ class TestConfigDefaults:
             "normalization",
             "hvg",
             "pca",
-            "harmony",
+            "integration",
             "clustering",
             "marker",
             "de",
@@ -295,8 +295,8 @@ hvg:
 pca:
   n_pcs_use: 40
 
-harmony:
-  use_harmony: true
+integration:
+  method: harmony
 
 clustering:
   leiden_resolutions: [0.5, 1.0, 2.0]
@@ -403,7 +403,7 @@ execution:
         assert cfg.data_input.h5_file_pattern == "*filtered_feature_bc_matrix.h5"
         assert cfg.qc.min_genes == 500
         assert cfg.hvg.n_top_genes == 4000
-        assert cfg.harmony.use_harmony is True
+        assert cfg.integration.method == "harmony"
         assert cfg.clustering.cluster_selection_method == "multi_metric"
         assert cfg.de.method == "wilcoxon"
         assert cfg.execution.n_jobs == 0
