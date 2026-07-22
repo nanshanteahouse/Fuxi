@@ -62,6 +62,8 @@ clustering:
   param_grid_spread: [1.0]
   umap_min_dist: 0.3
   umap_spread: 1.0
+  umap_color_by_batch: false
+  # batch_key_override: null  # optionally override integration.batch_key
   # umap_paga_init: false
 
 # ── Cell type markers ──
