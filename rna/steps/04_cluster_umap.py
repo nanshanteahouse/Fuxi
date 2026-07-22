@@ -500,6 +500,139 @@ def main():
         except Exception as e:
             log.warning("UMAP comparison plot generation failed: %s", e)
 
+    # ── Batch UMAP 诊断 ──
+    if getattr(cfg.clustering, "umap_color_by_batch", False):
+        batch_key = (
+            getattr(cfg.clustering, "batch_key_override", None) or cfg.integration.batch_key
+        )
+        if batch_key not in adata.obs:
+            log.warning(
+                "batch_key '%s' not found in adata.obs, skipping batch UMAP diagnostics", batch_key
+            )
+        else:
+            batches = adata.obs[batch_key].unique()
+            n_batches = len(batches)
+            log.info("Batch UMAP diagnostics: key=%s, n_batches=%d", batch_key, n_batches)
+            # Guard: skip if fewer than 2 batches (single-batch = meaningless)
+            if n_batches < 2:
+                log.info(
+                    "  n_batches=%d < 2, skipping batch UMAP diagnostics (single-batch data)",
+                    n_batches,
+                )
+            else:
+                # 1) Colored UMAP — check safe_plot return to avoid silent garbage
+                try:
+                    result = safe_plot(
+                        sc.pl.umap,
+                        adata,
+                        color=batch_key,
+                        show=False,
+                        title=f"UMAP colored by {batch_key}",
+                    )
+                    if result is not None:
+                        plt.savefig(
+                            os.path.join(fig_dir, "_04_batch_colored.png"),
+                            dpi=150,
+                            bbox_inches="tight",
+                        )
+                        plt.close()
+                        log.info("  Batch-colored UMAP saved")
+                    else:
+                        log.warning("  Batch-colored UMAP failed (safe_plot returned None)")
+                except Exception as e:
+                    log.warning("  Batch-colored UMAP failed: %s", e)
+                # 2) Split-by-batch faceted UMAP (degrade if >12 batches)
+                if n_batches <= 12:
+                    try:
+                        n_cols = min(4, n_batches)
+                        n_rows = int(np.ceil(n_batches / n_cols))
+                        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
+                        axes_flat = axes.ravel() if n_batches > 1 else [axes]
+                        for i, batch_val in enumerate(batches):
+                            ax = axes_flat[i]
+                            mask = adata.obs[batch_key] == batch_val
+                            ax.scatter(
+                                adata.obsm["X_umap"][:, 0],
+                                adata.obsm["X_umap"][:, 1],
+                                c="lightgray",
+                                s=1,
+                                alpha=0.3,
+                                rasterized=True,
+                            )
+                            ax.scatter(
+                                adata.obsm["X_umap"][mask, 0],
+                                adata.obsm["X_umap"][mask, 1],
+                                c=adata.obs.loc[mask, "leiden"].astype("category").cat.codes,
+                                cmap="tab20",
+                                s=3,
+                                alpha=0.8,
+                                rasterized=True,
+                            )
+                            ax.set_title(
+                                f"{batch_key}={batch_val} ({mask.sum()} cells)", fontsize=9
+                            )
+                            ax.set_xticks([])
+                            ax.set_yticks([])
+                        for j in range(n_batches, len(axes_flat)):
+                            axes_flat[j].axis("off")
+                        fig.tight_layout()
+                        fig.savefig(
+                            os.path.join(fig_dir, "_04_batch_faceted.png"),
+                            dpi=150,
+                            bbox_inches="tight",
+                        )
+                        log.info("  Split-by-batch faceted UMAP saved")
+                    except Exception as e:
+                        log.warning("  Split-by-batch UMAP failed: %s", e)
+                    finally:
+                        try:
+                            plt.close(fig)
+                        except Exception:
+                            pass
+                else:
+                    log.info("  n_batches=%d > 12, skipping faceted UMAP", n_batches)
+                # 3) Leiden × batch crosstab heatmap (pure matplotlib — zero new deps)
+                try:
+                    ct = pd.crosstab(adata.obs["leiden"], adata.obs[batch_key])
+                    fig, ax = plt.subplots(
+                        figsize=(max(6, n_batches * 0.8), max(5, ct.shape[0] * 0.3))
+                    )
+                    im = ax.imshow(ct.values, aspect="auto", cmap="YlOrRd")
+                    for i in range(ct.shape[0]):
+                        for j in range(ct.shape[1]):
+                            val = ct.values[i, j]
+                            ax.text(
+                                j,
+                                i,
+                                str(val),
+                                ha="center",
+                                va="center",
+                                fontsize=8,
+                                color="white" if val > ct.values.max() / 2 else "black",
+                            )
+                    ax.set_xticks(range(ct.shape[1]))
+                    ax.set_xticklabels(ct.columns, rotation=45, ha="right")
+                    ax.set_yticks(range(ct.shape[0]))
+                    ax.set_yticklabels(ct.index)
+                    ax.set_xlabel(batch_key)
+                    ax.set_ylabel("Leiden cluster")
+                    ax.set_title(f"Cluster \u00d7 batch mixing ({batch_key})")
+                    plt.colorbar(im, ax=ax, label="cell count")
+                    fig.tight_layout()
+                    fig.savefig(
+                        os.path.join(fig_dir, "_04_batch_mixing_heatmap.png"),
+                        dpi=150,
+                        bbox_inches="tight",
+                    )
+                    log.info("  Batch mixing heatmap saved")
+                except Exception as e:
+                    log.warning("  Batch mixing heatmap failed: %s", e)
+                finally:
+                    try:
+                        plt.close(fig)
+                    except Exception:
+                        pass
+
     # ── 网格汇总图: 所有参数组合对比 ──
     n_n = len(n_neighbors_grid)
     n_r = len(resolutions_grid)
