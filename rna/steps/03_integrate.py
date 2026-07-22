@@ -253,6 +253,7 @@ def main():
 
     # ── 保存原始 counts 供 scVI 使用（必须在 normalize_total+log1p 之前）──
     if getattr(cfg.integration, "method", None) == "scvi":
+        assert adata.X is not None, "adata.X is None — data not loaded properly"
         adata.layers["counts"] = adata.X.copy()
         log.info("Raw counts preserved in adata.layers['counts'] for scVI")
 
