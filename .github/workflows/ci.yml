@@ -48,7 +48,7 @@ jobs:
       - name: Install deps
         run: uv pip install -r requirements/all.txt
       - name: Pyright
-        run: uv pip install pyright==1.1.411 && uv run pyright
+        run: uv pip install pyright==1.1.411 && uv run pyright --level error
 
   # ════════════════════════════════════════════════════════════════════════
   # Smoke test (fast gate)
