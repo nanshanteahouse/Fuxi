@@ -239,6 +239,8 @@ class ClusteringSettings(BaseModel):
     param_grid_spread: Optional[list] = Field(default_factory=lambda: [1.0])
     umap_min_dist: float = 0.3
     umap_spread: float = 1.0
+    umap_color_by_batch: bool = False
+    batch_key_override: Optional[str] = None
 
 
 # ═══════════════════════════════════════════════════════════════════════
