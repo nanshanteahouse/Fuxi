@@ -115,7 +115,7 @@ def main():
             adata,
             color=qc_metrics,
             show=False,
-            save="_10_qc_umap.pdf",
+            save="qc_umap.pdf",
             vmax="p99",
             ncols=3,
         )
@@ -136,7 +136,7 @@ def main():
                 color=batch,
                 use_raw=True,
                 show=False,
-                save=f"_10_markers_{batch_start}.pdf",
+                save=f"marker_umap_batch{batch_start}.pdf",
                 vmax="p99",
                 ncols=4,
             )
@@ -150,7 +150,7 @@ def main():
             var_names=all_markers,
             groupby=group_col,
             show=False,
-            save="_10_marker_dotplot.pdf",
+            save="marker_dotplot.pdf",
         )
 
     # 5. 聚类大小统计
@@ -232,7 +232,7 @@ def main():
             color=col,
             show=False,
             legend_loc="on data" if len(sizes) < 30 else "right margin",
-            save=f"_10_umap_{col}.pdf",
+            save=f"umap_{col}.pdf",
         )
 
     log.info("Step 10 complete, took %.1fs", time.time() - t0)

@@ -640,16 +640,12 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
 
     adata.obs["annot_label"] = adata.obs["cell_type"].astype(str)
 
-    safe_plot(sc.pl.umap, adata, color="cell_type", show=False, save="_05_celltype_unified.pdf")
+    safe_plot(sc.pl.umap, adata, color="cell_type", show=False, save="celltype_umap.pdf")
+    safe_plot(sc.pl.umap, adata, color="annot_label", show=False, save="annot_label_umap.pdf")
     safe_plot(
-        sc.pl.umap, adata, color="annot_label", show=False, save="_05_annot_label_unified.pdf"
+        sc.pl.umap, adata, color="annot_confidence", show=False, save="annot_confidence_umap.pdf"
     )
-    safe_plot(
-        sc.pl.umap, adata, color="annot_confidence", show=False, save="_05_confidence_unified.pdf"
-    )
-    safe_plot(
-        sc.pl.umap, adata, color="cell_category", show=False, save="_05_cell_category_unified.png"
-    )
+    safe_plot(sc.pl.umap, adata, color="cell_category", show=False, save="cell_category_umap.png")
 
     # ── j. Cell metadata export ───────────────────────────────────────────
     meta_df = pd.DataFrame(

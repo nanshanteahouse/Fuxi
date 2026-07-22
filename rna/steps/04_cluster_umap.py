@@ -329,7 +329,7 @@ def main():
                     title=f"UMAP (n_neighbors={n}, resolution={res})",
                 )
                 plt.savefig(
-                    os.path.join(fig_dir, f"umap_grid_n{n}_r{res}.png"),
+                    os.path.join(fig_dir, f"leiden_grid_n{n}_r{res}.png"),
                     dpi=150,
                     bbox_inches="tight",
                 )
@@ -492,9 +492,7 @@ def main():
             for j in range(len(sweep_results), len(axes_flat)):
                 axes_flat[j].axis("off")
             fig.tight_layout()
-            fig.savefig(
-                os.path.join(fig_dir, "umap_min_dist_comparison.png"), dpi=150, bbox_inches="tight"
-            )
+            fig.savefig(os.path.join(fig_dir, "min_dist_sweep.png"), dpi=150, bbox_inches="tight")
             plt.close(fig)
             log.info("UMAP min_dist comparison plot saved")
         except Exception as e:
@@ -531,7 +529,7 @@ def main():
                     )
                     if result is not None:
                         plt.savefig(
-                            os.path.join(fig_dir, "_04_batch_colored.png"),
+                            os.path.join(fig_dir, "batch_colored_umap.png"),
                             dpi=150,
                             bbox_inches="tight",
                         )
@@ -577,7 +575,7 @@ def main():
                             axes_flat[j].axis("off")
                         fig.tight_layout()
                         fig.savefig(
-                            os.path.join(fig_dir, "_04_batch_faceted.png"),
+                            os.path.join(fig_dir, "batch_faceted_umap.png"),
                             dpi=150,
                             bbox_inches="tight",
                         )
@@ -620,7 +618,7 @@ def main():
                     plt.colorbar(im, ax=ax, label="cell count")
                     fig.tight_layout()
                     fig.savefig(
-                        os.path.join(fig_dir, "_04_batch_mixing_heatmap.png"),
+                        os.path.join(fig_dir, "batch_mixing_heatmap.png"),
                         dpi=150,
                         bbox_inches="tight",
                     )
@@ -673,9 +671,7 @@ def main():
                     )
                     ax.set_title(f"n={n}, r={res}")
         fig.tight_layout()
-        fig.savefig(
-            os.path.join(fig_dir, "umap_param_grid_summary.png"), dpi=150, bbox_inches="tight"
-        )
+        fig.savefig(os.path.join(fig_dir, "param_grid_summary.png"), dpi=150, bbox_inches="tight")
         plt.close(fig)
         log.info("Parameter grid summary plot saved")
     except Exception as e:
@@ -699,12 +695,12 @@ def main():
                     axes[j].axis("off")
                 fig.tight_layout()
                 fig.savefig(
-                    os.path.join(fig_dir, f"umap_leiden_n{n}_all_resolutions.pdf"),
+                    os.path.join(fig_dir, f"leiden_multires_n{n}.png"),
                     dpi=150,
                     bbox_inches="tight",
                 )
                 plt.close(fig)
-                log.info("  Multi-resolution UMAP plot (n=%d) saved", n)
+                log.info("  Multi-resolution Leiden plot (n=%d) saved", n)
             except Exception as e:
                 log.warning("  Multi-resolution comparison plot (n=%d) failed: %s", n, e)
 

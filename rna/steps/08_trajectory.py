@@ -66,7 +66,7 @@ def run_paga(adata, cfg, log):
         adata,
         color=group_col,
         show=False,
-        save="_08_paga_graph.pdf",
+        save="paga_graph.pdf",
         title="PAGA trajectory",
     )
     safe_plot(
@@ -75,7 +75,7 @@ def run_paga(adata, cfg, log):
         basis="umap",
         color=group_col,
         show=False,
-        save="_08_paga_umap.pdf",
+        save="paga_umap.pdf",
         edge_width_scale=0.5,
         title="PAGA on UMAP",
     )
@@ -165,7 +165,7 @@ def compute_dpt(adata, root_mask, cfg, log):
         adata,
         color="dpt_pseudotime",
         show=False,
-        save="_08_pseudotime.pdf",
+        save="pseudotime_umap.pdf",
         cmap="plasma",
     )
     safe_plot(
@@ -173,7 +173,7 @@ def compute_dpt(adata, root_mask, cfg, log):
         adata,
         color="dpt_pseudotime",
         show=False,
-        save="_08_pseudotime_diffmap.pdf",
+        save="pseudotime_diffmap.pdf",
         cmap="plasma",
     )
 
@@ -489,7 +489,7 @@ def gene_trends(adata, cfg, log, branch_results: Optional[pd.DataFrame] = None):
             y=gene,
             use_raw=True,
             show=False,
-            save=f"_08_trend_{gene}.pdf",
+            save=f"trend_{gene}.pdf",
         )
 
     # Heatmap: if >=5 genes, with binned pseudotime
@@ -507,7 +507,7 @@ def gene_trends(adata, cfg, log, branch_results: Optional[pd.DataFrame] = None):
                 groupby="dpt_pseudotime_bin",
                 use_raw=True,
                 show=False,
-                save="_08_dev_genes_heatmap.pdf",
+                save="dev_gene_heatmap.pdf",
             )
         else:
             log.info("Not enough unique pseudotime values (%d) for heatmap binning.", n_bins)
@@ -579,7 +579,7 @@ def main():
     # 最终可视化 (figdir 已在上面设置)
     for color in ["stage", "cell_type", "cell_type_sub", "dpt_pseudotime"]:
         if color in adata.obs or color in adata.obsm:
-            safe_plot(sc.pl.umap, adata, color=color, show=False, save=f"_08_final_{color}.pdf")
+            safe_plot(sc.pl.umap, adata, color=color, show=False, save=f"final_umap_{color}.pdf")
 
     safe_write(adata, cfg.final_h5ad, cfg=cfg)
     log.info("Step 08 complete, took %.1fs", time.time() - t0)

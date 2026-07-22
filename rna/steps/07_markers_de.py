@@ -281,7 +281,7 @@ def generate_figures(adata, markers_df, cfg, log, primary_col=None):
             var_names=top_genes,
             groupby=group_col,
             show=False,
-            save="_07_marker_heatmap.pdf",
+            save="marker_heatmap.pdf",
         )
 
     # 关键标记基因 dotplot
@@ -297,7 +297,7 @@ def generate_figures(adata, markers_df, cfg, log, primary_col=None):
                 var_names=all_markers,
                 groupby=group_col,
                 show=False,
-                save="_07_dotplot.pdf",
+                save="marker_dotplot.pdf",
             )
 
 

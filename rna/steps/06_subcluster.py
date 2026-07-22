@@ -375,7 +375,7 @@ def main():
         sub,
         color="leiden",
         show=False,
-        save=f"_06_sub_{safe_cell_type}_leiden.pdf",
+        save=f"sub_{safe_cell_type}_leiden_umap.pdf",
         title=f"{args.cell_type} — leiden",
     )
 
@@ -405,7 +405,7 @@ def main():
             axes[j].axis("off")
         fig.tight_layout()
         fig.savefig(
-            os.path.join(fig_dir, f"umap_sub_{safe_cell_type}_resolutions.pdf"),
+            os.path.join(fig_dir, f"sub_{safe_cell_type}_multires.pdf"),
             dpi=150,
             bbox_inches="tight",
         )
@@ -496,7 +496,7 @@ def main():
                     sub,
                     color="sub_ai_label",
                     show=False,
-                    save=f"_06_sub_{safe_cell_type}_ai.pdf",
+                    save=f"sub_{safe_cell_type}_umap_ai.pdf",
                     title=f"{args.cell_type} — AI subcluster",
                 )
 
