@@ -165,6 +165,53 @@ def _normalize_gene_symbols(
     return out
 
 
+def _load_marker_table(cfg, log) -> pd.DataFrame:
+    """Load marker gene table from Step 07, supporting both pseudobulk and rank_genes_groups paths.
+
+    - Pseudobulk path: reads `{cfg.de.pseudobulk.output_dir or "pseudobulk_de"}/*_de.csv`
+      files (per-cell-type DE results). Synthesizes group, names, scores, gene columns.
+    - Rank_genes_groups fallback: reads `marker_genes_per_group.csv` via read_marker_csv().
+    """
+    import glob
+
+    # Try pseudobulk path first
+    pb_subdir = cfg.de.pseudobulk.output_dir if cfg.de.pseudobulk.output_dir else "pseudobulk_de"
+    pb_dir = os.path.join(cfg.table_dir, pb_subdir)
+    pb_files = sorted(glob.glob(os.path.join(pb_dir, "*_de.csv")))
+
+    if pb_files:
+        log.info("Loading pseudobulk DE results from %d files in %s", len(pb_files), pb_dir)
+        chunks = []
+        for fpath in pb_files:
+            ct = os.path.splitext(os.path.basename(fpath))[0]
+            # Remove trailing "_de" to get the cell type name
+            if ct.endswith("_de"):
+                ct = ct[:-3]
+            df_ct = pd.read_csv(fpath)
+            if df_ct.empty:
+                continue
+            df_ct["group"] = ct
+            df_ct["names"] = df_ct["gene"]
+            # Copy log2FoldChange to scores so the downstream cascade still has both columns
+            df_ct["scores"] = df_ct["log2FoldChange"]
+            chunks.append(df_ct)
+        if not chunks:
+            log.warning(
+                "Pseudobulk DE files present but all empty; falling back to marker_genes_per_group.csv"
+            )
+            return read_marker_csv(cfg.table_dir, log)
+        combined = pd.concat(chunks, ignore_index=True)
+        log.info(
+            "Loaded pseudobulk markers: %d rows, %d groups",
+            len(combined),
+            combined["group"].nunique(),
+        )
+        return combined
+
+    # Fallback to rank_genes_groups path
+    return read_marker_csv(cfg.table_dir, log)
+
+
 def read_marker_csv(table_dir: str, log) -> pd.DataFrame:
     """读取 Step 07 产出的标记基因 CSV"""
     path = os.path.join(table_dir, "marker_genes_per_group.csv")
@@ -283,7 +330,8 @@ def _prerank_one_group(
     """Run pre-ranked GSEA for a single group (used by ThreadPoolExecutor)."""
     import gseapy as gp
 
-    df = grp_df.dropna(subset=["scores", "names"]).copy()
+    drop_cols = [c for c in ["scores", "names"] if c in grp_df.columns]
+    df = grp_df.dropna(subset=drop_cols).copy() if drop_cols else grp_df.copy()
     df["gene"] = df["names"].apply(_extract_gene_symbol)
     if len(df) < cfg.enrichment.min_size:
         log.info(
@@ -304,7 +352,16 @@ def _prerank_one_group(
         )
         return (grp, None)
 
-    rnk = df.set_index("gene")["scores"]
+    if "log2FoldChange" in df.columns:
+        rnk = df.set_index("gene")["log2FoldChange"]
+    elif "logfoldchanges" in df.columns:
+        rnk = df.set_index("gene")["logfoldchanges"]
+    else:
+        log.warning(
+            "marker table has no effect-size column (log2FoldChange/logfoldchanges); "
+            "falling back to 'scores' (GSEA assumption loosely holds)"
+        )
+        rnk = df.set_index("gene")["scores"]
 
     try:
         pre_res = gp.prerank(
@@ -646,7 +703,7 @@ def main():
         log.info("Enrichment analysis disabled (run_enrichment=False)")
         return
 
-    marker_df = read_marker_csv(cfg.table_dir, log)
+    marker_df = _load_marker_table(cfg, log)
     log.info("Gene set libraries: %s", cfg.enrichment.gene_sets)
     log.info("Method: %s", cfg.enrichment.method)
 

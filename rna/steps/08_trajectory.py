@@ -221,7 +221,7 @@ def branch_analysis(adata, cfg, log, table_dir) -> Optional[pd.DataFrame]:
                 groupby="cell_type",
                 groups=[child],
                 reference=parent,
-                method="wilcoxon",
+                method=cfg.de.branch_method,
                 n_genes=50,
                 use_raw=True,
                 random_state=cfg.execution.random_seed,
@@ -236,9 +236,15 @@ def branch_analysis(adata, cfg, log, table_dir) -> Optional[pd.DataFrame]:
             log.info(
                 "  %s → %s: %d DEGs (%d up, %d down)", parent, child, len(de_df), n_up, n_down
             )
-        except Exception as e:
-            log.debug("  %s → %s failed: %s", parent, child, e)
+        except (KeyError, ValueError) as e:
+            log.warning("  %s → %s branch DE failed: %s", parent, child, e)
 
+    if not branch_results:
+        log.warning(
+            "branch_deg.csv NOT generated: all branch DE pairs failed or were filtered. "
+            "Check cfg.de.branch_method and pval_cutoff."
+        )
+        return None
     if branch_results:
         combined = pd.concat(branch_results, ignore_index=True)
         out_path = os.path.join(table_dir, "branch_deg.csv")

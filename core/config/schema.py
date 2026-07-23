@@ -278,10 +278,12 @@ class DESettings(BaseModel):
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
-    method: str = "wilcoxon"
+    method: Literal["wilcoxon", "pseudobulk"] = "pseudobulk"
     n_genes: int = 50
     pval_cutoff: float = 0.05
     logfc_cutoff: float = 0.25
+    pairwise_method: Literal["wilcoxon", "t-test"] = "wilcoxon"
+    branch_method: Literal["wilcoxon", "t-test"] = "t-test"
     stage_pairwise: bool = True
     auto_switch_on_low_quality: bool = False
     pseudobulk: "PseudobulkDESettings" = Field(default_factory=lambda: PseudobulkDESettings())
@@ -297,7 +299,7 @@ class PseudobulkDESettings(BaseModel):
 
     celltype_col: str = "cell_type"
     sample_col: str = "sample"
-    design: str = "~condition"
+    design: str = "~batch + condition"
     contrast_column: str = "condition"
     contrast_treatment: str = ""
     contrast_baseline: str = ""

@@ -102,7 +102,7 @@ def _layer2_one_pair(ct, s1, s2, adata, ct_col, cfg, log):
             groupby="stage",
             groups=[s2],
             reference=s1,
-            method="t-test",
+            method=cfg.de.pairwise_method,  # safe: _layer2_one_pair only reads pvals_adj, not logfoldchanges
             n_genes=cfg.de.n_genes,
             n_jobs=getattr(cfg.execution, "n_jobs", 1),
             use_raw=True,
@@ -303,6 +303,36 @@ def generate_figures(adata, markers_df, cfg, log, primary_col=None):
             )
 
 
+def _pseudobulk_feasible(adata, cfg) -> bool:
+    """Check if pseudobulk DE has needed designed-contrast metadata.
+
+    Returns True if ALL of the following pass:
+      - sample_col column exists in adata.obs
+      - contrast_column exists in adata.obs
+      - contrast_treatment is non-empty AND found in the contrast column
+      - contrast_baseline is non-empty AND found in the contrast column
+      - at least 2 unique samples
+    """
+    pb = cfg.de.pseudobulk
+    if pb.sample_col not in adata.obs.columns:
+        return False
+    if pb.contrast_column not in adata.obs.columns:
+        return False
+    if (
+        not pb.contrast_treatment
+        or pb.contrast_treatment not in adata.obs[pb.contrast_column].unique()
+    ):
+        return False
+    if (
+        not pb.contrast_baseline
+        or pb.contrast_baseline not in adata.obs[pb.contrast_column].unique()
+    ):
+        return False
+    if adata.obs[pb.sample_col].nunique() < 2:
+        return False
+    return True
+
+
 def main():
     t0 = time.time()
     args_parser = argparse.ArgumentParser()
@@ -311,35 +341,36 @@ def main():
     cfg = resolve_config(args.config)
     log = setup_logger("07_de", os.path.join(cfg.log_dir, "07_markers_de.log"))
 
-    # ── Pseudobulk dispatch (de.method: pseudobulk) ───────────────────
-    if cfg.de.method == "pseudobulk":
-        input_h5ad = os.path.join(cfg.h5ad_dir, "05_annotated.h5ad")
-        if not os.path.exists(input_h5ad):
-            input_h5ad = cfg.cluster_h5ad
-            log.warning("05_annotated.h5ad not found, falling back to: %s", input_h5ad)
-        adata = sc.read(input_h5ad)
-        log.info("Loaded: %s — %d cells", input_h5ad, adata.n_obs)
-
-        from rna.utils.pseudobulk_de import run_pseudobulk_de
-
-        run_pseudobulk_de(adata, cfg, log)
-
-        log.info("Step 07 (pseudobulk) complete, took %.1fs", time.time() - t0)
-        return
-
-    # ── Table output subdirectory ──────────────────────────
-    table_dir = os.path.join(cfg.table_dir, "07_markers")
-    os.makedirs(table_dir, exist_ok=True)
-
-    log.info("Step 07: Marker genes + differential expression analysis")
-
-    # 优先加载 05_annotated.h5ad，回退到 cluster_h5ad
+    # ── Load data ONCE before dispatch ───────────────────────
     input_h5ad = os.path.join(cfg.h5ad_dir, "05_annotated.h5ad")
     if not os.path.exists(input_h5ad):
         input_h5ad = cfg.cluster_h5ad
         log.warning("05_annotated.h5ad not found, falling back to: %s", input_h5ad)
     adata = sc.read(input_h5ad)
     log.info("Loaded: %s — %d cells", input_h5ad, adata.n_obs)
+
+    # ── Pseudobulk dispatch (de.method: pseudobulk) ───────────────────
+    if cfg.de.method == "pseudobulk":
+        if _pseudobulk_feasible(adata, cfg):
+            from rna.utils.pseudobulk_de import run_pseudobulk_de
+
+            run_pseudobulk_de(adata, cfg, log)
+
+            log.info("Step 07 (pseudobulk) complete, took %.1fs", time.time() - t0)
+            return
+        else:
+            log.warning(
+                "pseudobulk selected but designed-contrast metadata missing "
+                "(sample/condition/treatment-baseline); falling back to wilcoxon. "
+                "Pin de.method and provide sample+contrast columns to enable pseudobulk."
+            )
+            cfg.de.method = "wilcoxon"
+
+    # ── Table output subdirectory ──────────────────────────
+    table_dir = os.path.join(cfg.table_dir, "07_markers")
+    os.makedirs(table_dir, exist_ok=True)
+
+    log.info("Step 07: Marker genes + differential expression analysis")
 
     # Quality awareness (v3.1.0+): check marker_validation PASS rate
     _pass_rate = None
