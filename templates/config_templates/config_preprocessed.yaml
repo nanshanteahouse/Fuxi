@@ -12,7 +12,11 @@ expression_type: "{{EXPRESSION_TYPE}}"  # log1p_counts / raw_counts / TPM / CPM 
 tissue: "{{TISSUE}}"
 species: "{{SPECIES}}"
 
-# ── QC ──
+# ── QC (relaxed — data already QC'd by original authors) ──
+# Complexity filter (min_genes_per_umi) and total_counts upper bound are
+# auto-skipped for non-raw_counts data. MAD adaptive thresholds are NOT
+# recommended here — the distribution of log-normalized values differs
+# from raw counts and would produce misleading MAD bounds.
 qc:
   min_genes: 200
   max_genes: 7500

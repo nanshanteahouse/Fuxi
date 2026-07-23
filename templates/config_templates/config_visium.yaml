@@ -33,9 +33,10 @@ qc:
   max_pct_mito: 20.0
   min_genes_per_umi: 0.7
   min_cells_per_gene: 3
-  # use_adaptive_thresholds: true
-  # mad_n_mads: 3.0
-  # use_adaptive_thresholds: false
+  # ── Adaptive thresholds (managed by global.yaml) ──
+  # use_adaptive_thresholds: true   # ← global.yaml default
+  # mad_n_mads: 3.0                  # MAD multiplier
+  # ncount_max_mad: 5.0              # nCount upper bound MAD multiplier
 
 # ── HVG ──
 hvg:

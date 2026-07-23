@@ -51,14 +51,21 @@ sample_meta:
   stage_order: [GW7, GW8, GW10, GW12, GW15, GW18, GW20]
 
 # ── Dataset metadata ──
-# tissue_maturity: "unknown"   # "developing" | "adult" | "unknown"
+# GW7-GW20 = developing fetal hypothalamus
+tissue_maturity: "developing"   # enables wider MAD bounds (5× instead of 3×)
 
 # ── QC ──
 qc:
-  min_genes: 500
+  min_genes: 200
   max_genes: 7000
   max_pct_mito: 20.0
+  min_cells_per_gene: 3
   min_genes_per_umi: 0.7
+
+  # ── Adaptive thresholds (managed by global.yaml) ──
+  # use_adaptive_thresholds: true   # ← global.yaml default
+  # mad_n_mads: 3.0                  # auto-promoted to 5.0 when tissue_maturity=developing
+  # ncount_max_mad: 5.0              # nCount upper bound MAD multiplier
 
   # ── Single-nucleus (snRNA-seq) ──
   # is_nuclei: true

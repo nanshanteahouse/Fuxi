@@ -38,14 +38,16 @@ expression_type: raw_counts
 
 # ── QC ──
 qc:
-  min_genes: 500
+  min_genes: 200
   max_genes: 7500
   max_pct_mito: 20.0
   min_cells_per_gene: 3
   min_genes_per_umi: 0.7
-  # use_adaptive_thresholds: true
-  # mad_n_mads: 3.0
-  # qc_ncount_max_mad: 5.0
+
+  # ── Adaptive thresholds (managed by global.yaml) ──
+  # use_adaptive_thresholds: true   # ← global.yaml default
+  # mad_n_mads: 3.0                  # MAD multiplier (developing tissue auto-uses 5.0)
+  # ncount_max_mad: 5.0              # nCount upper bound MAD multiplier
 
   # ── Single-nucleus (snRNA-seq) ──
   # is_nuclei: true
