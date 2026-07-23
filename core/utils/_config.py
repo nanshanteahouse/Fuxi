@@ -22,6 +22,26 @@ def _find_dataset_yaml(cfg) -> Optional[str]:
     return None
 
 
+def _find_repo_root() -> str | None:
+    """Walk up from CWD to find the repository root (first dir with .git/).
+
+    Returns absolute path to repo root, or None if not found.
+    Never raises.
+    """
+    try:
+        current = os.path.abspath(os.getcwd())
+        for _ in range(20):  # safety limit
+            if os.path.isdir(os.path.join(current, ".git")):
+                return current
+            parent = os.path.dirname(current)
+            if parent == current:
+                break
+            current = parent
+    except Exception:
+        pass
+    return None
+
+
 def _find_global_yaml() -> str | None:
     """Discover the global.yaml file path.
 
@@ -38,22 +58,12 @@ def _find_global_yaml() -> str | None:
     if env_path and os.path.isfile(env_path):
         return env_path
 
-    # 2. Walk up from CWD looking for repo root
-    try:
-        current = os.path.abspath(os.getcwd())
-        for _ in range(20):  # safety limit
-            if os.path.isdir(os.path.join(current, ".git")):
-                global_yaml = os.path.join(current, "global.yaml")
-                if os.path.isfile(global_yaml):
-                    return global_yaml
-                break  # found repo root, but no global.yaml
-            parent = os.path.dirname(current)
-            if parent == current:
-                break
-            current = parent
-    except Exception:
-        pass
-
+    # 2. Walk up to repo root via _find_repo_root()
+    repo_root = _find_repo_root()
+    if repo_root:
+        global_yaml = os.path.join(repo_root, "global.yaml")
+        if os.path.isfile(global_yaml):
+            return global_yaml
     return None
 
 

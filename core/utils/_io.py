@@ -72,7 +72,14 @@ def safe_write(
         )
 
 
-def safe_plot(func, *args, **kwargs):
+def safe_plot(
+    func,
+    *args,
+    cfg=None,
+    dpi=None,
+    fmt=None,
+    **kwargs,
+):
     """
     容错的 scanpy 绘图包装。
 
@@ -80,9 +87,19 @@ def safe_plot(func, *args, **kwargs):
     本函数捕获异常并记录警告，避免整个步骤因此中断。
     自动处理已弃用的 save 参数 — 拦截并改用 plt.savefig。
 
+    参数:
+        func: 绘图函数 (e.g. sc.pl.umap)
+        *args: 传递给 func 的位置参数
+        cfg: 可选的 Config 对象 — 使用 cfg.plot.figure_dpi / figure_format / figure_transparent
+        dpi: 显式 DPI — 优先级高于 cfg.plot.figure_dpi，高于 150
+        fmt: 显式图片格式 — 优先级高于 cfg.plot.figure_format，高于 "pdf"
+        **kwargs: 传递给 func 的关键字参数
+
     用法:
         safe_plot(sc.pl.umap, adata, color='stage', show=False, save='_stage.pdf')
+        safe_plot(sc.pl.umap, adata, cfg=cfg, color='stage', show=False, save='_stage')
     """
+
     import scanpy as sc
 
     logger = logging.getLogger(__name__)
@@ -94,10 +111,20 @@ def safe_plot(func, *args, **kwargs):
         if save_path:
             import matplotlib.pyplot as plt
 
+            # Resolve DPI: explicit dpi > cfg.plot.figure_dpi > 150
+            final_dpi = dpi or (cfg.plot.figure_dpi if cfg else 150)
+            # Resolve format: explicit fmt > cfg.plot.figure_format > "pdf"
+            final_fmt = fmt or (cfg.plot.figure_format if cfg else "pdf")
+            # Resolve transparency
+            transparent = cfg.plot.figure_transparent if cfg else True
+
             if not os.path.isabs(save_path):
                 save_path = os.path.join(sc.settings.figdir, save_path)
+            # If save_path has no extension, append final_fmt
+            if not os.path.splitext(save_path)[1]:
+                save_path = f"{save_path}.{final_fmt}"
             os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            plt.savefig(save_path, dpi=150, bbox_inches="tight")
+            plt.savefig(save_path, dpi=final_dpi, bbox_inches="tight", transparent=transparent)
             plt.close()
         return result
     except Exception as e:
