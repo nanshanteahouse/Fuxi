@@ -60,7 +60,7 @@ def _warn_if_low_coverage(adata, cfg, log):
 
 def _update_quality_report_pass_rate(adata, cfg):
     """Update 05_annotation_quality.json pass_rate from marker_validation column."""
-    quality_path = os.path.join(cfg.table_dir, "05_annotation_quality.json")
+    quality_path = os.path.join(cfg.table_dir, "05_annotation_quality_step05.json")
     if not os.path.exists(quality_path):
         return
     try:
@@ -342,7 +342,7 @@ def ai_annotate(adata, cfg, logger, std=None):
             }
         )
     ann_df = pd.DataFrame(ann_records)
-    ann_csv = os.path.join(cfg.table_dir, "cell_type_annotations.csv")
+    ann_csv = os.path.join(cfg.table_dir, "cell_type_annotations_step05.csv")
     ann_df.to_csv(ann_csv, index=False)
     logger.info("Annotation table saved: %s", ann_csv)
 
@@ -390,7 +390,7 @@ def ai_annotate(adata, cfg, logger, std=None):
         meta_dict["cell_type_raw"] = adata.obs["cell_type_raw"].values
         meta_dict["marker_validation"] = adata.obs["marker_validation"].values
     meta_df = pd.DataFrame(meta_dict)
-    meta_csv = os.path.join(cfg.table_dir, "cell_metadata.csv")
+    meta_csv = os.path.join(cfg.table_dir, "cell_metadata_step05.csv")
     meta_df.to_csv(meta_csv, index=False)
     logger.info("Cell metadata exported: %s", meta_csv)
 
@@ -457,7 +457,7 @@ def score_genes_mode(adata, cfg, logger):
     for col in ["cell_type", "cell_subtype", "cell_type_sub", "annotation_confidence"]:
         if col in adata.obs:
             meta_df[col] = adata.obs[col].values
-    meta_csv = os.path.join(cfg.table_dir, "cell_metadata.csv")
+    meta_csv = os.path.join(cfg.table_dir, "cell_metadata_step05.csv")
     meta_df.to_csv(meta_csv, index=False)
     logger.info("Cell metadata exported: %s", meta_csv)
 

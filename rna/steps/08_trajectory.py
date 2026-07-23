@@ -178,7 +178,7 @@ def compute_dpt(adata, root_mask, cfg, log):
     )
 
 
-def branch_analysis(adata, cfg, log) -> Optional[pd.DataFrame]:
+def branch_analysis(adata, cfg, log, table_dir) -> Optional[pd.DataFrame]:
     """分支间差异表达 (分支间配对比较策略)"""
     if "cell_type" not in adata.obs:
         log.info("No cell_type annotation, skipping branch analysis.")
@@ -237,7 +237,7 @@ def branch_analysis(adata, cfg, log) -> Optional[pd.DataFrame]:
 
     if branch_results:
         combined = pd.concat(branch_results, ignore_index=True)
-        out_path = os.path.join(cfg.table_dir, "branch_deg.csv")
+        out_path = os.path.join(table_dir, "branch_deg.csv")
         combined.to_csv(out_path, index=False)
         log.info("  Branch DEG exported: %s (%d rows)", out_path, len(combined))
         return combined
@@ -352,7 +352,7 @@ def _select_pseudotime_correlated(adata, cfg) -> Tuple[List[str], pd.DataFrame]:
     return result, full_df
 
 
-def gene_trends(adata, cfg, log, branch_results: Optional[pd.DataFrame] = None):
+def gene_trends(adata, cfg, log, table_dir, branch_results: Optional[pd.DataFrame] = None):
     """基因表达沿伪时间趋势——四源数据驱动选择"""
     # Guard A: DPT exists and has variance
     if "dpt_pseudotime" not in adata.obs:
@@ -446,7 +446,7 @@ def gene_trends(adata, cfg, log, branch_results: Optional[pd.DataFrame] = None):
 
     # Export Spearman correlation full results
     if not corr_df.empty:
-        corr_csv = os.path.join(cfg.table_dir, "pseudotime_trend_genes.csv")
+        corr_csv = os.path.join(table_dir, "pseudotime_trend_genes.csv")
         corr_df.to_csv(corr_csv, index=False)
         log.info("  Pseudotime trend genes exported: %s (%d rows)", corr_csv, len(corr_df))
 
@@ -467,7 +467,7 @@ def gene_trends(adata, cfg, log, branch_results: Optional[pd.DataFrame] = None):
             "source": ["+".join(sorted(v)) for v in source_map.values()],
         },
     )
-    sel_csv = os.path.join(cfg.table_dir, "pseudotime_trend_genes_selected.csv")
+    sel_csv = os.path.join(table_dir, "pseudotime_trend_genes_selected.csv")
     sel_df.to_csv(sel_csv, index=False)
     log.info("  Selected pseudotime trend genes exported: %s (%d rows)", sel_csv, len(sel_df))
     log.info(
@@ -530,6 +530,10 @@ def main():
     sc.settings.figdir = os.path.join(cfg.figure_dir, "08_trajectory")
     os.makedirs(sc.settings.figdir, exist_ok=True)
 
+    # ── Table output subdirectory ──────────────────────────
+    table_dir = os.path.join(cfg.table_dir, "08_trajectory")
+    os.makedirs(table_dir, exist_ok=True)
+
     # 当 marker_validation PASS 率极低时，退回到 leiden 聚类
     if "marker_validation" in adata.obs and adata.n_obs > 0:
         pass_cells = (adata.obs["marker_validation"] == "PASS").sum()
@@ -573,8 +577,8 @@ def main():
     run_paga(adata, cfg, log)
     root_mask = find_root_cells(adata, cfg, log)
     compute_dpt(adata, root_mask, cfg, log)
-    branch_results = branch_analysis(adata, cfg, log)
-    gene_trends(adata, cfg, log, branch_results=branch_results)
+    branch_results = branch_analysis(adata, cfg, log, table_dir)
+    gene_trends(adata, cfg, log, table_dir, branch_results=branch_results)
 
     # 最终可视化 (figdir 已在上面设置)
     for color in ["stage", "cell_type", "cell_type_sub", "dpt_pseudotime"]:

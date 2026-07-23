@@ -91,6 +91,8 @@ def main():
     os.makedirs(fig_dir, exist_ok=True)
     sc.settings.figdir = fig_dir
     sc.settings.autoshow = False
+    csv_dir = os.path.join(cfg.table_dir, "10_exploratory")
+    os.makedirs(csv_dir, exist_ok=True)
 
     # 1. 细胞组成
     group_by = ["cell_type", "cell_type_sub", "leiden"]
@@ -102,7 +104,7 @@ def main():
                 "stage" if "stage" in adata.obs else "sample",
                 cfg.sample_meta.stage_order,
                 fig_dir,
-                cfg.table_dir,
+                csv_dir,
                 log,
             )
 
@@ -161,7 +163,7 @@ def main():
         log.info("  %s size distribution:", group_col)
         for label, cnt in sizes.items():
             log.info("    %s: %d cells (%.1f%%)", label, cnt, 100 * cnt / adata.n_obs)
-        sizes.to_csv(os.path.join(cfg.table_dir, f"{group_col}_sizes.csv"), header=["n_cells"])
+        sizes.to_csv(os.path.join(csv_dir, f"{group_col}_sizes.csv"), header=["n_cells"])
 
     # 6. 额外元数据分组可视化
     # 来源 A: 用户显式配置的 meta_columns
@@ -223,7 +225,7 @@ def main():
         log.info("  %s distribution:", col)
         for label, cnt in sizes.items():
             log.info("    %s: %d cells (%.1f%%)", label, cnt, 100 * cnt / adata.n_obs)
-        sizes.to_csv(os.path.join(cfg.table_dir, f"{col}_sizes.csv"), header=["n_cells"])
+        sizes.to_csv(os.path.join(csv_dir, f"{col}_sizes.csv"), header=["n_cells"])
 
         # UMAP
         safe_plot(

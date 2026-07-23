@@ -767,7 +767,7 @@ def main():
                 if interpretation is None:
                     raise ValueError("LLM returned empty interpretation")
 
-                interp_path = os.path.join(cfg.table_dir, "09_enrichment", "ai_interpretation.txt")
+                interp_path = os.path.join(cfg.table_dir, "09_enrichment", "ai_interpretation.md")
                 os.makedirs(os.path.dirname(interp_path), exist_ok=True)
                 with open(interp_path, "w") as f:
                     f.write(interpretation)
@@ -777,7 +777,7 @@ def main():
                 summary_lines.append("=" * 60)
                 summary_lines.append(interpretation[:2000])
                 summary_path = os.path.join(
-                    cfg.table_dir, "09_enrichment", "ai_interpretation_summary.txt"
+                    cfg.table_dir, "09_enrichment", "ai_interpretation_summary.md"
                 )
                 with open(summary_path, "w") as f:
                     f.write("\n".join(summary_lines))

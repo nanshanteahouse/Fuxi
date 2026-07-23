@@ -29,7 +29,7 @@ from scipy.stats import rankdata
 from core.utils import resolve_config, safe_plot, setup_logger
 
 
-def layer1_markers(adata, cfg, log, group_col):
+def layer1_markers(adata, cfg, log, group_col, table_dir):
     """Full cell-type marker genes (configurable method) for a given annotation column
     Returns (filtered_df, unfiltered_df).
     """
@@ -51,7 +51,7 @@ def layer1_markers(adata, cfg, log, group_col):
         result_all = result_all[result_all["pvals_adj"] < cfg.de.pval_cutoff]
     elif cfg.de.pval_cutoff is not None and "pvals_adj" not in result_all.columns:
         log.info("  pvals_adj not available (method=%s) — skipping p-value filter", cfg.de.method)
-    out_path = os.path.join(cfg.table_dir, f"marker_genes_per_group_{group_col}.csv")
+    out_path = os.path.join(table_dir, f"marker_genes_per_group_{group_col}.csv")
     result_all.to_csv(out_path, index=False)
     log.info("  Exported (unfiltered): %s (%d rows)", out_path, len(result_all))
 
@@ -64,7 +64,7 @@ def layer1_markers(adata, cfg, log, group_col):
     )
     result = sc.get.rank_genes_groups_df(adata, group=None, key="rank_genes_groups_filtered")
     result = result.dropna(subset=["names"])
-    filtered_path = os.path.join(cfg.table_dir, f"marker_genes_per_group_{group_col}_filtered.csv")
+    filtered_path = os.path.join(table_dir, f"marker_genes_per_group_{group_col}_filtered.csv")
     result.to_csv(filtered_path, index=False)
     log.info("  Exported (filtered): %s (%d rows)", filtered_path, len(result))
 
@@ -122,7 +122,7 @@ def _layer2_one_pair(ct, s1, s2, adata, ct_col, cfg, log):
         return None
 
 
-def layer2_pairwise_de(adata, cfg, log, primary_col=None):
+def layer2_pairwise_de(adata, cfg, log, table_dir, primary_col=None):
     """相邻发育阶段配对差异表达"""
     if "stage" not in adata.obs or not cfg.sample_meta.stage_order:
         log.info("[Layer 2] No stage info, skipping.")
@@ -155,13 +155,13 @@ def layer2_pairwise_de(adata, cfg, log, primary_col=None):
 
     if all_results:
         combined = pd.concat(all_results.values(), ignore_index=True)
-        out_path = os.path.join(cfg.table_dir, "pairwise_stage_de.csv")
+        out_path = os.path.join(table_dir, "pairwise_stage_de.csv")
         combined.to_csv(out_path, index=False)
         log.info("  Exported: %s (%d rows)", out_path, len(combined))
     return all_results
 
 
-def layer3_temporal_trends(adata, cfg, log, primary_col=None):
+def layer3_temporal_trends(adata, cfg, log, table_dir, primary_col=None):
     """发育时间趋势基因 (Spearman 相关 vs 发育顺序)"""
     if "stage" not in adata.obs or not cfg.sample_meta.stage_order:
         log.info("[Layer 3] No stage info, skipping.")
@@ -233,7 +233,7 @@ def layer3_temporal_trends(adata, cfg, log, primary_col=None):
 
     results_df = pd.DataFrame(results)
     if len(results_df) > 0:
-        out_path = os.path.join(cfg.table_dir, "temporal_trend_genes.csv")
+        out_path = os.path.join(table_dir, "temporal_trend_genes.csv")
         results_df.to_csv(out_path, index=False)
         log.info("  Exported: %s (%d rows)", out_path, len(results_df))
     return results_df
@@ -324,6 +324,11 @@ def main():
 
         log.info("Step 07 (pseudobulk) complete, took %.1fs", time.time() - t0)
         return
+
+    # ── Table output subdirectory ──────────────────────────
+    table_dir = os.path.join(cfg.table_dir, "07_markers")
+    os.makedirs(table_dir, exist_ok=True)
+
     log.info("Step 07: Marker genes + differential expression analysis")
 
     # 优先加载 05_annotated.h5ad，回退到 cluster_h5ad
@@ -368,7 +373,7 @@ def main():
     all_markers = {}
     # Primary column 始终串行（用原始 adata，修改 .uns 供下游使用）
     col = annotation_cols[0]
-    all_markers[col], _ = layer1_markers(adata, cfg, log, group_col=col)
+    all_markers[col], _ = layer1_markers(adata, cfg, log, group_col=col, table_dir=table_dir)
 
     # 非主列并行（仅在有多列时）
     if len(annotation_cols) > 1:
@@ -382,7 +387,8 @@ def main():
             n_jobs,
         )
         parallel_layer1 = Parallel(n_jobs=n_jobs, prefer="threads")(
-            delayed(layer1_markers)(adata.copy(), cfg, log, col) for col in non_primary_cols
+            delayed(layer1_markers)(adata.copy(), cfg, log, col, table_dir)
+            for col in non_primary_cols
         )
         if parallel_layer1 is None:
             log.error("Parallel layer1_markers returned None ", "— skipping non-primary columns")
@@ -390,9 +396,9 @@ def main():
             for col, (result_df, _unused) in zip(non_primary_cols, parallel_layer1):
                 all_markers[col] = result_df
 
-    # 导出兼容文件 — unfiltered (Step 09/10 输入，路径不变)
+    # 导出兼容文件 — unfiltered (Step 09/10 输入)
     combined_path = os.path.join(cfg.table_dir, "marker_genes_per_group.csv")
-    unfiltered_path = os.path.join(cfg.table_dir, f"marker_genes_per_group_{primary_col}.csv")
+    unfiltered_path = os.path.join(table_dir, f"marker_genes_per_group_{primary_col}.csv")
     pd.read_csv(unfiltered_path).to_csv(combined_path, index=False)
     log.info("  Exported (compat unfiltered): %s", combined_path)
 
@@ -406,8 +412,8 @@ def main():
     )
 
     # Layer 2 & 3: 使用主注释列
-    layer2_pairwise_de(adata, cfg, log, primary_col=primary_col)
-    layer3_temporal_trends(adata, cfg, log, primary_col=primary_col)
+    layer2_pairwise_de(adata, cfg, log, table_dir, primary_col=primary_col)
+    layer3_temporal_trends(adata, cfg, log, table_dir, primary_col=primary_col)
     generate_figures(adata, all_markers[primary_col], cfg, log, primary_col=primary_col)
 
     log.info("Step 07 complete, took %.1fs", time.time() - t0)

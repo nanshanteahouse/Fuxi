@@ -67,6 +67,8 @@ def main():
 
     fig_dir = os.path.join(cfg.figure_dir, "04_cluster")
     os.makedirs(fig_dir, exist_ok=True)
+    table_dir = os.path.join(cfg.table_dir, "04_cluster")
+    os.makedirs(table_dir, exist_ok=True)
 
     umap_min_dist = getattr(cfg.clustering, "umap_min_dist", 0.3)
     umap_spread = getattr(cfg.clustering, "umap_spread", 1.0)
@@ -343,7 +345,7 @@ def main():
 
     # ── 汇总 CSV ──
     df_summary = pd.DataFrame(results_summary)
-    csv_path = os.path.join(cfg.table_dir, "param_grid_summary.csv")
+    csv_path = os.path.join(table_dir, "param_grid_summary.csv")
     try:
         df_summary.to_csv(csv_path, index=False)
         log.info("Parameter grid summary saved: %s", csv_path)
@@ -456,7 +458,7 @@ def main():
     if sweep_results:
         # Summary CSV
         try:
-            sweep_csv = os.path.join(cfg.table_dir, "umap_min_dist_sweep_summary.csv")
+            sweep_csv = os.path.join(table_dir, "umap_min_dist_sweep_summary.csv")
             pd.DataFrame(sweep_results).to_csv(sweep_csv, index=False)
             log.info("UMAP sweep summary saved: %s", sweep_csv)
         except Exception as e:
