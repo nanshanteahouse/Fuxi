@@ -1,12 +1,10 @@
 # ═══════════════════════════════════════════════════════════════════════
-# Fuxi (伏羲) — spatial transcriptomics 依赖
-# 安装: pip install -r requirements/spatial.txt
+# Fuxi — spatial transcriptomics (薄包装)
 # ═══════════════════════════════════════════════════════════════════════
-
--r base.txt
-
-# ══ Spatial (Squidpy) ══════════════════════════════════════════════════
-squidpy>=1.8.1
-liana>=1.0.0
-# 可选: napari         09_exploratory 交互式查看器，缺失降级为静态图
-textual>=2.0.0
+#
+# 声明源: pyproject.toml [project.optional-dependencies] spatial
+#   squidpy / liana
+#
+# 等价: pip install -e ".[spatial]"
+# ═══════════════════════════════════════════════════════════════════════
+-e ".[spatial]"

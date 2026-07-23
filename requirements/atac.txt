@@ -1,22 +1,10 @@
 # ═══════════════════════════════════════════════════════════════════════
-# Fuxi (伏羲) — scATAC-seq 依赖
-# 安装: pip install -r requirements/atac.txt
+# Fuxi — scATAC-seq (薄包装)
 # ═══════════════════════════════════════════════════════════════════════
-
--r base.txt
-
-# ══ scATAC-seq ══════════════════════════════════════════════════════════
-snapatac2>=2.9.0
-mudata>=0.3.0
-polars>=1.0
-
-# ══ 可选 / 有守卫 (缺失时自动降级，不阻塞管道) ═══════════════════════
-#   pybedtools      11_enrichment 策略1 (peak→gene 映射，需 bedtools 二进制)
-#   muon            13_integrate 多组学整合增强
-
-# ══ 预留策略层 (代码未接线，备用) ═════════════════════════════════════
-#   tobias            ATAC 足迹分析
-#   pyranges          基因组区间运算
-#   scvi-tools        深度整合/注释
-#   cellrank          命运轨迹
-textual>=2.0.0
+#
+# 声明源: pyproject.toml [project.optional-dependencies] atac
+#   snapatac2 (Rust) / mudata / polars (Rust)
+#
+# 等价: pip install -e ".[atac]"
+# ═══════════════════════════════════════════════════════════════════════
+-e ".[atac]"

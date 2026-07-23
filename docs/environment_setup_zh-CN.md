@@ -148,15 +148,17 @@ source .venv/bin/activate
 确保虚拟环境已激活（提示符前有 `(.venv)`），然后根据你的需求选择对应的命令：
 
 ```bash
-# 安装全部模态（RNA + ATAC + spatial）
-pip install -r requirements.txt
+# ── 方式 A: pyproject extras (推荐, 依赖单一声明源) ──────────────
+pip install -e ".[all]"                # 全部模态 (RNA + ATAC + spatial + bulk + paper)
+pip install -e ".[rna]"                # 仅 scRNA-seq (跳过 ATAC 包)
+pip install -e ".[atac]"               # 仅 scATAC-seq
+pip install -e ".[bulk]"               # 仅 Bulk RNA-seq
+pip install -e ".[rna,celltypist]"     # 模态 + 方法学 (CellTypist 等)
 
-# 仅安装 scRNA-seq（跳过 ATAC 包）
-pip install -r requirements/rna.txt
-
-# 仅安装 scATAC-seq
-pip install -r requirements/atac.txt
-pip install -r requirements/bulk.txt     # 仅 Bulk RNA-seq
+# ── 方式 B: requirements 薄包装 (等价, 向后兼容) ────────────────
+pip install -r requirements.txt          # = -e ".[all]"
+pip install -r requirements/rna.txt      # = -e ".[rna]"
+pip install -r requirements/atac.txt     # = -e ".[atac]"
 ```
 
 此命令会安装所有必要的 Python 包，包括：
@@ -174,7 +176,8 @@ pip install -r requirements/bulk.txt     # 仅 Bulk RNA-seq
 | **多组学整合** | `muon`, `mudata` | RNA + ATAC 联合分析 |
 | **AI 注释** | `openai` | 调用大语言模型辅助细胞类型注释 |
 
-> 💡 **只需要 scRNA-seq？** 使用 `pip install -r requirements/rna.txt` 即可只安装你需要的包，不会拉取 ATAC 相关依赖。
+> 💡 **只需要 scRNA-seq？** `pip install -e ".[rna]"`（或 `pip install -r requirements/rna.txt`），只装 RNA 依赖，不拉 ATAC 包。
+> 💡 **需要方法学？** 额外加 `[celltypist]` / `[scvelo]` / `[sccoda]` / `[methods]`。注意 `[all]` **不含**方法学（避免拉入 PyTorch），需显式指定。详见 `pyproject.toml` `[project.optional-dependencies]`。
 
 ### 4.2 安装时间参考
 

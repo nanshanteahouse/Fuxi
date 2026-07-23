@@ -1,16 +1,10 @@
-# ══════════════════════════════════════════════════════════════════════════
-# Fuxi (伏羲) — Development dependencies (NOT included in all.txt)
-#   pip install -r requirements/dev.txt
-# ══════════════════════════════════════════════════════════════════════════
-
-# ══ Testing ═══════════════════════════════════════════════════════════════
-pytest>=7.0
-pytest-cov>=5.0
-pytest-asyncio>=0.24
-
-# ══ Code quality ═════════════════════════════════════════════════════════
-ruff>=0.5
-pre-commit>=4.0
-
-# ══ Tools ════════════════════════════════════════════════════════════════
-deepdiff              # core/kb_migrate_to_yaml.py optional validation
+# ═══════════════════════════════════════════════════════════════════════
+# Fuxi — Development dependencies (薄包装, NOT in [all])
+# ═══════════════════════════════════════════════════════════════════════
+#
+# 声明源: pyproject.toml [project.optional-dependencies] dev
+#   pytest / pytest-cov / pytest-asyncio / ruff / pre-commit / deepdiff
+#
+# 等价: pip install -e ".[dev]"
+# ═══════════════════════════════════════════════════════════════════════
+-e ".[dev]"

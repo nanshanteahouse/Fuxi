@@ -1,20 +1,11 @@
 # ═══════════════════════════════════════════════════════════════════════
-# Fuxi (伏羲) — scRNA-seq 依赖
-# 安装: pip install -r requirements/rna.txt
+# Fuxi — scRNA-seq (薄包装)
 # ═══════════════════════════════════════════════════════════════════════
-
--r base.txt
-
-# ══ scRNA-seq ═══════════════════════════════════════════════════════════
-scrublet>=0.2.3
-harmonypy>=2.0
-leidenalg>=0.10.0
-gseapy>=1.1.0
-decoupler>=2.0
-pydeseq2>=0.5
-liana>=1.0.0
-statsmodels>=0.14
-igraph>=1.0
-# 可选 (懒加载，缺失不报错):
-#   mygene            rna/utils/cell_interaction.py Ensembl→symbol 转换
-textual>=2.0.0
+#
+# 声明源: pyproject.toml [project.optional-dependencies] rna
+#   scrublet / harmonypy / leidenalg / gseapy / decoupler /
+#   pydeseq2 / liana / statsmodels / igraph
+#
+# 等价: pip install -e ".[rna]"
+# ═══════════════════════════════════════════════════════════════════════
+-e ".[rna]"

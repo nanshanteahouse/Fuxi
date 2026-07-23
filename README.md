@@ -97,11 +97,21 @@ fuxi/
   cd <repo_root>
   python -m venv .venv
   source .venv/bin/activate
+  # 方式 A: requirements 薄包装 (向后兼容)
   pip install -r requirements.txt          # all modalities
   pip install -r requirements/rna.txt        # scRNA-seq only
   pip install -r requirements/atac.txt       # scATAC-seq only
   pip install -r requirements/spatial.txt    # spatial transcriptomics only
+  # 方式 B: pyproject extras (推荐, 依赖单一声明源)
+  pip install -e ".[all]"              # 等价: 全部模态
+  pip install -e ".[rna]"              # 单模态
+  pip install -e ".[rna,celltypist]"   # 模态 + 方法学
   ```
+
+可选 extras: `rna` / `atac` / `spatial` / `bulk` / `paper` / `methods` /
+`scvi` / `celltypist` / `scvelo` / `sccoda` / `cellbender` / `soupx` / `dev` / `all`.
+依赖声明源见 `pyproject.toml` `[project.optional-dependencies]`.
+`[all]` 不含方法学 (避免拉入 PyTorch) —— 显式加 `[methods]` 或单个 extra。
 
 ### Running the Pipeline
 

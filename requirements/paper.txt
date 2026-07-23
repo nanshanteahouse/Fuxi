@@ -1,7 +1,10 @@
 # ═══════════════════════════════════════════════════════════════════════
-# Fuxi (伏羲) — 论文工具依赖
-# 安装: pip install -r requirements/paper.txt
+# Fuxi — 论文工具 (薄包装)
 # ═══════════════════════════════════════════════════════════════════════
-# ══ 论文解析 ═══════════════════════════════════════════════════════════
-pymupdf4llm
-pymupdf               # paper_converter.py 直接 import fitz
+#
+# 声明源: pyproject.toml [project.optional-dependencies] paper
+#   pymupdf4llm / pymupdf
+#
+# 等价: pip install -e ".[paper]"
+# ═══════════════════════════════════════════════════════════════════════
+-e ".[paper]"

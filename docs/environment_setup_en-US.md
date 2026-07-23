@@ -148,16 +148,17 @@ source .venv/bin/activate
 Make sure the virtual environment is active (your prompt starts with `(.venv)`), then pick the command matching your needs:
 
 ```bash
-# All modalities (RNA + ATAC + spatial)
-pip install -r requirements.txt
+# ── Option A: pyproject extras (recommended, single source of truth) ──
+pip install -e ".[all]"                # all modalities (RNA + ATAC + spatial + bulk + paper)
+pip install -e ".[rna]"                # scRNA-seq only (skip ATAC packages)
+pip install -e ".[atac]"               # scATAC-seq only
+pip install -e ".[bulk]"               # Bulk RNA-seq only
+pip install -e ".[rna,celltypist]"     # modality + methodology (CellTypist etc.)
 
-# scRNA-seq only (skip ATAC packages entirely)
-pip install -r requirements/rna.txt
-
-# scATAC-seq only
-pip install -r requirements/atac.txt
-# Bulk RNA-seq only
-pip install -r requirements/bulk.txt
+# ── Option B: requirements thin wrappers (equivalent, backward-compatible) ──
+pip install -r requirements.txt          # = -e ".[all]"
+pip install -r requirements/rna.txt      # = -e ".[rna]"
+pip install -r requirements/atac.txt     # = -e ".[atac]"
 ```
 
 This installs the required Python packages:
@@ -175,7 +176,8 @@ This installs the required Python packages:
 | **Multi-omics integration** | `muon`, `mudata` | Joint RNA + ATAC analysis |
 | **AI annotation** | `openai` | LLM-assisted cell type annotation |
 
-> 💡 **Only need scRNA-seq?** Use `pip install -r requirements/rna.txt` to install only the packages you need — no ATAC dependencies will be pulled.
+> 💡 **Only need scRNA-seq?** `pip install -e ".[rna]"` (or `pip install -r requirements/rna.txt`) installs only RNA dependencies — no ATAC packages.
+> 💡 **Need methodology?** Add `[celltypist]` / `[scvelo]` / `[sccoda]` / `[methods]`. Note `[all]` does **NOT** include methodology (avoids pulling PyTorch) — specify explicitly. See `pyproject.toml` `[project.optional-dependencies]`.
 
 ### 4.2 How long will it take?
 

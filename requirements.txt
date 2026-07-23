@@ -1,21 +1,22 @@
 # ═══════════════════════════════════════════════════════════════════════
-# Fuxi (伏羲) — 统一单细胞多组学管线依赖
+# Fuxi (伏羲) — 统一单细胞多组学管线
 # ═══════════════════════════════════════════════════════════════════════
 #
-# 安装全部模态: pip install -r requirements.txt
-# 仅安装 RNA:   pip install -r requirements/rna.txt
-# 仅安装 ATAC:   pip install -r requirements/atac.txt
-# 仅安装空间:   pip install -r requirements/spatial.txt
+# 依赖单一声明源: pyproject.toml
+#   [project] dependencies              → base 运行时 (16 包)
+#   [project.optional-dependencies]     → 模态 / 方法学 / 聚合 extras
 #
-# 文件结构:
-#   requirements/
-#   ├── base.txt     共享核心 (numpy, scipy, pandas, scanpy, pydantic ...)
-#   ├── rna.txt       scRNA-seq  (harmonypy, Scrublet, decoupler, LIANA ...)
-#   ├── atac.txt      scATAC-seq (Snapatac2, Mudata, polars ...)
-#   ├── spatial.txt   spatial    (Squidpy, LIANA ...)
-#   ├── paper.txt     论文工具   (pymupdf4llm, pymupdf)
-#   ├── dev.txt       开发测试   (pytest, ruff, deepdiff) — 不进 all.txt
-#   └── all.txt       全部模态 + 论文工具
+# 本文件是便利别名,等价于:  pip install -e ".[all]"
+#
+# 常用安装方式:
+#   全量模态:    pip install -r requirements.txt            (本文件)
+#   单模态:      pip install -r requirements/rna.txt        (等价 -e ".[rna]")
+#   +方法学:     pip install -e ".[rna,celltypist]"
+#   轻量方法包:  pip install -e ".[methods]"                (scvi+celltypist+scvelo+sccoda)
+#
+# ⚠️ [all] 不含方法学(scvi/celltypist/scvelo/sccoda)——避免拉入 PyTorch。
+#    需要时显式加 [methods] 或单个 extra。
+#
+# 详见 pyproject.toml [project.optional-dependencies] 获取全部 extras 列表。
 # ═══════════════════════════════════════════════════════════════════════
-
--r requirements/all.txt
+-e ".[all]"

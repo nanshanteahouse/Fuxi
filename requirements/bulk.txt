@@ -1,13 +1,10 @@
 # ==============================================================
-# Fuxi - Bulk RNA-seq dependencies
-# Install: pip install -r requirements/bulk.txt
+# Fuxi — Bulk RNA-seq (薄包装)
 # ==============================================================
-
--r base.txt
-
-# == Bulk RNA-seq ==
-pydeseq2>=0.5
-gseapy>=1.1.0
-statsmodels>=0.14
-# Optional: batch correction (install separately if needed)
-# pycombat
+#
+# 声明源: pyproject.toml [project.optional-dependencies] bulk
+#   pydeseq2 / gseapy / statsmodels
+#
+# 等价: pip install -e ".[bulk]"
+# ==============================================================
+-e ".[bulk]"

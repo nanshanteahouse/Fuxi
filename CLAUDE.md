@@ -71,9 +71,10 @@ Subject: imperative, lowercase, ≤72 chars. Body explains *why*, not *what*.
 ```bash
 cd <repo_root>
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt          # all modalities
-pip install -r requirements/rna.txt      # scRNA-seq only
-pip install -r requirements/atac.txt     # scATAC-seq only
+pip install -r requirements.txt          # all modalities (等价: -e ".[all]")
+pip install -r requirements/rna.txt      # scRNA-seq only (等价: -e ".[rna]")
+pip install -r requirements/atac.txt     # scATAC-seq only (等价: -e ".[atac]")
+# 方法学 extras: pip install -e ".[rna,celltypist]" / ".[methods]" / ".[scvi]"
 
 export FUXI_DATA_ROOT=<path_to_geo_datasets>
 ```

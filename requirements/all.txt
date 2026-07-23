@@ -1,10 +1,11 @@
 # ═══════════════════════════════════════════════════════════════════════
-# Fuxi (伏羲) — 全部模态依赖 (RNA + ATAC + spatial)
-# 安装: pip install -r requirements/all.txt
+# Fuxi — 全部模态 (薄包装)
 # ═══════════════════════════════════════════════════════════════════════
-
--r rna.txt
--r atac.txt
--r spatial.txt
--r paper.txt
-textual>=2.0.0
+#
+# 声明源: pyproject.toml [project.optional-dependencies] all
+#   聚合: rna + atac + spatial + bulk + paper
+#
+# 等价: pip install -e ".[all]"
+# 注意: [all] 不含方法学 —— 显式加 [methods] 或单个 extra (scvi/celltypist/...)
+# ═══════════════════════════════════════════════════════════════════════
+-e ".[all]"

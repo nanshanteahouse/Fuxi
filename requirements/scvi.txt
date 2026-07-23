@@ -1,7 +1,0 @@
-# ═══════════════════════════════════════════════════════════════════════
-# Fuxi (伏羲) — scVI integration (optional)
-# 安装: pip install -r requirements/scvi.txt
-# ═══════════════════════════════════════════════════════════════════════
-
-# scVI 依赖 PyTorch + Lightning + Pyro (自动传递，不显式列出)
-scvi-tools>=1.5,<2

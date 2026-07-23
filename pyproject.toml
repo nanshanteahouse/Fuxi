@@ -71,12 +71,83 @@ name = "fuxi"
 version = "0.1.0"
 description = "Unified single-cell multi-omics pipeline"
 requires-python = ">=3.14"
+# ── Base runtime (was requirements/base.txt) ──────────────────────────
+# Shared across all modalities. Modality-specific deps live in extras.
+dependencies = [
+    "numpy>=1.24.0",
+    "scipy>=1.11.0",
+    "pandas>=2.0.0",
+    "joblib>=1.3.0",
+    "matplotlib>=3.7.0",
+    "pyyaml>=6.0",
+    "openpyxl>=3.1",
+    "pydantic>=2.0",
+    "scanpy>=1.10.0",
+    "anndata>=0.10.0",
+    "scikit-learn>=1.3",
+    "networkx>=3.0",
+    "psutil>=5.9",
+    # AI calls (engine.py, caller) — shared core
+    "openai>=1.0.0",
+    "python-dotenv>=1.0.0",
+    # TUI — cross-modality interaction layer (core/tui/)
+    "textual>=2.0.0",
+]
 
 [project.optional-dependencies]
+# ── Modalities ────────────────────────────────────────────────────────
+rna = [
+    "scrublet>=0.2.3",
+    "harmonypy>=2.0",
+    "leidenalg>=0.10.0",
+    "gseapy>=1.1.0",
+    "decoupler>=2.0",
+    "pydeseq2>=0.5",
+    "liana>=1.0.0",
+    "statsmodels>=0.14",
+    "igraph>=1.0",
+]
+atac = [
+    "snapatac2>=2.9.0",
+    "mudata>=0.3.0",
+    "polars>=1.0",
+]
+spatial = [
+    "squidpy>=1.8.1",
+    "liana>=1.0.0",
+]
+bulk = [
+    "pydeseq2>=0.5",
+    "gseapy>=1.1.0",
+    "statsmodels>=0.14",
+]
+paper = [
+    "pymupdf4llm",
+    "pymupdf",
+]
+
+# ── Methodology (CPU / lightweight) ──────────────────────────────────
 scvi = ["scvi-tools>=1.5,<2"]
 celltypist = ["celltypist>=1.6"]
 scvelo = ["scvelo>=0.3"]
 sccoda = ["sccoda>=0.1"]  # pip confirmed: ``pip index versions sccoda`` → 0.1.9 available
+
+# ── Methodology (heavyweight / third-party — keep independent) ───────
 cellbender = ["cellbender"]  # broadinstitute/CellBender (PyPI: cellbender); GPU recommended
-soupx = ["soupx-python"]  # third-party Python port of SoupX; package name=``soupx-python``, import name=``soupx``
-methods = ["fuxi[scvi]", "fuxi[celltypist]", "fuxi[scvelo]", "fuxi[sccoda]"]  # CPU/lightweight aggregate; cellbender(GPU) & soupx stay separate opt-in
+soupx = ["soupx-python"]     # third-party Python port of SoupX; package name=``soupx-python``, import name=``soupx``
+
+# ── Development ──────────────────────────────────────────────────────
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=5.0",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.5",
+    "pre-commit>=4.0",
+    "deepdiff",
+]
+
+# ── Aggregates ───────────────────────────────────────────────────────
+# methods: CPU-lightweight methodology bundle (no GPU, no third-party ports)
+methods = ["fuxi[scvi]", "fuxi[celltypist]", "fuxi[scvelo]", "fuxi[sccoda]"]
+# all: every modality (NO methodology — add [methods] explicitly to avoid pulling PyTorch via scvi)
+all = ["fuxi[rna]", "fuxi[atac]", "fuxi[spatial]", "fuxi[bulk]", "fuxi[paper]"]
