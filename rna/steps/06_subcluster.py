@@ -377,6 +377,7 @@ def main():
         show=False,
         save=f"sub_{safe_cell_type}_leiden_umap.pdf",
         title=f"{args.cell_type} — leiden",
+        cfg=cfg,
     )
 
     # Multi-resolution comparison
@@ -390,7 +391,11 @@ def main():
         n_res = len(res_keys)
         n_cols = min(3, n_res)
         n_rows = int(np.ceil(n_res / n_cols))
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows))
+        fig, axes = plt.subplots(
+            n_rows,
+            n_cols,
+            figsize=(cfg.plot.umap_panel_size[0] * n_cols, cfg.plot.umap_panel_size[1] * n_rows),
+        )
         axes = axes.ravel() if n_res > 1 else [axes]
         for i, key in enumerate(res_keys):
             sc.pl.umap(
@@ -406,7 +411,7 @@ def main():
         fig.tight_layout()
         fig.savefig(
             os.path.join(fig_dir, f"sub_{safe_cell_type}_multires.pdf"),
-            dpi=150,
+            dpi=cfg.plot.figure_dpi,
             bbox_inches="tight",
         )
         plt.close(fig)
@@ -498,6 +503,7 @@ def main():
                     show=False,
                     save=f"sub_{safe_cell_type}_umap_ai.pdf",
                     title=f"{args.cell_type} — AI subcluster",
+                    cfg=cfg,
                 )
 
         except Exception as e:

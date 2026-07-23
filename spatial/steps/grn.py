@@ -296,7 +296,12 @@ def plot_heatmap(top_df, cfg, log):
     ax_hm = fig.add_subplot(gs[1, 1])
     vabs = np.percentile(np.abs(data_clust), 90)
     im = ax_hm.imshow(
-        data_clust, aspect="auto", cmap="RdBu_r", vmin=-vabs, vmax=vabs, interpolation="nearest"
+        data_clust,
+        aspect="auto",
+        cmap=cfg.plot.palette.heatmap,
+        vmin=-vabs,
+        vmax=vabs,
+        interpolation="nearest",
     )
 
     ax_hm.set_xticks(range(n_cts))
@@ -329,7 +334,12 @@ def plot_heatmap(top_df, cfg, log):
     )
 
     path = os.path.join(fig_dir, "tf_activity_heatmap.png")
-    fig.savefig(path, dpi=200, bbox_inches="tight", facecolor="white")
+    fig.savefig(
+        path,
+        dpi=cfg.plot.figure_dpi,
+        bbox_inches="tight",
+        facecolor=cfg.plot.palette.grn_facecolor,
+    )
     plt.close(fig)
     log.info("Heatmap saved: %s", path)
 

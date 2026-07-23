@@ -315,7 +315,7 @@ def _hard_thresholds(cfg, log, adata=None):
 # ══════════════════════════════════════════════════════════════════════════════
 
 
-def _plot_qc_diagnostics(adata, thresholds, output_dir, log):
+def _plot_qc_diagnostics(adata, thresholds, output_dir, log, cfg=None):
     """Save 3 diagnostic plots with threshold lines.
 
     Panels:
@@ -324,24 +324,41 @@ def _plot_qc_diagnostics(adata, thresholds, output_dir, log):
       C: pct_mito distribution histogram
     """
     os.makedirs(output_dir, exist_ok=True)
-
+    _dpi = cfg.plot.figure_dpi if cfg else 150
+    _figsize = cfg.plot.qc_figure_size if cfg else [8, 5]
+    _qchist = cfg.plot.palette.qc_hist if cfg else "steelblue"
+    _qcthresh = cfg.plot.palette.qc_threshold if cfg else "red"
+    _qcsecond = cfg.plot.palette.qc_second if cfg else "indianred"
+    _pseudotime = cfg.plot.palette.pseudotime if cfg else "viridis"
     # ---- Panel A: nFeature distribution ----
     try:
-        fig, ax = plt.subplots(figsize=(8, 5))
+        fig, ax = plt.subplots(figsize=_figsize)
         vals = adata.obs["n_genes_by_counts"].values
         vals = vals[np.isfinite(vals)]
-        ax.hist(vals, bins=100, color="steelblue", edgecolor="white", alpha=0.85)
+        ax.hist(vals, bins=100, color=_qchist, edgecolor="white", alpha=0.85)
         lo, hi = thresholds["n_genes_by_counts"]
         if lo is not None:
-            ax.axvline(lo, color="red", linestyle="--", linewidth=1.2, label=f"lo={lo:.0f}")
+            ax.axvline(
+                lo,
+                color=_qcthresh,
+                linestyle="--",
+                linewidth=1.2,
+                label=f"lo={lo:.0f}",
+            )
         if hi is not None:
-            ax.axvline(hi, color="red", linestyle="--", linewidth=1.2, label=f"hi={hi:.0f}")
+            ax.axvline(
+                hi,
+                color=_qcthresh,
+                linestyle="--",
+                linewidth=1.2,
+                label=f"hi={hi:.0f}",
+            )
         ax.set_xlabel("n_genes_by_counts (nFeature)")
         ax.set_ylabel("Number of spots")
         ax.set_title(f"nFeature distribution (N={adata.n_obs}, median={np.median(vals):.0f})")
         ax.legend(fontsize=9)
         fig.tight_layout()
-        fig.savefig(os.path.join(output_dir, "nFeature_distribution.png"), dpi=150)
+        fig.savefig(os.path.join(output_dir, "nFeature_distribution.png"), dpi=_dpi)
         plt.close(fig)
         log.info("  Plot saved: nFeature_distribution.png")
     except Exception as e:
@@ -349,21 +366,30 @@ def _plot_qc_diagnostics(adata, thresholds, output_dir, log):
 
     # ---- Panel B: nCount vs nFeature scatter ----
     try:
-        fig, ax = plt.subplots(figsize=(8, 6))
+        fig, ax = plt.subplots(figsize=(_figsize[0], _figsize[1] + 1))
         x = adata.obs["total_counts"].values
         y = adata.obs["n_genes_by_counts"].values
         c = adata.obs["pct_counts_mt"].values
         finite = np.isfinite(x) & np.isfinite(y) & np.isfinite(c)
         xp, yp, cp = x[finite], y[finite], c[finite]
         vmax = np.nanpercentile(c, 99) if np.isfinite(c).any() else None
-        scat = ax.scatter(xp, yp, c=cp, cmap="viridis", s=2, alpha=0.6, rasterized=True, vmax=vmax)
+        scat = ax.scatter(
+            xp,
+            yp,
+            c=cp,
+            cmap=_pseudotime,
+            s=2,
+            alpha=0.6,
+            rasterized=True,
+            vmax=vmax,
+        )
         fig.colorbar(scat, ax=ax).set_label("% Mito")
         nfeat_lo, nfeat_hi = thresholds["n_genes_by_counts"]
         _, ncount_hi = thresholds["total_counts"]
         if nfeat_lo is not None:
-            ax.axhline(nfeat_lo, color="red", linestyle="--", linewidth=1.0)
+            ax.axhline(nfeat_lo, color=_qcthresh, linestyle="--", linewidth=1.0)
         if nfeat_hi is not None:
-            ax.axhline(nfeat_hi, color="red", linestyle="--", linewidth=1.0)
+            ax.axhline(nfeat_hi, color=_qcthresh, linestyle="--", linewidth=1.0)
         if ncount_hi is not None:
             ax.axvline(
                 ncount_hi,
@@ -378,7 +404,7 @@ def _plot_qc_diagnostics(adata, thresholds, output_dir, log):
         if ncount_hi is not None:
             ax.legend(fontsize=9)
         fig.tight_layout()
-        fig.savefig(os.path.join(output_dir, "nCount_vs_nFeature.png"), dpi=150)
+        fig.savefig(os.path.join(output_dir, "nCount_vs_nFeature.png"), dpi=_dpi)
         plt.close(fig)
         log.info("  Plot saved: nCount_vs_nFeature.png")
     except Exception as e:
@@ -386,20 +412,26 @@ def _plot_qc_diagnostics(adata, thresholds, output_dir, log):
 
     # ---- Panel C: pct_mito distribution ----
     try:
-        fig, ax = plt.subplots(figsize=(8, 5))
+        fig, ax = plt.subplots(figsize=_figsize)
         vals = adata.obs["pct_counts_mt"].values
         vals = vals[np.isfinite(vals)]
-        ax.hist(vals, bins=100, color="indianred", edgecolor="white", alpha=0.85)
+        ax.hist(vals, bins=100, color=_qcsecond, edgecolor="white", alpha=0.85)
         _, hi = thresholds["pct_counts_mt"]
         if hi is not None:
-            ax.axvline(hi, color="red", linestyle="--", linewidth=1.2, label=f"hi={hi:.2f}%")
+            ax.axvline(
+                hi,
+                color=_qcthresh,
+                linestyle="--",
+                linewidth=1.2,
+                label=f"hi={hi:.2f}%",
+            )
         ax.set_xlabel("pct_counts_mt (% Mito)")
         ax.set_ylabel("Number of spots")
         ax.set_title(f"% Mito distribution (N={len(vals)}, median={np.median(vals):.2f}%)")
         if hi is not None:
             ax.legend(fontsize=9)
         fig.tight_layout()
-        fig.savefig(os.path.join(output_dir, "pct_mito_distribution.png"), dpi=150)
+        fig.savefig(os.path.join(output_dir, "pct_mito_distribution.png"), dpi=_dpi)
         plt.close(fig)
         log.info("  Plot saved: pct_mito_distribution.png")
     except Exception as e:
@@ -559,7 +591,7 @@ def main():
         )
         thresholds = _mad_thresholds(adata, cfg, log)
         fig_dir = os.path.join(cfg.figure_dir, "01_qc")
-        _plot_qc_diagnostics(adata, thresholds, fig_dir, log)
+        _plot_qc_diagnostics(adata, thresholds, fig_dir, log, cfg=cfg)
         adata = _filter_cells(adata, thresholds, cfg, log)
 
         if adata.n_obs == 0:

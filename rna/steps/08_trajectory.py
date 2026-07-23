@@ -68,6 +68,7 @@ def run_paga(adata, cfg, log):
         show=False,
         save="paga_graph.pdf",
         title="PAGA trajectory",
+        cfg=cfg,
     )
     safe_plot(
         sc.pl.paga_compare,
@@ -78,6 +79,7 @@ def run_paga(adata, cfg, log):
         save="paga_umap.pdf",
         edge_width_scale=0.5,
         title="PAGA on UMAP",
+        cfg=cfg,
     )
 
 
@@ -166,7 +168,8 @@ def compute_dpt(adata, root_mask, cfg, log):
         color="dpt_pseudotime",
         show=False,
         save="pseudotime_umap.pdf",
-        cmap="plasma",
+        cmap=cfg.plot.palette.pseudotime,
+        cfg=cfg,
     )
     safe_plot(
         sc.pl.diffmap,
@@ -174,7 +177,8 @@ def compute_dpt(adata, root_mask, cfg, log):
         color="dpt_pseudotime",
         show=False,
         save="pseudotime_diffmap.pdf",
-        cmap="plasma",
+        cmap=cfg.plot.palette.pseudotime,
+        cfg=cfg,
     )
 
 
@@ -490,6 +494,7 @@ def gene_trends(adata, cfg, log, table_dir, branch_results: Optional[pd.DataFram
             use_raw=True,
             show=False,
             save=f"trend_{gene}.pdf",
+            cfg=cfg,
         )
 
     # Heatmap: if >=5 genes, with binned pseudotime
@@ -508,6 +513,7 @@ def gene_trends(adata, cfg, log, table_dir, branch_results: Optional[pd.DataFram
                 use_raw=True,
                 show=False,
                 save="dev_gene_heatmap.pdf",
+                cfg=cfg,
             )
         else:
             log.info("Not enough unique pseudotime values (%d) for heatmap binning.", n_bins)
@@ -583,7 +589,9 @@ def main():
     # 最终可视化 (figdir 已在上面设置)
     for color in ["stage", "cell_type", "cell_type_sub", "dpt_pseudotime"]:
         if color in adata.obs or color in adata.obsm:
-            safe_plot(sc.pl.umap, adata, color=color, show=False, save=f"final_umap_{color}.pdf")
+            safe_plot(
+                sc.pl.umap, adata, color=color, show=False, save=f"final_umap_{color}.pdf", cfg=cfg
+            )
 
     safe_write(adata, cfg.final_h5ad, cfg=cfg)
     log.info("Step 08 complete, took %.1fs", time.time() - t0)

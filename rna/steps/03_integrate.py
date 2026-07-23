@@ -373,11 +373,11 @@ def main():
     # PCA elbow 图
     fig_dir = os.path.join(cfg.figure_dir, "03_integrate")
     os.makedirs(fig_dir, exist_ok=True)
-    fig, ax = plt.subplots(figsize=(8, 4))
+    fig, ax = plt.subplots(figsize=(cfg.plot.qc_figure_size[0], 4))
     ax.plot(range(1, cfg.pca.n_pcs_full + 1), var_ratio, "o-", ms=3)
     ax.axvline(
         cfg.pca.n_pcs_use,
-        color="red",
+        color=cfg.plot.palette.qc_threshold,
         linestyle="--",
         alpha=0.5,
         label=f"n_pcs_use={cfg.pca.n_pcs_use}",
@@ -386,7 +386,7 @@ def main():
     ax.set_ylabel("Variance ratio")
     ax.legend()
     fig.tight_layout()
-    fig.savefig(os.path.join(fig_dir, "pca_elbow.png"), dpi=150)
+    fig.savefig(os.path.join(fig_dir, "pca_elbow.png"), dpi=cfg.plot.figure_dpi)
     plt.close(fig)
     log.info("  PCA elbow plot saved")
 
@@ -507,7 +507,7 @@ def main():
                 title="Harmony-corrected",
             )
             fig.tight_layout()
-            fig.savefig(os.path.join(fig_dir, "harmony_comparison.png"), dpi=150)
+            fig.savefig(os.path.join(fig_dir, "harmony_comparison.png"), dpi=cfg.plot.figure_dpi)
             plt.close(fig)
             log.info("  Harmony comparison plot saved")
             # ── Post-Harmony preservation check ──
@@ -566,7 +566,7 @@ def main():
                 title="Combat-corrected",
             )
             fig.tight_layout()
-            fig.savefig(os.path.join(fig_dir, "combat_comparison.png"), dpi=150)
+            fig.savefig(os.path.join(fig_dir, "combat_comparison.png"), dpi=cfg.plot.figure_dpi)
             plt.close(fig)
             log.info("  Combat comparison plot saved")
         else:

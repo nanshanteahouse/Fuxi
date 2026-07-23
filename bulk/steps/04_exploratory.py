@@ -65,10 +65,10 @@ def main():
     log.info("Contrast column: %s", contrast_col)
 
     # ── 1. PCA Plot ───────────────────────────────────────────────────
-    _pca_plot(adata, contrast_col, cfg.figure_dir, log)
+    _pca_plot(adata, contrast_col, cfg.figure_dir, log, cfg=cfg)
 
     # ── 2. Sample distance heatmap ────────────────────────────────────
-    _sample_distance_heatmap(adata, contrast_col, cfg.figure_dir, log)
+    _sample_distance_heatmap(adata, contrast_col, cfg.figure_dir, log, cfg=cfg)
 
     # ── Load DEG table for DE-specific plots ──────────────────────────
     sig_path = os.path.join(cfg.table_dir, "02_de_significant.csv")
@@ -85,13 +85,13 @@ def main():
     if n_sig == 0:
         log.warning("No significant DEGs found — skipping DE heatmap")
     else:
-        _de_heatmap(adata, sig_df, contrast_col, cfg.figure_dir, log)
+        _de_heatmap(adata, sig_df, contrast_col, cfg.figure_dir, log, cfg=cfg)
 
     # ── 4. Top gene boxplots ──────────────────────────────────────────
     if n_sig == 0:
         log.warning("No significant DEGs found — skipping top gene boxplots")
     else:
-        _top_genes_boxplot(adata, sig_df, contrast_col, cfg.figure_dir, log)
+        _top_genes_boxplot(adata, sig_df, contrast_col, cfg.figure_dir, log, cfg=cfg)
 
     log.info("Step 04 complete, took %.1fs", time.time() - t0)
 
@@ -101,7 +101,7 @@ def main():
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def _pca_plot(adata, contrast_col, figure_dir, log):
+def _pca_plot(adata, contrast_col, figure_dir, log, cfg=None):
     """PCA plot of samples colored by contrast group."""
     try:
         if adata.n_obs < 2:
@@ -118,7 +118,12 @@ def _pca_plot(adata, contrast_col, figure_dir, log):
         np.log1p(x)
 
         sc.pp.pca(adata, n_comps=n_comps)
-        fig, ax = plt.subplots(figsize=(8, 6))
+        fig, ax = plt.subplots(
+            figsize=(
+                cfg.plot.qc_figure_size[0] if cfg else 8,
+                cfg.plot.qc_figure_size[1] + 1 if cfg else 7,
+            )
+        )
 
         if contrast_col in adata.obs.columns:
             sc.pl.pca(adata, color=contrast_col, ax=ax, show=False)
@@ -127,7 +132,8 @@ def _pca_plot(adata, contrast_col, figure_dir, log):
             sc.pl.pca(adata, ax=ax, show=False)
             log.warning("contrast_column '%s' not in adata.obs — PCA without color", contrast_col)
 
-        fig.savefig(os.path.join(figure_dir, "04_pca.png"), dpi=150, bbox_inches="tight")
+        _dpi = cfg.plot.figure_dpi if cfg else 150
+        fig.savefig(os.path.join(figure_dir, "04_pca.png"), dpi=_dpi, bbox_inches="tight")
         plt.close(fig)
         log.info("PCA plot saved: 04_pca.png")
 
@@ -135,7 +141,7 @@ def _pca_plot(adata, contrast_col, figure_dir, log):
         log.warning("PCA plot failed: %s", e)
 
 
-def _sample_distance_heatmap(adata, contrast_col, figure_dir, log):
+def _sample_distance_heatmap(adata, contrast_col, figure_dir, log, cfg=None):
     """Euclidean distance heatmap between samples (log1p normalized counts)."""
     try:
         log.info("Computing sample distance matrix...")
@@ -153,7 +159,8 @@ def _sample_distance_heatmap(adata, contrast_col, figure_dir, log):
         # Build annotation DataFrame for row colors
         if contrast_col in adata.obs.columns:
             groups = adata.obs[contrast_col].astype("category")
-            palette = sns.color_palette("Set2", n_colors=len(groups.cat.categories))
+            _palette_name = cfg.plot.palette.categorical if cfg else "Set2"
+            palette = sns.color_palette(_palette_name, n_colors=len(groups.cat.categories))
             color_map = dict(zip(groups.cat.categories, palette))
             # Build color mapping without map() to avoid pandas MultiIndex issue
             cat_to_color = pd.Series(color_map)
@@ -165,17 +172,20 @@ def _sample_distance_heatmap(adata, contrast_col, figure_dir, log):
         fig, ax = plt.subplots(figsize=figsize)
         sns.heatmap(
             dist_df,
-            cmap="viridis",
+            cmap=cfg.plot.palette.pseudotime if cfg else "viridis",
             xticklabels=sample_names,
             yticklabels=sample_names,
             linewidths=0.5,
-            linecolor="gray",
+            linecolor=cfg.plot.palette.significance_edge if cfg else "gray",
             ax=ax,
         )
         ax.set_title("Sample Distance (Euclidean, log1p counts)")
         fig.tight_layout()
+        _dpi = cfg.plot.figure_dpi if cfg else 150
         fig.savefig(
-            os.path.join(figure_dir, "04_sample_heatmap.png"), dpi=150, bbox_inches="tight"
+            os.path.join(figure_dir, "04_sample_heatmap.png"),
+            dpi=_dpi,
+            bbox_inches="tight",
         )
         plt.close(fig)
         log.info("Sample distance heatmap saved: 04_sample_heatmap.png")
@@ -184,7 +194,7 @@ def _sample_distance_heatmap(adata, contrast_col, figure_dir, log):
         log.warning("Sample distance heatmap failed: %s", e)
 
 
-def _de_heatmap(adata, sig_df, contrast_col, figure_dir, log):
+def _de_heatmap(adata, sig_df, contrast_col, figure_dir, log, cfg=None):
     """Z-score heatmap of top 50 significant DEGs across samples."""
     try:
         log.info("Generating top DEG heatmap...")
@@ -227,7 +237,8 @@ def _de_heatmap(adata, sig_df, contrast_col, figure_dir, log):
         col_colors_df = None
         if contrast_col in adata.obs.columns:
             groups = adata.obs[contrast_col].astype("category")
-            palette = sns.color_palette("Set2", n_colors=len(groups.cat.categories))
+            _palette_name = cfg.plot.palette.categorical if cfg else "Set2"
+            palette = sns.color_palette(_palette_name, n_colors=len(groups.cat.categories))
             color_map = dict(zip(groups.cat.categories, palette))
             # Build annotation without map() to avoid pandas MultiIndex issue
             cat_to_color = pd.Series(color_map)
@@ -239,7 +250,7 @@ def _de_heatmap(adata, sig_df, contrast_col, figure_dir, log):
         g = sns.clustermap(
             heatmap_df,
             z_score=None,  # already z-scored
-            cmap="RdBu_r",
+            cmap=cfg.plot.palette.heatmap if cfg else "RdBu_r",
             center=0,
             vmin=-3,
             vmax=3,
@@ -251,7 +262,12 @@ def _de_heatmap(adata, sig_df, contrast_col, figure_dir, log):
             dendrogram_ratio=(0.1, 0.2),
         )
         g.fig.suptitle(f"Top {n_top} DEGs — Z-score (log1p counts)", y=1.02)
-        g.savefig(os.path.join(figure_dir, "04_de_heatmap.png"), dpi=150, bbox_inches="tight")
+        _dpi = cfg.plot.figure_dpi if cfg else 150
+        g.savefig(
+            os.path.join(figure_dir, "04_de_heatmap.png"),
+            dpi=_dpi,
+            bbox_inches="tight",
+        )
         plt.close(g.fig)
         log.info("DE heatmap saved: 04_de_heatmap.png")
 
@@ -259,7 +275,7 @@ def _de_heatmap(adata, sig_df, contrast_col, figure_dir, log):
         log.warning("DE heatmap failed: %s", e)
 
 
-def _top_genes_boxplot(adata, sig_df, contrast_col, figure_dir, log):
+def _top_genes_boxplot(adata, sig_df, contrast_col, figure_dir, log, cfg=None):
     """Expression boxplots for top 10 significant DEGs across sample groups."""
     try:
         log.info("Generating top gene boxplots...")
@@ -312,7 +328,13 @@ def _top_genes_boxplot(adata, sig_df, contrast_col, figure_dir, log):
             ax = axes[row, col]
 
             gene_df = plot_df[plot_df["gene"] == gene]
-            sns.boxplot(data=gene_df, x="group", y="expression", ax=ax, palette="Set2")
+            sns.boxplot(
+                data=gene_df,
+                x="group",
+                y="expression",
+                ax=ax,
+                palette=cfg.plot.palette.categorical if cfg else "Set2",
+            )
             sns.stripplot(
                 data=gene_df,
                 x="group",
@@ -337,8 +359,11 @@ def _top_genes_boxplot(adata, sig_df, contrast_col, figure_dir, log):
         fig.suptitle("Top DEG Expression by Group", y=1.02, fontsize=12)
         fig.tight_layout()
 
+        _dpi = cfg.plot.figure_dpi if cfg else 150
         fig.savefig(
-            os.path.join(figure_dir, "04_top_genes_boxplot.png"), dpi=150, bbox_inches="tight"
+            os.path.join(figure_dir, "04_top_genes_boxplot.png"),
+            dpi=_dpi,
+            bbox_inches="tight",
         )
         plt.close(fig)
         log.info("Top gene boxplots saved: 04_top_genes_boxplot.png")

@@ -61,9 +61,10 @@ def main():
             snap.pl.umap,
             data,
             color="pseudotime",
-            cmap="viridis",
+            cmap=cfg.plot.palette.pseudotime,
             show=False,
             save=os.path.join(cfg.figure_dir, "07_trajectory", "trajectory_pseudotime.png"),
+            cfg=cfg,
         )
     except Exception:
         pass

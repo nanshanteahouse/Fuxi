@@ -218,8 +218,8 @@ def _dot_ora(df: pd.DataFrame, direction: str, cfg, log):
         range(len(sig)),
         s=overlap_ratio * 200 + 20,
         c=overlap_ratio,
-        cmap="Blues",
-        edgecolors="grey",
+        cmap=cfg.plot.palette.dotplot_fill,
+        edgecolors=cfg.plot.palette.significance_edge,
         linewidths=0.5,
     )
     ax.set_yticks(range(len(sig)))
@@ -228,7 +228,7 @@ def _dot_ora(df: pd.DataFrame, direction: str, cfg, log):
     ax.set_title(f"Enrichment ({direction}-regulated), top {len(sig)} terms")
     fig.tight_layout()
     path = os.path.join(cfg.figure_dir, f"03_enrichment_{direction}_dot.png")
-    fig.savefig(path, dpi=150, bbox_inches="tight")
+    fig.savefig(path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
     plt.close(fig)
     log.info("  Dot plot: %s", path)
 
@@ -252,9 +252,9 @@ def _dot_gsea(df: pd.DataFrame, cfg, log):
         range(len(sig)),
         s=log10_fdr * 20,
         c=sig["NES"],
-        cmap="RdBu_r",
+        cmap=cfg.plot.palette.heatmap,
         norm=plt.Normalize(-vmax, vmax),
-        edgecolors="grey",
+        edgecolors=cfg.plot.palette.significance_edge,
         linewidths=0.5,
     )
     plt.colorbar(sc, ax=ax, label="NES")
@@ -264,7 +264,7 @@ def _dot_gsea(df: pd.DataFrame, cfg, log):
     ax.set_title(f"GSEA (preranked), top {len(sig)} terms")
     fig.tight_layout()
     path = os.path.join(cfg.figure_dir, "03_gsea_dot.png")
-    fig.savefig(path, dpi=150, bbox_inches="tight")
+    fig.savefig(path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
     plt.close(fig)
     log.info("  GSEA dot plot: %s", path)
 

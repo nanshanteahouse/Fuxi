@@ -561,8 +561,8 @@ def plot_ora_bubble(
         top_per_cluster["Term_short"],
         s=overlap_numeric * 30,
         c=top_per_cluster["-log10_padj"],
-        cmap="YlOrRd",
-        edgecolors="grey",
+        cmap=cfg.plot.palette.dotplot_fill,
+        edgecolors=cfg.plot.palette.significance_edge,
         linewidths=0.5,
     )
     plt.colorbar(sc, ax=ax, label="-log10(Adjusted P-value)")
@@ -572,7 +572,7 @@ def plot_ora_bubble(
     plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
     fig.tight_layout()
     path = os.path.join(fig_dir, f"ora_{gs_name}_bubble.pdf")
-    fig.savefig(path, dpi=150, bbox_inches="tight")
+    fig.savefig(path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
     plt.close(fig)
     log.info("  ORA bubble plot: %s", path)
 
@@ -616,9 +616,9 @@ def plot_prerank_bubble(
         top_per_cluster["Term_short"],
         s=top_per_cluster["-log10_fdr"] * 20,
         c=top_per_cluster["NES"],
-        cmap="RdBu_r",
+        cmap=cfg.plot.palette.heatmap,
         norm=norm,
-        edgecolors="grey",
+        edgecolors=cfg.plot.palette.significance_edge,
         linewidths=0.5,
     )
     plt.colorbar(sc, ax=ax, label="NES")
@@ -628,7 +628,7 @@ def plot_prerank_bubble(
     plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
     fig.tight_layout()
     path = os.path.join(fig_dir, f"prerank_{gs_name}_bubble.pdf")
-    fig.savefig(path, dpi=150, bbox_inches="tight")
+    fig.savefig(path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
     plt.close(fig)
     log.info("  GSEA bubble plot: %s", path)
 

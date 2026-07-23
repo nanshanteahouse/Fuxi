@@ -63,6 +63,7 @@ def main():
             groupby=groupby,
             show=False,
             save=os.path.join(cfg.figure_dir, "05_marker_peaks", "marker_peaks_heatmap.png"),
+            cfg=cfg,
         )
     except Exception as e:
         log.warning("Heatmap failed: %s", e)

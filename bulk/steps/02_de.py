@@ -255,10 +255,10 @@ def main():
 
     # ── Volcano plot ──────────────────────────────────────────────────
     os.makedirs(cfg.figure_dir, exist_ok=True)
-    _volcano_plot(results_df, alpha, treatment, baseline, cfg.figure_dir, log)
+    _volcano_plot(results_df, alpha, treatment, baseline, cfg.figure_dir, log, cfg=cfg)
 
     # ── MA plot ───────────────────────────────────────────────────────
-    _ma_plot(results_df, alpha, treatment, baseline, cfg.figure_dir, log)
+    _ma_plot(results_df, alpha, treatment, baseline, cfg.figure_dir, log, cfg=cfg)
 
     # ── Store normalized counts and save ──────────────────────────────
     log.info("Storing normalized counts...")
@@ -297,7 +297,7 @@ def main():
 # ── Plot helpers ──────────────────────────────────────────────────────────
 
 
-def _volcano_plot(results_df, alpha, treatment, baseline, figure_dir, log):
+def _volcano_plot(results_df, alpha, treatment, baseline, figure_dir, log, cfg=None):
     """Generate volcano plot: -log10(padj) vs log2FoldChange."""
     try:
         plot_df = results_df.dropna(subset=["padj"]).copy()
@@ -320,7 +320,7 @@ def _volcano_plot(results_df, alpha, treatment, baseline, figure_dir, log):
             plot_df.loc[~sig_mask, "neg_log10_padj"],
             s=3,
             alpha=0.3,
-            color="grey",
+            color=cfg.plot.palette.significance_edge if cfg else "grey",
             label="NS",
         )
         # Significant
@@ -335,8 +335,18 @@ def _volcano_plot(results_df, alpha, treatment, baseline, figure_dir, log):
 
         # Threshold lines
         ax.axhline(-np.log10(alpha), color="blue", linestyle="--", linewidth=0.8)
-        ax.axvline(-1, color="gray", linestyle="--", linewidth=0.5)
-        ax.axvline(1, color="gray", linestyle="--", linewidth=0.5)
+        ax.axvline(
+            -1,
+            color=cfg.plot.palette.significance_edge if cfg else "gray",
+            linestyle="--",
+            linewidth=0.5,
+        )
+        ax.axvline(
+            1,
+            color=cfg.plot.palette.significance_edge if cfg else "gray",
+            linestyle="--",
+            linewidth=0.5,
+        )
 
         # Label top 20 significant genes by padj
         sig_plot = plot_df.loc[sig_mask]
@@ -357,7 +367,7 @@ def _volcano_plot(results_df, alpha, treatment, baseline, figure_dir, log):
         ax.legend(loc="upper right")
 
         vol_path = os.path.join(figure_dir, "02_volcano.png")
-        fig.savefig(vol_path, dpi=150, bbox_inches="tight")
+        fig.savefig(vol_path, dpi=cfg.plot.figure_dpi if cfg else 150, bbox_inches="tight")
         plt.close(fig)
         log.info("Volcano plot saved: %s", vol_path)
 
@@ -365,7 +375,7 @@ def _volcano_plot(results_df, alpha, treatment, baseline, figure_dir, log):
         log.warning("Volcano plot failed: %s", e)
 
 
-def _ma_plot(results_df, alpha, treatment, baseline, figure_dir, log):
+def _ma_plot(results_df, alpha, treatment, baseline, figure_dir, log, cfg=None):
     """Generate MA plot: mean of normalized counts vs log2 fold change."""
     try:
         plot_df = results_df.dropna(subset=["baseMean", "log2FoldChange"]).copy()
@@ -387,7 +397,7 @@ def _ma_plot(results_df, alpha, treatment, baseline, figure_dir, log):
             ns_ma["log2FoldChange"],
             s=3,
             alpha=0.3,
-            color="grey",
+            color=cfg.plot.palette.significance_edge if cfg else "grey",
         )
 
         # Significant
@@ -412,7 +422,7 @@ def _ma_plot(results_df, alpha, treatment, baseline, figure_dir, log):
         ax.set_title(f"MA Plot: {treatment} vs {baseline}")
 
         ma_path = os.path.join(figure_dir, "02_ma_plot.png")
-        fig.savefig(ma_path, dpi=150, bbox_inches="tight")
+        fig.savefig(ma_path, dpi=cfg.plot.figure_dpi if cfg else 150, bbox_inches="tight")
         plt.close(fig)
         log.info("MA plot saved: %s", ma_path)
 

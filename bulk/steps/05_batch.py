@@ -150,7 +150,7 @@ def main():
 
     # ── Before / After PCA plots ───────────────────────────────────────
     os.makedirs(cfg.figure_dir, exist_ok=True)
-    _pca_comparison(adata.X, out_adata.X, adata.obs, batch_col, cfg.figure_dir, log)
+    _pca_comparison(adata.X, out_adata.X, adata.obs, batch_col, cfg.figure_dir, log, cfg=cfg)
 
     # ── Save ───────────────────────────────────────────────────────────
     log.info("Saving to %s...", out_path)
@@ -161,7 +161,7 @@ def main():
 # ── Plot helper ──────────────────────────────────────────────────────────
 
 
-def _pca_comparison(x_before, x_after, obs, batch_col, figure_dir, log):
+def _pca_comparison(x_before, x_after, obs, batch_col, figure_dir, log, cfg=None):
     """Side-by-side PCA plots: before and after batch correction."""
     try:
         n_comps = min(50, x_before.shape[0] - 1)
@@ -184,7 +184,7 @@ def _pca_comparison(x_before, x_after, obs, batch_col, figure_dir, log):
         # ── Plot ───────────────────────────────────────────────────────
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
 
-        colors = _get_colors(obs, batch_col)
+        colors = _get_colors(obs, batch_col, cfg=cfg)
         for label in obs[batch_col].unique():
             mask = obs[batch_col] == label
             ax1.scatter(
@@ -219,7 +219,7 @@ def _pca_comparison(x_before, x_after, obs, batch_col, figure_dir, log):
         fig.tight_layout()
 
         comparison_path = os.path.join(figure_dir, "05_pca_comparison.png")
-        fig.savefig(comparison_path, dpi=150, bbox_inches="tight")
+        fig.savefig(comparison_path, dpi=cfg.plot.figure_dpi if cfg else 150, bbox_inches="tight")
         log.info("Saved: %s", comparison_path)
 
         plt.close(fig)
@@ -228,10 +228,11 @@ def _pca_comparison(x_before, x_after, obs, batch_col, figure_dir, log):
         log.warning("PCA comparison plot failed: %s", e)
 
 
-def _get_colors(obs, col):
+def _get_colors(obs, col, cfg=None):
     """Return a color map for unique values of an obs column."""
     unique = obs[col].unique()
-    palette = plt.cm.tab10(np.linspace(0, 1, len(unique)))
+    _cmap = cfg.plot.palette.categorical if cfg else "tab10"
+    palette = plt.get_cmap(_cmap)(np.linspace(0, 1, len(unique)))
     return dict(zip(unique, palette))
 
 

@@ -332,7 +332,7 @@ def main():
                 )
                 plt.savefig(
                     os.path.join(fig_dir, f"leiden_grid_n{n}_r{res}.png"),
-                    dpi=150,
+                    dpi=cfg.plot.figure_dpi,
                     bbox_inches="tight",
                 )
                 plt.close()
@@ -427,7 +427,11 @@ def main():
         log.info("Computing PAGA backbone for UMAP initialization...")
         sc.tl.paga(adata, groups="leiden")
         sc.pl.paga(adata, show=False)
-        plt.savefig(os.path.join(fig_dir, "paga_backbone.png"), dpi=150, bbox_inches="tight")
+        plt.savefig(
+            os.path.join(fig_dir, "paga_backbone.png"),
+            dpi=cfg.plot.figure_dpi,
+            bbox_inches="tight",
+        )
         plt.close()
         log.info("  PAGA backbone computed and saved")
 
@@ -494,7 +498,11 @@ def main():
             for j in range(len(sweep_results), len(axes_flat)):
                 axes_flat[j].axis("off")
             fig.tight_layout()
-            fig.savefig(os.path.join(fig_dir, "min_dist_sweep.png"), dpi=150, bbox_inches="tight")
+            fig.savefig(
+                os.path.join(fig_dir, "min_dist_sweep.png"),
+                dpi=cfg.plot.figure_dpi,
+                bbox_inches="tight",
+            )
             plt.close(fig)
             log.info("UMAP min_dist comparison plot saved")
         except Exception as e:
@@ -532,7 +540,7 @@ def main():
                     if result is not None:
                         plt.savefig(
                             os.path.join(fig_dir, "batch_colored_umap.png"),
-                            dpi=150,
+                            dpi=cfg.plot.figure_dpi,
                             bbox_inches="tight",
                         )
                         plt.close()
@@ -563,7 +571,7 @@ def main():
                                 adata.obsm["X_umap"][mask, 0],
                                 adata.obsm["X_umap"][mask, 1],
                                 c=adata.obs.loc[mask, "leiden"].astype("category").cat.codes,
-                                cmap="tab20",
+                                cmap=cfg.plot.palette.categorical,
                                 s=3,
                                 alpha=0.8,
                                 rasterized=True,
@@ -578,7 +586,7 @@ def main():
                         fig.tight_layout()
                         fig.savefig(
                             os.path.join(fig_dir, "batch_faceted_umap.png"),
-                            dpi=150,
+                            dpi=cfg.plot.figure_dpi,
                             bbox_inches="tight",
                         )
                         log.info("  Split-by-batch faceted UMAP saved")
@@ -597,7 +605,7 @@ def main():
                     fig, ax = plt.subplots(
                         figsize=(max(6, n_batches * 0.8), max(5, ct.shape[0] * 0.3))
                     )
-                    im = ax.imshow(ct.values, aspect="auto", cmap="YlOrRd")
+                    im = ax.imshow(ct.values, aspect="auto", cmap=cfg.plot.palette.dotplot_fill)
                     for i in range(ct.shape[0]):
                         for j in range(ct.shape[1]):
                             val = ct.values[i, j]
@@ -621,7 +629,7 @@ def main():
                     fig.tight_layout()
                     fig.savefig(
                         os.path.join(fig_dir, "batch_mixing_heatmap.png"),
-                        dpi=150,
+                        dpi=cfg.plot.figure_dpi,
                         bbox_inches="tight",
                     )
                     log.info("  Batch mixing heatmap saved")
@@ -673,7 +681,11 @@ def main():
                     )
                     ax.set_title(f"n={n}, r={res}")
         fig.tight_layout()
-        fig.savefig(os.path.join(fig_dir, "param_grid_summary.png"), dpi=150, bbox_inches="tight")
+        fig.savefig(
+            os.path.join(fig_dir, "param_grid_summary.png"),
+            dpi=cfg.plot.figure_dpi,
+            bbox_inches="tight",
+        )
         plt.close(fig)
         log.info("Parameter grid summary plot saved")
     except Exception as e:
@@ -698,7 +710,7 @@ def main():
                 fig.tight_layout()
                 fig.savefig(
                     os.path.join(fig_dir, f"leiden_multires_n{n}.png"),
-                    dpi=150,
+                    dpi=cfg.plot.figure_dpi,
                     bbox_inches="tight",
                 )
                 plt.close(fig)

@@ -24,7 +24,7 @@ import scanpy as sc
 from core.utils import resolve_config, safe_plot, setup_logger
 
 
-def plot_composition(adata, group_col, stage_col, stage_order, fig_dir, table_dir, log):
+def plot_composition(adata, group_col, stage_col, stage_order, fig_dir, table_dir, log, cfg=None):
     """绘制细胞类型随发育阶段的组成变化堆积图"""
     if group_col not in adata.obs or stage_col not in adata.obs:
         log.warning("Missing %s or %s, skipping composition plot", group_col, stage_col)
@@ -42,7 +42,8 @@ def plot_composition(adata, group_col, stage_col, stage_order, fig_dir, table_di
     ct_pivot = ct_pivot.div(ct_pivot.sum(axis=1), axis=0)
 
     n_types = ct_pivot.shape[1]
-    colors = plt.cm.tab20(np.linspace(0, 1, min(n_types, 20)))
+    _cmap = cfg.plot.palette.categorical if cfg else "tab20"
+    colors = plt.get_cmap(_cmap)(np.linspace(0, 1, min(n_types, 20)))
     if n_types > 20:
         n_tile = int(np.ceil(n_types / 20))
         colors = np.vstack([colors] * n_tile)[:n_types]
@@ -57,9 +58,10 @@ def plot_composition(adata, group_col, stage_col, stage_order, fig_dir, table_di
         title=group_col, bbox_to_anchor=(1.02, 1), loc="upper left", fontsize=8, title_fontsize=9
     )
     fig.tight_layout()
+    _dpi = cfg.plot.figure_dpi if cfg else 150
     fig.savefig(
         os.path.join(fig_dir, f"composition_by_stage_{group_col}.png"),
-        dpi=150,
+        dpi=_dpi,
         bbox_inches="tight",
     )
     plt.close(fig)
@@ -106,6 +108,7 @@ def main():
                 fig_dir,
                 csv_dir,
                 log,
+                cfg=cfg,
             )
 
     # 2. UMAP: QC 指标
@@ -120,6 +123,7 @@ def main():
             save="qc_umap.pdf",
             vmax="p99",
             ncols=3,
+            cfg=cfg,
         )
 
     # 3. UMAP: 标记基因
@@ -141,6 +145,7 @@ def main():
                 save=f"marker_umap_batch{batch_start}.pdf",
                 vmax="p99",
                 ncols=4,
+                cfg=cfg,
             )
 
     # 4. 标记基因 dotplot
@@ -153,6 +158,7 @@ def main():
             groupby=group_col,
             show=False,
             save="marker_dotplot.pdf",
+            cfg=cfg,
         )
 
     # 5. 聚类大小统计
@@ -235,6 +241,7 @@ def main():
             show=False,
             legend_loc="on data" if len(sizes) < 30 else "right margin",
             save=f"umap_{col}.pdf",
+            cfg=cfg,
         )
 
     log.info("Step 10 complete, took %.1fs", time.time() - t0)

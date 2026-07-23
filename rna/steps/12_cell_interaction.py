@@ -84,7 +84,7 @@ def plot_heatmap(top_df, cfg, log):
     fig_h = max(4, n_rows * 0.4 + 2.0)
     fig, ax = plt.subplots(figsize=(fig_w, fig_h))
 
-    im = ax.imshow(pivot.values, aspect="auto", cmap="YlOrRd")
+    im = ax.imshow(pivot.values, aspect="auto", cmap=cfg.plot.palette.dotplot_fill)
 
     ax.set_xticks(range(n_cols))
     ax.set_xticklabels(pivot.columns, rotation=45, ha="right", fontsize=8)
@@ -99,7 +99,7 @@ def plot_heatmap(top_df, cfg, log):
 
     fig.tight_layout()
     path = os.path.join(fig_dir, "interaction_heatmap.png")
-    fig.savefig(path, dpi=150, bbox_inches="tight")
+    fig.savefig(path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
     plt.close(fig)
     log.info("Saved: %s", path)
 
@@ -156,7 +156,13 @@ def plot_dotplot(top_df, cfg, log):
     if vmin == vmax:
         vmin, vmax = vmin - 0.1, vmax + 0.1
 
-    im = ax.imshow(pivot.values, aspect="auto", cmap="RdYlBu_r", vmin=vmin, vmax=vmax)
+    im = ax.imshow(
+        pivot.values,
+        aspect="auto",
+        cmap=cfg.plot.palette.interaction_heatmap,
+        vmin=vmin,
+        vmax=vmax,
+    )
 
     ax.set_xticks(range(n_cols))
     ax.set_xticklabels(pivot.columns, rotation=45, ha="right", fontsize=7)
@@ -171,7 +177,7 @@ def plot_dotplot(top_df, cfg, log):
 
     fig.tight_layout()
     path = os.path.join(fig_dir, "interaction_dotplot.png")
-    fig.savefig(path, dpi=150, bbox_inches="tight")
+    fig.savefig(path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
     plt.close(fig)
     log.info("Saved: %s", path)
 

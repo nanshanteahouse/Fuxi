@@ -347,10 +347,11 @@ def main():
                     color=leiden_key,
                     show=False,
                     title=f"UMAP (n_neighbors={n}, resolution={res})",
+                    cfg=cfg,
                 )
                 plt.savefig(
                     os.path.join(fig_dir, f"umap_grid_n{n}_r{res}.png"),
-                    dpi=150,
+                    dpi=cfg.plot.figure_dpi,
                     bbox_inches="tight",
                 )
                 plt.close()
@@ -480,7 +481,14 @@ def main():
             n_total = n_md * n_sp
             n_cols = min(3, n_total)
             n_rows = int(np.ceil(n_total / n_cols))
-            fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows))
+            fig, axes = plt.subplots(
+                n_rows,
+                n_cols,
+                figsize=(
+                    cfg.plot.umap_panel_size[0] * n_cols,
+                    cfg.plot.umap_panel_size[1] * n_rows,
+                ),
+            )
             axes_flat = axes.ravel() if n_total > 1 else [axes]
             for idx, r in enumerate(sweep_results):
                 ax = axes_flat[idx]
@@ -505,7 +513,9 @@ def main():
                 axes_flat[j].axis("off")
             fig.tight_layout()
             fig.savefig(
-                os.path.join(fig_dir, "umap_min_dist_comparison.png"), dpi=150, bbox_inches="tight"
+                os.path.join(fig_dir, "umap_min_dist_comparison.png"),
+                dpi=cfg.plot.figure_dpi,
+                bbox_inches="tight",
             )
             plt.close(fig)
             log.info("UMAP min_dist comparison plot saved")
@@ -553,7 +563,9 @@ def main():
                     ax.set_title(f"n={n}, r={res}")
         fig.tight_layout()
         fig.savefig(
-            os.path.join(fig_dir, "umap_param_grid_summary.png"), dpi=150, bbox_inches="tight"
+            os.path.join(fig_dir, "umap_param_grid_summary.png"),
+            dpi=cfg.plot.figure_dpi,
+            bbox_inches="tight",
         )
         plt.close(fig)
         log.info("Parameter grid summary plot saved")
@@ -568,7 +580,14 @@ def main():
             try:
                 n_cols = min(3, n_res)
                 n_rows = int(np.ceil(n_res / n_cols))
-                fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows))
+                fig, axes = plt.subplots(
+                    n_rows,
+                    n_cols,
+                    figsize=(
+                        cfg.plot.umap_panel_size[0] * n_cols,
+                        cfg.plot.umap_panel_size[1] * n_rows,
+                    ),
+                )
                 axes = axes.ravel() if n_res > 1 else [axes]
                 for i, key in enumerate(res_keys):
                     sc.pl.umap(
@@ -579,7 +598,7 @@ def main():
                 fig.tight_layout()
                 fig.savefig(
                     os.path.join(fig_dir, f"umap_leiden_n{n}_all_resolutions.pdf"),
-                    dpi=150,
+                    dpi=cfg.plot.figure_dpi,
                     bbox_inches="tight",
                 )
                 plt.close(fig)

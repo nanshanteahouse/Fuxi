@@ -85,7 +85,7 @@ def plot_spatial_heatmap(top_df, cfg, log):
     fig_h = max(4, n_rows * 0.4 + 2.0)
     fig, ax = plt.subplots(figsize=(fig_w, fig_h))
 
-    im = ax.imshow(pivot.values, aspect="auto", cmap="YlOrRd")
+    im = ax.imshow(pivot.values, aspect="auto", cmap=cfg.plot.palette.dotplot_fill)
 
     ax.set_xticks(range(n_cols))
     ax.set_xticklabels(pivot.columns, rotation=45, ha="right", fontsize=8)
@@ -100,7 +100,7 @@ def plot_spatial_heatmap(top_df, cfg, log):
 
     fig.tight_layout()
     path = os.path.join(fig_dir, "cci_spatial_heatmap.png")
-    fig.savefig(path, dpi=150, bbox_inches="tight")
+    fig.savefig(path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
     plt.close(fig)
     log.info("Saved: %s", path)
 
@@ -146,7 +146,7 @@ def plot_spatial_dotplot(top_df, cfg, log):
     fig_h = max(4, n_interactions * 0.3 + 1.0)
     fig, ax = plt.subplots(figsize=(fig_w, fig_h))
 
-    colors = plt.cm.RdYlBu_r(
+    colors = plt.get_cmap(cfg.plot.palette.interaction_heatmap)(
         (plot_df[score_col].values - plot_df[score_col].min())
         / (plot_df[score_col].max() - plot_df[score_col].min() + 0.001)
     )
@@ -158,7 +158,7 @@ def plot_spatial_dotplot(top_df, cfg, log):
 
     fig.tight_layout()
     path = os.path.join(fig_dir, "cci_spatial_dotplot.png")
-    fig.savefig(path, dpi=150, bbox_inches="tight")
+    fig.savefig(path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
     plt.close(fig)
     log.info("Saved: %s", path)
 

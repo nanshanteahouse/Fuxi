@@ -242,7 +242,9 @@ def main():
             ax.set_xlabel("-log10(Adjusted P-value)")
             plt.tight_layout()
             plt.savefig(
-                os.path.join(atac_fig_dir, "enrichment_barplot.png"), dpi=150, bbox_inches="tight"
+                os.path.join(atac_fig_dir, "enrichment_barplot.png"),
+                dpi=cfg.plot.figure_dpi,
+                bbox_inches="tight",
             )
             plt.close()
         except Exception as e:

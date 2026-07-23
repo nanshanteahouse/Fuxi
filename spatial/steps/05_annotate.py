@@ -296,7 +296,9 @@ def main():
     # Also compute spatial UMAPs
     if "cell_type" in adata.obs:
         try:
-            safe_plot(sc.pl.umap, adata, color="cell_type", show=False, save="_05_celltype.png")
+            safe_plot(
+                sc.pl.umap, adata, color="cell_type", show=False, save="_05_celltype.png", cfg=cfg
+            )
         except Exception as e:
             log.warning("UMAP cell_type plot failed: %s", e)
 
@@ -316,6 +318,7 @@ def main():
                         show=False,
                         save=f"_05_marker_{gene}.png",
                         use_raw=True,
+                        cfg=cfg,
                     )
         except Exception as e:
             log.warning("Marker gene UMAP failed: %s", e)

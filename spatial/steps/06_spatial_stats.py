@@ -134,19 +134,28 @@ def plot_top_svg(adata, moran_df, cfg, log):
         fig, axes = plt.subplots(
             max(1, (len(top_genes) + 2) // 3),
             min(3, len(top_genes)),
-            figsize=(5 * min(3, len(top_genes)), 5 * max(1, (len(top_genes) + 2) // 3)),
+            figsize=(
+                cfg.plot.umap_panel_size[0] * min(3, len(top_genes)),
+                cfg.plot.umap_panel_size[1] * max(1, (len(top_genes) + 2) // 3),
+            ),
             squeeze=False,
         )
         for i, gene in enumerate(top_genes):
             ax = axes[i // 3, i % 3]
-            safe_plot(sq.pl.spatial_scatter, adata, color=gene, ax=ax, show=False, title=gene)
+            safe_plot(
+                sq.pl.spatial_scatter, adata, color=gene, ax=ax, show=False, title=gene, cfg=cfg
+            )
 
         # Hide unused subplots
         for j in range(len(top_genes), axes.size):
             axes[j // 3, j % 3].axis("off")
 
         fig.tight_layout()
-        fig.savefig(os.path.join(fig_dir, "top_svg_spatial.png"), dpi=150, bbox_inches="tight")
+        fig.savefig(
+            os.path.join(fig_dir, "top_svg_spatial.png"),
+            dpi=cfg.plot.figure_dpi,
+            bbox_inches="tight",
+        )
         plt.close(fig)
         log.info("Top SVG spatial plot saved")
     except Exception as e:
@@ -166,7 +175,7 @@ def run_nhood_enrichment(adata, cfg, log):
         sq.pl.nhood_enrichment(adata, cluster_key=group_col, show=False)
         fig_path = os.path.join(cfg.figure_dir, "06_spatial_de", "nhood_enrichment_heatmap.png")
         os.makedirs(os.path.dirname(fig_path), exist_ok=True)
-        plt.savefig(fig_path, dpi=150, bbox_inches="tight")
+        plt.savefig(fig_path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
         plt.close()
 
         enrich_key = "nhood_enrichment"
@@ -194,7 +203,7 @@ def run_co_occurrence(adata, cfg, log):
         sq.pl.co_occurrence(adata, cluster_key=group_col, show=False)
         fig_path = os.path.join(cfg.figure_dir, "06_spatial_de", "co_occurrence_plot.png")
         os.makedirs(os.path.dirname(fig_path), exist_ok=True)
-        plt.savefig(fig_path, dpi=150, bbox_inches="tight")
+        plt.savefig(fig_path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
         plt.close()
         log.info("Co-occurrence plot saved: %s", fig_path)
     except Exception as e:
@@ -214,7 +223,7 @@ def run_interaction_matrix(adata, cfg, log):
         sq.pl.interaction_matrix(adata, cluster_key=group_col, show=False)
         fig_path = os.path.join(cfg.figure_dir, "06_spatial_de", "interaction_matrix_heatmap.png")
         os.makedirs(os.path.dirname(fig_path), exist_ok=True)
-        plt.savefig(fig_path, dpi=150, bbox_inches="tight")
+        plt.savefig(fig_path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
         plt.close()
         log.info("Interaction matrix heatmap saved: %s", fig_path)
     except Exception as e:
@@ -285,7 +294,10 @@ def main():
                 fig, axes = plt.subplots(
                     max(1, (len(top_genes) + 2) // 3),
                     min(3, len(top_genes)),
-                    figsize=(5 * min(3, len(top_genes)), 5 * max(1, (len(top_genes) + 2) // 3)),
+                    figsize=(
+                        cfg.plot.umap_panel_size[0] * min(3, len(top_genes)),
+                        cfg.plot.umap_panel_size[1] * max(1, (len(top_genes) + 2) // 3),
+                    ),
                     squeeze=False,
                 )
                 for i, gene in enumerate(top_genes):
@@ -299,6 +311,7 @@ def main():
                             show=False,
                             title=gene,
                             use_raw=True,
+                            cfg=cfg,
                         )
                     except Exception as e:
                         log.warning("Top marker UMAP annotation failed: %s", e)
@@ -307,7 +320,9 @@ def main():
                     axes[j // 3, j % 3].axis("off")
                 fig.tight_layout()
                 fig.savefig(
-                    os.path.join(fig_dir, "top_markers_umap.png"), dpi=150, bbox_inches="tight"
+                    os.path.join(fig_dir, "top_markers_umap.png"),
+                    dpi=cfg.plot.figure_dpi,
+                    bbox_inches="tight",
                 )
                 plt.close(fig)
                 log.info("Top marker UMAP plot saved")

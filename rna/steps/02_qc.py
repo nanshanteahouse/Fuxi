@@ -307,15 +307,27 @@ def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, cfg, log):
 
     # ---- Panel A: nFeature 分布直方图 ----
     try:
-        _fig, _ax = plt.subplots(figsize=(8, 5))
+        _fig, _ax = plt.subplots(figsize=cfg.plot.qc_figure_size)
         vals = adata.obs["n_genes_by_counts"].values
         vals = vals[np.isfinite(vals)]
-        _ax.hist(vals, bins=100, color="steelblue", edgecolor="white", alpha=0.85)
+        _ax.hist(vals, bins=100, color=cfg.plot.palette.qc_hist, edgecolor="white", alpha=0.85)
         lo, hi = thresholds["n_genes_by_counts"]
         if lo is not None:
-            _ax.axvline(lo, color="red", linestyle="--", linewidth=1.2, label=f"lo={lo:.0f}")
+            _ax.axvline(
+                lo,
+                color=cfg.plot.palette.qc_threshold,
+                linestyle="--",
+                linewidth=1.2,
+                label=f"lo={lo:.0f}",
+            )
         if hi is not None:
-            _ax.axvline(hi, color="red", linestyle="--", linewidth=1.2, label=f"hi={hi:.0f}")
+            _ax.axvline(
+                hi,
+                color=cfg.plot.palette.qc_threshold,
+                linestyle="--",
+                linewidth=1.2,
+                label=f"hi={hi:.0f}",
+            )
         _ax.set_xlabel("n_genes_by_counts (nFeature_RNA)")
         _ax.set_ylabel("Number of cells")
         _ax.set_title(
@@ -324,7 +336,7 @@ def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, cfg, log):
         )
         _ax.legend(fontsize=9)
         _fig.tight_layout()
-        _fig.savefig(os.path.join(fig_dir, "nFeature_distribution.png"), dpi=150)
+        _fig.savefig(os.path.join(fig_dir, "nFeature_distribution.png"), dpi=cfg.plot.figure_dpi)
         plt.close(_fig)
         log.info("  Plot saved: nFeature_distribution.png")
     except Exception as e:
@@ -332,7 +344,9 @@ def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, cfg, log):
 
     # ---- Panel B: nCount vs nFeature 散点图 (按 mito% 着色) ----
     try:
-        _fig, _ax = plt.subplots(figsize=(8, 6))
+        _fig, _ax = plt.subplots(
+            figsize=(cfg.plot.qc_figure_size[0], cfg.plot.qc_figure_size[1] + 1)
+        )
         x = adata.obs["total_counts"].values
         y = adata.obs["n_genes_by_counts"].values
         c = adata.obs["pct_counts_mt"].values
@@ -341,7 +355,14 @@ def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, cfg, log):
         xp, yp, cp = x[finite], y[finite], c[finite]
         vmax = np.nanpercentile(c, 99) if np.isfinite(c).any() else None
         scat = _ax.scatter(
-            xp, yp, c=cp, cmap="viridis", s=2, alpha=0.6, rasterized=True, vmax=vmax
+            xp,
+            yp,
+            c=cp,
+            cmap=cfg.plot.palette.pseudotime,
+            s=2,
+            alpha=0.6,
+            rasterized=True,
+            vmax=vmax,
         )
         cbar = _fig.colorbar(scat, ax=_ax)
         cbar.set_label("% Mito")
@@ -349,9 +370,13 @@ def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, cfg, log):
         nfeat_lo, nfeat_hi = thresholds["n_genes_by_counts"]
         _, ncount_hi = thresholds["total_counts"]
         if nfeat_lo is not None:
-            _ax.axhline(nfeat_lo, color="red", linestyle="--", linewidth=1.0)
+            _ax.axhline(
+                nfeat_lo, color=cfg.plot.palette.qc_threshold, linestyle="--", linewidth=1.0
+            )
         if nfeat_hi is not None:
-            _ax.axhline(nfeat_hi, color="red", linestyle="--", linewidth=1.0)
+            _ax.axhline(
+                nfeat_hi, color=cfg.plot.palette.qc_threshold, linestyle="--", linewidth=1.0
+            )
         if ncount_hi is not None:
             _ax.axvline(
                 ncount_hi,
@@ -366,7 +391,7 @@ def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, cfg, log):
         if ncount_hi is not None:
             _ax.legend(fontsize=9)
         _fig.tight_layout()
-        _fig.savefig(os.path.join(fig_dir, "nCount_vs_nFeature.png"), dpi=150)
+        _fig.savefig(os.path.join(fig_dir, "nCount_vs_nFeature.png"), dpi=cfg.plot.figure_dpi)
         plt.close(_fig)
         log.info("  Plot saved: nCount_vs_nFeature.png")
     except Exception as e:
@@ -374,13 +399,19 @@ def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, cfg, log):
 
     # ---- Panel C: % Mito 分布直方图 ----
     try:
-        _fig, _ax = plt.subplots(figsize=(8, 5))
+        _fig, _ax = plt.subplots(figsize=cfg.plot.qc_figure_size)
         vals = adata.obs["pct_counts_mt"].values
         vals = vals[np.isfinite(vals)]
-        _ax.hist(vals, bins=100, color="indianred", edgecolor="white", alpha=0.85)
+        _ax.hist(vals, bins=100, color=cfg.plot.palette.qc_second, edgecolor="white", alpha=0.85)
         _, hi = thresholds["pct_counts_mt"]
         if hi is not None:
-            _ax.axvline(hi, color="red", linestyle="--", linewidth=1.2, label=f"hi={hi:.2f}%")
+            _ax.axvline(
+                hi,
+                color=cfg.plot.palette.qc_threshold,
+                linestyle="--",
+                linewidth=1.2,
+                label=f"hi={hi:.2f}%",
+            )
         _ax.set_xlabel("pct_counts_mt (% Mito)")
         _ax.set_ylabel("Number of cells")
         _suffix = " (snRNA-seq: residual cytoplasm)" if cfg.qc.is_nuclei else ""
@@ -391,7 +422,7 @@ def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, cfg, log):
         if hi is not None:
             _ax.legend(fontsize=9)
         _fig.tight_layout()
-        _fig.savefig(os.path.join(fig_dir, "pct_mito_distribution.png"), dpi=150)
+        _fig.savefig(os.path.join(fig_dir, "pct_mito_distribution.png"), dpi=cfg.plot.figure_dpi)
         plt.close(_fig)
         log.info("  Plot saved: pct_mito_distribution.png")
     except Exception as e:
@@ -407,9 +438,9 @@ def _plot_nfeature_kde(adata, fig_dir, mode_label, cfg, log):
             log.info("  KDE plot: skipped (too few cells)")
             return
 
-        _fig, _ax = plt.subplots(figsize=(8, 5))
-        _ax.plot(x_range, density, color="steelblue", linewidth=1.5)
-        _ax.fill_between(x_range, density, alpha=0.15, color="steelblue")
+        _fig, _ax = plt.subplots(figsize=cfg.plot.qc_figure_size)
+        _ax.plot(x_range, density, color=cfg.plot.palette.qc_hist, linewidth=1.5)
+        _ax.fill_between(x_range, density, alpha=0.15, color=cfg.plot.palette.qc_hist)
 
         y_offset = density.max() * 0.03
         for px, py in zip(peaks_x, peaks_y):
@@ -418,7 +449,7 @@ def _plot_nfeature_kde(adata, fig_dir, mode_label, cfg, log):
                 py + y_offset,
                 marker="^",
                 s=80,
-                color="darkorange",
+                color=cfg.plot.palette.qc_third,
                 edgecolors="black",
                 linewidths=0.5,
                 zorder=5,
@@ -428,14 +459,14 @@ def _plot_nfeature_kde(adata, fig_dir, mode_label, cfg, log):
         # Threshold lines
         _ax.axvline(
             cfg.qc.min_genes,
-            color="red",
+            color=cfg.plot.palette.qc_threshold,
             linestyle="--",
             linewidth=1.0,
             label=f"lo={cfg.qc.min_genes:.0f}",
         )
         _ax.axvline(
             cfg.qc.max_genes,
-            color="red",
+            color=cfg.plot.palette.qc_threshold,
             linestyle="--",
             linewidth=1.0,
             label=f"hi={cfg.qc.max_genes:.0f}",
@@ -459,11 +490,13 @@ def _plot_nfeature_kde(adata, fig_dir, mode_label, cfg, log):
             color=assess_color,
             ha="left",
             va="bottom",
-            bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8),
+            bbox=dict(
+                boxstyle="round,pad=0.3", facecolor=cfg.plot.palette.grn_facecolor, alpha=0.8
+            ),
         )
 
         _fig.tight_layout()
-        _fig.savefig(os.path.join(fig_dir, "nFeature_KDE_density.png"), dpi=150)
+        _fig.savefig(os.path.join(fig_dir, "nFeature_KDE_density.png"), dpi=cfg.plot.figure_dpi)
         plt.close(_fig)
         log.info("  Plot saved: nFeature_KDE_density.png (%s)", assessment)
     except Exception as e:

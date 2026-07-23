@@ -282,6 +282,7 @@ def generate_figures(adata, markers_df, cfg, log, primary_col=None):
             groupby=group_col,
             show=False,
             save="marker_heatmap.pdf",
+            cfg=cfg,
         )
 
     # 关键标记基因 dotplot
@@ -298,6 +299,7 @@ def generate_figures(adata, markers_df, cfg, log, primary_col=None):
                 groupby=group_col,
                 show=False,
                 save="marker_dotplot.pdf",
+                cfg=cfg,
             )
 
 

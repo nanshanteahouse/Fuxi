@@ -114,7 +114,7 @@ def main():
         yticklabels=sample_names,
         annot=True,
         fmt=".2f",
-        cmap="RdBu_r",
+        cmap=cfg.plot.palette.heatmap,
         vmin=-1,
         vmax=1,
         ax=ax,
@@ -124,7 +124,7 @@ def main():
     fig.tight_layout()
     corr_path = os.path.join(cfg.figure_dir, "01_sample_correlation.png")
     os.makedirs(cfg.figure_dir, exist_ok=True)
-    fig.savefig(corr_path, dpi=150, bbox_inches="tight")
+    fig.savefig(corr_path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
     plt.close(fig)
     log.info("  Saved: %s", corr_path)
 

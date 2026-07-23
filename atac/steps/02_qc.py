@@ -69,6 +69,7 @@ def main():
             data,
             show=False,
             save=os.path.join(cfg.figure_dir, "02_qc", "fragment_size_distribution.png"),
+            cfg=cfg,
         )
     except Exception as e:
         log.warning("Frag size plot failed: %s", e)

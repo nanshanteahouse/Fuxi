@@ -65,9 +65,14 @@ def main():
         log.info("  PAGA complete")
 
         # PAGA plot
-        safe_plot(sc.pl.paga, adata, show=False, save="_07_paga.png", threshold=0.1)
+        safe_plot(sc.pl.paga, adata, show=False, save="_07_paga.png", threshold=0.1, cfg=cfg)
         safe_plot(
-            sc.pl.paga_compare, adata, show=False, save="_07_paga_compare.png", legend_fontsize=8
+            sc.pl.paga_compare,
+            adata,
+            show=False,
+            save="_07_paga_compare.png",
+            legend_fontsize=8,
+            cfg=cfg,
         )
         log.info("  PAGA plots saved")
     except Exception as e:
@@ -131,7 +136,7 @@ def main():
 
     for var in plot_vars:
         try:
-            safe_plot(sc.pl.umap, adata, color=var, show=False, save=f"_07_{var}.pdf")
+            safe_plot(sc.pl.umap, adata, color=var, show=False, save=f"_07_{var}.pdf", cfg=cfg)
         except Exception:
             pass
 

@@ -81,7 +81,10 @@ def main():
         fig, ax = plt.subplots(figsize=(6, 4))
         ax.hist(pd.obs["frip"], bins=50)
         ax.set_xlabel("FRiP")
-        plt.savefig(os.path.join(cfg.figure_dir, "05_peaks", "frip_distribution.png"), dpi=150)
+        plt.savefig(
+            os.path.join(cfg.figure_dir, "05_peaks", "frip_distribution.png"),
+            dpi=cfg.plot.figure_dpi,
+        )
         plt.close()
     except Exception as e:
         log.warning("FRiP histogram: %s", e)

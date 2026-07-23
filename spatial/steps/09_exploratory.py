@@ -45,8 +45,13 @@ def spatial_cell_type_plot(adata, cfg, log):
             size=1.5,
             show=False,
             save="_09_spatial_celltype.png",
+            cfg=cfg,
         )
-        plt.savefig(os.path.join(fig_dir, "spatial_cell_type.png"), dpi=200, bbox_inches="tight")
+        plt.savefig(
+            os.path.join(fig_dir, "spatial_cell_type.png"),
+            dpi=cfg.plot.figure_dpi,
+            bbox_inches="tight",
+        )
         plt.close()
         log.info("Spatial cell type plot saved")
     except Exception as e:
@@ -93,7 +98,10 @@ def spatial_gene_plots(adata, cfg, log):
         fig, axes = plt.subplots(
             max(1, (len(genes) + 2) // 3),
             min(3, len(genes)),
-            figsize=(5 * min(3, len(genes)), 5 * max(1, (len(genes) + 2) // 3)),
+            figsize=(
+                cfg.plot.umap_panel_size[0] * min(3, len(genes)),
+                cfg.plot.umap_panel_size[1] * max(1, (len(genes) + 2) // 3),
+            ),
             squeeze=False,
         )
         for i, gene in enumerate(genes):
@@ -107,6 +115,7 @@ def spatial_gene_plots(adata, cfg, log):
                     size=1.5,
                     ax=ax,
                     show=False,
+                    cfg=cfg,
                 )
             except Exception:
                 ax.text(0.5, 0.5, gene, ha="center", va="center")
@@ -116,7 +125,9 @@ def spatial_gene_plots(adata, cfg, log):
 
         fig.tight_layout()
         fig.savefig(
-            os.path.join(fig_dir, "spatial_marker_genes.png"), dpi=200, bbox_inches="tight"
+            os.path.join(fig_dir, "spatial_marker_genes.png"),
+            dpi=cfg.plot.figure_dpi,
+            bbox_inches="tight",
         )
         plt.close(fig)
         log.info("Spatial gene expression plot saved")
@@ -207,7 +218,7 @@ def main():
     for col in ["cell_type", "leiden", "total_counts", "n_genes_by_counts"]:
         if col in adata.obs:
             try:
-                safe_plot(sc.pl.umap, adata, color=col, show=False, save=f"_09_{col}.pdf")
+                safe_plot(sc.pl.umap, adata, color=col, show=False, save=f"_09_{col}.pdf", cfg=cfg)
             except Exception as e:
                 log.warning("UMAP plot failed: %s", e)
 
