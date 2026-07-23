@@ -77,14 +77,24 @@ def detect_doublets_parallel(adata, cfg, log):
         adata.obs["predicted_doublet"] = False
         return
 
-    # TPM/CPM/FPKM/log1p 数据 → Scrublet 的负二项分布假设不成立
     if cfg.expression_type != "raw_counts":
-        log.warning(
-            "Scrublet is designed for raw UMI counts. "
-            "expression_type='%s' violates the negative-binomial assumption. "
-            "Disabling Scrublet. Set run_scrublet=False to suppress this warning.",
-            cfg.expression_type,
-        )
+        _policy = cfg.scrublet.on_non_counts
+        if _policy == "abort":
+            log.error(
+                "Scrublet requires raw UMI counts but expression_type='%s'. "
+                "Set scrublet.on_non_counts to 'skip_warn' or 'skip_silent' to proceed, "
+                "or use raw UMI counts as input.",
+                cfg.expression_type,
+            )
+            sys.exit(1)
+        elif _policy == "skip_warn":
+            log.warning(
+                "Scrublet is designed for raw UMI counts. "
+                "expression_type='%s' violates the negative-binomial assumption. "
+                "Disabling Scrublet.",
+                cfg.expression_type,
+            )
+        # skip_silent: no log message
         adata.obs["doublet_scores"] = 0.0
         adata.obs["predicted_doublet"] = False
         return

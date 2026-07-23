@@ -26,6 +26,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 
+from core.ai.json_extract import extract_json_block
 from core.annotation.engine import run_unified_annotation as unified_annotate
 from core.utils import resolve_config, safe_plot, safe_write, setup_logger
 
@@ -271,7 +272,7 @@ def ai_annotate(adata, cfg, logger, std=None):
 
     # ── f. 解析 JSON ──────────────────────────────────────────────────
     try:
-        annotations = json.loads(response)
+        annotations = json.loads(extract_json_block(response))
     except (json.JSONDecodeError, TypeError) as e:
         logger.warning(
             "LLM response is not valid JSON (%s) — falling back to score_genes method", e

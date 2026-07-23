@@ -578,6 +578,16 @@ def filter_cells(adata, thresholds, cfg, log):
         100 * n_doublet / n_before if n_before else 0,
     )
 
+    # ── Doublet guard: warn if Scrublet ran but predicted zero doublets ──
+    _n_doublet = f_doublet.sum()
+    if _n_doublet == 0 and getattr(cfg.scrublet, "run", True):
+        log.warning(
+            "Doublet detection enabled but 0 doublets predicted. "
+            "Likely cause: input not raw_counts (Scrublet was skipped) or "
+            "expected_doublet_rate too low. No doublets removed; "
+            "interpret downstream with caution.",
+        )
+
     # ---- 从 thresholds 读取各指标边界 ----
     gf_lo, gf_hi = thresholds["n_genes_by_counts"]
     _, tc_hi = thresholds["total_counts"]

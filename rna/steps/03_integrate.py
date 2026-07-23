@@ -31,113 +31,12 @@ import numpy as np
 import scanpy as sc
 import scipy.sparse as sp
 
+from core.kb.cell_cycle import load_cell_cycle_genes
 from core.utils import resolve_config, safe_write, setup_logger
 
-# Cell cycle gene lists (Tirosh et al., 2016) for sc.tl.score_genes_cell_cycle
-_S_GENES = [
-    "MCM5",
-    "PCNA",
-    "TYMS",
-    "FEN1",
-    "MCM2",
-    "MCM4",
-    "RRM1",
-    "UNG",
-    "GINS2",
-    "MCM6",
-    "CDCA7",
-    "DTL",
-    "PRIM1",
-    "UHRF1",
-    "MLF1IP",
-    "HELLS",
-    "RFC2",
-    "RPA2",
-    "NASP",
-    "RAD51AP1",
-    "GMNN",
-    "WDR76",
-    "SLBP",
-    "CCNE2",
-    "UBR7",
-    "PIR51",
-    "MCM10",
-    "RFWD3",
-    "FANCI",
-    "TK1",
-    "CDC45",
-    "CDC6",
-    "DSCC1",
-    "EXO1",
-    "TIPIN",
-    "E2F8",
-    "GINS4",
-    "CASP8AP2",
-    "GMPS",
-    "BRIP1",
-    "CLSPN",
-    "HAT1",
-    "RRM2",
-    "RAD51",
-    "RPA3",
-    "BRCA1",
-]
-_G2M_GENES = [
-    "HMGB2",
-    "CDK1",
-    "NUSAP1",
-    "UBE2C",
-    "BIRC5",
-    "TPX2",
-    "TOP2A",
-    "NDC80",
-    "CKS2",
-    "NUF2",
-    "CKS1B",
-    "MKI67",
-    "TMPO",
-    "CENPF",
-    "TACC3",
-    "FAM64A",
-    "SMC4",
-    "CCNB2",
-    "CKAP2L",
-    "CKAP2",
-    "AURKB",
-    "BUB1",
-    "KIF11",
-    "ANP32E",
-    "TUBB4B",
-    "GTSE1",
-    "KIF20B",
-    "HJURP",
-    "CDCA3",
-    "HN1",
-    "CDC20",
-    "TTK",
-    "CDC25C",
-    "KIF2C",
-    "RANGAP1",
-    "NCAPD2",
-    "DLGAP5",
-    "CDCA2",
-    "CDCA8",
-    "ECT2",
-    "KIF23",
-    "HMMR",
-    "AURKA",
-    "PSRC1",
-    "ANLN",
-    "LBR",
-    "CKAP5",
-    "CENPE",
-    "CTCF",
-    "NEK2",
-    "G2E3",
-    "GAS2L3",
-    "CBX5",
-    "CENPA",
-]
+# Cell cycle gene lists — externalized to core/kb/cell_cycle/
+# Previously hardcoded as _S_GENES / _G2M_GENES (Tirosh et al., 2016).
+# Loading is deferred to the score_cell_cycle block below via load_cell_cycle_genes().
 
 
 def main():
@@ -284,7 +183,8 @@ def main():
     if cfg.normalization.score_cell_cycle:
         log.info("Scoring cell cycle (S / G2M) on full gene reference...")
         try:
-            sc.tl.score_genes_cell_cycle(adata_full, s_genes=_S_GENES, g2m_genes=_G2M_GENES)
+            s_genes, g2m_genes = load_cell_cycle_genes(cfg.species)
+            sc.tl.score_genes_cell_cycle(adata_full, s_genes=s_genes, g2m_genes=g2m_genes)
             adata.obs["S_score"] = adata_full.obs["S_score"].copy()
             adata.obs["G2M_score"] = adata_full.obs["G2M_score"].copy()
             adata.obs["phase"] = adata_full.obs["phase"].copy()

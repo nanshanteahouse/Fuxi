@@ -74,3 +74,7 @@ requires-python = ">=3.14"
 
 [project.optional-dependencies]
 scvi = ["scvi-tools>=1.5,<2"]
+celltypist = ["celltypist>=1.6"]
+scvelo = ["scvelo>=0.3"]
+sccoda = ["sccoda>=0.1"]  # pip confirmed: ``pip index versions sccoda`` → 0.1.9 available
+methods = ["fuxi[scvi]", "fuxi[celltypist]", "fuxi[scvelo]"]

@@ -59,44 +59,107 @@ def export_results(lr_res, top_df, cfg, log):
 
 
 def plot_heatmap(top_df, cfg, log):
-    """Heatmap of top interaction scores (source→target cell type pairs)."""
+    """Two-panel heatmap: median interaction magnitude + interaction counts."""
 
     fig_dir = os.path.join(cfg.figure_dir, "12_cell_interaction")
     os.makedirs(fig_dir, exist_ok=True)
 
-    # Pivot to (source x target) matrix using magnitude_rank or similar
     if "interaction" not in top_df.columns:
         top_df = top_df.copy()
         top_df["interaction"] = top_df["source"].astype(str) + "→" + top_df["target"].astype(str)
 
-    # Count interactions per source→target pair
-    st_counts = top_df.groupby(["source", "target"]).size().reset_index(name="n_interactions")
-    pivot = st_counts.pivot(index="source", columns="target", values="n_interactions")
-    pivot = pivot.fillna(0)
+    # Determine which scoring column to use for the magnitude panel
+    score_col = None
+    for candidate in ["magnitude_rank", "specificity_rank", "lrscore"]:
+        if candidate in top_df.columns:
+            score_col = candidate
+            break
 
-    if pivot.empty or pivot.shape[0] < 2:
+    if score_col is None:
+        log.warning(
+            "No magnitude/specificity/lrscore column found — falling back to counts-only heatmap"
+        )
+        # Count interactions per source→target pair
+        st_counts = top_df.groupby(["source", "target"]).size().reset_index(name="n_interactions")
+        pivot = st_counts.pivot(index="source", columns="target", values="n_interactions")
+        pivot = pivot.fillna(0)
+
+        if pivot.empty or pivot.shape[0] < 2:
+            log.warning("Not enough source→target pairs for heatmap — skipping")
+            return
+
+        n_rows, n_cols = pivot.shape
+
+        fig_w = max(6, n_cols * 0.5 + 2.5)
+        fig_h = max(4, n_rows * 0.4 + 2.0)
+        fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+
+        im = ax.imshow(pivot.values, aspect="auto", cmap=cfg.plot.palette.dotplot_fill)
+
+        ax.set_xticks(range(n_cols))
+        ax.set_xticklabels(pivot.columns, rotation=45, ha="right", fontsize=8)
+        ax.set_yticks(range(n_rows))
+        ax.set_yticklabels(pivot.index, fontsize=8)
+        ax.set_xlabel("Target cell type")
+        ax.set_ylabel("Source cell type")
+        ax.set_title(f"Top {len(top_df)} CCI Interactions (LIANA+ rank_aggregate)")
+
+        cbar = fig.colorbar(im, ax=ax, shrink=0.8)
+        cbar.set_label("N interactions")
+
+        fig.tight_layout()
+        path = os.path.join(fig_dir, "interaction_heatmap.png")
+        fig.savefig(path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
+        plt.close(fig)
+        log.info("Saved: %s", path)
+        return
+
+    # Build two pivot tables
+    # Magnitude panel: median score per source→target pair
+    mag_pivot = top_df.groupby(["source", "target"])[score_col].median().reset_index()
+    mag_pivot = mag_pivot.pivot(index="source", columns="target", values=score_col)
+    mag_pivot = mag_pivot.fillna(0)
+
+    # Counts panel: number of interactions per source→target pair
+    ct_pivot = top_df.groupby(["source", "target"]).size().reset_index(name="count")
+    ct_pivot = ct_pivot.pivot(index="source", columns="target", values="count")
+    ct_pivot = ct_pivot.fillna(0)
+
+    if mag_pivot.empty or mag_pivot.shape[0] < 2:
         log.warning("Not enough source→target pairs for heatmap — skipping")
         return
 
-    n_rows, n_cols = pivot.shape
+    # Create two subplots
+    n_rows, n_cols = mag_pivot.shape
+    fig_w = max(8, n_cols * 0.5 + 4.0)
+    fig_h = max(6, n_rows * 0.4 + 3.0)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(fig_w, fig_h))
 
-    fig_w = max(6, n_cols * 0.5 + 2.5)
-    fig_h = max(4, n_rows * 0.4 + 2.0)
-    fig, ax = plt.subplots(figsize=(fig_w, fig_h))
+    # Panel 1: Magnitude heatmap
+    im1 = ax1.imshow(mag_pivot.values, aspect="auto", cmap=cfg.plot.palette.interaction_heatmap)
+    ax1.set_xticks(range(n_cols))
+    ax1.set_xticklabels(mag_pivot.columns, rotation=45, ha="right", fontsize=8)
+    ax1.set_yticks(range(n_rows))
+    ax1.set_yticklabels(mag_pivot.index, fontsize=8)
+    ax1.set_xlabel("Target cell type")
+    ax1.set_ylabel("Source cell type")
+    ax1.set_title(f"Median {score_col}")
+    cbar1 = fig.colorbar(im1, ax=ax1, shrink=0.8)
+    cbar1.set_label(f"Median {score_col}")
 
-    im = ax.imshow(pivot.values, aspect="auto", cmap=cfg.plot.palette.dotplot_fill)
+    # Panel 2: Counts heatmap
+    im2 = ax2.imshow(ct_pivot.values, aspect="auto", cmap=cfg.plot.palette.dotplot_fill)
+    ax2.set_xticks(range(ct_pivot.shape[1]))
+    ax2.set_xticklabels(ct_pivot.columns, rotation=45, ha="right", fontsize=8)
+    ax2.set_yticks(range(ct_pivot.shape[0]))
+    ax2.set_yticklabels(ct_pivot.index, fontsize=8)
+    ax2.set_xlabel("Target cell type")
+    ax2.set_ylabel("Source cell type")
+    ax2.set_title("N interactions")
+    cbar2 = fig.colorbar(im2, ax=ax2, shrink=0.8)
+    cbar2.set_label("N interactions")
 
-    ax.set_xticks(range(n_cols))
-    ax.set_xticklabels(pivot.columns, rotation=45, ha="right", fontsize=8)
-    ax.set_yticks(range(n_rows))
-    ax.set_yticklabels(pivot.index, fontsize=8)
-    ax.set_xlabel("Target cell type")
-    ax.set_ylabel("Source cell type")
-    ax.set_title(f"Top {len(top_df)} CCI Interactions (LIANA+ rank_aggregate)")
-
-    cbar = fig.colorbar(im, ax=ax, shrink=0.8)
-    cbar.set_label("N interactions")
-
+    fig.suptitle(f"Top {len(top_df)} CCI Interactions", fontsize=12)
     fig.tight_layout()
     path = os.path.join(fig_dir, "interaction_heatmap.png")
     fig.savefig(path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")

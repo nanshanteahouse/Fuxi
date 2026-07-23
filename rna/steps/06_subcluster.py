@@ -24,6 +24,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scanpy as sc
 
+from core.ai.json_extract import extract_json_block
 from core.utils import resolve_config, safe_plot, safe_write, setup_logger
 
 
@@ -450,20 +451,7 @@ def main():
 
                 # ── Parse JSON from AI response ──
                 # Strip potential markdown code fences
-                cleaned = result.strip()
-                if cleaned.startswith("```"):
-                    lines = cleaned.split("\n")
-                    start = 0
-                    for i, line in enumerate(lines):
-                        if line.strip().startswith("```"):
-                            start = i + 1
-                            break
-                    end = len(lines)
-                    for i in range(len(lines) - 1, start - 1, -1):
-                        if lines[i].strip().startswith("```"):
-                            end = i
-                            break
-                    cleaned = "\n".join(lines[start:end]).strip()
+                cleaned = extract_json_block(result)
 
                 parsed = json.loads(cleaned)
 

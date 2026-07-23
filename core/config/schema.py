@@ -123,6 +123,9 @@ class ScrubletSettings(BaseModel):
     n_prin_comps: int = 30
 
 
+on_non_counts: Literal["skip_warn", "skip_silent", "abort"] = "skip_warn"
+
+
 # ═══════════════════════════════════════════════════════════════════════
 # Sub-model 5 — NormalizationSettings
 # ═══════════════════════════════════════════════════════════════════════

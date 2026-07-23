@@ -1,0 +1,14 @@
+# Cell-cycle gene lists — Danio rerio (zebrafish)
+# TODO: Populate with curated zebrafish cell-cycle gene orthologs.
+# Zebrafish gene symbols typically follow lower-case convention with
+# occasional ZGC/ZDB prefixes. A reliable source is the Tinyatlas
+# cell-cycle collection:
+#   https://github.com/hbc/tinyatlas/tree/master/cell_cycle
+# or the scib package:
+#   scib.preprocessing.get_cell_cycle_genes("zebrafish")
+#
+# Until then, set cfg.normalization.score_cell_cycle=False for zebrafish
+# datasets, or the pipeline will skip cell-cycle scoring with a warning.
+
+S_GENES: []
+G2M_GENES: []
