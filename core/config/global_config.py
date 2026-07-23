@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Global visualization configuration defaults — shared across all modalities.
+"""Project-wide global configuration defaults — shared across all modalities.
 
-Contains GlobalPaletteConfig (color palettes) and GlobalPlotConfig (DPI, size,
-format) that serve as the single source of truth for all plot rendering in
-the Fuxi pipeline.
-
-These models are designed to be overridable per project via global.yaml;
-every field has a sensible default so no project is required to specify them.
+Contains GlobalPaletteConfig, GlobalPlotConfig, Execution/DE/Clustering/
+Integration/QC sub-configs, and a top-level GlobalConfig that aggregates them
+all.  Every field has a sensible default so no project is required to specify
+them; projects override only what differs via global.yaml.
 """
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -56,3 +54,89 @@ class GlobalPlotConfig(BaseModel):
     qc_figure_size: list[int] = [8, 5]
     umap_panel_size: list[int] = [6, 5]
     palette: GlobalPaletteConfig = Field(default_factory=GlobalPaletteConfig)
+
+
+class GlobalExecutionConfig(BaseModel):
+    """Execution environment defaults — parallelization, memory, float precision.
+
+    These values control runtime behaviour of every pipeline step across
+    all modalities. Projects override only what differs from the common
+    baseline in their global.yaml.
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    random_seed: int = 42
+    memory_policy: str = "speed"
+    n_jobs: int = 0  # 0 = auto-detect
+    limit_blas_threads: bool = True
+    force_csr: bool = True
+    use_float32: bool = True
+
+
+class GlobalDEConfig(BaseModel):
+    """Differential expression analysis defaults — method, gene count, cutoffs."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    method: str = "wilcoxon"
+    n_genes: int = 50
+    pval_cutoff: float = 0.05
+    logfc_cutoff: float = 0.25
+
+
+class GlobalClusteringConfig(BaseModel):
+    """Clustering and UMAP defaults — selection method, parameter grids.
+
+    Controls how the pipeline picks cluster resolution (multi-metric) and the
+    UMAP layout (convex-hull) without requiring per-project config.
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    cluster_selection_method: str = "multi_metric"
+    umap_selection_method: str = "convex_hull"
+    param_grid_min_dist: list[float] = [0.1, 0.3, 0.5]
+    param_grid_spread: list[float] = [1.0]
+    umap_min_dist: float = 0.3
+    umap_spread: float = 1.0
+
+
+class GlobalIntegrationConfig(BaseModel):
+    """Integration / batch-correction defaults — Harmony, diagnosis thresholds."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    max_iter: int = 20
+    diagnose: bool = True
+    diagnose_report: bool = True
+    gini_batch_threshold: float = 0.3
+    gini_biology_threshold: float = 0.6
+
+
+class GlobalQCConfig(BaseModel):
+    """Quality-control thresholds — mito, gene detection, expression pattern."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    max_pct_mito: float = 20.0
+    min_cells_per_gene: int = 3
+    mt_gene_pattern: str = "MT-"
+
+
+class GlobalConfig(BaseModel):
+    """Top-level global config aggregating every sub-config namespace.
+
+    This is the single import consumers use to access all project-wide
+    defaults.  Any sub-config can be overridden via global.yaml without
+    touching the remainder.
+    """
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    execution: GlobalExecutionConfig = Field(default_factory=GlobalExecutionConfig)
+    de: GlobalDEConfig = Field(default_factory=GlobalDEConfig)
+    clustering: GlobalClusteringConfig = Field(default_factory=GlobalClusteringConfig)
+    integration: GlobalIntegrationConfig = Field(default_factory=GlobalIntegrationConfig)
+    qc: GlobalQCConfig = Field(default_factory=GlobalQCConfig)
+    plot: GlobalPlotConfig = Field(default_factory=GlobalPlotConfig)
