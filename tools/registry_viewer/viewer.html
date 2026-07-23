@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fuxi Registry · 统一论文登记表</title>
+<meta name="description" content="Fuxi 单细胞多组学统一论文/数据集/链接登记表浏览器">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<style>
+  /* ───────── palettes ───────── */
+  :root {
+    --bg: #0d1117;
+    --bg-elev: #11141d;
+    --card: #161b25;
+    --card-2: #1a2030;
+    --border: #252b3b;
+    --border-soft: #1d2230;
+    --text: #c9d1d9;
+    --text-strong: #f0f5fc;
+    --muted: #6e7d96;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #a371f7;
+    --cyan: #39d0d8;
+    --row-hover: #1b2030;
+    --row-stripe: #131822;
+    --scrollbar-bg: transparent;
+    --scrollbar-thumb: #30363d;
+    --shadow-1: 0 1px 0 rgba(0,0,0,.4);
+    --shadow-card: 0 1px 2px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.02) inset;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background:
+      radial-gradient(1200px 600px at 100% -10%, rgba(88,166,255,.06), transparent 60%),
+      radial-gradient(800px 400px at -10% 0%, rgba(163,113,247,.06), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    font: 13.5px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Helvetica, Arial, sans-serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: rgba(88,166,255,.3); color: var(--text-strong); }
+
+  .container { max-width: 1800px; margin: 0 auto; padding: 28px 28px 60px; }
+
+  /* ───────── hero ───────── */
+  .hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
+  .hero h1 {
+    font-size: 24px; font-weight: 650; letter-spacing: -.01em;
+    background: linear-gradient(180deg, var(--text-strong), #b7c5da);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .hero .sub { color: var(--muted); font-size: 13px; margin-top: 6px; }
+  .hero .sub code { color: var(--accent); font-family: "SFMono-Regular",Consolas,monospace; font-size: 12px; background: var(--card); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border); }
+  .hero .meta { color: var(--muted); font-size: 12px; text-align: right; line-height: 1.6; }
+  .hero .meta .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: middle; background: var(--green); box-shadow: 0 0 8px rgba(63,185,80,.6); }
+
+  /* ───────── sticky tabs ───────── */
+  .tabs {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; gap: 4px; padding: 10px 0; margin: 0 -8px 18px;
+    background: linear-gradient(180deg, var(--bg) 85%, rgba(13,17,23,0));
+    backdrop-filter: blur(2px);
+  }
+  .tab {
+    appearance: none; border: 1px solid var(--border);
+    background: var(--card); color: var(--muted); cursor: pointer;
+    font: 13px/1 inherit; padding: 8px 14px; border-radius: 8px;
+    display: inline-flex; align-items: center; gap: 8px;
+    transition: all .15s;
+  }
+  .tab:hover { color: var(--text); background: var(--card-2); border-color: rgba(88,166,255,.3); }
+  .tab.active {
+    color: var(--accent); background: rgba(88,166,255,.08);
+    border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset, 0 0 14px rgba(88,166,255,.18);
+  }
+  .tab .ico { font-size: 13px; }
+  .tab .chip {
+    background: var(--card-2); color: var(--muted); border: 1px solid var(--border);
+    font-size: 10px; padding: 0 6px; border-radius: 10px; min-width: 18px; text-align: center; line-height: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+  .tab.active .chip { color: var(--accent); border-color: rgba(88,166,255,.4); background: rgba(88,166,255,.12); }
+
+  /* ───────── tab panels (show only active) ───────── */
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; animation: tabFade .15s ease-out; }
+  @keyframes tabFade { from { opacity: 0; transform: translateY(2px); } to { opacity: 1; transform: none; } }
+
+  /* modality filters only relevant under datasets tab */
+  body:not([data-tab="datasets"]) .filters { display: none; }
+
+  /* ───────── stat cards ───────── */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 22px; }
+  .stat-card {
+    position: relative; padding: 14px 16px 12px;
+    background: linear-gradient(180deg, var(--card), var(--card-2));
+    border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-card);
+    overflow: hidden; transition: transform .15s, border-color .15s;
+  }
+  .stat-card::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--accent); opacity: .9;
+  }
+  .stat-card.c-green::before { background: var(--green); }
+  .stat-card.c-purple::before { background: var(--purple); }
+  .stat-card.c-orange::before { background: var(--orange); }
+  .stat-card.c-cyan::before { background: var(--cyan); }
+  .stat-card:hover { transform: translateY(-1px); border-color: rgba(88,166,255,.35); }
+  .stat-card .num { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+  .stat-card .label { font-size: 11px; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: .05em; }
+
+  /* ───────── toolbar ───────── */
+  .toolbar { display: flex; gap: 10px; align-items: center; margin: 8px 0 8px; flex-wrap: wrap; }
+  .search-wrap { flex: 1; min-width: 280px; position: relative; }
+  .search-wrap::before {
+    content: "🔍"; position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+    font-size: 12px; opacity: .55; pointer-events: none;
+  }
+  .search { width: 100%; padding: 8px 12px 8px 32px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 13px; outline: none; transition: all .15s; }
+  .search:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(88,166,255,.12); background: var(--bg-elev); }
+  .search::placeholder { color: var(--muted); }
+  .search-kbd { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 10px; color: var(--muted); border: 1px solid var(--border); padding: 1px 5px; border-radius: 4px; background: var(--bg-elev); pointer-events: none; opacity: .7; }
+  .btn { padding: 7px 13px; border: 1px solid var(--border); border-radius: 7px; background: var(--card); color: var(--text); cursor: pointer; font-size: 12px; white-space: nowrap; transition: all .15s; }
+  .btn:hover { background: var(--row-hover); border-color: rgba(88,166,255,.3); }
+  .btn.active { border-color: var(--accent); color: var(--accent); background: rgba(88,166,255,.08); }
+  .count-summary { font-size: 12px; color: var(--muted); margin-left: 6px; font-variant-numeric: tabular-nums; }
+  .count-summary .num { color: var(--text); font-weight: 600; }
+
+  /* ───────── filter pills ───────── */
+  .filters { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+  .pill {
+    padding: 4px 10px; border: 1px solid var(--border); background: var(--card); color: var(--muted);
+    border-radius: 14px; font-size: 11px; cursor: pointer; user-select: none; transition: all .15s;
+  }
+  .pill:hover { color: var(--text); border-color: rgba(88,166,255,.3); }
+  .pill.active { background: rgba(88,166,255,.1); color: var(--accent); border-color: var(--accent); }
+
+  /* ───────── badges ───────── */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; letter-spacing: .01em; white-space: nowrap; }
+  .badge-ok   { background: rgba(63,185,80,.15); color: var(--green);  border: 1px solid rgba(63,185,80,.25); }
+  .badge-warn { background: rgba(210,153,34,.15); color: var(--orange); border: 1px solid rgba(210,153,34,.25); }
+  .badge-err  { background: rgba(248,81,73,.15); color: var(--red);    border: 1px solid rgba(248,81,73,.25); }
+  .badge-info { background: rgba(88,166,255,.15); color: var(--accent); border: 1px solid rgba(88,166,255,.25); }
+  .badge-kb   { background: rgba(163,113,247,.15); color: var(--purple); border: 1px solid rgba(163,113,247,.25); }
+  .badge-superseries { background: rgba(163,113,247,.15); color: var(--purple); border: 1px solid rgba(163,113,247,.35); font-weight: 600; }
+  .badge-nonpipeline { background: rgba(110,125,150,.15); color: var(--muted); border: 1px solid rgba(110,125,150,.3); font-style: italic; }
+
+  /* ───────── section header ───────── */
+  .section { margin-top: 28px; }
+  .section-head {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 14px; font-weight: 600; color: var(--text-strong);
+    margin: 0 0 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border-soft);
+  }
+  .section-head .ico { font-size: 15px; }
+  .section-head .count {
+    background: var(--card); color: var(--muted); border: 1px solid var(--border);
+    font-size: 11px; padding: 1px 8px; border-radius: 10px; font-variant-numeric: tabular-nums;
+  }
+  .section-head .hint { margin-left: auto; color: var(--muted); font-size: 11px; font-weight: 400; }
+
+  /* ───────── tables ───────── */
+  .table-wrap { overflow-x: auto; max-height: 720px; overflow-y: auto; border: 1px solid var(--border-soft); border-radius: 8px; background: var(--card); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead { position: sticky; top: 0; z-index: 3; box-shadow: 0 1px 0 var(--border); }
+  th {
+    background: var(--card-2); border-bottom: 1px solid var(--border);
+    text-align: left; padding: 9px 10px; font-weight: 600; font-size: 11px;
+    color: var(--text-strong); white-space: nowrap; cursor: pointer; user-select: none;
+    transition: color .12s; letter-spacing: .02em;
+  }
+  th:hover { color: var(--accent); }
+  th .sort-arrow { margin-left: 4px; opacity: .25; font-size: 10px; }
+  th .sort-arrow.asc  { opacity: 1; color: var(--accent); }
+  th .sort-arrow.desc { opacity: 1; color: var(--accent); }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+  tbody tr:nth-child(even of :not(.detail-row)) td { background: var(--row-stripe); }
+  tbody tr:hover td { background: var(--row-hover); }
+  tbody tr.hidden { display: none; }
+  .table-wrap tbody tr:last-child td { border-bottom: none; }
+
+  /* ───────── cells ───────── */
+  .td-id { font-family: "SFMono-Regular",Consolas,monospace; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+  .td-slug { color: var(--accent); font-family: "SFMono-Regular",Consolas,monospace; font-size: 11.5px; }
+  .td-title { max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-strong); }
+  .td-clamp-1 { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .td-clamp-2 { max-width: 280px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.45; }
+  .td-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .td-center { text-align: center; white-space: nowrap; }
+
+  .gse-list { display: flex; flex-wrap: wrap; gap: 3px; max-width: 280px; }
+  .gse-tag {
+    padding: 1px 7px; background: rgba(88,166,255,.1); color: var(--accent);
+    border: 1px solid rgba(88,166,255,.2); border-radius: 4px;
+    font-size: 10.5px; font-family: "SFMono-Regular",Consolas,monospace; text-decoration: none; transition: all .12s;
+  }
+  .gse-tag:hover { background: rgba(88,166,255,.2); border-color: var(--accent); }
+  .gse-tag.orphan { background: rgba(248,81,73,.1); color: var(--red); border-color: rgba(248,81,73,.25); }
+  .gse-tag.valid  { background: rgba(163,113,247,.1); color: var(--purple); border-color: rgba(163,113,247,.25); }
+  .role-primary  { background: rgba(63,185,80,.1); color: var(--green); border-color: rgba(63,185,80,.25); }
+  .role-secondary{ background: rgba(210,153,34,.1); color: var(--orange); border-color: rgba(210,153,34,.25); }
+
+  /* ───────── pipeline dot ───────── */
+  .pipeline-cell { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-family: "SFMono-Regular",Consolas,monospace; white-space: nowrap; }
+  .pipeline-cell .mod-label { color: var(--muted); text-transform: lowercase; }
+  .pipeline-cell .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+  .pipeline-cell .dot.complete { background: var(--green); box-shadow: 0 0 6px rgba(63,185,80,.55); }
+  .pipeline-cell .dot.configured { background: var(--accent); }
+  .pipeline-cell .dot.not_configured { background: var(--muted); }
+  .pipeline-cell .dot.error { background: var(--red); }
+  .pipeline-cell .dot.n_a { background: var(--purple); opacity: .55; border: 1px dashed var(--purple); }
+  .mod-sep { color: var(--muted); margin: 0 2px; }
+
+  /* ───────── detail row ───────── */
+  .detail-toggle { cursor: pointer; color: var(--accent); font-size: 11px; margin-right: 4px; user-select: none; transition: transform .12s; display: inline-block; width: 12px; }
+  .detail-toggle.open { transform: rotate(90deg); }
+  .detail-row td { background: var(--bg-elev) !important; padding: 12px 18px; border-bottom: 1px solid var(--border); }
+  .detail-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+  .detail-field { display: flex; flex-direction: column; gap: 2px; padding: 6px 10px; background: var(--card); border: 1px solid var(--border-soft); border-radius: 6px; }
+  .detail-field .k { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .detail-field .v { font-size: 12px; color: var(--text); font-family: "SFMono-Regular",Consolas,monospace; word-break: break-all; }
+  .detail-field .v a { color: var(--accent); text-decoration: none; }
+  .detail-field .v a:hover { text-decoration: underline; }
+
+  /* ───────── ext link ───────── */
+  .ext-link { color: var(--accent); text-decoration: none; border-bottom: 1px dashed transparent; }
+  .ext-link:hover { border-bottom-color: var(--accent); }
+
+  /* ───────── empty / error / loading ───────── */
+  .loading, .empty, .error { text-align: center; padding: 60px 20px; }
+  .loading { color: var(--muted); }
+  .loading::after { content: "..."; animation: dots 1.5s steps(3) infinite; }
+  @keyframes dots { 0% { content: "."; } 33% { content: ".."; } 66% { content: "..."; } }
+  .empty { color: var(--muted); font-size: 13px; }
+  .empty .ico { display: block; font-size: 24px; margin-bottom: 8px; opacity: .6; }
+  .error { color: var(--red); padding: 24px; }
+  .error code { color: var(--accent); }
+  .error .ok { color: var(--green); }
+
+  /* ───────── scrollbars ───────── */
+  .table-wrap, body { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-bg); }
+  .table-wrap::-webkit-scrollbar, body::-webkit-scrollbar { width: 6px; height: 6px; }
+  .table-wrap::-webkit-scrollbar-track, body::-webkit-scrollbar-track { background: var(--scrollbar-bg); }
+  .table-wrap::-webkit-scrollbar-thumb, body::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+  .table-wrap::-webkit-scrollbar-thumb:hover, body::-webkit-scrollbar-thumb:hover { background: #484f58; }
+
+  /* ───────── footer ───────── */
+  .footer {
+    text-align: center; padding: 32px 0 8px; margin-top: 30px;
+    color: var(--muted); font-size: 11px;
+    border-top: 1px solid var(--border-soft);
+  }
+  .footer a { color: var(--accent); text-decoration: none; }
+
+  /* ───────── light mode ───────── */
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f6f8fb;
+      --bg-elev: #ffffff;
+      --card: #ffffff;
+      --card-2: #f4f6fa;
+      --border: #d7dde6;
+      --border-soft: #e6eaef;
+      --text: #2c3441;
+      --text-strong: #0e1620;
+      --muted: #65707d;
+      --accent: #0969da;
+      --green: #1a7f37;
+      --orange: #9a6700;
+      --red: #cf222e;
+      --purple: #8250df;
+      --cyan: #0a7f8a;
+      --row-hover: #eef1f6;
+      --row-stripe: #f8fafc;
+      --scrollbar-bg: transparent;
+      --scrollbar-thumb: #c1c7cd;
+      --shadow-card: 0 1px 2px rgba(0,0,0,.04), 0 0 0 1px rgba(0,0,0,.02);
+    }
+    body {
+      background:
+        radial-gradient(1200px 600px at 100% -10%, rgba(9,105,218,.04), transparent 60%),
+        radial-gradient(800px 400px at -10% 0%, rgba(130,80,223,.04), transparent 60%),
+        var(--bg);
+    }
+    .hero h1 { background: linear-gradient(180deg, var(--text-strong), #41505f); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .badge-ok   { background: rgba(26,127,55,.1); }
+    .badge-warn { background: rgba(154,103,0,.1); }
+    .badge-err  { background: rgba(207,34,46,.08); }
+    .badge-info { background: rgba(9,105,218,.08); }
+    .badge-kb   { background: rgba(130,80,223,.08); }
+    .gse-tag { background: rgba(9,105,218,.06); }
+    .gse-tag.orphan { background: rgba(207,34,46,.08); }
+    .gse-tag.valid  { background: rgba(130,80,223,.08); }
+    .role-primary { background: rgba(26,127,55,.08); }
+    .role-secondary { background: rgba(154,103,0,.08); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header class="hero">
+    <div>
+      <h1>Fuxi Registry</h1>
+      <div class="sub">Fuxi Master Registry · 数据源 <code>projects/registry/*.yaml</code></div>
+    </div>
+    <div class="meta">
+      <div><span class="dot"></span>registry live</div>
+      <div id="updatedAt">—</div>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="papers" type="button">
+      <span class="ico">📄</span> Papers <span class="chip" id="navPapers">0</span>
+    </button>
+    <button class="tab" data-tab="datasets" type="button">
+      <span class="ico">📦</span> Datasets <span class="chip" id="navDatasets">0</span>
+    </button>
+    <button class="tab" data-tab="links" type="button">
+      <span class="ico">🔗</span> Links <span class="chip" id="navLinks">0</span>
+    </button>
+  </nav>
+
+  <section id="stats">
+    <div class="stats" id="statCards"></div>
+  </section>
+
+  <div class="filters" id="filters"></div>
+
+  <div class="toolbar">
+    <div class="search-wrap">
+      <input class="search" id="search" placeholder="搜索 PMID / slug / title / GSE / journal / species / tissue ..." autofocus>
+      <span class="search-kbd">/</span>
+    </div>
+    <button class="btn" id="btnClear">✕ 清除</button>
+    <span class="count-summary" id="countSummary"></span>
+  </div>
+
+  <section class="section tab-panel active" id="papers" data-tab-panel="papers">
+    <div class="section-head">
+      <span class="ico">📄</span> Papers
+      <span class="count" id="papersCount">0</span>
+      <span class="hint">点击列头排序 · 点击 ▸ 展开详情</span>
+    </div>
+    <div class="table-wrap" id="papersWrap"><div class="loading">Loading papers.yaml</div></div>
+  </section>
+
+  <section class="section tab-panel" id="datasets" data-tab-panel="datasets">
+    <div class="section-head">
+      <span class="ico">📦</span> Datasets
+      <span class="count" id="datasetsCount">0</span>
+      <span class="hint">点击列头排序</span>
+    </div>
+    <div class="table-wrap" id="datasetsWrap"><div class="loading">Loading datasets.yaml</div></div>
+  </section>
+
+  <section class="section tab-panel" id="links" data-tab-panel="links">
+    <div class="section-head">
+      <span class="ico">🔗</span> Links
+      <span class="count" id="linksCount">0</span>
+      <span class="hint">paper ↔ dataset 映射关系</span>
+    </div>
+    <div class="table-wrap" id="linksWrap"><div class="loading">Loading links.yaml</div></div>
+  </section>
+
+  <footer class="footer">
+    Sisyphus · <span id="footerYear">2026</span> · Fuxi (伏羲) 统一单细胞多组学管线
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+/* ───────── shared constants ───────── */
+const DATA = { papers: [], datasets: {}, links: [] };
+const LINK_MAP = {}; // dataset_id → [{ paper_id, role, slug }]
+let activeFilters = { modality: null }; // future-proof filter state
+const GEO_BASE = 'https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=';
+const PUBMED_BASE = 'https://pubmed.ncbi.nlm.nih.gov/';
+const ARRAYEXPRESS_BASE = 'https://www.ebi.ac.uk/biostudies/arrayexpress/studies/';
+const DOI_BASE = 'https://doi.org/';
+
+/* ───────── external link helpers ───────── */
+function pmidLink(paperId) {
+  if (!paperId) return '<span style="color:var(--muted)">—</span>';
+  if (/^\d{7,9}$/.test(String(paperId))) return `<a class="ext-link" href="${PUBMED_BASE}${paperId}" target="_blank" rel="noopener">${paperId}</a>`;
+  return escapeHtml(paperId);
+}
+function gseLink(dsId) {
+  if (!dsId) return '<span style="color:var(--muted)">—</span>';
+  if (dsId.startsWith('GSE'))  return `<a class="ext-link" href="${GEO_BASE}${dsId}" target="_blank" rel="noopener">${dsId}</a>`;
+  if (dsId.startsWith('E-MTAB')) return `<a class="ext-link" href="${ARRAYEXPRESS_BASE}${dsId}" target="_blank" rel="noopener">${dsId}</a>`;
+  return escapeHtml(dsId);
+}
+function doiA(doi) {
+  if (!doi) return '<span style="color:var(--muted)">—</span>';
+  return `<a class="ext-link" href="${DOI_BASE}${doi}" target="_blank" rel="noopener">${escapeHtml(doi)}</a>`;
+}
+
+/* ───────── yaml load ───────── */
+async function loadYaml(path) {
+  const res = await fetch(path);
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${path}`);
+  return jsyaml.load(await res.text());
+}
+
+/* ───────── main load + index ───────── */
+async function loadAll() {
+  try {
+    const [papers, datasets, links] = await Promise.all([
+      loadYaml('./papers.yaml'),
+      loadYaml('./datasets.yaml'),
+      loadYaml('./links.yaml'),
+    ]);
+    DATA.papers = Array.isArray(papers) ? papers : [];
+    DATA.datasets = datasets && typeof datasets === 'object' ? datasets : {};
+    DATA.links = Array.isArray(links) ? links : [];
+
+    // index papers
+    for (const p of DATA.papers) {
+      p._paperId = String(p.paper_id || p.pmid || '');
+      p._slug = p.slug || '';
+      p._firstAuthor = p.first_author || '';
+      p._kbs = Array.isArray(p.kb_sources) ? p.kb_sources.length : 0;
+      p._supp = Array.isArray(p.supplements) && p.supplements.length > 0;
+    }
+
+    // index links → per-dataset map and per-paper gse list
+    for (const ln of DATA.links) {
+      const ds = ln.dataset_id;
+      if (!ds) continue;
+      if (!LINK_MAP[ds]) LINK_MAP[ds] = [];
+      const p = DATA.papers.find(x => x._paperId === String(ln.paper_id));
+      LINK_MAP[ds].push({
+        paper_id: String(ln.paper_id || ''),
+        role: ln.role || 'primary',
+        slug: p ? p._slug : String(ln.paper_id || ''),
+      });
+    }
+    for (const p of DATA.papers) {
+      p._gses = DATA.links
+        .filter(ln => String(ln.paper_id) === p._paperId)
+        .map(ln => ({ id: ln.dataset_id, role: ln.role || 'primary' }));
+    }
+
+    // render
+    renderStats();
+    renderFilters();
+    renderPapers();
+    renderDatasets();
+    renderLinks();
+    wireSearch();
+    wireKeyboard();
+    updateNavCounts();
+    // initialize tab state (default: papers)
+    document.body.dataset.tab = 'papers';
+    wireTabs();
+  } catch (e) {
+    document.querySelectorAll('.loading').forEach(el => {
+      el.innerHTML = `<div class="error">❌ 加载失败: ${escapeHtml(e.message)}<br><br>
+        请用 launcher 启动:<br>
+        <code>python tools/registry_viewer/serve.py --open</code><br><br>
+        默认数据目录 <span class="ok">projects/registry/</span> (用 <code>--data</code> 覆盖)</div>`;
+    });
+    console.error(e);
+  }
+}
+
+/* ───────── stats ───────── */
+function renderStats() {
+  const orphans = Object.keys(DATA.datasets).filter(ds => !DATA.links.some(ln => ln.dataset_id === ds));
+  const papersWithKB = DATA.papers.filter(p => p._kbs > 0).length;
+  const papersWithSupp = DATA.papers.filter(p => p._supp).length;
+  const generatedPapers = DATA.papers.filter(p => p.insights?.status === 'generated').length;
+
+  document.getElementById('statCards').innerHTML = `
+    <div class="stat-card"><div class="num" style="color:var(--accent)">${DATA.papers.length}</div><div class="label">Papers</div></div>
+    <div class="stat-card c-green"><div class="num" style="color:var(--green)">${Object.keys(DATA.datasets).length}</div><div class="label">Datasets</div></div>
+    <div class="stat-card c-purple"><div class="num" style="color:var(--purple)">${DATA.links.length}</div><div class="label">Links</div></div>
+    <div class="stat-card ${orphans.length ? 'c-orange' : 'c-green'}"><div class="num" style="color:${orphans.length ? 'var(--orange)' : 'var(--green)'}">${orphans.length}</div><div class="label">Orphans</div></div>
+    <div class="stat-card c-green"><div class="num" style="color:var(--green)">${generatedPapers}</div><div class="label">Insights generated</div></div>
+    <div class="stat-card c-purple"><div class="num" style="color:var(--purple)">${papersWithKB}</div><div class="label">With KB source</div></div>
+    <div class="stat-card c-cyan"><div class="num" style="color:var(--cyan)">${papersWithSupp}</div><div class="label">With supplements</div></div>
+  `;
+
+  // hero meta
+  const now = new Date();
+  document.getElementById('updatedAt').textContent =
+    `last updated ${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  document.getElementById('footerYear').textContent = now.getFullYear();
+}
+
+/* ───────── filter pills (modality) ───────── */
+function renderFilters() {
+  const modSet = new Set();
+  for (const ds of Object.values(DATA.datasets)) {
+    for (const m of Object.keys(ds.modalities || {})) modSet.add(m);
+  }
+  const mods = Array.from(modSet).sort();
+  const items = [`<span class="pill active" data-filter="modality" data-value="">全部 modalities</span>`];
+  for (const m of mods) {
+    const dsCount = Object.values(DATA.datasets).filter(ds => (ds.modalities || {})[m]).length;
+    items.push(`<span class="pill" data-filter="modality" data-value="${m}">${m.toUpperCase()} <span class="gse-tag" style="border:0;padding:0 4px;background:transparent;color:var(--muted)">${dsCount}</span></span>`);
+  }
+  document.getElementById('filters').innerHTML = items.join('');
+  document.querySelectorAll('.filters .pill').forEach(p => {
+    p.addEventListener('click', () => {
+      document.querySelectorAll('.filters .pill').forEach(x => x.classList.remove('active'));
+      p.classList.add('active');
+      activeFilters[p.dataset.filter] = p.dataset.value || null;
+      applyFilters();
+    });
+  });
+}
+
+function applyFilters() {
+  const mod = activeFilters.modality;
+  // datasets: hide rows whose dataset lacks this modality
+  document.querySelectorAll('#datasetsWrap tbody tr').forEach(row => {
+    const dsId = row.dataset.dsid;
+    const ds = dsId ? DATA.datasets[dsId] : null;
+    const hasMod = ds ? !!(ds.modalities || {})[mod] : false;
+    row.classList.toggle('hidden-by-filter', !!mod && !hasMod);
+  });
+  reapplySearch();
+}
+
+/* ───────── sorting (per-table state) ───────── */
+const sortState = {}; // tableId → { col, dir }
+
+function sortColumn(tableId, colIdx) {
+  const tbody = document.querySelector(`#${tableId} tbody`);
+  if (!tbody) return;
+  const isDetailable = tableId === 'papersWrap';
+  const rows = Array.from(tbody.querySelectorAll('tr:not(.detail-row)'));
+  const prev = sortState[tableId];
+  const isAsc = !(prev && prev.col === colIdx && prev.dir === 1);
+  sortState[tableId] = { col: colIdx, dir: isAsc ? 1 : -1 };
+
+  rows.sort((a, b) => {
+    const ca = (a.cells[colIdx]?.textContent || '').trim().toLowerCase();
+    const cb = (b.cells[colIdx]?.textContent || '').trim().toLowerCase();
+    return (isAsc ? 1 : -1) * naturalCompare(ca, cb);
+  });
+
+  // reorder with paired detail rows
+  if (isDetailable) {
+    const detailRows = [];
+    rows.forEach(r => {
+      const next = r.nextElementSibling;
+      if (next && next.classList.contains('detail-row')) detailRows.push({ parent: r, detail: next });
+    });
+    rows.forEach(r => tbody.appendChild(r));
+    detailRows.forEach(d => { d.parent.after(d.detail); });
+  } else {
+    rows.forEach(r => tbody.appendChild(r));
+  }
+
+  // arrows
+  document.querySelectorAll(`#${tableId} .sort-arrow`).forEach(el => el.className = 'sort-arrow');
+  const arrow = document.querySelector(`#${tableId} .sort-arrow[data-col="${colIdx}"]`);
+  if (arrow) arrow.className = `sort-arrow ${isAsc ? 'asc' : 'desc'}`;
+}
+
+/* ───────── papers ───────── */
+function renderPapers() {
+  DATA.papers.sort((a, b) => naturalCompare(a._paperId, b._paperId));
+  const headers = ['paper_id', 'slug', 'title', 'journal', 'year', 'status', 'GSEs', 'KB', 'supp'];
+  const labels = { paper_id: 'Paper ID', slug: 'Slug', title: 'Title', journal: 'Journal', year: 'Year', status: 'Status', GSEs: 'GSEs', KB: 'KB', supp: 'Suppl.' };
+  const html = ['<table><thead><tr>'];
+  headers.forEach((h, i) => {
+    html.push(`<th onclick="sortColumn('papersWrap',${i})">${labels[h]}<span class="sort-arrow" data-col="${i}">↕</span></th>`);
+  });
+  html.push('</tr></thead><tbody>');
+
+  for (const p of DATA.papers) {
+    const statusBadge = statusBadgeHtml(p.insights?.status || '');
+    const gseTags = p._gses.length
+      ? p._gses.map(g => `<a class="gse-tag" href="${GEO_BASE}${g.id}" target="_blank" rel="noopener" title="${g.id} · ${g.role}">${g.id}</a>`).join('')
+      : '<span style="color:var(--muted)">—</span>';
+    const kbTag = p._kbs > 0
+      ? `<span class="badge badge-kb">${p._kbs}</span>`
+      : '<span style="color:var(--muted)">—</span>';
+    const suppTag = p._supp ? '<span class="badge badge-info">✓</span>' : '<span style="color:var(--muted)">—</span>';
+    const title = p.title || '';
+    const truncated = title.length > 120 ? title.slice(0, 120) + '…' : title;
+    const search = [p._paperId, p._slug, title, p.journal, p._firstAuthor, p.year].filter(Boolean).join(' ').toLowerCase();
+
+    html.push(
+      `<tr class="paper-row" data-pid="${escapeHtml(p._paperId)}" data-role="paper" data-search="${escapeAttr(search)}">`,
+      `<td><span class="detail-toggle" onclick="togglePaperDetail(this,'${escapeAttr(p._paperId)}')">▸</span>${pmidLink(p._paperId)}</td>`,
+      `<td class="td-slug">${escapeHtml(p._slug || '—')}</td>`,
+      `<td class="td-title" title="${escapeAttr(title)}">${escapeHtml(truncated)}</td>`,
+      `<td class="td-clamp-1"><span title="${escapeAttr(p.journal || '')}">${escapeHtml(p.journal || '—')}</span></td>`,
+      `<td class="td-center">${escapeHtml(p.year || '—')}</td>`,
+      `<td>${statusBadge}</td>`,
+      `<td><div class="gse-list">${gseTags}</div></td>`,
+      `<td class="td-center">${kbTag}</td>`,
+      `<td class="td-center">${suppTag}</td>`,
+      `</tr>`
+    );
+  }
+  html.push('</tbody></table>');
+  document.getElementById('papersWrap').innerHTML = html.join('');
+}
+
+function togglePaperDetail(el, paperId) {
+  const row = el.closest('tr');
+  const next = row.nextElementSibling;
+  if (next && next.classList.contains('detail-row')) {
+    next.remove();
+    el.classList.remove('open');
+    el.textContent = '▸';
+    return;
+  }
+  const p = DATA.papers.find(x => x._paperId === paperId);
+  if (!p) return;
+  el.classList.add('open');
+  el.textContent = '▸';
+
+  const fields = [];
+  if (p.doi)            fields.push({ k: 'DOI',      v: doiA(p.doi) });
+  if (p.insights?.pdf_raw) fields.push({ k: 'PDF',  v: escapeHtml(p.insights.pdf_raw) });
+  if (p.paper_dir)      fields.push({ k: 'Dir',      v: `projects/papers/${escapeHtml(p.paper_dir)}` });
+  fields.push({ k: 'Insights', v: escapeHtml(p.insights?.status || '—') });
+  if (p.year)           fields.push({ k: 'Year',     v: escapeHtml(p.year) });
+  if (p._firstAuthor)   fields.push({ k: 'First author', v: escapeHtml(p._firstAuthor) });
+  if (Array.isArray(p.kb_sources) && p.kb_sources.length) {
+    fields.push({ k: 'KB sources', v: p.kb_sources.map(s => escapeHtml(s.kb_id || '')).join(', ') });
+  }
+  if (Array.isArray(p.supplements) && p.supplements.length) {
+    fields.push({ k: 'Supplements', v: `${p.supplements.length} supplement${p.supplements.length > 1 ? 's' : ''}` });
+  }
+
+  const detail = document.createElement('tr');
+  detail.className = 'detail-row';
+  detail.innerHTML = `<td colspan="${9}"><div class="detail-grid">${
+    fields.map(f => `<div class="detail-field"><span class="k">${f.k}</span><span class="v">${f.v}</span></div>`).join('')
+  }</div></td>`;
+  row.after(detail);
+}
+
+/* ───────── datasets ───────── */
+function renderDatasets() {
+  const keys = Object.keys(DATA.datasets).sort(naturalCompare);
+  const headers = ['dataset_id', 'status', 'species', 'tissue', 'size', 'cells', 'pipeline', 'papers', 'notes'];
+  const labels = { dataset_id: 'ID', status: 'Status', species: 'Sp.', tissue: 'Tissue', size: 'Size', cells: 'Cells', pipeline: 'Pipeline', papers: 'Papers', notes: 'Notes' };
+  const html = ['<table><thead><tr>'];
+  headers.forEach((h, i) => {
+    html.push(`<th onclick="sortColumn('datasetsWrap',${i})">${labels[h]}<span class="sort-arrow" data-col="${i}">↕</span></th>`);
+  });
+  html.push('</tr></thead><tbody>');
+
+  for (const dsId of keys) {
+    const ds = DATA.datasets[dsId];
+    const orphan = !DATA.links.some(ln => ln.dataset_id === dsId);
+    const paperLinks = LINK_MAP[dsId] || [];
+    const paperTags = paperLinks.map(pl => {
+      const cls = pl.role === 'primary' ? 'role-primary' : 'role-secondary';
+      return `<a class="gse-tag ${cls}" title="role: ${escapeAttr(pl.role)}">${escapeHtml(pl.slug || pl.paper_id)}</a>`;
+    }).join('');
+    const cellsStr = ds.n_cells ? Number(ds.n_cells).toLocaleString() : '—';
+    const pipelineHtml = pipelineBadge(ds);
+    const superSeriesBadge = (ds.type === 'SuperSeries') ? ' <span class="badge badge-superseries" title="SuperSeries container — no own pipeline">SS</span>' : '';
+    const nonPipeBadge    = (ds.non_pipeline && ds.type !== 'SuperSeries') ? ' <span class="badge badge-nonpipeline" title="Non-pipeline: bulk / STARR — Fuxi pipeline does not run">non-pipeline</span>' : '';
+    const orphanBadge = orphan ? ' <span class="badge badge-warn">orphan</span>' : '';
+    const statusHtml = datasetStatusBadge(ds);
+    const sampleInfoStr = ds.sample_info || ds.notes || '';
+    const search = [dsId, ds.species, ds.tissue, ds.size_desc, ds.n_cells, ds.sample_info, ds.notes, paperLinks.map(p => p.slug).join(' ')].filter(x => x != null).join(' ').toLowerCase();
+
+    html.push(
+      `<tr data-role="dataset" data-dsid="${escapeHtml(dsId)}" data-search="${escapeAttr(search)}">`,
+      `<td class="td-id" style="color:${orphan ? 'var(--orange)' : 'var(--accent)'}">${gseLink(dsId)}${orphanBadge}${superSeriesBadge}${nonPipeBadge}</td>`,
+      `<td>${statusHtml}</td>`,
+      `<td>${escapeHtml(ds.species || '—')}</td>`,
+      `<td class="td-clamp-1"><span title="${escapeAttr(ds.tissue || '')}">${escapeHtml(ds.tissue || '—')}</span></td>`,
+      `<td style="color:var(--muted);white-space:nowrap">${escapeHtml(ds.size_desc || '—')}</td>`,
+      `<td class="td-num">${cellsStr}</td>`,
+      `<td>${pipelineHtml}</td>`,
+      `<td><div class="gse-list">${paperTags || '<span style="color:var(--muted)">—</span>'}</div></td>`,
+      `<td class="td-clamp-2"><span title="${escapeAttr(sampleInfoStr)}">${escapeHtml(sampleInfoStr || '—')}</span></td>`,
+      `</tr>`
+    );
+  }
+  html.push('</tbody></table>');
+  document.getElementById('datasetsWrap').innerHTML = html.join('');
+}
+
+/* ───────── pipeline badge — uses modalities.<mod>.status ───────── */
+function pipelineBadge(ds) {
+  const mods = ds.modalities || {};
+  const modKeys = Object.keys(mods);
+  if (!modKeys.length) return '<span style="color:var(--muted)">—</span>';
+  const parts = [];
+  for (const m of modKeys) {
+    const info = mods[m] || {};
+    const status = info.status || 'unknown';
+    let dotCls = 'not_configured';
+    if (status === 'pipeline_complete' || status === 'complete')   dotCls = 'complete';
+    else if (status === 'config_exists' || status === 'configured'|| status === 'config_only') dotCls = 'configured';
+    else if (status === 'n_a' || status === 'na')                  dotCls = 'n_a';
+    else if (status.includes('error') || status.includes('failed')) dotCls = 'error';
+    parts.push(`<span class="pipeline-cell"><span class="mod-label">${m}</span><span class="dot ${dotCls}" title="${escapeAttr(m + ': ' + status)}"></span></span>`);
+  }
+  return parts.join('<span class="mod-sep">·</span>');
+}
+
+/* ───────── badges ───────── */
+function datasetStatusBadge(ds) {
+  const s = ds.status || 'unknown';
+  if (s === 'data_downloaded')                    return '<span class="badge badge-ok">downloaded</span>';
+  if (s.includes('orphan'))                        return '<span class="badge badge-warn">orphan</span>';
+  if (s.includes('not_downloaded') || s === 'data_not_downloaded')
+                                                  return '<span class="badge badge-err">not downloaded</span>';
+  if (s.includes('complete'))                      return `<span class="badge badge-ok">${escapeHtml(s)}</span>`;
+  return `<span class="badge badge-info">${escapeHtml(s)}</span>`;
+}
+
+function statusBadgeHtml(status) {
+  switch (status) {
+    case 'generated':      return '<span class="badge badge-ok">generated</span>';
+    case 'pending':        return '<span class="badge badge-info">pending</span>';
+    case 'pending_review': return '<span class="badge badge-warn">needs review</span>';
+    case 'no_geo':         return '<span class="badge badge-err">no GEO</span>';
+    case 'failed':         return '<span class="badge badge-err">failed</span>';
+    case 'preprint':       return '<span class="badge badge-info">preprint</span>';
+    case 'pdf_only':       return '<span class="badge badge-info">PDF only</span>';
+    default:               return `<span style="color:var(--muted)">${escapeHtml(status || '—')}</span>`;
+  }
+}
+
+/* ───────── links ───────── */
+function renderLinks() {
+  if (DATA.links.length === 0) {
+    document.getElementById('linksWrap').innerHTML = '<div class="empty"><span class="ico">📭</span>无关联数据</div>';
+    return;
+  }
+  const html = ['<table><thead><tr>',
+    '<th onclick="sortColumn(\'linksWrap\',0)">#<span class="sort-arrow" data-col="0">↕</span></th>',
+    '<th onclick="sortColumn(\'linksWrap\',1)">Paper ID<span class="sort-arrow" data-col="1">↕</span></th>',
+    '<th onclick="sortColumn(\'linksWrap\',2)">Slug<span class="sort-arrow" data-col="2">↕</span></th>',
+    '<th onclick="sortColumn(\'linksWrap\',3)">Dataset ID<span class="sort-arrow" data-col="3">↕</span></th>',
+    '<th onclick="sortColumn(\'linksWrap\',4)">Role<span class="sort-arrow" data-col="4">↕</span></th>',
+    '</tr></thead><tbody>'];
+
+  DATA.links.forEach((ln, i) => {
+    const p = DATA.papers.find(x => x._paperId === String(ln.paper_id));
+    const slug = p ? p._slug : '';
+    const role = ln.role || 'primary';
+    const roleCls = role === 'primary' ? 'role-primary' : 'role-secondary';
+    const search = [ln.paper_id, slug, ln.dataset_id, role].filter(Boolean).join(' ').toLowerCase();
+    html.push(
+      `<tr data-role="link" data-search="${escapeAttr(search)}">`,
+      `<td style="color:var(--muted)">${i+1}</td>`,
+      `<td class="td-id">${pmidLink(ln.paper_id)}</td>`,
+      `<td class="td-slug">${escapeHtml(slug || '—')}</td>`,
+      `<td class="td-id">${gseLink(ln.dataset_id)}</td>`,
+      `<td><span class="gse-tag ${roleCls}">${escapeHtml(role)}</span></td>`,
+      `</tr>`
+    );
+  });
+  html.push('</tbody></table>');
+  document.getElementById('linksWrap').innerHTML = html.join('');
+}
+
+/* ───────── search + filter ───────── */
+let lastQuery = '';
+function reapplySearch() {
+  const input = document.getElementById('search');
+  input.value = lastQuery;
+  input.dispatchEvent(new Event('input'));
+}
+
+function wireSearch() {
+  const input = document.getElementById('search');
+  const btnClear = document.getElementById('btnClear');
+  const countEl = document.getElementById('countSummary');
+
+  function apply() {
+    const q = input.value.toLowerCase().trim();
+    lastQuery = input.value;
+    let p = 0, d = 0, l = 0;
+
+    document.querySelectorAll('#papersWrap tr.paper-row').forEach(row => {
+      const match = (!q || row.dataset.search.includes(q)) && !row.classList.contains('hidden-by-filter');
+      row.classList.toggle('hidden', !match);
+      const next = row.nextElementSibling;
+      if (next && next.classList.contains('detail-row')) next.classList.toggle('hidden', !match);
+      if (match) p++;
+    });
+    document.querySelectorAll('#datasetsWrap tbody tr').forEach(row => {
+      const match = (!q || row.dataset.search.includes(q)) && !row.classList.contains('hidden-by-filter');
+      row.classList.toggle('hidden', !match);
+      if (match) d++;
+    });
+    document.querySelectorAll('#linksWrap tbody tr').forEach(row => {
+      const match = !q || row.dataset.search.includes(q);
+      row.classList.toggle('hidden', !match);
+      if (match) l++;
+    });
+
+    // empty states
+    toggleEmpty('papersWrap',   p, '没有匹配的 paper');
+    toggleEmpty('datasetsWrap', d, '没有匹配的 dataset');
+    toggleEmpty('linksWrap',    l, '没有匹配的 link');
+
+    const totalP = DATA.papers.length, totalD = Object.keys(DATA.datasets).length, totalL = DATA.links.length;
+    const tab = document.body.dataset.tab || 'papers';
+    let vis, total, label;
+    if (tab === 'papers')        { vis = p; total = totalP; label = 'papers'; }
+    else if (tab === 'datasets') { vis = d; total = totalD; label = 'datasets'; }
+    else                          { vis = l; total = totalL; label = 'links'; }
+    if (q) countEl.innerHTML = `匹配 <span class="num">${vis}</span>/<span class="num">${total}</span> ${label}`;
+    else if (tab === 'datasets' && activeFilters.modality) {
+      const visD = Object.keys(DATA.datasets).filter(id => (DATA.datasets[id].modalities || {})[activeFilters.modality]).length;
+      countEl.innerHTML = `共 <span class="num">${total}</span> ${label} · 过滤 <span class="num">${visD}</span> ${activeFilters.modality.toUpperCase()}`;
+    } else countEl.innerHTML = `共 <span class="num">${total}</span> ${label}`;
+  }
+
+  input.addEventListener('input', apply);
+  btnClear.addEventListener('click', () => {
+    input.value = '';
+    document.querySelectorAll('.filters .pill').forEach(x => x.classList.remove('active'));
+    document.querySelector('.filters .pill[data-value=""]').classList.add('active');
+    activeFilters.modality = null;
+    applyFilters();
+    input.focus();
+  });
+  apply();
+}
+
+function toggleEmpty(wrapId, count, msg) {
+  const wrap = document.getElementById(wrapId);
+  const table = wrap.querySelector('table');
+  if (!table) return; // don't compete with global error state
+  let empty = wrap.querySelector('.empty-inline');
+  if (count === 0) {
+    table.style.display = 'none';
+    if (!empty) {
+      empty = document.createElement('div');
+      empty.className = 'empty empty-inline';
+      empty.innerHTML = `<span class="ico">🔍</span>${escapeHtml(msg)}`;
+      wrap.appendChild(empty);
+    }
+  } else {
+    table.style.display = '';
+    if (empty) empty.remove();
+  }
+}
+
+/* ───────── keyboard ───────── */
+function wireKeyboard() {
+  document.addEventListener('keydown', (e) => {
+    if (e.key === '/' && document.activeElement.tagName !== 'INPUT') {
+      e.preventDefault();
+      document.getElementById('search').focus();
+    }
+    if (e.key === 'Escape' && document.activeElement.id === 'search') {
+      document.getElementById('search').value = '';
+      document.getElementById('search').dispatchEvent(new Event('input'));
+    }
+  });
+}
+
+/* ───────── tab switching ───────── */
+function switchTab(name) {
+  document.body.dataset.tab = name;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.tabPanel === name));
+  // refresh count summary for the now-active tab (re-runs apply with new tab state)
+  reapplySearch();
+}
+
+function wireTabs() {
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => switchTab(t.dataset.tab));
+  });
+}
+
+/* ───────── nav counts ───────── */
+function updateNavCounts() {
+  document.getElementById('navPapers').textContent = DATA.papers.length;
+  document.getElementById('navDatasets').textContent = Object.keys(DATA.datasets).length;
+  document.getElementById('navLinks').textContent = DATA.links.length;
+  document.getElementById('papersCount').textContent = DATA.papers.length;
+  document.getElementById('datasetsCount').textContent = Object.keys(DATA.datasets).length;
+  document.getElementById('linksCount').textContent = DATA.links.length;
+}
+
+/* ───────── utils ───────── */
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function escapeAttr(s) { return escapeHtml(s).replace(/'/g, '&#39;'); }
+function naturalCompare(a, b) {
+  const re = /(\d+)/g;
+  const s1 = String(a == null ? '' : a).toLowerCase();
+  const s2 = String(b == null ? '' : b).toLowerCase();
+  const chunks1 = s1.split(re);
+  const chunks2 = s2.split(re);
+  const len = Math.max(chunks1.length, chunks2.length);
+  for (let i = 0; i < len; i++) {
+    const c1 = chunks1[i] || '';
+    const c2 = chunks2[i] || '';
+    const n1 = parseInt(c1, 10), n2 = parseInt(c2, 10);
+    if (!isNaN(n1) && !isNaN(n2)) {
+      if (n1 !== n2) return n1 - n2;
+    } else {
+      const cmp = c1.localeCompare(c2);
+      if (cmp !== 0) return cmp;
+    }
+  }
+  return 0;
+}
+
+document.getElementById('search').addEventListener('keydown', e => {
+  if (e.key === 'Enter') e.preventDefault();
+});
+
+loadAll();
+</script>
+</body>
+</html>
