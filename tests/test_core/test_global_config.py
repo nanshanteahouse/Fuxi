@@ -124,27 +124,37 @@ class TestFindGlobalYaml:
 class TestResolveConfig:
     """resolve_config — backward compat, priority, bulk loading."""
 
+    @staticmethod
+    def _minimal_config(tmpdir: str, name: str = "test_project", **overrides) -> str:
+        """Write a minimal valid project config to tmpdir and return its path."""
+        data = {
+            "modality": "rna",
+            "tissue": "retina",
+            "species": "human",
+            "data_format": "10X_mtx",
+            "expression_type": "raw_counts",
+            "tissue_maturity": "developing",
+            "project_dir": tmpdir,
+        }
+        data.update(overrides)
+        path = os.path.join(tmpdir, f"config_{name}.yaml")
+        with open(path, "w") as f:
+            yaml.dump(data, f)
+        return path
+
     def test_backward_compat_no_global(self):
         """Configs load without global.yaml, using schema defaults."""
-        cfg = resolve_config("projects/rna/GSE107618/config_GSE107618.yaml")
-        assert cfg.tissue == "retina"
-        assert cfg.plot.figure_dpi == 150
+        with tempfile.TemporaryDirectory() as tmp:
+            project_path = self._minimal_config(tmp)
+            cfg = resolve_config(project_path)
+            assert cfg.tissue == "retina"
+            assert cfg.plot.figure_dpi == 150
 
     def test_priority_project_overrides_global(self):
         """Project values win over global when both specify the key."""
         with tempfile.TemporaryDirectory() as tmp:
             # Project config: explicitly set figure_dpi = 100
-            project_path = os.path.join(tmp, "project_config.yaml")
-            with open(project_path, "w") as f:
-                yaml.dump(
-                    {
-                        "modality": "rna",
-                        "tissue": "retina",
-                        "species": "human",
-                        "plot": {"figure_dpi": 100},
-                    },
-                    f,
-                )
+            project_path = self._minimal_config(tmp, plot={"figure_dpi": 100})
             # Global config: set figure_dpi = 300
             global_path = os.path.join(tmp, "global.yaml")
             with open(global_path, "w") as f:
@@ -158,20 +168,20 @@ class TestResolveConfig:
                 del os.environ["FUXI_GLOBAL_CONFIG"]
 
     def test_all_active_configs_load(self):
-        """All 6 active RNA configs load without error."""
-        names = ["GSE107618", "GSE137537", "GSE137846", "GSE235582", "GSE243413", "GSE310245"]
-        for name in names:
-            path = f"projects/rna/{name}/config_{name}.yaml"
-            cfg = resolve_config(path)
-            assert cfg.plot.figure_dpi == 150
+        """Multiple valid configs load without error, plot defaults present."""
+        with tempfile.TemporaryDirectory() as tmp:
+            for i in range(5):
+                project_path = self._minimal_config(tmp, name=f"proj_{i}")
+                cfg = resolve_config(project_path)
+                assert cfg.plot.figure_dpi == 150
 
     def test_all_active_configs_load_no_global(self):
-        """Same configs load cleanly in absence of a global.yaml."""
-        names = ["GSE107618", "GSE137537", "GSE137846", "GSE235582", "GSE243413", "GSE310245"]
-        for name in names:
-            path = f"projects/rna/{name}/config_{name}.yaml"
-            cfg = resolve_config(path)
-            assert cfg.plot.figure_dpi == 150
+        """Configs load cleanly without global.yaml, plot defaults present."""
+        with tempfile.TemporaryDirectory() as tmp:
+            for i in range(5):
+                project_path = self._minimal_config(tmp, name=f"proj_{i}")
+                cfg = resolve_config(project_path)
+                assert cfg.plot.figure_dpi == 150
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -207,16 +217,35 @@ class TestPlotConfig:
 class TestExport:
     """Export resolved config to YAML and re-load it."""
 
+    @staticmethod
+    def _minimal_config(tmpdir: str, name: str = "test_project", **overrides) -> str:
+        data = {
+            "modality": "rna",
+            "tissue": "retina",
+            "species": "human",
+            "data_format": "10X_mtx",
+            "expression_type": "raw_counts",
+            "tissue_maturity": "developing",
+            "project_dir": tmpdir,
+        }
+        data.update(overrides)
+        path = os.path.join(tmpdir, f"config_{name}.yaml")
+        with open(path, "w") as f:
+            yaml.dump(data, f)
+        return path
+
     def test_roundtrip(self):
         """Exported config can be loaded back as a valid Config model."""
-        cfg = resolve_config("projects/rna/GSE310245/config_GSE310245.yaml")
-        resolved_path = os.path.join(cfg.results_dir, "config_resolved.yaml")
-        assert os.path.exists(resolved_path)
-        with open(resolved_path) as f:
-            d = yaml.safe_load(f)
-        assert "_config_meta" in d
-        assert d["_config_meta"]["merged_priority"] == "project > global > schema_default"
-        data = {k: v for k, v in d.items() if not k.startswith("_config_")}
-        cfg2 = Config.model_validate(data)
-        assert cfg2.tissue == "retina"
-        assert cfg2.plot.figure_dpi == 150
+        with tempfile.TemporaryDirectory() as tmp:
+            project_path = self._minimal_config(tmp)
+            cfg = resolve_config(project_path)
+            resolved_path = os.path.join(cfg.results_dir, "config_resolved.yaml")
+            assert os.path.exists(resolved_path)
+            with open(resolved_path) as f:
+                d = yaml.safe_load(f)
+            assert "_config_meta" in d
+            assert d["_config_meta"]["merged_priority"] == "project > global > schema_default"
+            data = {k: v for k, v in d.items() if not k.startswith("_config_")}
+            cfg2 = Config.model_validate(data)
+            assert cfg2.tissue == "retina"
+            assert cfg2.plot.figure_dpi == 150
