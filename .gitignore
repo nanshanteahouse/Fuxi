@@ -97,3 +97,7 @@ adhoc/
 node_modules/
 package.json
 package-lock.json
+# ── Global config ──
+global.yaml
+projects/**/config_*_resolved.yaml
+results/config_*_resolved.yaml

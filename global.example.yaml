@@ -1,0 +1,79 @@
+# Fuxi (伏羲) — Global Configuration Defaults
+# =============================================================================
+# This file documents ALL available global configuration options and their
+# default values.  Copy this file to ``global.yaml`` and uncomment/override
+# only the values you want to change — everything else defaults to sensible
+# project-wide values.
+#
+# Priority: project config_{GSE}.yaml > global.yaml > schema defaults
+# =============================================================================
+
+# ── Execution Environment ──────────────────────────────────────────────────
+execution:
+  # random_seed: 42                     # Random seed for reproducibility
+  # memory_policy: "speed"              # 'speed' | 'balance' | 'memory'
+  # n_jobs: 0                           # Parallel workers (0 = auto-detect)
+  # limit_blas_threads: true
+  # force_csr: true                     # Force CSR matrix format
+  # use_float32: true                   # Cast to float32
+
+# ── Differential Expression ────────────────────────────────────────────────
+de:
+  # method: "wilcoxon"                  # DE method
+  # n_genes: 50                         # Top N marker genes
+  # pval_cutoff: 0.05
+  # logfc_cutoff: 0.25
+
+# ── Clustering & UMAP ─────────────────────────────────────────────────────
+clustering:
+  # cluster_selection_method: "multi_metric"
+  # umap_selection_method: "convex_hull"
+  # param_grid_min_dist: [0.1, 0.3, 0.5]
+  # param_grid_spread: [1.0]
+  # umap_min_dist: 0.3
+  # umap_spread: 1.0
+
+# ── Integration / Batch Correction ─────────────────────────────────────────
+integration:
+  # max_iter: 20                        # Harmony max iterations
+  # diagnose: true                      # Run integration diagnosis
+  # diagnose_report: true               # Generate diagnosis report
+  # gini_batch_threshold: 0.3
+  # gini_biology_threshold: 0.6
+
+# ── Quality Control ────────────────────────────────────────────────────────
+qc:
+  # max_pct_mito: 20.0                  # Max mitochondrial percentage
+  # min_cells_per_gene: 3               # Min cells expressing a gene
+  # mt_gene_pattern: "MT-"              # Mitochondrial gene prefix
+
+# ── Figure / Visualization ─────────────────────────────────────────────────
+plot:
+  # figure_dpi: 150                     # Default figure resolution
+  # figure_format: "pdf"                # Output format: pdf | png | svg
+  # figure_transparent: true
+  # scatter_dot_size: 4
+  # legend_fontsize: 8
+  # legend_fontsize_dense: 5
+  # title_fontsize: 12
+  # axis_label_fontsize: 10
+  # qc_figure_size: [8, 5]
+  # umap_panel_size: [6, 5]
+  palette:
+    # categorical: "tab20"
+    # heatmap: "RdBu_r"
+    # pseudotime: "plasma"
+    # dotplot_fill: "YlOrRd"
+    # gsea_dotplot: "RdBu_r"
+    # batch_heatmap: "YlOrRd"
+    # composition: "tab20"
+    # interaction_heatmap: "RdYlBu_r"
+    # qc_hist: "steelblue"
+    # qc_second: "indianred"
+    # qc_third: "darkorange"
+    # qc_threshold: "red"
+    # batch_gini_good: "#2ecc71"
+    # batch_gini_bad: "#e74c3c"
+    # batch_gini_ambiguous: "#f39c12"
+    # significance_edge: "grey"
+    # grn_facecolor: "white"

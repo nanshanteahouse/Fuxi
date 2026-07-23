@@ -200,8 +200,13 @@ def resolve_config(config_path: Optional[str] = None) -> Config:
     for d in [cfg.results_dir, cfg.h5ad_dir, cfg.figure_dir, cfg.table_dir, cfg.log_dir]:
         os.makedirs(d, exist_ok=True)
 
-    # ── Auto-export resolved config (Todo 5) ──
-    # _export_resolved(cfg, merged, _source_map, global_path, config_path)
+    # ── Auto-export resolved config ──
+    try:
+        from core.config.export import export_resolved_config
+
+        export_resolved_config(cfg, merged, _source_map, global_path, config_path)
+    except Exception:
+        pass  # non-blocking — export failure never breaks the pipeline
 
     return cfg
 
