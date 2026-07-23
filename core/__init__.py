@@ -15,8 +15,23 @@ Sub-packages:
   - utils/        I/O, logging, path resolution, validation, performance
 """
 
-# Lazy re-exports for unittest.mock.patch() compatibility.
-# These allow patch("core.run_reproduce.subprocess.run") etc.
-# to resolve via pkgutil.resolve_name without eager imports.
-import core.ai.caller as ai_caller  # noqa: F401
-import core.pipeline.reproduce as run_reproduce  # noqa: F401
+# True lazy re-exports — use __getattr__ to defer import until first access.
+# This avoids triggering the runpy warning:
+#   "'core.paper.registry' found in sys.modules after import of package
+#   'core.paper', but prior to execution of 'core.paper.registry'"
+# which was caused by eager `import core.pipeline.reproduce` during `import core`.
+
+_LAZY_MODULES: dict[str, str] = {
+    "ai_caller": "core.ai.caller",
+    "run_reproduce": "core.pipeline.reproduce",
+}
+
+
+def __getattr__(name: str):
+    if name in _LAZY_MODULES:
+        import importlib
+
+        mod = importlib.import_module(_LAZY_MODULES[name])
+        globals()[name] = mod
+        return mod
+    raise AttributeError(f"module 'core' has no attribute '{name}'")
