@@ -46,7 +46,7 @@ jobs:
       - name: Install system deps
         run: sudo apt-get update && sudo apt-get install -y libopenblas-dev cmake
       - name: Install deps
-        run: uv pip install -r requirements/all.txt
+        run: uv pip install -e ".[all]"
       - name: Pyright
         run: uv pip install pyright==1.1.411 && uv run pyright --level error
 
@@ -66,7 +66,7 @@ jobs:
       - name: Install system deps
         run: sudo apt-get update && sudo apt-get install -y libopenblas-dev cmake
       - name: Install deps
-        run: uv pip install -r requirements/all.txt -r requirements/dev.txt
+        run: uv pip install -e ".[all,dev]"
       - name: Smoke test
         run: uv run pytest tests/ -m smoke -v --tb=short
 
@@ -87,7 +87,7 @@ jobs:
       - name: Install system deps
         run: sudo apt-get update && sudo apt-get install -y libopenblas-dev cmake
       - name: Install deps
-        run: uv pip install -r requirements/all.txt -r requirements/dev.txt
+        run: uv pip install -e ".[all,dev]"
       - name: Test core
         run: uv run pytest tests/test_core/ -v --tb=short --cov=core --cov-report=xml --cov-report=term
 
@@ -105,7 +105,7 @@ jobs:
       - name: Install system deps
         run: sudo apt-get update && sudo apt-get install -y libopenblas-dev cmake
       - name: Install deps
-        run: uv pip install -r requirements/all.txt -r requirements/dev.txt
+        run: uv pip install -e ".[all,dev]"
       - name: Test RNA
         run: uv run pytest tests/test_rna/ -v --tb=short --cov=rna --cov-report=xml --cov-report=term
 
