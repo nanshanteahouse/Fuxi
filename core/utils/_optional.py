@@ -117,7 +117,10 @@ def require_soupx(feature: str = "SoupX ambient RNA removal") -> None:
         _soupx_available = importlib.util.find_spec("soupx") is not None
     if not _soupx_available:
         raise ImportError(
-            f"soupx is required for {feature}. Install with: pip install fuxi[soupx]"
+            f"soupx is required for {feature}. "
+            "Install with: pip install fuxi[soupx] "
+            "(third-party Python port, soupx-python; "
+            "for the canonical R implementation use the SoupX R package)."
         )
 
 
