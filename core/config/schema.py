@@ -122,8 +122,9 @@ class ScrubletSettings(BaseModel):
     min_gene_var_pctl: int = 85
     n_prin_comps: int = 30
 
-
-on_non_counts: Literal["skip_warn", "skip_silent", "abort"] = "skip_warn"
+    on_non_counts: Literal["skip_warn", "skip_silent", "abort"] = (
+        "skip_warn"  # policy when expression_type != raw_counts
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════
