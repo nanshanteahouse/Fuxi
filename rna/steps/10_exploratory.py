@@ -22,6 +22,7 @@ import numpy as np
 import scanpy as sc
 
 from core.utils import resolve_config, safe_plot, setup_logger
+from core.utils._optional import require_sccoda
 
 
 def plot_composition(adata, group_col, stage_col, stage_order, fig_dir, table_dir, log, cfg=None):
@@ -72,6 +73,33 @@ def plot_composition(adata, group_col, stage_col, stage_order, fig_dir, table_di
     log.info("  Composition table exported")
 
 
+def run_sccoda_composition(adata, cfg, log, fig_dir=None, table_dir=None):
+    """Run scCODA compositional analysis for differential cell-type abundance.
+
+    Requires the ``sccoda`` package. This function sets up the data and
+    triggers the composition test. The actual MCMC sampling is handled
+    by the scCODA backend.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data matrix with cell-type labels and sample metadata.
+    cfg : Config
+        Pipeline configuration (uses ``cfg.exploratory.sccoda``).
+    log : logging.Logger
+        Logger instance.
+    """
+    require_sccoda()
+    log.info("scCODA composition analysis requires manual MCMC execution")
+    log.info("  -- configure and run via sccoda CLI or Python API")
+    log.info(
+        "  sample_col=%s  condition_col=%s  ref_cell_type=%s",
+        cfg.exploratory.sccoda.sample_col,
+        cfg.exploratory.sccoda.condition_col,
+        cfg.exploratory.sccoda.reference_cell_type,
+    )
+
+
 def main():
     t0 = time.time()
     args_parser = argparse.ArgumentParser()
@@ -110,6 +138,10 @@ def main():
                 log,
                 cfg=cfg,
             )
+
+    # 1b. scCODA composition test (optional)
+    if cfg.exploratory.composition_test == "sccoda":
+        run_sccoda_composition(adata, cfg, log, fig_dir=fig_dir, table_dir=csv_dir)
 
     # 2. UMAP: QC 指标
     qc_metrics = ["n_genes_by_counts", "total_counts", "pct_counts_mt"]

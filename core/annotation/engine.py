@@ -399,6 +399,48 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
             k: v for k, v in scores.items() if not k.startswith(CATEGORY_PREFIX)
         }
 
+    # ── CellTypist supplementary annotation ────────────────────────────
+    celltypist_results: dict[str, str] = {}
+    _celltypist_triggered = (
+        getattr(CFG.annotation.celltypist, "enabled", False)
+        or getattr(CFG.annotation, "method", "kb_unified") == "celltypist"
+    )
+    if _celltypist_triggered:
+        _model_name = CFG.annotation.celltypist.model
+        if not _model_name:
+            logger.warning("CellTypist enabled but no model specified — skipping")
+        else:
+            try:
+                from core.utils._optional import require_celltypist
+
+                require_celltypist()
+                import celltypist  # type: ignore[import-untyped]
+
+                _model = celltypist.models.Model.load(model=_model_name)
+                _mv = CFG.annotation.celltypist.majority_voting
+                _ = celltypist.annotate(adata, model=_model, majority_voting=_mv)  # noqa: SLF001
+                _label_col = "majority_voting" if _mv else "predicted_labels"
+                if _label_col in adata.obs:
+                    for cl in clusters:
+                        cl_str = str(cl)
+                        _mask = adata.obs["leiden"].astype(str) == cl_str
+                        _types = adata.obs.loc[_mask, _label_col].mode()
+                        if len(_types) > 0:
+                            celltypist_results[cl_str] = str(_types[0])
+                    logger.info(
+                        "CellTypist: predicted %d/%d clusters via '%s'",
+                        len(celltypist_results),
+                        len(clusters),
+                        _model_name,
+                    )
+                else:
+                    logger.warning(
+                        "CellTypist: '%s' column not found in adata.obs — skipping",
+                        _label_col,
+                    )
+            except Exception as exc:
+                logger.warning("CellTypist prediction failed: %s — skipping", exc)
+
     decisions, fusion_quality = fuse_all_clusters(
         fine_scores,
         all_rules,
@@ -409,6 +451,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
         unconstrained=getattr(CFG.ai, "unconstrained_annotation", False),
         allows_transitions=allows_transitions,
         incompatible_transitions=_incompatible_transitions,
+        celltypist_results=celltypist_results,
     )
     logger.info("Evidence fusion: %d clusters processed", len(decisions))
 
@@ -498,6 +541,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
                     unconstrained=getattr(CFG.ai, "unconstrained_annotation", False),
                     allows_transitions=allows_transitions,
                     incompatible_transitions=_incompatible_transitions,
+                    celltypist_results=celltypist_results,
                 )
                 decision_map = dict(zip(decision_clusters, decisions))
         except Exception as exc:

@@ -586,6 +586,31 @@ def main():
                 adata.obs["cell_type"] = adata.obs["leiden"].astype(str)
 
     recompute_neighbors(adata, cfg, log)
+
+    # ── scVelo RNA velocity dispatch ──────────────────────────
+    if cfg.trajectory.method == "scvelo_cellrank":
+        from core.utils._optional import require_scvelo
+
+        require_scvelo()
+        import scvelo as scv
+
+        if "spliced" not in adata.layers or "unspliced" not in adata.layers:
+            log.error(
+                "scVelo requires spliced/unspliced layers in adata. "
+                "Did you preprocess with velocyto (e.g., velocyto run10x / run.py) "
+                "and load the resulting loom file? "
+                "See scVelo documentation for loom preparation."
+            )
+            sys.exit(1)
+
+        log.info("scVelo RNA velocity (mode=%s)...", cfg.trajectory.scvelo.mode)
+        scv.tl.velocity(adata, mode=cfg.trajectory.scvelo.mode)
+        scv.tl.velocity_graph(adata)
+        log.info("scVelo velocity + velocity_graph computed")
+
+        safe_write(adata, cfg.final_h5ad, cfg=cfg)
+        log.info("Step 08 complete (scVelo), took %.1fs", time.time() - t0)
+        return
     run_paga(adata, cfg, log)
     root_mask = find_root_cells(adata, cfg, log)
     compute_dpt(adata, root_mask, cfg, log)

@@ -2,8 +2,8 @@
 """
 config.py — Fuxi (伏羲) 统一配置 (Pydantic v2)
 
-23 Pydantic BaseModel classes:
-  22 topic sub-models + 1 top-level Config
+25+ Pydantic BaseModel classes:
+  23 topic sub-models + several nested + 1 top-level Config
 
 设计原则:
   - 所有参数集中在一个 Config(BaseModel) 中
@@ -127,6 +127,18 @@ on_non_counts: Literal["skip_warn", "skip_silent", "abort"] = "skip_warn"
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Sub-model 4b — PearsonConfig
+# ═══════════════════════════════════════════════════════════════════════
+class PearsonConfig(BaseModel):
+    """Pearson residuals normalization configuration."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    n_top_genes: int = 4000
+    clip: Optional[float] = None
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # Sub-model 5 — NormalizationSettings
 # ═══════════════════════════════════════════════════════════════════════
 class NormalizationSettings(BaseModel):
@@ -139,6 +151,10 @@ class NormalizationSettings(BaseModel):
     score_cell_cycle: bool = False
     regress_out_genes: List[str] = Field(default_factory=list)
     detect_sex: bool = True
+
+    # ── Normalization method ──
+    method: Literal["log_cpm", "pearson_residuals"] = "log_cpm"
+    pearson_residuals: PearsonConfig = Field(default_factory=PearsonConfig)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -206,6 +222,21 @@ class IntegrationSettings(BaseModel):
     gini_biology_threshold: float = 0.6
     collinearity_guard: bool = True
     scvi: SCVIConfig = Field(default_factory=SCVIConfig)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model — AmbientSettings
+# ═══════════════════════════════════════════════════════════════════════
+class AmbientSettings(BaseModel):
+    """Ambient RNA correction / removal settings (CellBender, SoupX)."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    run: bool = False
+    method: Literal["cellbender", "soupx", "none"] = "none"
+    raw_matrix_path: str = ""
+    expected_cells: int = 0
+    fallback_fraction: float = 0.1
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -315,12 +346,27 @@ class PseudobulkDESettings(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Sub-model 12c — ScVeloConfig
+# ═══════════════════════════════════════════════════════════════════════
+class ScVeloConfig(BaseModel):
+    """scVelo RNA velocity configuration."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    loom_path: str = ""
+    mode: Literal["stochastic", "dynamical"] = "stochastic"
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # Sub-model 13 — TrajectorySettings
 # ═══════════════════════════════════════════════════════════════════════
 class TrajectorySettings(BaseModel):
     """Pseudotime / trajectory analysis settings."""
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    method: Literal["paga_dpt", "scvelo_cellrank"] = "paga_dpt"
+    scvelo: ScVeloConfig = Field(default_factory=ScVeloConfig)
 
     root_cell_types: List[str] = Field(default_factory=list)
     root_markers: List[str] = Field(default_factory=list)
@@ -551,6 +597,57 @@ class BulkConfig(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════
+# Sub-model 23 — ScCODAConfig (nested under exploratory)
+# ═══════════════════════════════════════════════════════════════════════
+class ScCODAConfig(BaseModel):
+    """scCODA compositional analysis configuration."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    sample_col: str = ""
+    condition_col: str = ""
+    reference_cell_type: str = ""
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# Sub-model 24 — ExploratorySettings
+# ═══════════════════════════════════════════════════════════════════════
+class ExploratorySettings(BaseModel):
+    """Exploratory analysis settings (composition test, etc.)."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    composition_test: Literal["none", "sccoda"] = "none"
+    sccoda: ScCODAConfig = Field(default_factory=ScCODAConfig)
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# CellTypistConfig — nested sub-model for AnnotationSettings
+# ═══════════════════════════════════════════════════════════════════════
+class CellTypistConfig(BaseModel):
+    """CellTypist annotation model configuration."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    model: str = ""
+    """Model name (e.g. \"Immune_All_Low.pkl\"). Empty = auto-select disabled."""
+    majority_voting: bool = True
+    enabled: bool = False
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# AnnotationSettings — annotation method selector + supplementary evidence
+# ═══════════════════════════════════════════════════════════════════════
+class AnnotationSettings(BaseModel):
+    """Annotation method and supplementary evidence settings."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    method: Literal["kb_unified", "celltypist", "ai", "score_genes"] = "kb_unified"
+    celltypist: CellTypistConfig = Field(default_factory=CellTypistConfig)
+
+
+# ═══════════════════════════════════════════════════════════════════════
 # Top-level Config
 # ═══════════════════════════════════════════════════════════════════════
 class Config(BaseModel):
@@ -609,7 +706,7 @@ class Config(BaseModel):
     target_order: str = ""
 
     # ═══════════════════════════════════════════════════════════════════
-    # 22 个主题子模型
+    # 23 个主题子模型
     # ═══════════════════════════════════════════════════════════════════
     data_input: DataInputConfig = Field(default_factory=DataInputConfig)
     sample_meta: SampleMetaConfig = Field(default_factory=SampleMetaConfig)
@@ -624,6 +721,7 @@ class Config(BaseModel):
     de: DESettings = Field(default_factory=DESettings)
     trajectory: TrajectorySettings = Field(default_factory=TrajectorySettings)
     enrichment: EnrichmentSettings = Field(default_factory=EnrichmentSettings)
+    exploratory: ExploratorySettings = Field(default_factory=ExploratorySettings)
     grn: GRNSettings = Field(default_factory=GRNSettings)
     cci: CCISettings = Field(default_factory=CCISettings)
     downsample: DownsampleSettings = Field(default_factory=DownsampleSettings)
@@ -633,6 +731,8 @@ class Config(BaseModel):
     ai: AIConfig = Field(default_factory=AIConfig)
     bulk: BulkConfig = Field(default_factory=BulkConfig)
     plot: GlobalPlotConfig = Field(default_factory=GlobalPlotConfig)
+    ambient: AmbientSettings = Field(default_factory=AmbientSettings)
+    annotation: AnnotationSettings = Field(default_factory=AnnotationSettings)
 
     def model_post_init(self, __context):
         """Resolve relative paths after construction.

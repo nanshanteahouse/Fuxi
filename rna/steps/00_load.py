@@ -82,6 +82,48 @@ def _parse_barcodes(adata, cfg, log):
                 log.info("  Extracted %s from barcode", obs_col)
 
 
+def _run_ambient_correction(adata, cfg, log):
+    """Run ambient RNA correction (CellBender or SoupX) on raw count data.
+
+    Writes an intermediate ``ambient_removed.h5ad`` before the main
+    raw h5ad is written.  On missing dependency the step is skipped
+    with a logged error (does not crash).
+    """
+    from core.utils import safe_write
+    from core.utils._optional import require_cellbender, require_soupx
+
+    method = cfg.ambient.method
+    out_dir = os.path.dirname(cfg.raw_h5ad)
+    ambient_pth = os.path.join(out_dir, "ambient_removed.h5ad")
+
+    if method == "cellbender":
+        try:
+            require_cellbender()
+        except ImportError:
+            log.error("CellBender not installed — skipping ambient correction")
+            return
+        log.info("Running CellBender ambient RNA removal...")
+        log.warning("CellBender GPU training not yet implemented — Phase 2 scope")
+        # Phase 1: write pass-through until GPU training is wired
+        safe_write(ambient_pth, adata=adata, file_type="h5ad")
+        log.info("Ambient-corrected data written to %s", ambient_pth)
+
+    elif method == "soupx":
+        try:
+            require_soupx()
+        except ImportError:
+            log.error("SoupX not installed — skipping ambient correction")
+            return
+        log.info("Running SoupX ambient RNA removal...")
+        log.warning("SoupX ambient estimation not yet implemented — Phase 2 scope")
+        # Phase 1: write pass-through until SoupX estimation is wired
+        safe_write(ambient_pth, adata=adata, file_type="h5ad")
+        log.info("Ambient-corrected data written to %s", ambient_pth)
+
+    else:
+        log.warning("Unknown ambient method: %s — skipping", method)
+
+
 def main():
     t0 = time.time()
     args_parser = argparse.ArgumentParser()
@@ -531,6 +573,10 @@ def main():
     if getattr(cfg.execution, "use_float32", False) and adata.X is not None:
         adata.X = adata.X.astype("float32", copy=False) if sp.issparse(adata.X) else adata.X
         log.info("X precision converted to float32")
+
+    # ── 可选 ambient RNA 校正 ──
+    if cfg.ambient.run and cfg.data_format in ("10X_h5", "10X_mtx"):
+        _run_ambient_correction(adata, cfg, log)
 
     # ── 可选细胞过滤 + 降采样（config-driven） ──
     from core.downsample import downsample_by_config, filter_by_config

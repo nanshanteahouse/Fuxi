@@ -157,23 +157,43 @@ def main():
         log.info("Raw counts preserved in adata.layers['counts'] for scVI")
 
     # ── 归一化 (HVG 子集) ──
-    skip_norm = getattr(cfg, "expression_type", "raw_counts") == "log1p_counts"
-    if skip_norm:
+    pearson_mode = cfg.normalization.method == "pearson_residuals"
+    if pearson_mode:
         log.info(
-            "expression_type='log1p_counts' — data already normalized, skipping normalize_total+log1p"
+            "Using Pearson residuals normalization (n_top_genes=%d)...",
+            cfg.normalization.pearson_residuals.n_top_genes,
         )
+        sc.experimental.pp.highly_variable_genes(
+            adata_full,
+            flavor="pearson_residuals",
+            n_top_genes=cfg.normalization.pearson_residuals.n_top_genes,
+        )
+        adata = adata_full[:, adata_full.var["highly_variable"]].copy()
+        sc.experimental.pp.normalize_pearson_residuals(
+            adata,
+            clip=cfg.normalization.pearson_residuals.clip,
+        )
+        log.info("  Pearson residuals normalization complete (%d HVGs)", adata.n_vars)
     else:
-        log.info(
-            "Normalizing (target_sum=%.0f) + log1p...", cfg.normalization.normalize_target_sum
-        )
-        sc.pp.normalize_total(adata, target_sum=cfg.normalization.normalize_target_sum)
-        sc.pp.log1p(adata)
+        skip_norm = getattr(cfg, "expression_type", "raw_counts") == "log1p_counts"
+        if skip_norm:
+            log.info(
+                "expression_type='log1p_counts' — data already normalized, skipping normalize_total+log1p"
+            )
+        else:
+            log.info(
+                "Normalizing (target_sum=%.0f) + log1p...", cfg.normalization.normalize_target_sum
+            )
+            sc.pp.normalize_total(adata, target_sum=cfg.normalization.normalize_target_sum)
+            sc.pp.log1p(adata)
 
     # ── 数据完整性检查：归一化后 ──
     validate_adata(adata, stage_name="normalize+log1p", logger=log)
 
     # ── 归一化全基因副本（用于细胞周期打分和 .raw）──
-    if skip_norm:
+    if pearson_mode:
+        log.info("  Pearson residuals mode — full-gene copy kept as raw counts")
+    elif skip_norm:
         log.info("  expression_type='log1p_counts' — full-gene copy also pre-normalized")
     else:
         sc.pp.normalize_total(adata_full, target_sum=cfg.normalization.normalize_target_sum)
@@ -181,42 +201,52 @@ def main():
 
     # ── 可选: 细胞周期打分 ──
     if cfg.normalization.score_cell_cycle:
-        log.info("Scoring cell cycle (S / G2M) on full gene reference...")
-        try:
-            s_genes, g2m_genes = load_cell_cycle_genes(cfg.species)
-            sc.tl.score_genes_cell_cycle(adata_full, s_genes=s_genes, g2m_genes=g2m_genes)
-            adata.obs["S_score"] = adata_full.obs["S_score"].copy()
-            adata.obs["G2M_score"] = adata_full.obs["G2M_score"].copy()
-            adata.obs["phase"] = adata_full.obs["phase"].copy()
-            log.info("Cell cycle phases: %s", adata.obs["phase"].value_counts().to_dict())
-        except Exception as e:
-            log.warning("Cell cycle scoring failed (skipped): %s", e)
+        if pearson_mode:
+            log.info("  Pearson residuals mode — cell cycle scoring skipped")
+        else:
+            log.info("Scoring cell cycle (S / G2M) on full gene reference...")
+            try:
+                s_genes, g2m_genes = load_cell_cycle_genes(cfg.species)
+                sc.tl.score_genes_cell_cycle(adata_full, s_genes=s_genes, g2m_genes=g2m_genes)
+                adata.obs["S_score"] = adata_full.obs["S_score"].copy()
+                adata.obs["G2M_score"] = adata_full.obs["G2M_score"].copy()
+                adata.obs["phase"] = adata_full.obs["phase"].copy()
+                log.info("Cell cycle phases: %s", adata.obs["phase"].value_counts().to_dict())
+            except Exception as e:
+                log.warning("Cell cycle scoring failed (skipped): %s", e)
 
     # ── 回归技术变异 / 细胞周期分数 (HVG 子集, normalize+log1p 后) ──
     # regress_out internally densifies → large temporary allocation; skip in
     # balanced/memory modes unless cell cycle scoring is explicitly enabled.
-    _skip_regress = mem_policy in ("balanced", "memory") and not cfg.normalization.score_cell_cycle
-    if _skip_regress:
-        log.info("memory_policy=%s — skipping regress_out (avoids dense allocation)", mem_policy)
-    elif cfg.normalization.score_cell_cycle:
-        try:
-            log.info("Regressing cell cycle scores: S_score, G2M_score ...")
-            sc.pp.regress_out(adata, ["S_score", "G2M_score"])
-            log.info("  regress_out complete")
-        except Exception as e:
-            log.warning("regress_out (cell cycle) failed (skipped): %s", e)
-    elif cfg.normalization.use_regress_out:
-        covariate_list = ["pct_counts_mt"]
-        if cfg.normalization.regress_out_genes:
-            covariate_list = cfg.normalization.regress_out_genes
-        try:
-            log.info("Regressing technical covariates: %s ...", covariate_list)
-            sc.pp.regress_out(adata, covariate_list)
-            log.info("  regress_out complete")
-        except Exception as e:
-            log.warning("regress_out (%s) failed (skipped): %s", covariate_list, e)
+    if pearson_mode:
+        log.info("  Pearson residuals mode — regress_out skipped")
     else:
-        log.info("Cell cycle scoring disabled, use_regress_out=False — skipping regress_out")
+        _skip_regress = (
+            mem_policy in ("balanced", "memory") and not cfg.normalization.score_cell_cycle
+        )
+        if _skip_regress:
+            log.info(
+                "memory_policy=%s — skipping regress_out (avoids dense allocation)", mem_policy
+            )
+        elif cfg.normalization.score_cell_cycle:
+            try:
+                log.info("Regressing cell cycle scores: S_score, G2M_score ...")
+                sc.pp.regress_out(adata, ["S_score", "G2M_score"])
+                log.info("  regress_out complete")
+            except Exception as e:
+                log.warning("regress_out (cell cycle) failed (skipped): %s", e)
+        elif cfg.normalization.use_regress_out:
+            covariate_list = ["pct_counts_mt"]
+            if cfg.normalization.regress_out_genes:
+                covariate_list = cfg.normalization.regress_out_genes
+            try:
+                log.info("Regressing technical covariates: %s ...", covariate_list)
+                sc.pp.regress_out(adata, covariate_list)
+                log.info("  regress_out complete")
+            except Exception as e:
+                log.warning("regress_out (%s) failed (skipped): %s", covariate_list, e)
+        else:
+            log.info("Cell cycle scoring disabled, use_regress_out=False — skipping regress_out")
 
     # ── 可选: 回归自定义基因（额外）──
     # (主回归 covariate_list 已同时处理 obs 与 gene 列)

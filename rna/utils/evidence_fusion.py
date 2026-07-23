@@ -665,6 +665,7 @@ def fuse_all_clusters(
     unconstrained: bool = False,
     allows_transitions: bool = False,
     incompatible_transitions: Optional[list] = None,
+    celltypist_results: Optional[dict] = None,
 ) -> list | tuple[list, dict]:
     """Process all clusters and return a list of :class:`FusionDecision`.
 
@@ -749,6 +750,7 @@ def fuse_all_clusters(
             "ai_agreed": sum(1 for d in decisions if d.ai_agreed),
             "total": len(decisions),
             "diagnostic_summary": _build_diagnostic_summary(decisions),
+            "celltypist": bool(celltypist_results) if celltypist_results else False,
         }
         return decisions, quality
     return decisions
