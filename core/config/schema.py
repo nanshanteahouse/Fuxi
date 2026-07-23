@@ -25,9 +25,12 @@ from typing import Dict, List, Literal, Optional
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.config.global_config import GlobalPlotConfig
+
 _env_path = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"
 )
+
 if os.path.isfile(_env_path):
     load_dotenv(_env_path)
 
@@ -624,6 +627,7 @@ class Config(BaseModel):
     execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
     ai: AIConfig = Field(default_factory=AIConfig)
     bulk: BulkConfig = Field(default_factory=BulkConfig)
+    plot: GlobalPlotConfig = Field(default_factory=GlobalPlotConfig)
 
     def model_post_init(self, __context):
         """Resolve relative paths after construction.
