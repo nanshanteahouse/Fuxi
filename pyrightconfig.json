@@ -9,7 +9,6 @@
   "exclude": [
     "projects",
     "rna/data",
-    "rna/tissue_ontologies",
     "**/__pycache__"
   ],
   "typeCheckingMode": "basic",
