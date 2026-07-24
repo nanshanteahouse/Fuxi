@@ -346,6 +346,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
     # ── Compute per-cluster marker scores and expert rules ───────────
     all_scores = {}
     all_rules = {}
+    all_top_genes: dict[str, list[str]] = {}
     low_quality_clusters: dict[str, str] = {}  # cluster_str → reason
     clusters = sorted(
         marker_df["cluster"].unique(),
@@ -372,6 +373,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
             target_order=target_order,
             adaptive_top_n=True,
         )
+        all_top_genes[cl_str] = cl_data["names"].head(20).tolist()
         all_rules[cl_str] = apply_expert_rules(
             kb, cl_data, top_n=rule_top_n, pval_cutoff=rule_pval
         )
@@ -581,11 +583,48 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
         if cl_str in cell_category_map:
             cell_category_map[cl_str] = ""
 
+    # ── Tiered annotation: enforce cell_type=L2, L3→cell_subtype ─────
+    tiered_subtypes: dict[str, str] = {}
+    if "_hierarchy" in kb and kb.get("_hierarchy", {}).get("categories"):
+        from core.annotation.scoring import _build_kb_lookup
+        from rna.utils.tiered_annotation import _build_subtype_map, resolve_tiered_label
+
+        _kb_lookup = _build_kb_lookup(kb, species=species)
+        _hierarchy = kb["_hierarchy"]
+        _subtype_map = _build_subtype_map(_hierarchy)
+        for cl_str in list(decision_map):
+            _scores = all_scores.get(cl_str, {})
+            _label, _ev = resolve_tiered_label(
+                _scores, _hierarchy, _kb_lookup, all_top_genes.get(cl_str, [])
+            )
+            # Force fusion cell_type to its L2 ancestor.
+            _ct = decision_map[cl_str].cell_type
+            while _ct in _subtype_map:
+                _ct = _subtype_map[_ct]
+            # cell_subtype from tiered resolution.
+            if _ev["tier"] == "L3" and _ev["subtype_resolution"] == "resolved":
+                tiered_subtypes[cl_str] = _label
+            elif _ev["subtype_resolution"] == "unresolved":
+                tiered_subtypes[cl_str] = "unresolved"
+            else:
+                tiered_subtypes[cl_str] = "N/A"
+            decision_map[cl_str] = decision_map[cl_str]._replace(
+                cell_type=_ct,
+                tier=("L3" if tiered_subtypes[cl_str] not in ("unresolved", "N/A") else "L2"),
+                consensus=_ev["consensus"],
+                n_sources=_ev["n_sources"],
+                subtype_resolution=_ev["subtype_resolution"] or "na",
+            )
+    else:
+        tiered_subtypes = {k: "N/A" for k in decision_map}
+
     adata.obs["cell_type"] = leiden_str.map(
         {k: v.cell_type for k, v in decision_map.items()}
     ).astype("category")
     adata.obs["cell_state"] = leiden_str.map({k: "N/A" for k in decision_map})
-    adata.obs["cell_subtype"] = leiden_str.map({k: "N/A" for k in decision_map})
+    adata.obs["cell_subtype"] = leiden_str.map(
+        {k: tiered_subtypes.get(k, "N/A") for k in decision_map}
+    )
     adata.obs["cell_category"] = leiden_str.map(
         {k: cell_category_map.get(k, "") for k in decision_map}
     ).astype("category")
@@ -623,6 +662,11 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
                     "diagnostic_category": v.diagnostic.category if v.diagnostic else None,
                     "diagnostic_detail": v.diagnostic.detail if v.diagnostic else None,
                     "top_competitors": v.diagnostic.top_competitors if v.diagnostic else [],
+                    "tier": v.tier,
+                    "consensus": v.consensus,
+                    "n_sources": v.n_sources,
+                    "subtype_resolution": v.subtype_resolution,
+                    "cell_subtype": tiered_subtypes.get(k, "N/A"),
                 }
             )
             for k, v in decision_map.items()
@@ -650,6 +694,11 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
                 "reasoning": d.explanation,
                 "diagnostic_category": d.diagnostic.category if d.diagnostic else "",
                 "cell_category": cell_category_map.get(str(cl_name), ""),
+                "cell_subtype": tiered_subtypes.get(str(cl_name), "N/A"),
+                "tier": d.tier,
+                "consensus": d.consensus,
+                "n_sources": d.n_sources,
+                "subtype_resolution": d.subtype_resolution,
             }
         )
     ann_df = pd.DataFrame(ann_records)
