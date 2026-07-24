@@ -2,6 +2,9 @@
 modality: spatial
 data_format: visium
 
+# 公共默认参数已移至 global.yaml (参考 global.example.yaml)
+# 本模板仅包含数据集特异性和生物学相关参数
+
 # ── Spatial platform ──
 spatial:
   platform: visium
@@ -30,9 +33,8 @@ species: "{{SPECIES}}"
 qc:
   min_genes: 500
   max_genes: 7500
-  max_pct_mito: 20.0
+  # max_pct_mito: 20.0  # global default; snRNA-seq→5-10%, heart/liver→15%
   min_genes_per_umi: 0.7
-  min_cells_per_gene: 3
   # ── Adaptive thresholds (managed by global.yaml) ──
   # use_adaptive_thresholds: true   # ← global.yaml default
   # mad_n_mads: 3.0                  # MAD multiplier
@@ -56,13 +58,7 @@ clustering:
   leiden_resolutions: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
   best_resolution: 1.0
   best_n_neighbors: 0
-  cluster_selection_method: "pareto_elbow"
   leiden_flavor: igraph
-  umap_selection_method: "convex_hull"
-  param_grid_min_dist: [0.1, 0.3, 0.5]
-  param_grid_spread: [1.0]
-  umap_min_dist: 0.3
-  umap_spread: 1.0
   umap_color_by_batch: false
   # batch_key_override: null  # optionally override integration.batch_key
   # umap_paga_init: false
@@ -79,10 +75,6 @@ marker:
 #   min_cells: 50
 # ── Differential expression ──
 de:
-  method: wilcoxon
-  n_genes: 50
-  pval_cutoff: 0.05
-  logfc_cutoff: 0.25
   stage_pairwise: true
   # auto_switch_on_low_quality: true
 
@@ -146,15 +138,6 @@ cci:
 #   interpretation: true
 #   cache_responses: true
 
-# ── Execution ──
-execution:
-  n_jobs: 0
-  random_seed: 42
-  memory_policy: speed
-  # force_csr: true
-  # use_float32: true
-  # limit_blas_threads: true
-  # scanpy_verbosity: 2
 
 # h5ad_compression: gzip
 # h5ad_tempdir: /tmp/Fuxi

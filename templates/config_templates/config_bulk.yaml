@@ -4,6 +4,9 @@ data_format: count_matrix
 # ── Modality ──
 modality: bulk
 
+# 公共默认参数已移至 global.yaml (参考 global.example.yaml)
+# 本模板仅包含数据集特异性和生物学相关参数
+
 # ── Data input ──
 data_input:
   matrix_file: ""
@@ -39,11 +42,3 @@ enrichment:
   method: both
   gene_sets: [GO_Biological_Process_2023, KEGG_2021_Human]
   organism: human
-
-# ── Execution ──
-execution:
-  n_jobs: 0
-  random_seed: 42
-  memory_policy: speed
-  # force_csr: true
-  # use_float32: true

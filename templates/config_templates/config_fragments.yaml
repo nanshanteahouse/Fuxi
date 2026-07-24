@@ -2,6 +2,9 @@
 modality: atac
 data_format: 10x_fragments
 
+# 公共默认参数已移至 global.yaml (参考 global.example.yaml)
+# 本模板仅包含数据集特异性和生物学相关参数
+
 # ── Data input ──
 data_input:
   fragment_file: "{{FRAGMENT_FILE}}"
@@ -55,11 +58,6 @@ clustering:
   n_neighbors: 15
   param_grid_n_neighbors: [15, 20, 30]
   param_grid_resolutions: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
-  umap_selection_method: "convex_hull"
-  param_grid_min_dist: [0.1, 0.3, 0.5]
-  param_grid_spread: [1.0]
-  umap_min_dist: 0.3
-  umap_spread: 1.0
   umap_color_by_batch: false
   # batch_key_override: null  # optionally override integration.batch_key
 
@@ -99,15 +97,6 @@ enrichment:
 #   annotation: true
 #   cache_responses: true
 
-# ── Execution ──
-execution:
-  n_jobs: 0
-  random_seed: 42
-  memory_policy: speed
-  # force_csr: true
-  # use_float32: true
-  # limit_blas_threads: true
-  # scanpy_verbosity: 2
 
 h5ad_tempdir: /tmp/Fuxi
 # h5ad_compression: gzip

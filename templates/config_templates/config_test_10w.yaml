@@ -2,6 +2,9 @@
 # data_dir and paths are resolved via FUXI_DATA_ROOT and GSE_ID
 data_format: 10x_fragments
 
+# 公共默认参数已移至 global.yaml (参考 global.example.yaml)
+# 本模板仅包含数据集特异性和生物学相关参数
+
 data_input:
   fragment_file: "<fragments.tsv.gz>"
   barcodes_file: "<barcodes.txt>"
@@ -41,11 +44,6 @@ clustering:
   n_neighbors: 15
   param_grid_n_neighbors: [15, 20]
   param_grid_resolutions: [0.3, 0.8, 1.5]
-  umap_selection_method: "convex_hull"
-  param_grid_min_dist: [0.1, 0.3, 0.5]
-  param_grid_spread: [1.0]
-  umap_min_dist: 0.3
-  umap_spread: 1.0
   umap_color_by_batch: false
   # batch_key_override: null  # optionally override integration.batch_key
 
@@ -81,15 +79,6 @@ enrichment:
 ai:
   enabled: false
 
-# ── Execution ──
-execution:
-  n_jobs: 4
-  random_seed: 42
-  memory_policy: speed
-  # force_csr: true
-  # use_float32: true
-  # limit_blas_threads: true
-  # scanpy_verbosity: 2
 
 # h5ad_compression: gzip
 # h5ad_tempdir: /tmp/Fuxi
