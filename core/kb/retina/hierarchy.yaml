@@ -75,6 +75,31 @@ categories:
       - TUBB3
       - ELAVL4
       - SLC17A6
+    subtypes:
+      RGC:
+        members:
+          - RGC_Alpha
+          - RGC_Foxp2
+          - RGC_Neurod2
+          - RGC_Tbr1
+          - RGC_W3
+          - RGC_ipRGC
+          - RGC_ooDSGC
+      Bipolar_Cell:
+        members:
+          - BC1A
+          - BC1B
+          - BC2
+          - BC3A
+          - BC3B
+          - BC4
+          - BC5A
+          - BC5B
+          - BC5C
+          - BC5D
+          - BC6
+          - BC7
+          - BC8_BC9
 
   Glia:
     label: "Glia"

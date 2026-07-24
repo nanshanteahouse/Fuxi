@@ -117,6 +117,20 @@ def load_hierarchy_yaml(path: str) -> dict[str, Any]:
             )
         if "fallback_markers" in cat_def and not isinstance(cat_def["fallback_markers"], list):
             raise ValueError(f"Category {cat_key!r} 'fallback_markers' must be a list")
+        if "subtypes" in cat_def:
+            sub = cat_def["subtypes"]
+            if not isinstance(sub, dict):
+                raise ValueError(f"Category {cat_key!r} 'subtypes' must be a dict")
+            for l2_key, l2_def in sub.items():
+                if not isinstance(l2_def, dict) or "members" not in l2_def:
+                    raise ValueError(
+                        f"Category {cat_key!r} subtypes.{l2_key!r} must be a dict "
+                        f"with a 'members' list"
+                    )
+                if not isinstance(l2_def["members"], list):
+                    raise ValueError(
+                        f"Category {cat_key!r} subtypes.{l2_key!r} 'members' must be a list"
+                    )
 
     if "incompatible_transitions" in cfg:
         it = cfg["incompatible_transitions"]
@@ -306,6 +320,7 @@ def build_hierarchy(kb: dict[str, Any], config: dict[str, Any]) -> dict[str, Any
                 "confirm": {gene: ["_hierarchy"] for gene in markers},
             },
             "members": members,
+            "subtypes": cat_def.get("subtypes", {}),
         }
 
     # ── 2. Create Broad_* synthetic entries ─────────────────────────────
@@ -340,14 +355,26 @@ def build_hierarchy(kb: dict[str, Any], config: dict[str, Any]) -> dict[str, Any
         "incompatible_transitions": incompatible,
     }
 
-    # ── 4. Backfill parent fields on member types ───────────────────────
+    # ── 4. Build subtype→L2-parent map for two-level parent assignment ──
+    subtype_to_l2: dict[str, str] = {}
+    for cat_def in categories.values():
+        for l2_key, l2_def in (cat_def.get("subtypes") or {}).items():
+            for sub in l2_def.get("members", []):
+                subtype_to_l2[sub] = l2_key
+
+    # ── 5. Backfill parent fields on member types ─────────────────────
     for type_key in list(kb.keys()):
         if type_key in ("expert_rules", "_meta", "_hierarchy"):
             continue
         if type_key.startswith(prefix):
             continue
+        if type_key in subtype_to_l2:
+            # L3 subtype → parent is its L2 type (e.g. RGC_Foxp2 → RGC)
+            kb[type_key]["parent"] = subtype_to_l2[type_key]
+            continue
         for cat_key, cat_def in categories.items():
             if type_key in cat_def.get("members", []):
+                # L2 type → parent is Broad_* category
                 kb[type_key]["parent"] = f"{prefix}{cat_key}"
                 break
 
