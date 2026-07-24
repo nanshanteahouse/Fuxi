@@ -9,7 +9,7 @@ Sub-modules (private, import through this package):
   _logging        — setup_logger
   _config         — resolve_config, species validation, dataset.yaml helpers
   _cross_modality — find_rna_h5ad, find_rna_marker_csv, load_scRNA_markers
-  _perf           — PerformanceReport, PerformanceSummary, monitor_performance
+  _perf           — PerformanceReport, PerformanceSummary, monitor_performance, timed_substep, record_memory_skip
   _validation     — validate_adata, validate_pipeline_state
 """
 
@@ -59,6 +59,8 @@ from core.utils._perf import (  # noqa: F401
     PerformanceReport,
     PerformanceSummary,
     monitor_performance,
+    record_memory_skip,
+    timed_substep,
 )
 from core.utils._validation import (  # noqa: F401
     _STEP_REQUIREMENTS,

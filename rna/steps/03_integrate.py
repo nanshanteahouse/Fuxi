@@ -32,7 +32,7 @@ import scanpy as sc
 import scipy.sparse as sp
 
 from core.kb.cell_cycle import load_cell_cycle_genes
-from core.utils import resolve_config, safe_write, setup_logger
+from core.utils import record_memory_skip, resolve_config, safe_write, setup_logger, timed_substep
 
 # Cell cycle gene lists — externalized to core/kb/cell_cycle/
 # Previously hardcoded as _S_GENES / _G2M_GENES (Tirosh et al., 2016).
@@ -77,46 +77,47 @@ def main():
 
     # ── HVG（自动降级：CFG.hvg.flavor → seurat_v3 → cell_ranger → seurat）──
     batch_key = cfg.hvg.batch_key if cfg.hvg.batch_key in adata.obs else None
-    flavors_to_try = list(
-        dict.fromkeys([cfg.hvg.flavor, "seurat_v3", "cell_ranger", "seurat", "scry"])
-    )
-    hvg_found = False
-    for flavor in flavors_to_try:
-        for bk in [batch_key, None]:
-            try:
-                log.info(
-                    "Selecting top %d HVGs (flavor=%s, batch_key=%s)...",
-                    cfg.hvg.n_top_genes,
-                    flavor,
-                    bk,
-                )
-                sc.pp.highly_variable_genes(
-                    adata,
-                    n_top_genes=cfg.hvg.n_top_genes,
-                    flavor=flavor,
-                    batch_key=bk,
-                    inplace=True,
-                )
-                log.info("HVG flavor=%s, batch_key=%s succeeded", flavor, bk)
-                hvg_found = True
+    with timed_substep("HVG selection", log=log):
+        flavors_to_try = list(
+            dict.fromkeys([cfg.hvg.flavor, "seurat_v3", "cell_ranger", "seurat", "scry"])
+        )
+        hvg_found = False
+        for flavor in flavors_to_try:
+            for bk in [batch_key, None]:
+                try:
+                    log.info(
+                        "Selecting top %d HVGs (flavor=%s, batch_key=%s)...",
+                        cfg.hvg.n_top_genes,
+                        flavor,
+                        bk,
+                    )
+                    sc.pp.highly_variable_genes(
+                        adata,
+                        n_top_genes=cfg.hvg.n_top_genes,
+                        flavor=flavor,
+                        batch_key=bk,
+                        inplace=True,
+                    )
+                    log.info("HVG flavor=%s, batch_key=%s succeeded", flavor, bk)
+                    hvg_found = True
+                    break
+                except (ValueError, RuntimeWarning, TypeError, ImportError):
+                    log.warning("HVG flavor=%s, batch_key=%s failed, trying next", flavor, bk)
+                    continue
+            if hvg_found:
                 break
-            except (ValueError, RuntimeWarning, TypeError, ImportError):
-                log.warning("HVG flavor=%s, batch_key=%s failed, trying next", flavor, bk)
-                continue
-        if hvg_found:
-            break
 
-    if not hvg_found:
-        log.warning("All standard HVG flavors failed, falling back to manual variance method")
-        if adata.X is None:
-            raise ValueError("adata.X is None — cannot compute manual variance HVG")
-        x_mean = adata.X.mean(axis=0).A1
-        x_sq = (adata.X.multiply(adata.X)).mean(axis=0).A1
-        gene_var = x_sq - x_mean**2
-        adata.var["highly_variable"] = np.zeros(adata.n_vars, dtype=bool)
-        top_idx = np.argsort(gene_var)[-cfg.hvg.n_top_genes :]
-        adata.var.iloc[top_idx, adata.var.columns.get_loc("highly_variable")] = True
-        log.info("Manual variance HVG: selected top %d genes", cfg.hvg.n_top_genes)
+        if not hvg_found:
+            log.warning("All standard HVG flavors failed, falling back to manual variance method")
+            if adata.X is None:
+                raise ValueError("adata.X is None — cannot compute manual variance HVG")
+            x_mean = adata.X.mean(axis=0).A1
+            x_sq = (adata.X.multiply(adata.X)).mean(axis=0).A1
+            gene_var = x_sq - x_mean**2
+            adata.var["highly_variable"] = np.zeros(adata.n_vars, dtype=bool)
+            top_idx = np.argsort(gene_var)[-cfg.hvg.n_top_genes :]
+            adata.var.iloc[top_idx, adata.var.columns.get_loc("highly_variable")] = True
+            log.info("Manual variance HVG: selected top %d genes", cfg.hvg.n_top_genes)
 
     n_hvg = adata.var["highly_variable"].sum()
     log.info("HVG count: %d", n_hvg)
@@ -228,6 +229,13 @@ def main():
             log.info(
                 "memory_policy=%s — skipping regress_out (avoids dense allocation)", mem_policy
             )
+            record_memory_skip(
+                step="03_integrate",
+                operation="regress_out",
+                reason=f"memory_policy={mem_policy} would dense-allocate X (n_obs={adata.n_obs}, n_vars={adata.n_vars})",
+                cfg=cfg,
+                log=log,
+            )
         elif cfg.normalization.score_cell_cycle:
             try:
                 log.info("Regressing cell cycle scores: S_score, G2M_score ...")
@@ -290,35 +298,36 @@ def main():
     # arpack = iterative (low memory), randomized = fast (dense allocation)
     _solver = "arpack" if mem_policy in ("balanced", "memory") else "randomized"
     log.info("PCA (%d components, solver=%s)...", cfg.pca.n_pcs_full, _solver)
-    sc.pp.pca(
-        adata,
-        n_comps=cfg.pca.n_pcs_full,
-        svd_solver=_solver,
-        random_state=cfg.execution.random_seed,
-    )
-    var_ratio = adata.uns["pca"]["variance_ratio"]
-    log.info("  top-5 variance ratio: %.4f", var_ratio[:5].sum())
-    log.info("  Cumulative variance ratio first 50 PCs: %.4f", var_ratio[:50].sum())
+    with timed_substep("PCA", log=log):
+        sc.pp.pca(
+            adata,
+            n_comps=cfg.pca.n_pcs_full,
+            svd_solver=_solver,
+            random_state=cfg.execution.random_seed,
+        )
+        var_ratio = adata.uns["pca"]["variance_ratio"]
+        log.info("  top-5 variance ratio: %.4f", var_ratio[:5].sum())
+        log.info("  Cumulative variance ratio first 50 PCs: %.4f", var_ratio[:50].sum())
 
-    # PCA elbow 图
-    fig_dir = os.path.join(cfg.figure_dir, "03_integrate")
-    os.makedirs(fig_dir, exist_ok=True)
-    fig, ax = plt.subplots(figsize=(cfg.plot.qc_figure_size[0], 4))
-    ax.plot(range(1, cfg.pca.n_pcs_full + 1), var_ratio, "o-", ms=3)
-    ax.axvline(
-        cfg.pca.n_pcs_use,
-        color=cfg.plot.palette.qc_threshold,
-        linestyle="--",
-        alpha=0.5,
-        label=f"n_pcs_use={cfg.pca.n_pcs_use}",
-    )
-    ax.set_xlabel("PC")
-    ax.set_ylabel("Variance ratio")
-    ax.legend()
-    fig.tight_layout()
-    fig.savefig(os.path.join(fig_dir, "pca_elbow.png"), dpi=cfg.plot.figure_dpi)
-    plt.close(fig)
-    log.info("  PCA elbow plot saved")
+        # PCA elbow 图
+        fig_dir = os.path.join(cfg.figure_dir, "03_integrate")
+        os.makedirs(fig_dir, exist_ok=True)
+        fig, ax = plt.subplots(figsize=(cfg.plot.qc_figure_size[0], 4))
+        ax.plot(range(1, cfg.pca.n_pcs_full + 1), var_ratio, "o-", ms=3)
+        ax.axvline(
+            cfg.pca.n_pcs_use,
+            color=cfg.plot.palette.qc_threshold,
+            linestyle="--",
+            alpha=0.5,
+            label=f"n_pcs_use={cfg.pca.n_pcs_use}",
+        )
+        ax.set_xlabel("PC")
+        ax.set_ylabel("Variance ratio")
+        ax.legend()
+        fig.tight_layout()
+        fig.savefig(os.path.join(fig_dir, "pca_elbow.png"), dpi=cfg.plot.figure_dpi)
+        plt.close(fig)
+        log.info("  PCA elbow plot saved")
 
     # ── Batch diagnosis (v4.x+) ──
     report = None
@@ -330,30 +339,31 @@ def main():
         gini_ = cfg.integration.gini_biology_threshold
         log.info("Running batch diagnosis ...")
         try:
-            report = diagnose_batch_candidates(
-                adata,
-                n_pcs=cfg.pca.n_pcs_use,
-                gini_batch_threshold=gini_b,
-                gini_biology_threshold=gini_,
-            )
-            log.info(
-                "[batch-diagnosis] batch_cols=%s, biology_cols=%s, ambiguous=%s",
-                report.batch_cols,
-                report.biology_cols,
-                report.ambiguous_cols,
-            )
-            # Augment batch_key with auto-detected batch columns
-            augment = report.batch_cols if report.batch_cols else []
-            user_key = cfg.integration.batch_key
-            bk_list = [user_key] if isinstance(user_key, str) else list(user_key)
-            batch_keys = list(dict.fromkeys(bk_list + [c for c in augment if c in adata.obs]))
-            for w in report.warnings:
-                log.warning("[batch-diagnosis] %s", w)
-            if cfg.integration.diagnose_report:
-                os.makedirs(fig_dir, exist_ok=True)
-                report_path = os.path.join(fig_dir, "batch_diagnosis.pdf")
-                plot_diagnosis_report(report, report_path)
-                log.info("  Diagnosis report saved to %s", report_path)
+            with timed_substep("Batch diagnosis", log=log):
+                report = diagnose_batch_candidates(
+                    adata,
+                    n_pcs=cfg.pca.n_pcs_use,
+                    gini_batch_threshold=gini_b,
+                    gini_biology_threshold=gini_,
+                )
+                log.info(
+                    "[batch-diagnosis] batch_cols=%s, biology_cols=%s, ambiguous=%s",
+                    report.batch_cols,
+                    report.biology_cols,
+                    report.ambiguous_cols,
+                )
+                # Augment batch_key with auto-detected batch columns
+                augment = report.batch_cols if report.batch_cols else []
+                user_key = cfg.integration.batch_key
+                bk_list = [user_key] if isinstance(user_key, str) else list(user_key)
+                batch_keys = list(dict.fromkeys(bk_list + [c for c in augment if c in adata.obs]))
+                for w in report.warnings:
+                    log.warning("[batch-diagnosis] %s", w)
+                if cfg.integration.diagnose_report:
+                    os.makedirs(fig_dir, exist_ok=True)
+                    report_path = os.path.join(fig_dir, "batch_diagnosis.pdf")
+                    plot_diagnosis_report(report, report_path)
+                    log.info("  Diagnosis report saved to %s", report_path)
         except Exception as e:
             log.warning("Batch diagnosis failed (%s) — continuing without diagnosis", e)
             batch_keys = (
@@ -405,14 +415,15 @@ def main():
                 adata._inplace_subset_obs(~nan_mask)
             log.info("Harmony correction (batch_keys=%s)...", bk_list)
             try:
-                ho = hm.run_harmony(
-                    adata.obsm["X_pca"][:, : cfg.pca.n_pcs_use],
-                    adata.obs,
-                    vars_use=bk_list,
-                    random_state=cfg.execution.random_seed,
-                    max_iter_harmony=cfg.integration.max_iter,
-                )
-                adata.obsm["X_integrated"] = ho.Z_corr
+                with timed_substep("Harmony", log=log):
+                    ho = hm.run_harmony(
+                        adata.obsm["X_pca"][:, : cfg.pca.n_pcs_use],
+                        adata.obs,
+                        vars_use=bk_list,
+                        random_state=cfg.execution.random_seed,
+                        max_iter_harmony=cfg.integration.max_iter,
+                    )
+                    adata.obsm["X_integrated"] = ho.Z_corr
                 log.info("  Harmony complete, output shape: %s", ho.Z_corr.shape)
             except Exception as e:
                 log.warning("Harmony correction failed (%s) — continuing with raw PCA", e)
@@ -445,9 +456,11 @@ def main():
                 try:
                     from rna.utils.batch_diagnostics import validate_harmony_preservation
 
-                    preservation = validate_harmony_preservation(
-                        adata_orig, adata, report.biology_cols
-                    )
+                    preservation = None
+                    with timed_substep("Preservation check", log=log):
+                        preservation = validate_harmony_preservation(
+                            adata_orig, adata, report.biology_cols
+                        )
                     for col, ratio in preservation.items():
                         if ratio < 0.9:
                             log.warning(
@@ -574,7 +587,8 @@ def main():
 
     # ── 保存 ──
     out_path = os.path.join(cfg.h5ad_dir, "03_integrated.h5ad")
-    safe_write(adata, out_path, cfg=cfg)
+    with timed_substep("Save checkpoint", log=log):
+        safe_write(adata, out_path, cfg=cfg)
     log.info("Step 03 complete, took %.1fs", time.time() - t0)
 
 

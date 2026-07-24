@@ -28,7 +28,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import scanpy as sc
 
-from core.utils import resolve_config, setup_logger
+from core.utils import resolve_config, setup_logger, timed_substep
 
 # Agg backend for headless environments
 matplotlib.use("Agg")
@@ -323,15 +323,16 @@ def main():
         lr_db = "mouseconsensus"
         log.info("Switched CCI LR database for mouse: consensus → mouseconsensus")
 
-    lr_res = run_cci_permutation(
-        adata,
-        groupby_col=group_col,
-        resource_name=lr_db,
-        n_perms=cfg.cci.permutations,
-        use_raw=use_raw,
-        n_jobs=n_jobs,
-        log=log,
-    )
+    with timed_substep("CCI permutation", log=log):
+        lr_res = run_cci_permutation(
+            adata,
+            groupby_col=group_col,
+            resource_name=lr_db,
+            n_perms=cfg.cci.permutations,
+            use_raw=use_raw,
+            n_jobs=n_jobs,
+            log=log,
+        )
 
     # ── Format & export ─────────────────────────────────────────────────
     top_df = format_cci_results(
@@ -342,11 +343,12 @@ def main():
         adjacency_mode=adj_mode,
     )
 
-    export_results(lr_res, top_df, cfg, log)
+    with timed_substep("Export + plot", log=log):
+        export_results(lr_res, top_df, cfg, log)
 
-    # ── Plot ────────────────────────────────────────────────────────────
-    plot_heatmap(top_df, cfg, log)
-    plot_dotplot(top_df, cfg, log)
+        # ── Plot ────────────────────────────────────────────────────────────
+        plot_heatmap(top_df, cfg, log)
+        plot_dotplot(top_df, cfg, log)
 
     log.info("Step 12 complete, took %.1fs", time.time() - t0)
 

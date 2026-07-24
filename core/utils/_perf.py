@@ -117,7 +117,13 @@ class PerformanceSummary:
         self.steps: list[PerformanceReport] = []
 
     def add_step(self, step_num: str, desc: str, perf: PerformanceReport) -> None:
-        """Convert step_num + desc into a PerformanceReport clone and append."""
+        """Upsert a step entry by step_num — replace if rerun, append if new.
+
+        Ensures ``perf_report.json`` survives ``--step N`` reruns and
+        ``--resume`` without losing history: when the same step is rerun,
+        the new measurements replace the previous entry instead of being
+        appended as duplicates.
+        """
         clone = PerformanceReport(
             step=f"{step_num} {desc}",
             wall_sec=perf.wall_sec,
@@ -129,7 +135,46 @@ class PerformanceSummary:
             n_genes=perf.n_genes,
             checkpoint_mib=perf.checkpoint_mib,
         )
+        key = str(step_num)
+        for i, s in enumerate(self.steps):
+            if s.step.split(" ", 1)[0] == key:
+                self.steps[i] = clone
+                return
         self.steps.append(clone)
+
+    @classmethod
+    def load_existing(cls, path: str) -> Optional["PerformanceSummary"]:
+        """Load a previously saved ``perf_report.json``.
+
+        Returns ``None`` if the file is missing or cannot be parsed, so the
+        caller can fall back to a fresh summary. Used by the runner when
+        resuming or running a single step (``--step N``) to preserve
+        historical step metrics instead of overwriting them.
+        """
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path) as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return None
+        inst = cls()
+        inst.pipeline_info = data.get("pipeline", {}) or {}
+        for s in data.get("steps", []) or []:
+            inst.steps.append(
+                PerformanceReport(
+                    step=s.get("step", ""),
+                    wall_sec=s.get("wall_sec", 0.0),
+                    cpu_sec=s.get("cpu_sec", 0.0),
+                    peak_rss_mib=s.get("peak_rss_mib", 0.0),
+                    avg_cpu_pct=s.get("avg_cpu_pct", 0.0),
+                    gpu_mem_mb=s.get("gpu_mem_mb", -1.0),
+                    n_cells=s.get("n_cells", 0),
+                    n_genes=s.get("n_genes", 0),
+                    checkpoint_mib=s.get("checkpoint_mib", 0.0),
+                )
+            )
+        return inst
 
     def to_dict(self) -> dict:
         """Full JSON-ready dict with pipeline, steps, and summary keys."""
@@ -283,3 +328,103 @@ class PerformanceSummary:
             "200k": round(200_000 * n_genes * per_cell_gene_mib / 1024, 1),
             "500k": round(500_000 * n_genes * per_cell_gene_mib / 1024, 1),
         }
+
+
+@contextmanager
+def timed_substep(name: str, log=None, *, log_level=None):
+    """Time a sub-step within a pipeline step.
+
+    Surfaces hidden bottlenecks inside a single pipeline step (PCA, Harmony,
+    UMAP sweep, batch_diag, ...) by emitting clean log lines of the form
+    ``[substep] <name> took <N.N>s``. Replaces manual timestamp archaeology
+    when triaging step wall time.
+
+    Usage::
+
+        with timed_substep("Harmony", log=log):
+            sc.external.pp.harmony_integrate(adata, batch_key)
+
+    Optionally bind the yielded dict to read the wall time programmatically::
+
+        with timed_substep("PCA", log=log) as t:
+            sc.pp.pca(adata)
+        log.info("PCA used %s sec", t["wall_sec"])
+
+    Args:
+        name: sub-step label (logged verbatim).
+        log: optional logger with a ``.log(level, fmt, *args)`` method
+            (standard ``logging.Logger``). If None, no log line is emitted
+            but the timing is still captured on the yielded dict.
+        log_level: optional explicit level (default ``logging.INFO``).
+
+    Yields:
+        dict with ``name`` and ``wall_sec`` (the latter filled on exit).
+    """
+    import logging as _logging
+
+    t0 = _time.time()
+    info = {"name": name, "wall_sec": 0.0}
+    try:
+        yield info
+    finally:
+        info["wall_sec"] = round(_time.time() - t0, 1)
+        if log is not None:
+            level = log_level if log_level is not None else _logging.INFO
+            log.log(level, "[substep] %s took %.1fs", name, info["wall_sec"])
+
+
+def record_memory_skip(step: str, operation: str, reason: str, cfg=None, log=None) -> None:
+    """Record that a pipeline step skipped an operation due to memory_policy.
+
+    Appends one JSON line to ``<results_dir>/memory_skips.jsonl`` so users can
+    audit silent skips across a pipeline run. The file is append-only across
+    ``--step N`` / ``--resume`` invocations — a single grep gives the full
+    picture without re-parsing step logs.
+
+    Each line is a JSON object::
+
+        {"timestamp": "2026-07-25T14:35:01", "step": "03_integrate",
+         "operation": "regress_out", "reason": "memory_policy=balanced ..."}
+
+    Usage from a step::
+
+        if _skip_regress:
+            log.info("memory_policy=%s — skipping regress_out", mem_policy)
+            record_memory_skip(
+                step="03_integrate",
+                operation="regress_out",
+                reason=f"memory_policy={mem_policy} would dense-allocate",
+                cfg=cfg, log=log,
+            )
+
+    Args:
+        step: short step identifier (e.g. ``"03_integrate"``).
+        operation: what was skipped (e.g. ``"regress_out"``, ``"PCA dense"``).
+        reason: human-readable reason, ideally including the policy value.
+        cfg: resolved config — needs a ``results_dir`` attribute. If missing,
+            the skip is logged but not recorded to disk.
+        log: optional logger for diagnostics about the recording itself.
+    """
+    import datetime as _dt
+
+    record = {
+        "timestamp": _dt.datetime.now().isoformat(timespec="seconds"),
+        "step": step,
+        "operation": operation,
+        "reason": reason,
+    }
+
+    results_dir = getattr(cfg, "results_dir", None) if cfg is not None else None
+    if not results_dir:
+        if log is not None:
+            log.warning("[memory-skip] could not record %s/%s: no results_dir", step, operation)
+        return
+
+    path = os.path.join(results_dir, "memory_skips.jsonl")
+    try:
+        os.makedirs(results_dir, exist_ok=True)
+        with open(path, "a") as f:
+            f.write(json.dumps(record) + "\n")
+    except OSError as e:
+        if log is not None:
+            log.warning("[memory-skip] failed to write %s: %s", path, e)

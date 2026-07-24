@@ -26,7 +26,7 @@ import scipy.sparse as sp
 from joblib import Parallel, delayed
 from scipy.stats import rankdata
 
-from core.utils import resolve_config, safe_plot, setup_logger
+from core.utils import resolve_config, safe_plot, setup_logger, timed_substep
 
 
 def layer1_markers(adata, cfg, log, group_col, table_dir):
@@ -201,12 +201,25 @@ def layer3_temporal_trends(adata, cfg, log, table_dir, primary_col=None):
         mean_matrix = np.stack([stage_means[s] for s in valid_stages], axis=1)
         gene_names = adata.raw.var_names
 
-        # Vectorized Spearman: rank each gene across stages, then Pearson = Spearman
-        ranked_genes = np.apply_along_axis(rankdata, 1, mean_matrix)
-        ranked_stages = rankdata(stage_nums)
-        combined = np.vstack([ranked_genes, ranked_stages.reshape(1, -1)])
-        corr_matrix = np.corrcoef(combined)
-        corr = corr_matrix[:-1, -1]
+        # Vectorized Spearman: rank each gene across stages, then Pearson = Spearman.
+        # NOTE: replaced np.corrcoef(combined) — that allocates an O(n_genes²)
+        # matrix (~5 GiB at 25k genes) per cell type, explaining the 21 GB peak
+        # seen on GSE107618/v1 (8 CTs × 5 stages). The replacement below computes
+        # only the corr(gene_i, stage) vector we actually need — O(n_genes × n_stages).
+        ranked_genes = np.apply_along_axis(rankdata, 1, mean_matrix)  # (n_genes, n_stages)
+        ranked_stages = rankdata(stage_nums)  # (n_stages,)
+        stage_centered = ranked_stages - ranked_stages.mean()  # (n_stages,)
+        stage_ss = float((stage_centered**2).sum())
+        if stage_ss <= 0:
+            # All stages rank equal (degenerate) — Spearman undefined; skip this CT
+            continue
+        gene_centered = ranked_genes - ranked_genes.mean(
+            axis=1, keepdims=True
+        )  # (n_genes, n_stages)
+        numerator = gene_centered @ stage_centered  # (n_genes,)
+        gene_ss = np.einsum("ij,ij->i", gene_centered, gene_centered)  # (n_genes,)
+        denom = np.sqrt(gene_ss * stage_ss) + 1e-12
+        corr = numerator / denom  # (n_genes,)
         corr_idx = np.argsort(corr)[::-1]
         n_top = min(20, len(corr))
 
@@ -406,7 +419,8 @@ def main():
     all_markers = {}
     # Primary column 始终串行（用原始 adata，修改 .uns 供下游使用）
     col = annotation_cols[0]
-    all_markers[col], _ = layer1_markers(adata, cfg, log, group_col=col, table_dir=table_dir)
+    with timed_substep(f"Layer1 markers [{col}]", log=log):
+        all_markers[col], _ = layer1_markers(adata, cfg, log, group_col=col, table_dir=table_dir)
 
     # 非主列并行（仅在有多列时）
     if len(annotation_cols) > 1:
@@ -445,9 +459,12 @@ def main():
     )
 
     # Layer 2 & 3: 使用主注释列
-    layer2_pairwise_de(adata, cfg, log, table_dir, primary_col=primary_col)
-    layer3_temporal_trends(adata, cfg, log, table_dir, primary_col=primary_col)
-    generate_figures(adata, all_markers[primary_col], cfg, log, primary_col=primary_col)
+    with timed_substep("Layer2 pairwise DE", log=log):
+        layer2_pairwise_de(adata, cfg, log, table_dir, primary_col=primary_col)
+    with timed_substep("Layer3 temporal trends", log=log):
+        layer3_temporal_trends(adata, cfg, log, table_dir, primary_col=primary_col)
+    with timed_substep("Figures", log=log):
+        generate_figures(adata, all_markers[primary_col], cfg, log, primary_col=primary_col)
 
     log.info("Step 07 complete, took %.1fs", time.time() - t0)
 

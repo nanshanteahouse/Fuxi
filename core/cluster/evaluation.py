@@ -1021,24 +1021,45 @@ def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, C
         )
         return md, sp, "convex_hull", []
 
-    # ── Ensure neighbor graph exists for best_n ──
-    log.info("Building KNN graph (n_neighbors=%d) for UMAP parameter sweep...", best_n)
+    # ── Reuse neighbor graph if it already matches best_n + use_rep ──
+    # grid_search_clustering already built KNN for the selected n_neighbors;
+    # rebuilding here is a redundant O(n_obs × log n_obs) cost on 1M-cell datasets.
+    _need_rebuild = True
     try:
-        sc.pp.neighbors(
-            adata,
-            n_neighbors=best_n,
-            n_pcs=CFG.pca.n_pcs_use,
-            use_rep=use_rep,
-            random_state=CFG.execution.random_seed,
-        )
-    except Exception as e:
-        log.error("KNN graph build failed for UMAP sweep: %s", e)
-        return (
-            getattr(CFG.clustering, "umap_min_dist", 0.3),
-            getattr(CFG.clustering, "umap_spread", 1.0),
-            "convex_hull",
-            [],
-        )
+        _nb_params = adata.uns.get("neighbors", {}).get("params", {}) or {}
+        if (
+            _nb_params.get("n_neighbors") == best_n
+            and _nb_params.get("use_rep") == use_rep
+            and "connectivities" in adata.obsp
+            and "distances" in adata.obsp
+        ):
+            log.info(
+                "Reusing existing KNN graph (n_neighbors=%d, use_rep=%s) for UMAP sweep",
+                best_n,
+                use_rep,
+            )
+            _need_rebuild = False
+    except Exception:
+        pass
+
+    if _need_rebuild:
+        log.info("Building KNN graph (n_neighbors=%d) for UMAP parameter sweep...", best_n)
+        try:
+            sc.pp.neighbors(
+                adata,
+                n_neighbors=best_n,
+                n_pcs=CFG.pca.n_pcs_use,
+                use_rep=use_rep,
+                random_state=CFG.execution.random_seed,
+            )
+        except Exception as e:
+            log.error("KNN graph build failed for UMAP sweep: %s", e)
+            return (
+                getattr(CFG.clustering, "umap_min_dist", 0.3),
+                getattr(CFG.clustering, "umap_spread", 1.0),
+                "convex_hull",
+                [],
+            )
 
     # ── Sweep ──
     results = []
@@ -1046,17 +1067,29 @@ def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, C
     best_md = min_dist_grid[0]
     best_sp = spread_grid[0]
 
+    # Cache of the previous UMAP embedding — used to warm-start the next
+    # combo instead of paying for spectral initialization every iteration.
+    _prev_embedding = None
     for md in min_dist_grid:
         for sp in spread_grid:
             try:
+                # UMAP init: first combo uses spectral/paga; subsequent combos
+                # warm-start from the previous embedding (legal scanpy API,
+                # much faster than re-running spectral initialization each time).
+                _init = (
+                    _prev_embedding
+                    if _prev_embedding is not None
+                    else ("paga" if use_paga else "spectral")
+                )
                 sc.tl.umap(
                     adata,
                     min_dist=md,
                     spread=sp,
-                    init_pos="paga" if use_paga else "spectral",
+                    init_pos=_init,
                     random_state=CFG.execution.random_seed,
                 )
                 coords = adata.obsm["X_umap"]
+                _prev_embedding = np.asarray(coords).copy()
                 hull = ConvexHull(coords)
                 area = float(hull.volume)  # 2D → area
                 results.append(

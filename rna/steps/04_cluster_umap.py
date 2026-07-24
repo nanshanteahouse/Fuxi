@@ -25,7 +25,71 @@ from sklearn.metrics import silhouette_score
 from core.cluster.evaluation import select_best_umap_params
 from core.cluster.grid_search import grid_search_clustering, select_best_params
 from core.config.schema import SILHOUETTE_SAMPLE_THRESHOLD
-from core.utils import resolve_config, safe_plot, safe_write, setup_logger
+from core.utils import resolve_config, safe_plot, safe_write, setup_logger, timed_substep
+
+
+def _smart_plot_umap(adata, color, ax, title, cfg, log, legend_fontsize=8):
+    """Render a UMAP scatter respecting cfg.clustering.umap_plot_mode.
+
+    Modes (auto resolves at runtime based on adata.n_obs vs umap_plot_max_cells):
+      * 'full'      — call sc.pl.umap directly (best visual fidelity, slow on >100k cells)
+      * 'subsample' — random subsample to umap_plot_max_cells, then plain ax.scatter
+      * 'skip'      — do nothing, return False
+      * 'auto'      — 'full' when n_obs <= max_cells, else 'subsample'
+
+    Returns True if something was drawn, False if skipped. Caller must still
+    save the figure (plt.savefig) on success — this helper only draws onto *ax*.
+    """
+
+    mode = getattr(cfg.clustering, "umap_plot_mode", "auto")
+    max_cells = getattr(cfg.clustering, "umap_plot_max_cells", 50000)
+    if mode == "auto":
+        mode = "subsample" if adata.n_obs > max_cells else "full"
+
+    if mode == "skip":
+        ax.text(
+            0.5,
+            0.5,
+            "skipped\n(umap_plot_mode=skip)",
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+            fontsize=10,
+        )
+        return False
+
+    if mode == "subsample" and adata.n_obs > max_cells:
+        rng = np.random.RandomState(getattr(cfg.execution, "random_seed", 42))
+        idx = rng.choice(adata.n_obs, max_cells, replace=False)
+        coords = adata.obsm["X_umap"][idx]
+        # Map categorical labels to integer codes for scatter coloring.
+        cat = pd.Categorical(adata.obs[color])
+        codes = cat.codes[idx]
+        ax.scatter(
+            coords[:, 0],
+            coords[:, 1],
+            c=codes,
+            cmap=getattr(cfg.plot.palette, "categorical", "tab20"),
+            s=3,
+            alpha=0.6,
+            rasterized=True,
+        )
+        ax.set_title(title, fontsize=9)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        log.info("    [plot] subsample mode: %d/%d cells drawn", max_cells, adata.n_obs)
+        return True
+
+    # 'full' (or 'subsample' with n_obs <= max_cells)
+    sc.pl.umap(
+        adata,
+        color=color,
+        ax=ax,
+        show=False,
+        title=title,
+        legend_fontsize=legend_fontsize,
+    )
+    return True
 
 
 def main():
@@ -130,20 +194,21 @@ def main():
                 )
             )
 
-    results_summary = grid_search_clustering(
-        adata,
-        param_grid={
-            "n_neighbors": n_neighbors_grid,
-            "resolution": resolutions_grid,
-        },
-        clusterer=_clusterer_fn,
-        neighbor_fn=_neighbors_fn,
-        umap_fn=_umap_fn,
-        evaluation_fn=_evaluation_fn,
-        group_key="n_neighbors",
-        n_jobs=cfg.execution.n_jobs,
-        random_seed=cfg.execution.random_seed,
-    )
+    with timed_substep("Grid search (Leiden)", log=log):
+        results_summary = grid_search_clustering(
+            adata,
+            param_grid={
+                "n_neighbors": n_neighbors_grid,
+                "resolution": resolutions_grid,
+            },
+            clusterer=_clusterer_fn,
+            neighbor_fn=_neighbors_fn,
+            umap_fn=_umap_fn,
+            evaluation_fn=_evaluation_fn,
+            group_key="n_neighbors",
+            n_jobs=cfg.execution.n_jobs,
+            random_seed=cfg.execution.random_seed,
+        )
 
     # Rename score → silhouette_score for select_best_params compatibility
     for r in results_summary:
@@ -211,20 +276,34 @@ def main():
             by_n.setdefault(n, []).append(r)
 
         for n_val, group in by_n.items():
-            # Rebuild KNN graph for this n_neighbors group
+            # Rebuild KNN only if the current graph doesn't already match n_val.
+            # grid_search_clustering leaves the last group's KNN on adata;
+            # if multi_metric's first n_val happens to equal it, skip the rebuild.
+            _need_rebuild_knn = True
             try:
-                sc.pp.neighbors(
-                    adata,
-                    n_neighbors=n_val,
-                    n_pcs=cfg.pca.n_pcs_use,
-                    use_rep=use_rep,
-                    random_state=cfg.execution.random_seed,
-                )
-            except Exception as e:
-                _log_enrich.warning(
-                    "KNN rebuild failed for n_neighbors=%d: %s — skipping group", n_val, e
-                )
-                continue
+                _nb_params = adata.uns.get("neighbors", {}).get("params", {}) or {}
+                if (
+                    _nb_params.get("n_neighbors") == n_val
+                    and _nb_params.get("use_rep") == use_rep
+                    and "connectivities" in adata.obsp
+                ):
+                    _need_rebuild_knn = False
+            except Exception:
+                pass
+            if _need_rebuild_knn:
+                try:
+                    sc.pp.neighbors(
+                        adata,
+                        n_neighbors=n_val,
+                        n_pcs=cfg.pca.n_pcs_use,
+                        use_rep=use_rep,
+                        random_state=cfg.execution.random_seed,
+                    )
+                except Exception as e:
+                    _log_enrich.warning(
+                        "KNN rebuild failed for n_neighbors=%d: %s — skipping group", n_val, e
+                    )
+                    continue
 
             # Pre-compute per_cell_scores once per group (only if markers available AND adata.raw exists)
             per_cell_scores = {}
@@ -314,6 +393,9 @@ def main():
                 for entry in group:
                     entry["splitting_gain"] = gains.get(entry["resolution"], 0.0)
     # ── Single-param UMAP plots ──
+    # This loop is the largest matplotlib cost in step 04 on big datasets
+    # (Li2026: 18 plots × 1M cells ≈ 2h). _smart_plot_umap dispatches by
+    # cfg.clustering.umap_plot_mode (auto/subsample/skip/full).
     for n in n_neighbors_grid:
         for res in resolutions_grid:
             umap_key = f"umap_{n}_{res}"
@@ -323,20 +405,23 @@ def main():
             saved = adata.obsm.get("X_umap")
             adata.obsm["X_umap"] = adata.obsm[umap_key].copy()
             try:
-                safe_plot(
-                    sc.pl.umap,
+                fig, ax = plt.subplots(figsize=(6, 5))
+                drawn = _smart_plot_umap(
                     adata,
                     color=leiden_key,
-                    show=False,
+                    ax=ax,
                     title=f"UMAP (n_neighbors={n}, resolution={res})",
+                    cfg=cfg,
+                    log=log,
                 )
-                plt.savefig(
-                    os.path.join(fig_dir, f"leiden_grid_n{n}_r{res}.png"),
-                    dpi=cfg.plot.figure_dpi,
-                    bbox_inches="tight",
-                )
-                plt.close()
-                log.info("    Plot saved: umap_grid_n%d_r%.1f.png", n, res)
+                if drawn:
+                    fig.savefig(
+                        os.path.join(fig_dir, f"leiden_grid_n{n}_r{res}.png"),
+                        dpi=cfg.plot.figure_dpi,
+                        bbox_inches="tight",
+                    )
+                    log.info("    Plot saved: umap_grid_n%d_r%.1f.png", n, res)
+                plt.close(fig)
             except Exception as e:
                 log.warning("    Single-param UMAP plot save failed: %s", e)
             finally:
@@ -407,7 +492,8 @@ def main():
     if leiden_col in adata.obs and umap_col in adata.obsm:
         adata.obs["leiden"] = adata.obs[leiden_col].copy()
         adata.obsm["X_umap"] = adata.obsm[umap_col].copy()
-        safe_write(adata, cfg.cluster_h5ad, cfg=cfg)
+        with timed_substep("Save checkpoint (post-selection)", log=log):
+            safe_write(adata, cfg.cluster_h5ad, cfg=cfg)
         log.info("Final checkpoint saved: %s (resolution=%.1f)", cfg.cluster_h5ad, best_r)
     else:
         log.warning(
@@ -435,23 +521,33 @@ def main():
         plt.close()
         log.info("  PAGA backbone computed and saved")
 
-    best_md, best_sp, umap_method_label, sweep_results = select_best_umap_params(
-        adata, best_n, min_dist_grid, spread_grid, umap_method, cfg, use_rep, log
-    )
+    with timed_substep("UMAP sweep (min_dist × spread)", log=log):
+        best_md, best_sp, umap_method_label, sweep_results = select_best_umap_params(
+            adata, best_n, min_dist_grid, spread_grid, umap_method, cfg, use_rep, log
+        )
 
-    # Rebuild UMAP with selected params and re-save checkpoint
+    # Rebuild UMAP with selected params and re-save checkpoint.
+    # Warm-start from the existing X_umap (left by select_best_umap_params sweep)
+    # instead of paying for spectral initialization again. Major win on
+    # 1M-cell datasets where spectral init alone is ~10-15 min.
+    _final_init = adata.obsm.get("X_umap")
+    _final_init_source = "existing X_umap (warm start)"
+    if _final_init is None:
+        _final_init = "paga" if use_paga else "spectral"
+        _final_init_source = str(_final_init)
     log.info(
-        "Rebuilding UMAP with selected params (min_dist=%.2f, spread=%.1f) [%s]...",
+        "Rebuilding UMAP with selected params (min_dist=%.2f, spread=%.1f) [%s], init=%s...",
         best_md,
         best_sp,
         umap_method_label,
+        _final_init_source,
     )
     try:
         sc.tl.umap(
             adata,
             min_dist=best_md,
             spread=best_sp,
-            init_pos="paga" if use_paga else "spectral",
+            init_pos=_final_init,
             random_state=cfg.execution.random_seed,
         )
         safe_write(adata, cfg.cluster_h5ad, cfg=cfg)
@@ -655,12 +751,14 @@ def main():
                     saved_umap = adata.obsm["X_umap"].copy()
                     try:
                         adata.obsm["X_umap"] = adata.obsm[umap_key].copy()
-                        sc.pl.umap(
+                        _smart_plot_umap(
                             adata,
                             color=leiden_key,
                             ax=ax,
-                            legend_fontsize=5,
                             title=f"n={n}, r={res}",
+                            cfg=cfg,
+                            log=log,
+                            legend_fontsize=5,
                         )
                     except Exception as e_sub:
                         log.warning("  Subplot failed (n=%d, r=%.1f): %s", n, res, e_sub)
@@ -702,8 +800,14 @@ def main():
                 fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows))
                 axes = axes.ravel() if n_res > 1 else [axes]
                 for i, key in enumerate(res_keys):
-                    sc.pl.umap(
-                        adata, color=key, ax=axes[i], show=False, legend_fontsize=8, title=key
+                    _smart_plot_umap(
+                        adata,
+                        color=key,
+                        ax=axes[i],
+                        title=key,
+                        cfg=cfg,
+                        log=log,
+                        legend_fontsize=8,
                     )
                 for j in range(len(res_keys), len(axes)):
                     axes[j].axis("off")

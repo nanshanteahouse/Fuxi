@@ -493,12 +493,22 @@ def main():
     if getattr(CFG, "perf_monitoring", True):
         from core.utils import PerformanceSummary
 
-        pipeline_summary = PerformanceSummary()
+        # Preserve historical perf data across --step N / --resume runs:
+        # load any existing perf_report.json so subsequent add_step() calls
+        # upsert into history instead of overwriting it.
+        _perf_report_path = os.path.join(CFG.results_dir, "perf_report.json")
+        pipeline_summary = PerformanceSummary.load_existing(_perf_report_path)
+        if pipeline_summary is None:
+            pipeline_summary = PerformanceSummary()
+        _prev_info = pipeline_summary.pipeline_info or {}
         pipeline_summary.pipeline_info = {
             "modality": args.modality,
             "config_path": config_path,
             "n_jobs": CFG.execution.n_jobs,
-            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "first_run_timestamp": _prev_info.get("first_run_timestamp")
+            or _prev_info.get("timestamp")
+            or time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "last_run_timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
         }
     else:
         pipeline_summary = None

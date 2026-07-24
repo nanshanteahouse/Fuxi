@@ -279,6 +279,13 @@ class ClusteringSettings(BaseModel):
     umap_spread: float = 1.0
     umap_color_by_batch: bool = False
     batch_key_override: Optional[str] = None
+    # Performance: matplotlib scatter on >100k cells is the dominant cost in
+    # step 04 (Li2026 1M cells spent ~4h just drawing UMAP scatter). Default
+    # 'auto' uses full rendering under the threshold and subsamples above it,
+    # preserving backward compatibility for small datasets while making large
+    # datasets actually finish. 'skip' disables plotting entirely.
+    umap_plot_mode: Literal["auto", "full", "subsample", "skip"] = "auto"
+    umap_plot_max_cells: int = 50000
 
 
 # ═══════════════════════════════════════════════════════════════════════

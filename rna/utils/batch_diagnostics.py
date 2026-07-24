@@ -108,26 +108,70 @@ def _compute_gini_criterion(r2_array: np.ndarray) -> float:
     return float(gini)
 
 
-def _compute_purity_one_shot(adata, col: str, use_rep: str = "X_pca") -> float:
-    """Cluster purity: copy internally, kNN + Leiden, crosstab max sum / total."""
+def _precompute_leiden_labels(
+    adata,
+    use_rep: str = "X_pca",
+    n_neighbors: int = 15,
+    resolution: float = 1.0,
+    random_state: int = 42,
+) -> np.ndarray | None:
+    """One-shot kNN + Leiden for purity scoring.
+
+    Returns cluster labels (length = ``adata.n_obs``), or ``None`` if the
+    computation fails. Extracted from ``_compute_purity_one_shot`` so callers
+    sweeping many categorical columns can pay the kNN + Leiden cost *once*
+    and reuse the labels for every column — turns an O(n_cols) bottleneck
+    into O(1) for the expensive part.
+    """
     if use_rep not in adata.obsm:
         raise ValueError(f"'{use_rep}' not found in adata.obsm. Run PCA first.")
     if adata.n_obs < 3:
-        return 1.0
-    adata = adata.copy()
+        return None
+    adata_local = adata.copy()
     try:
-        sc.pp.neighbors(adata, n_neighbors=15, use_rep=use_rep)
+        sc.pp.neighbors(adata_local, n_neighbors=n_neighbors, use_rep=use_rep)
         sc.tl.leiden(
-            adata,
-            resolution=1.0,
+            adata_local,
+            resolution=resolution,
             key_added="_diag_leiden",
             flavor="igraph",
             directed=False,
             n_iterations=2,
+            random_state=random_state,
         )
     except Exception:
+        return None
+    return adata_local.obs["_diag_leiden"].to_numpy()
+
+
+def _compute_purity_one_shot(
+    adata,
+    col: str,
+    use_rep: str = "X_pca",
+    precomputed_labels: np.ndarray | None = None,
+) -> float:
+    """Cluster purity = crosstab max sum / total.
+
+    If *precomputed_labels* is given (from ``_precompute_leiden_labels``),
+    reuse it and skip the expensive kNN + Leiden step — this is the
+    recommended path when scoring many columns against the same embedding.
+    Otherwise fall back to computing labels internally (backward compat).
+    """
+    if use_rep not in adata.obsm:
+        raise ValueError(f"'{use_rep}' not found in adata.obsm. Run PCA first.")
+    if adata.n_obs < 3:
         return 1.0
-    ct = pd.crosstab(adata.obs["_diag_leiden"], adata.obs[col])
+
+    if precomputed_labels is not None:
+        labels = precomputed_labels
+    else:
+        labels = _precompute_leiden_labels(adata, use_rep=use_rep)
+        if labels is None:
+            return 1.0
+
+    # Preserve index alignment so crosstab joins correctly with adata.obs[col]
+    labels_series = pd.Series(labels, index=adata.obs.index, name="_diag_leiden")
+    ct = pd.crosstab(labels_series, adata.obs[col])
     return float(ct.max(axis=1).sum() / ct.values.sum())
 
 
@@ -205,6 +249,10 @@ def diagnose_batch_candidates(
     if not cat_cols:
         return BatchDiagnosisReport(suggested_batch_key=[], warnings=warnings)
 
+    # Pre-compute kNN + Leiden ONCE for all categorical columns — the
+    # expensive part (O(n_obs * n_neighbors) graph build + Leiden) does not
+    # depend on which column we are scoring, only on the embedding.
+    _shared_labels = _precompute_leiden_labels(adata, use_rep="X_pca")
     for col in cat_cols:
         n_unique = len(adata.obs[col].dropna().unique())
         if n_unique < 2:
@@ -214,7 +262,9 @@ def diagnose_batch_candidates(
         r2s = _compute_anova_r2_per_pc(pca_mat, col_vals)
         r2_arr = np.array(r2s)
         gini = _compute_gini_criterion(r2_arr)
-        purity = _compute_purity_one_shot(adata, col, use_rep="X_pca")
+        purity = _compute_purity_one_shot(
+            adata, col, use_rep="X_pca", precomputed_labels=_shared_labels
+        )
 
         cramer_v: dict[str, float] = {}
         for oc in cat_cols:
@@ -274,9 +324,17 @@ def validate_harmony_preservation(
 ) -> dict[str, float]:
     """purity_after/purity_before per biology col using X_pca vs X_integrated."""
     results: dict[str, float] = {}
+    # Pre-compute kNN + Leiden once per representation (before/after Harmony).
+    # Each representation needs its own graph; columns under the same rep share.
+    _labels_before = _precompute_leiden_labels(adata_before, use_rep="X_pca")
+    _labels_after = _precompute_leiden_labels(adata_after, use_rep="X_integrated")
     for col in biology_cols:
-        pb = _compute_purity_one_shot(adata_before, col, use_rep="X_pca")
-        pa = _compute_purity_one_shot(adata_after, col, use_rep="X_integrated")
+        pb = _compute_purity_one_shot(
+            adata_before, col, use_rep="X_pca", precomputed_labels=_labels_before
+        )
+        pa = _compute_purity_one_shot(
+            adata_after, col, use_rep="X_integrated", precomputed_labels=_labels_after
+        )
         results[col] = pa / pb if pb > 0 else 1.0
     return results
 
