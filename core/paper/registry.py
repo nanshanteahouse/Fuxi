@@ -10,7 +10,7 @@ core/registry.py — 五域统一论文登记表 (Master Registry)
   2. projects/{rna,atac,spatial}/ — 管线运行产物
   3. notes/supplements/         — 论文附表
   4. $FUXI_DATA_ROOT/           — GSE 原始数据
-  5. rna/tissue_ontologies/     — 专家注释知识库
+  5. core/kb/                   — 专家注释知识库
 
 用法:
     from core.registry import load_master_registry, MasterRegistry

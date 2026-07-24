@@ -1,4 +1,4 @@
-"""tissue_ontologies — Knowledge Base loaders for supported tissues.
+"""KB — Knowledge Base loaders for supported tissues.
 
 Usage::
 

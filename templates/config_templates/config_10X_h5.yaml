@@ -116,7 +116,7 @@ marker:
   min_cells_subcluster: 50
 
 # ── Knowledge base ──
-# tissue_kb: ""   # Tissue KB name from rna/tissue_ontologies/, e.g. "retina"
+# tissue_kb: ""   # Tissue KB name from core/kb/, e.g. "retina"
 
 # ── Trajectory ──
 trajectory:

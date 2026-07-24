@@ -118,7 +118,7 @@ marker:
   min_cells_subcluster: 50
 
 # ── Knowledge base ──
-# TODO: Set to a tissue KB name if one exists in rna/tissue_ontologies/.
+# TODO: Set to a tissue KB name if one exists in core/kb/.
 # tissue_kb: ""   # e.g. "retina", "hypothalamus"
 
 # ── Trajectory ──

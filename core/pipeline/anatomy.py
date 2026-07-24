@@ -41,7 +41,7 @@ def load_adjacency(
 
         1. If **custom_file** is non-empty **and** the file exists → load as CSV.
         2. Else if **tissue** is non-empty → call
-           ``rna.tissue_ontologies.load_adjacency(tissue)``.
+           ``core.kb.load_adjacency(tissue)``.
         3. Else → return an empty DataFrame with columns
            ``["source", "target", "adjacency_type"]``.
 

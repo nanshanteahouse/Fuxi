@@ -1,5 +1,5 @@
 """
-tissue_ontologies/retina/pathway_relevance.py — Curated retina-specific pathway
+core/kb/retina/pathway_relevance.py — Curated retina-specific pathway
 metadata for tissue-aware enrichment analysis.
 
 This module provides three constant data structures that enable the enrichment

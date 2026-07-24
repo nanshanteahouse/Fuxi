@@ -1,5 +1,5 @@
 """
-tissue_ontologies/retina/adjacency.py — Anatomically validated cell-type adjacency map
+core/kb/retina/adjacency.py — Anatomically validated cell-type adjacency map
 of the vertebrate retina.
 
 This module defines known direct physical and synaptic connections between retinal

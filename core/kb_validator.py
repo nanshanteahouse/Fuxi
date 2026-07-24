@@ -369,7 +369,7 @@ def update_yaml_audit(
     ----------
     yaml_path : str
         Path to the YAML source file
-        (e.g. "rna/tissue_ontologies/retina/sources/hu2019.yaml").
+        (e.g. "core/kb/retina/sources/hu2019.yaml").
     validation_df : pd.DataFrame
         DataFrame from ``KbValidator.validate()`` with columns
         ``cell_type, gene, tier, validated, pct_expressed, mean_expression``.

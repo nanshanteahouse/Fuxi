@@ -3,7 +3,7 @@
 Functions under test
 --------------------
 - ``core.anatomy.load_adjacency``     — primary entry point (custom file → tissue KB → empty)
-- ``rna.tissue_ontologies.load_adjacency`` — tissue knowledge-base lookup
+- ``core.kb.load_adjacency`` — tissue knowledge-base lookup
 - ``filter_cci_by_adjacency``         — annotate / filter CCI results against adjacency
 """
 
