@@ -61,7 +61,8 @@ multiple classes** (a strong signal of biological relevance).
 
 import logging
 import re
-from typing import Any, Dict, List, NamedTuple, Optional
+from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -118,8 +119,9 @@ _CONSENSUS_WEIGHTS: Dict[str, float] = {
 # ═══════════════════════════════════════════════════════════════════════
 
 
-class Score(NamedTuple):
-    """Scoring result for one cluster–cell-type pair.
+@dataclass(frozen=True)
+class Score:
+    """Scoring result for one cluster-cell-type pair.
 
     Attributes
     ----------
@@ -134,6 +136,18 @@ class Score(NamedTuple):
         Number of KB positive markers found in the cluster's top-20.
     negative_penalty : bool
         Whether a negative-marker penalty was applied.
+    tier : str
+        Hierarchy tier of this type: ``"L1"`` (Broad_*), ``"L2"`` (major
+        type), or ``"L3"`` (subtype). Populated by
+        ``resolve_tiered_label()``; empty when tiered annotation is inactive.
+    private_markers_hit : int
+        Number of this type's ``_private_markers`` found in the cluster's
+        top-N genes. Used by the L3 subtype gate.
+    consensus : str
+        Best consensus level among the cluster's hit markers for this type
+        (``"gold"`` | ``"high"`` | ``"medium"`` | ``"low"``).
+    n_sources : int
+        Number of KB sources supporting this type (from the raw KB entry).
     """
 
     score: float
@@ -141,6 +155,11 @@ class Score(NamedTuple):
     method: str
     n_markers_found: int
     negative_penalty: bool
+    # -- Tiered-annotation fields (populated by resolve_tiered_label) --
+    tier: str = ""
+    private_markers_hit: int = 0
+    consensus: str = ""
+    n_sources: int = 0
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -465,6 +484,7 @@ def _build_kb_lookup(kb: Dict[str, Any], species: Optional[str] = None) -> Dict[
             "parent": type_data.get("parent", ""),
             "marker_weights": marker_weights,
             "consensus_levels": dict(type_data.get("consensus_levels", {})),
+            "_private_markers": list(type_data.get("_private_markers", [])),
         }
 
     return kb_all

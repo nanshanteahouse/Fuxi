@@ -64,6 +64,19 @@ class FusionDecision(NamedTuple):
     diagnostic : DiagnosticInfo or None
         Diagnostic context for Unknown/Uncertain clusters (v3.1.0+).
         ``None`` for all non-Unknown decisions.
+    cell_category : str
+        Broad lineage category (e.g. ``"Broad_Neuron"``).
+    tier : str
+        Hierarchy tier of the chosen label: ``"L2"`` (major type) or
+        ``"L3"`` (subtype). ``"L1"`` is never a final cell_type.
+    consensus : str
+        Best consensus level among hit markers for the chosen type.
+    n_sources : int
+        Number of KB sources supporting the chosen type.
+    subtype_resolution : str
+        ``"resolved"`` (L3 subtype elected), ``"unresolved"`` (subtypes
+        existed in KB but none passed the gates), or ``"na"`` (KB has no
+        subtypes for this L2 type).
     """
 
     cell_type: str
@@ -77,6 +90,10 @@ class FusionDecision(NamedTuple):
     alternative_rules: list
     diagnostic: Optional[DiagnosticInfo] = None
     cell_category: str = ""
+    tier: str = ""
+    consensus: str = ""
+    n_sources: int = 0
+    subtype_resolution: str = ""
 
 
 def _is_transition_state(

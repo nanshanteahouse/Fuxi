@@ -1,5 +1,7 @@
 """Numerical tests for rna/utils/marker_scoring.py."""
 
+from dataclasses import fields
+
 import pandas as pd
 import pytest
 
@@ -26,14 +28,19 @@ class TestMarkerScoringImport:
         assert detect_low_quality_cluster is not None
         assert _negative_marker_penalty is not None
 
-    def test_score_namedtuple_fields(self) -> None:
-        """Score namedtuple should have the expected fields."""
-        fields = list(Score._fields)
-        assert "score" in fields
-        assert "p_value" in fields
-        assert "method" in fields
-        assert "n_markers_found" in fields
-        assert "negative_penalty" in fields
+    def test_score_fields(self) -> None:
+        """Score (frozen dataclass) should have the expected fields."""
+        field_names = [f.name for f in fields(Score)]
+        assert "score" in field_names
+        assert "p_value" in field_names
+        assert "method" in field_names
+        assert "n_markers_found" in field_names
+        assert "negative_penalty" in field_names
+        # Tiered-annotation fields
+        assert "tier" in field_names
+        assert "private_markers_hit" in field_names
+        assert "consensus" in field_names
+        assert "n_sources" in field_names
 
 
 class TestScoreClusterAgainstKB:
