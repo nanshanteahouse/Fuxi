@@ -101,6 +101,75 @@ def _smart_plot_umap(adata, color, ax, title, cfg, log, legend_fontsize=8):
     return True
 
 
+def _plot_umap_from_coords(coords, adata, color, ax, title, cfg, log, legend_fontsize=8):
+    """Plot UMAP scatter directly from saved coords (no UMAP recomputation).
+
+    Used by sweep comparison figure to avoid the O(47min × N combos) cost of
+    re-running ``sc.tl.umap`` for cosmetic plotting. Reuses the per-combo
+    ``coords`` saved in ``sweep_results`` by ``select_best_umap_params``.
+
+    Honors ``cfg.clustering.umap_plot_mode`` (auto/full/subsample/skip) the
+    same way ``_smart_plot_umap`` does — ensures consistent visual treatment
+    between single-param plots and the sweep comparison figure.
+
+    Args:
+        coords: ``(n_obs, 2)`` ndarray of UMAP coordinates for this combo.
+        adata: AnnData for obs lookups (color labels).
+        color: column in ``adata.obs`` to color by (typically ``'leiden'``).
+        ax: matplotlib axes to draw on.
+        title: subplot title.
+        cfg, log, legend_fontsize: same as ``_smart_plot_umap``.
+
+    Returns:
+        True if a scatter was drawn; False if ``skip`` mode suppressed it.
+    """
+    mode = getattr(cfg.clustering, "umap_plot_mode", "auto")
+    max_cells = getattr(cfg.clustering, "umap_plot_max_cells", 50000)
+    if mode == "auto":
+        mode = "subsample" if adata.n_obs > max_cells else "full"
+    if mode == "skip":
+        ax.text(0.5, 0.5, f"{title}\n(skipped)", ha="center", va="center", transform=ax.transAxes)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        return False
+    if mode == "subsample" and adata.n_obs > max_cells:
+        rng = np.random.RandomState(getattr(cfg.execution, "random_seed", 42))
+        idx = rng.choice(adata.n_obs, max_cells, replace=False)
+        sub_coords = coords[idx]
+        cat = pd.Categorical(adata.obs[color])
+        codes = cat.codes[idx]
+        ax.scatter(
+            sub_coords[:, 0],
+            sub_coords[:, 1],
+            c=codes,
+            cmap=getattr(cfg.plot.palette, "categorical", "tab20"),
+            s=3,
+            alpha=0.6,
+            rasterized=True,
+        )
+        ax.set_title(title, fontsize=9)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        log.info("[plot] %s: subsample %d/%d cells", title, max_cells, adata.n_obs)
+        return True
+    # full mode
+    cat = pd.Categorical(adata.obs[color])
+    codes = cat.codes
+    ax.scatter(
+        coords[:, 0],
+        coords[:, 1],
+        c=codes,
+        cmap=getattr(cfg.plot.palette, "categorical", "tab20"),
+        s=3,
+        alpha=0.6,
+        rasterized=True,
+    )
+    ax.set_title(title, fontsize=9)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    return True
+
+
 def main():
     t0 = time.time()
     args_parser = argparse.ArgumentParser()
@@ -363,6 +432,7 @@ def main():
                         resolution=resolution,
                         leiden_flavor=cfg.clustering.leiden_flavor,
                         n_seeds=n_stab_seeds,
+                        device=cfg.execution.device,
                     )
                     if has_markers and per_cell_scores:
                         entry["cluster_coherence"] = _compute_cluster_coherence(
@@ -540,7 +610,15 @@ def main():
 
     with timed_substep("UMAP sweep (min_dist × spread)", log=log):
         best_md, best_sp, umap_method_label, sweep_results = select_best_umap_params(
-            adata, best_n, min_dist_grid, spread_grid, umap_method, cfg, use_rep, log
+            adata,
+            best_n,
+            min_dist_grid,
+            spread_grid,
+            umap_method,
+            cfg,
+            use_rep,
+            log,
+            device=cfg.execution.device,
         )
 
     # Rebuild UMAP with selected params and re-save checkpoint.
@@ -560,8 +638,10 @@ def main():
         _final_init_source,
     )
     try:
-        sc.tl.umap(
+        gpu_umap(
             adata,
+            log=log,
+            device=cfg.execution.device,
             min_dist=best_md,
             spread=best_sp,
             init_pos=_final_init,
@@ -595,17 +675,31 @@ def main():
                 md = r["min_dist"]
                 sp = r["spread"]
                 try:
-                    sc.tl.umap(
-                        adata, min_dist=md, spread=sp, random_state=cfg.execution.random_seed
-                    )
-                    sc.pl.umap(
-                        adata,
-                        color="leiden",
-                        ax=ax,
-                        show=False,
-                        legend_fontsize=8,
-                        title=f"min_dist={md}, spread={sp}",
-                    )
+                    # Reuse sweep coords (saved by select_best_umap_params) — avoids
+                    # re-running sc.tl.umap (cold spectral init costs ~47min/combo on 1M cells).
+                    sweep_coords = r.get("coords")
+                    title = f"min_dist={md}, spread={sp}"
+                    if sweep_coords is None:
+                        # Fallback (defensive): no coords saved — skip rather than recompute
+                        ax.text(
+                            0.5,
+                            0.5,
+                            f"{title}\n(no coords saved)",
+                            ha="center",
+                            va="center",
+                            transform=ax.transAxes,
+                        )
+                    else:
+                        _plot_umap_from_coords(
+                            sweep_coords,
+                            adata,
+                            color="leiden",
+                            ax=ax,
+                            title=title,
+                            cfg=cfg,
+                            log=log,
+                            legend_fontsize=8,
+                        )
                 except Exception:
                     ax.text(0.5, 0.5, "Error", ha="center", va="center", transform=ax.transAxes)
             for j in range(len(sweep_results), len(axes_flat)):

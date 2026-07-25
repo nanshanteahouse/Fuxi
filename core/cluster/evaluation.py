@@ -267,6 +267,7 @@ def _compute_stability(
     leiden_flavor: Literal["leidenalg", "igraph"] = "igraph",
     n_seeds=5,
     base_seed=42,
+    device: str = "cpu",
 ):
     """Compute cross-seed clustering stability via pairwise ARI.
 
@@ -305,15 +306,31 @@ def _compute_stability(
     for i, seed in enumerate(seeds):
         key = temp_keys[i]
         try:
-            sc.tl.leiden(
-                adata,
-                resolution=resolution,
-                key_added=key,
-                random_state=seed,
-                flavor=leiden_flavor,
-                n_iterations=2,
-                directed=False,
-            )
+            if device != "cpu":
+                # Lazy import to avoid circular dependency at module load.
+                from core.utils._gpu import gpu_leiden
+
+                gpu_leiden(
+                    adata,
+                    resolution=resolution,
+                    key_added=key,
+                    random_state=seed,
+                    # cuGraph doesn't accept flavor/directed/n_iterations;
+                    # gpu_leiden strips them on the GPU path automatically.
+                    flavor=leiden_flavor,
+                    n_iterations=2,
+                    directed=False,
+                )
+            else:
+                sc.tl.leiden(
+                    adata,
+                    resolution=resolution,
+                    key_added=key,
+                    random_state=seed,
+                    flavor=leiden_flavor,
+                    n_iterations=2,
+                    directed=False,
+                )
             label_sets.append(adata.obs[key].values)
         except Exception:
             pass
@@ -955,7 +972,17 @@ def _select_de_gated(valid, adata, de_gate_threshold=25):
     )
 
 
-def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, CFG, use_rep, log):  # noqa: N803
+def select_best_umap_params(
+    adata,
+    best_n,
+    min_dist_grid,
+    spread_grid,
+    method,
+    CFG,  # noqa: N803
+    use_rep,
+    log,
+    device="cpu",
+):  # noqa: N803
     """Sweep min_dist × spread on the best (n_neighbors) neighbor graph,
     or use manual fallback.
 
@@ -1045,13 +1072,26 @@ def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, C
     if _need_rebuild:
         log.info("Building KNN graph (n_neighbors=%d) for UMAP parameter sweep...", best_n)
         try:
-            sc.pp.neighbors(
-                adata,
-                n_neighbors=best_n,
-                n_pcs=CFG.pca.n_pcs_use,
-                use_rep=use_rep,
-                random_state=CFG.execution.random_seed,
-            )
+            if device != "cpu":
+                from core.utils._gpu import gpu_neighbors
+
+                gpu_neighbors(
+                    adata,
+                    log=log,
+                    device=device,
+                    n_neighbors=best_n,
+                    n_pcs=CFG.pca.n_pcs_use,
+                    use_rep=use_rep,
+                    random_state=CFG.execution.random_seed,
+                )
+            else:
+                sc.pp.neighbors(
+                    adata,
+                    n_neighbors=best_n,
+                    n_pcs=CFG.pca.n_pcs_use,
+                    use_rep=use_rep,
+                    random_state=CFG.execution.random_seed,
+                )
         except Exception as e:
             log.error("KNN graph build failed for UMAP sweep: %s", e)
             return (
@@ -1081,13 +1121,26 @@ def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, C
                     if _prev_embedding is not None
                     else ("paga" if use_paga else "spectral")
                 )
-                sc.tl.umap(
-                    adata,
-                    min_dist=md,
-                    spread=sp,
-                    init_pos=_init,
-                    random_state=CFG.execution.random_seed,
-                )
+                if device != "cpu":
+                    from core.utils._gpu import gpu_umap
+
+                    gpu_umap(
+                        adata,
+                        log=log,
+                        device=device,
+                        min_dist=md,
+                        spread=sp,
+                        init_pos=_init,
+                        random_state=CFG.execution.random_seed,
+                    )
+                else:
+                    sc.tl.umap(
+                        adata,
+                        min_dist=md,
+                        spread=sp,
+                        init_pos=_init,
+                        random_state=CFG.execution.random_seed,
+                    )
                 coords = adata.obsm["X_umap"]
                 _prev_embedding = np.asarray(coords).copy()
                 hull = ConvexHull(coords)
@@ -1097,6 +1150,10 @@ def select_best_umap_params(adata, best_n, min_dist_grid, spread_grid, method, C
                         "min_dist": md,
                         "spread": sp,
                         "convex_hull_area": area,
+                        # Save coords so the comparison figure can reuse them
+                        # without re-running UMAP (huge win on 1M-cell datasets:
+                        # ~3 × 47min cold spectral = ~2.4h saved).
+                        "coords": _prev_embedding,
                     }
                 )
                 log.info("  min_dist=%.2f, spread=%.1f → convex_hull_area=%.2f", md, sp, area)
