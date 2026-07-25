@@ -19,7 +19,6 @@ filterwarnings = [
     "error",
     'ignore::DeprecationWarning:pkg_resources.*',
 ]
-
 [tool.ruff]
 target-version = "py313"
 line-length = 99

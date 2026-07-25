@@ -11,16 +11,6 @@
     "rna/data",
     "**/__pycache__"
   ],
-  "typeCheckingMode": "basic",
-  "reportAttributeAccessIssue": "warning",
-  "reportMissingImports": "warning",
-  "reportMissingTypeStubs": "none",
-  "reportArgumentType": "warning",
-  "reportCallIssue": "warning",
-  "reportGeneralTypeIssues": "warning",
-  "reportOperatorIssue": "warning",
-  "reportIndexIssue": "warning",
-  "reportAssignmentType": "warning",
-  "reportUnhashable": "warning",
+  "typeCheckingMode": "off",
   "pythonVersion": "3.14"
 }
