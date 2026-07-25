@@ -219,7 +219,7 @@ def main():
             random_state=cfg.execution.random_seed,
             flavor=cfg.clustering.leiden_flavor,
             directed=False,
-            n_iterations=2,
+            n_iterations=cfg.clustering.leiden_n_iterations,
         )
         n_cl = sub.obs[key].nunique()
         log.info("  r=%.1f -> %d subclusters", res, n_cl)

@@ -115,6 +115,7 @@ def _precompute_leiden_labels(
     n_neighbors: int = 15,
     resolution: float = 1.0,
     random_state: int = 42,
+    n_iterations: int = 2,
 ) -> np.ndarray | None:
     """One-shot kNN + Leiden for purity scoring.
 
@@ -145,7 +146,7 @@ def _precompute_leiden_labels(
             key_added="_diag_leiden",
             flavor="igraph",
             directed=False,
-            n_iterations=2,
+            n_iterations=n_iterations,
             random_state=random_state,
         )
     except Exception:

@@ -19,6 +19,16 @@ from core.cluster.evaluation import (
 from core.config.schema import Config
 
 
+def _configure_mock_obs(adata, n_clusters_by_key):
+    """Configure adata.obs MagicMock for pairwise cluster detection."""
+    from unittest.mock import MagicMock
+
+    adata.obs = MagicMock()
+    adata.obs.__getitem__.side_effect = lambda k: MagicMock(
+        unique=lambda: [str(i) for i in range(n_clusters_by_key.get(k, 5))]
+    )
+
+
 class TestClusterEvaluationImport:
     """Verify that cluster-evaluation symbols are importable."""
 
@@ -29,6 +39,16 @@ class TestClusterEvaluationImport:
     def test_select_best_params_callable(self) -> None:
         """select_best_params should be a callable function."""
         assert callable(select_best_params)
+
+
+def _configure_mock_obs(adata, n_clusters_by_key):
+    """Configure adata.obs MagicMock for pairwise cluster detection."""
+    from unittest.mock import MagicMock
+
+    adata.obs = MagicMock()
+    adata.obs.__getitem__.side_effect = lambda k: MagicMock(
+        unique=lambda: [str(i) for i in range(n_clusters_by_key.get(k, 5))]
+    )
 
 
 class TestSelectBestParams:
@@ -173,6 +193,16 @@ class TestSelectBestParams:
         assert method == "manual"
 
 
+def _configure_mock_obs(adata, n_clusters_by_key):
+    """Configure adata.obs MagicMock for pairwise cluster detection."""
+    from unittest.mock import MagicMock
+
+    adata.obs = MagicMock()
+    adata.obs.__getitem__.side_effect = lambda k: MagicMock(
+        unique=lambda: [str(i) for i in range(n_clusters_by_key.get(k, 5))]
+    )
+
+
 class TestSelectBestUmapParams:
     """Numerical assertions for select_best_umap_params."""
 
@@ -199,6 +229,16 @@ class TestSelectBestUmapParams:
         assert best_sp == pytest.approx(1.5)
         assert method_label == "manual"
         assert sweep_results == []
+
+
+def _configure_mock_obs(adata, n_clusters_by_key):
+    """Configure adata.obs MagicMock for pairwise cluster detection."""
+    from unittest.mock import MagicMock
+
+    adata.obs = MagicMock()
+    adata.obs.__getitem__.side_effect = lambda k: MagicMock(
+        unique=lambda: [str(i) for i in range(n_clusters_by_key.get(k, 5))]
+    )
 
 
 class TestComputeStability:
@@ -266,6 +306,16 @@ class TestComputeStability:
         # n_seeds=3 should produce a valid float between 0 and 1
         stab_3 = _compute_stability(adata, resolution=0.3, n_seeds=3)
         assert 0.0 <= stab_3 <= 1.0, f"n_seeds=3 should be in [0,1], got {stab_3}"
+
+
+def _configure_mock_obs(adata, n_clusters_by_key):
+    """Configure adata.obs MagicMock for pairwise cluster detection."""
+    from unittest.mock import MagicMock
+
+    adata.obs = MagicMock()
+    adata.obs.__getitem__.side_effect = lambda k: MagicMock(
+        unique=lambda: [str(i) for i in range(n_clusters_by_key.get(k, 5))]
+    )
 
 
 class TestComputeClusterCoherence:
@@ -357,6 +407,16 @@ class TestComputeClusterCoherence:
         )
 
 
+def _configure_mock_obs(adata, n_clusters_by_key):
+    """Configure adata.obs MagicMock for pairwise cluster detection."""
+    from unittest.mock import MagicMock
+
+    adata.obs = MagicMock()
+    adata.obs.__getitem__.side_effect = lambda k: MagicMock(
+        unique=lambda: [str(i) for i in range(n_clusters_by_key.get(k, 5))]
+    )
+
+
 class TestSelectMultiMetric:
     """Numerical assertions for _select_multi_metric."""
 
@@ -444,6 +504,16 @@ class TestSelectMultiMetric:
         assert best_n3 == 15
         assert best_r3 == pytest.approx(0.6)
         assert method3 == "multi_metric"
+
+
+def _configure_mock_obs(adata, n_clusters_by_key):
+    """Configure adata.obs MagicMock for pairwise cluster detection."""
+    from unittest.mock import MagicMock
+
+    adata.obs = MagicMock()
+    adata.obs.__getitem__.side_effect = lambda k: MagicMock(
+        unique=lambda: [str(i) for i in range(n_clusters_by_key.get(k, 5))]
+    )
 
 
 class TestSelectMultiMetricIntegration:
@@ -625,6 +695,16 @@ class TestSelectMultiMetricIntegration:
         assert method == "multi_metric"
 
 
+def _configure_mock_obs(adata, n_clusters_by_key):
+    """Configure adata.obs MagicMock for pairwise cluster detection."""
+    from unittest.mock import MagicMock
+
+    adata.obs = MagicMock()
+    adata.obs.__getitem__.side_effect = lambda k: MagicMock(
+        unique=lambda: [str(i) for i in range(n_clusters_by_key.get(k, 5))]
+    )
+
+
 class TestAdaptiveBehaviors:
     """Adaptive degrade behaviors for _select_multi_metric.
 
@@ -742,6 +822,16 @@ class TestAdaptiveBehaviors:
         ), "Mismatch path SHOULD log a warning about marker mismatch degrade"
 
 
+def _configure_mock_obs(adata, n_clusters_by_key):
+    """Configure adata.obs MagicMock for pairwise cluster detection."""
+    from unittest.mock import MagicMock
+
+    adata.obs = MagicMock()
+    adata.obs.__getitem__.side_effect = lambda k: MagicMock(
+        unique=lambda: [str(i) for i in range(n_clusters_by_key.get(k, 5))]
+    )
+
+
 class TestDetectGranularity:
     """Tests for _detect_granularity function."""
 
@@ -774,6 +864,16 @@ class TestDetectGranularity:
         """Single entry → tissue (conservative default)."""
         r = [{"n_neighbors": 15, "resolution": 0.5, "n_clusters": 5, "silhouette_score": 0.10}]
         assert _detect_granularity(r) == "tissue"
+
+
+def _configure_mock_obs(adata, n_clusters_by_key):
+    """Configure adata.obs MagicMock for pairwise cluster detection."""
+    from unittest.mock import MagicMock
+
+    adata.obs = MagicMock()
+    adata.obs.__getitem__.side_effect = lambda k: MagicMock(
+        unique=lambda: [str(i) for i in range(n_clusters_by_key.get(k, 5))]
+    )
 
 
 class TestComputeSplittingGain:
@@ -864,6 +964,16 @@ def _make_mock_rank_results(
         "pvals_adj": pvals_adj,
         "logfoldchanges": logfoldchanges,
     }
+
+
+def _configure_mock_obs(adata, n_clusters_by_key):
+    """Configure adata.obs MagicMock for pairwise cluster detection."""
+    from unittest.mock import MagicMock
+
+    adata.obs = MagicMock()
+    adata.obs.__getitem__.side_effect = lambda k: MagicMock(
+        unique=lambda: [str(i) for i in range(n_clusters_by_key.get(k, 5))]
+    )
 
 
 class TestSelectMultiMetricKBRate:
@@ -1009,6 +1119,16 @@ class TestSelectMultiMetricKBRate:
         assert best_r2 == pytest.approx(0.8)
 
 
+def _configure_mock_obs(adata, n_clusters_by_key):
+    """Configure adata.obs MagicMock for pairwise cluster detection."""
+    from unittest.mock import MagicMock
+
+    adata.obs = MagicMock()
+    adata.obs.__getitem__.side_effect = lambda k: MagicMock(
+        unique=lambda: [str(i) for i in range(n_clusters_by_key.get(k, 5))]
+    )
+
+
 class TestSelectDeGated:
     """Tests for _select_de_gated with mocked rank_genes_groups."""
 
@@ -1051,6 +1171,8 @@ class TestSelectDeGated:
             "leiden_2.0": 20,
         }
 
+        _configure_mock_obs(adata, n_clusters_by_key)
+
         def rank_side_effect(adata, groupby, **kwargs):
             nk = n_clusters_by_key.get(groupby, 5)
             nd = de_by_key.get(groupby, 0)
@@ -1060,7 +1182,7 @@ class TestSelectDeGated:
                 n_de_genes=nd,
                 rng=rng,
             )
-            uns_store[f"_de_gated_{groupby}"] = mock_results
+            uns_store[kwargs.get("key_added", f"_de_gated_{groupby}")] = mock_results
 
         with patch("scanpy.tl.rank_genes_groups") as mock_rank:
             mock_rank.side_effect = rank_side_effect
@@ -1111,6 +1233,8 @@ class TestSelectDeGated:
             "leiden_2.0": 20,
         }
 
+        _configure_mock_obs(adata, n_clusters_by_key)
+
         def rank_side_effect(adata, groupby, **kwargs):
             nk = n_clusters_by_key.get(groupby, 5)
             nd = de_by_key.get(groupby, 0)
@@ -1120,7 +1244,7 @@ class TestSelectDeGated:
                 n_de_genes=nd,
                 rng=rng,
             )
-            uns_store[f"_de_gated_{groupby}"] = mock_results
+            uns_store[kwargs.get("key_added", f"_de_gated_{groupby}")] = mock_results
 
         with patch("scanpy.tl.rank_genes_groups") as mock_rank:
             mock_rank.side_effect = rank_side_effect
@@ -1177,6 +1301,10 @@ class TestSelectDeGated:
 
         rng = np.random.RandomState(42)
 
+        n_clusters_by_key = {"leiden_0.5": 10, "leiden_1.0": 10}
+
+        _configure_mock_obs(adata, n_clusters_by_key)
+
         def rank_side_effect(adata, groupby, **kwargs):
             mock_results = _make_mock_rank_results(
                 n_clusters=10,
@@ -1184,7 +1312,7 @@ class TestSelectDeGated:
                 n_de_genes=30,
                 rng=rng,
             )
-            uns_store[f"_de_gated_{groupby}"] = mock_results
+            uns_store[kwargs.get("key_added", f"_de_gated_{groupby}")] = mock_results
 
         with patch("scanpy.tl.rank_genes_groups") as mock_rank:
             mock_rank.side_effect = rank_side_effect
@@ -1196,6 +1324,16 @@ class TestSelectDeGated:
         assert isinstance(result[1], float)
         assert isinstance(result[2], str)
         assert isinstance(result[3], str)
+
+
+def _configure_mock_obs(adata, n_clusters_by_key):
+    """Configure adata.obs MagicMock for pairwise cluster detection."""
+    from unittest.mock import MagicMock
+
+    adata.obs = MagicMock()
+    adata.obs.__getitem__.side_effect = lambda k: MagicMock(
+        unique=lambda: [str(i) for i in range(n_clusters_by_key.get(k, 5))]
+    )
 
 
 class TestSelectMultiMetricT5:

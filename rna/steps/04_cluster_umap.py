@@ -273,7 +273,7 @@ def main():
             random_state=cfg.execution.random_seed,
             flavor=cfg.clustering.leiden_flavor,
             directed=False,
-            n_iterations=2,
+            n_iterations=cfg.clustering.leiden_n_iterations,
         )
         adata.obsm[umap_key] = adata.obsm["X_umap"].copy()
         return leiden_key
@@ -388,6 +388,7 @@ def main():
             results_summary,
             adata,
             de_gate_threshold=getattr(cfg.clustering, "multi_metric_de_gate_threshold", 25),
+            pairwise_max_clusters=getattr(cfg.clustering, "de_pairwise_max_clusters", 30),
         )
         # Extract n_neighbors from selected entry
         best_n = None

@@ -54,6 +54,16 @@ def _make_mock_rank_results(
 # ── Tests ─────────────────────────────────────────────────────────────────────────
 
 
+def _configure_mock_obs(adata, n_clusters_by_key):
+    """Configure adata.obs MagicMock for pairwise cluster detection."""
+    from unittest.mock import MagicMock
+
+    adata.obs = MagicMock()
+    adata.obs.__getitem__.side_effect = lambda k: MagicMock(
+        unique=lambda: [str(i) for i in range(n_clusters_by_key.get(k, 5))]
+    )
+
+
 class TestSelectDeGatedPostFix:
     """Post-fix behavior tests for _select_de_gated."""
 
@@ -89,11 +99,13 @@ class TestSelectDeGatedPostFix:
         de_by_key = {"leiden_0.5": 10, "leiden_1.0": 20, "leiden_2.0": 30}
         n_clusters_by_key = {"leiden_0.5": 5, "leiden_1.0": 10, "leiden_2.0": 20}
 
+        _configure_mock_obs(adata, n_clusters_by_key)
+
         def rank_side_effect(adata, groupby, **kwargs):
             nk = n_clusters_by_key.get(groupby, 5)
             nd = de_by_key.get(groupby, 0)
             mock_results = _make_mock_rank_results(nk, n_genes=50, n_de_genes=nd, rng=rng)
-            uns_store[f"_de_gated_{groupby}"] = mock_results
+            uns_store[kwargs.get("key_added", f"_de_gated_{groupby}")] = mock_results
 
         with patch("scanpy.tl.rank_genes_groups") as mock_rank:
             mock_rank.side_effect = rank_side_effect
@@ -142,11 +154,13 @@ class TestSelectDeGatedPostFix:
         de_by_key = {"leiden_0.5": 3, "leiden_1.0": 10, "leiden_2.0": 20}
         n_clusters_by_key = {"leiden_0.5": 5, "leiden_1.0": 10, "leiden_2.0": 20}
 
+        _configure_mock_obs(adata, n_clusters_by_key)
+
         def rank_side_effect(adata, groupby, **kwargs):
             nk = n_clusters_by_key.get(groupby, 5)
             nd = de_by_key.get(groupby, 0)
             mock_results = _make_mock_rank_results(nk, n_genes=50, n_de_genes=nd, rng=rng)
-            uns_store[f"_de_gated_{groupby}"] = mock_results
+            uns_store[kwargs.get("key_added", f"_de_gated_{groupby}")] = mock_results
 
         with patch("scanpy.tl.rank_genes_groups") as mock_rank:
             mock_rank.side_effect = rank_side_effect
@@ -191,12 +205,16 @@ class TestSelectDeGatedPostFix:
 
         rng = np.random.RandomState(42)
 
+        n_clusters_by_key = {"leiden_0.5": 10, "leiden_1.0": 10}
+
+        _configure_mock_obs(adata, n_clusters_by_key)
+
         def rank_side_effect(adata, groupby, **kwargs):
             mock_results = _make_mock_rank_results(
                 n_clusters=10, n_genes=50, n_de_genes=30, rng=rng
             )
             # Post-fix writes via key_added parameter
-            uns_store[f"_de_gated_{groupby}"] = mock_results
+            uns_store[kwargs.get("key_added", f"_de_gated_{groupby}")] = mock_results
 
         with patch("scanpy.tl.rank_genes_groups") as mock_rank:
             mock_rank.side_effect = rank_side_effect
@@ -250,6 +268,10 @@ class TestSelectDeGatedPostFix:
 
         rng = np.random.RandomState(42)
 
+        n_clusters_by_key = {"leiden_0.5": 5, "leiden_1.0": 5, "leiden_2.0": 5}
+
+        _configure_mock_obs(adata, n_clusters_by_key)
+
         def rank_side_effect(adata, groupby, **kwargs):
             nk = {"leiden_0.5": 5, "leiden_1.0": 10, "leiden_2.0": 20}[groupby]
             mock_results = _make_mock_rank_results(nk, n_genes=50, n_de_genes=30, rng=rng)
@@ -297,11 +319,13 @@ class TestSelectDeGatedPostFix:
         de_by_key = {"leiden_0.5": 5, "leiden_1.0": 12, "leiden_2.0": 30}
         n_clusters_by_key = {"leiden_0.5": 5, "leiden_1.0": 10, "leiden_2.0": 20}
 
+        _configure_mock_obs(adata, n_clusters_by_key)
+
         def rank_side_effect(adata, groupby, **kwargs):
             nk = n_clusters_by_key.get(groupby, 5)
             nd = de_by_key.get(groupby, 0)
             mock_results = _make_mock_rank_results(nk, n_genes=50, n_de_genes=nd, rng=rng)
-            uns_store[f"_de_gated_{groupby}"] = mock_results
+            uns_store[kwargs.get("key_added", f"_de_gated_{groupby}")] = mock_results
 
         with patch("scanpy.tl.rank_genes_groups") as mock_rank:
             mock_rank.side_effect = rank_side_effect
@@ -341,11 +365,13 @@ class TestSelectDeGatedPostFix:
         de_by_key = {"leiden_0.8": 10, "leiden_1.0": 30}
         n_clusters_by_key = {"leiden_0.8": 8, "leiden_1.0": 10}
 
+        _configure_mock_obs(adata, n_clusters_by_key)
+
         def rank_side_effect(adata, groupby, **kwargs):
             nk = n_clusters_by_key.get(groupby, 5)
             nd = de_by_key.get(groupby, 0)
             mock_results = _make_mock_rank_results(nk, n_genes=50, n_de_genes=nd, rng=rng)
-            uns_store[f"_de_gated_{groupby}"] = mock_results
+            uns_store[kwargs.get("key_added", f"_de_gated_{groupby}")] = mock_results
 
         with patch("scanpy.tl.rank_genes_groups") as mock_rank:
             mock_rank.side_effect = rank_side_effect
