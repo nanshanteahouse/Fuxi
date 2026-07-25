@@ -209,8 +209,8 @@ def main():
     log.info("Computing UMAP...")
     sc.tl.umap(sub, random_state=cfg.execution.random_seed)
 
-    log.info("Leiden subclustering, resolutions: %s", cfg.clustering.leiden_resolutions)
-    for res in cfg.clustering.leiden_resolutions:
+    log.info("Leiden subclustering, resolutions: %s", cfg.clustering.param_grid_resolutions)
+    for res in cfg.clustering.param_grid_resolutions:
         key = f"sub_leiden_r{res}"
         sc.tl.leiden(
             sub,
@@ -266,7 +266,7 @@ def main():
 
     res_keys = [
         f"sub_leiden_r{r}"
-        for r in cfg.clustering.leiden_resolutions
+        for r in cfg.clustering.param_grid_resolutions
         if f"sub_leiden_r{r}" in sub.obs
     ]
     i = -1

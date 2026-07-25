@@ -248,6 +248,7 @@ class ClusteringSettings(BaseModel):
 
     model_config = ConfigDict(extra="ignore", validate_assignment=True)
 
+    n_neighbors: int = 30  # single-value KNN for non-clustering uses (trajectory, ATAC)
     param_grid_n_neighbors: list = Field(default_factory=lambda: [15, 20, 30])
     param_grid_n_neighbors_adaptive: bool = Field(
         default=True,
