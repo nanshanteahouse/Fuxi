@@ -71,6 +71,9 @@ integration:
   method: harmony
   batch_key: sample
 
+  # ── Neighbor persistence (skip re-computation) ──
+  # persist_neighbors: false               # reuse neighbors from clustering step
+  # persisted_neighbors_k: 50              # k for persisted neighbor graph
   # -- v4.x+: batch diagnosis (auto-classify batch vs biology columns) --
 
   # -- scVI (deep generative model, method: scvi) --
@@ -95,6 +98,25 @@ clustering:
   best_n_neighbors: 0
   umap_color_by_batch: false
   # batch_key_override: null  # optionally override integration.batch_key
+
+  # ── Multi-metric evaluation ──
+  # stability_n_seeds: 12                  # random seeds for stability scoring
+  # stability_leiden_n_iterations: 1000    # Leiden iterations for stability
+  # umap_selection_metric: trustworthiness # UMAP quality metric (trustworthiness /
+                                           #   continuity / distance_mse / sil_score)
+  # param_grid_n_neighbors_adaptive: true  # auto-scale neighbors from n_obs
+  # plot_per_combo: false                 # per-(n_neighbors, resolution) UMAP plots
+
+  # ── Funnel mode (large datasets) ──
+  # funnel_enabled: true                   # progressive grid search for >100k cells
+  # funnel_threshold: 100000               # min n_obs to trigger funnel
+  # funnel_subsample_size: 50000           # subsample for funnel grid
+  # funnel_top_k: 3                        # top candidates re-validated on full data
+
+  # ── Target cluster mode ──
+  # target_n_clusters: null                # target cluster count (binary-search
+                                           #   resolution instead of grid)
+  # target_search_max_iters: 10            # max binary-search iterations
 
 # ── Cell type markers ──
 # Format: CellType: [marker1, marker2, ...]
