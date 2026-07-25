@@ -33,6 +33,7 @@ umap_sweep(adata, param_sweep, umap_fn, ...) -> list[dict]
 
 from __future__ import annotations
 
+import concurrent.futures
 import itertools
 from collections.abc import Callable, Sequence
 from typing import Any
@@ -62,6 +63,7 @@ def grid_search_clustering(
     group_key: str | None = None,
     n_jobs: int = 1,
     random_seed: int = 42,
+    stability_parallel_seeds: bool = False,
     **fixed_kwargs: Any,
 ) -> list[dict[str, Any]]:
     """Run a grid search over clustering parameters.
@@ -152,6 +154,7 @@ def grid_search_clustering(
         fixed_kwargs,
         results,
         n_jobs=n_jobs,
+        stability_parallel_seeds=stability_parallel_seeds,
     )
 
     return results
@@ -260,15 +263,32 @@ def _grid_search_serial(
     fixed_kwargs: dict[str, Any],
     results: list[dict[str, Any]],
     n_jobs: int = 1,
+    stability_parallel_seeds: bool = False,
 ) -> None:
     """Serialize grid-search: group by *group_idx*, call neighbours/UMAP once."""
 
     if group_idx is None:
         # flat case — no grouping, evaluate every combo independently
-        for combo in combos:
-            params = dict(zip(param_names, combo))
-            merged = {**fixed_kwargs, **params}
-            _try_one_combo(adata, clusterer, evaluation_fn, params, merged, results)
+        if stability_parallel_seeds and len(combos) > 1:
+            max_workers = min(n_jobs or 4, 8)
+            _eval_one = _make_combo_evaluator(
+                adata,
+                clusterer,
+                evaluation_fn,
+                param_names,
+                fixed_kwargs,
+            )
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [executor.submit(_eval_one, combo) for combo in combos]
+                for future in concurrent.futures.as_completed(futures):
+                    result = future.result()
+                    if result is not None:
+                        results.append(result)
+        else:
+            for combo in combos:
+                params = dict(zip(param_names, combo))
+                merged = {**fixed_kwargs, **params}
+                _try_one_combo(adata, clusterer, evaluation_fn, params, merged, results)
         return
 
     # --- grouped case ---
@@ -332,17 +352,33 @@ def _grid_search_serial(
                         results,
                     )
         else:
-            for combo in group_combos:
-                params = dict(zip(param_names, combo))
-                merged = {**group_merged, **params}
-                _try_one_combo(
+            if stability_parallel_seeds and len(group_combos) > 1:
+                max_workers = min(n_jobs or 4, 8)
+                _eval_one = _make_combo_evaluator(
                     adata,
                     clusterer,
                     evaluation_fn,
-                    params,
-                    merged,
-                    results,
+                    param_names,
+                    group_merged,
                 )
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures = [executor.submit(_eval_one, combo) for combo in group_combos]
+                    for future in concurrent.futures.as_completed(futures):
+                        result = future.result()
+                        if result is not None:
+                            results.append(result)
+            else:
+                for combo in group_combos:
+                    params = dict(zip(param_names, combo))
+                    merged = {**group_merged, **params}
+                    _try_one_combo(
+                        adata,
+                        clusterer,
+                        evaluation_fn,
+                        params,
+                        merged,
+                        results,
+                    )
 
 
 def _try_one_combo(
