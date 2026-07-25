@@ -896,6 +896,8 @@ def _cmd_list_papers(
                 p.slug or "",
                 p.year or "",
             ]
+            # Also match by linked dataset IDs (GSE/E-MTAB/...)
+            fields.extend(ds_id for ds_id, _ in registry.get_dataset_links(p.paper_id))
             if any(q in f.lower() for f in fields):
                 results.append(p)
         if not results:
