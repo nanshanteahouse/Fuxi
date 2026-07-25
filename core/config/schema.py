@@ -249,6 +249,10 @@ class ClusteringSettings(BaseModel):
     model_config = ConfigDict(extra="ignore", validate_assignment=True)
 
     n_neighbors: int = 30  # single-value KNN for non-clustering uses (trajectory, ATAC)
+    use_rep: str = Field(
+        default="X_pca",
+        description="Representation in adata.obsm used for nearest-neighbor graph and clustering.",
+    )
     param_grid_n_neighbors: list = Field(default_factory=lambda: [15, 20, 30])
     param_grid_n_neighbors_adaptive: bool = Field(
         default=True,
@@ -277,8 +281,8 @@ class ClusteringSettings(BaseModel):
         description="Number of random seeds for stability evaluation in multi-metric clustering.",
     )
     stability_leiden_n_iterations: int = Field(
-        default=1000,
-        description="Leiden n_iterations for the stability sub-path in multi-metric selection. 1000 or -1 = full convergence for accurate ARI.",
+        default=-1,
+        description="Leiden n_iterations for the stability sub-path in multi-metric selection. -1 = full convergence for accurate ARI.",
     )
     multi_metric_adaptive_resolution: bool = True
     multi_metric_coverage_ratio_threshold: float = 2.5
@@ -287,6 +291,10 @@ class ClusteringSettings(BaseModel):
     multi_metric_de_gate_threshold: int = 25
     umap_selection_method: Optional[str] = "convex_hull"
     umap_selection_metric: Literal["trustworthiness", "convex_hull"] = "trustworthiness"
+    umap_paga_init: bool = Field(
+        default=False,
+        description="Use PAGA-initialized UMAP positions during parameter selection.",
+    )
     param_grid_min_dist: Optional[list] = Field(default_factory=lambda: [0.1, 0.3, 0.5])
     param_grid_spread: Optional[list] = Field(default_factory=lambda: [1.0])
     umap_min_dist: float = 0.5

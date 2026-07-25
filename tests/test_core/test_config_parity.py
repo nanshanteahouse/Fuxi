@@ -111,7 +111,7 @@ class TestConfigDefaults:
         """Clustering defaults."""
         cfg = Config()
         assert cfg.clustering.n_neighbors == 30
-        assert cfg.clustering.leiden_resolutions == [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
+        assert cfg.clustering.param_grid_resolutions == [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
         assert cfg.clustering.param_grid_n_neighbors == [15, 20, 30]
         assert cfg.clustering.param_grid_resolutions == [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
         assert cfg.clustering.leiden_flavor == "igraph"
@@ -119,7 +119,7 @@ class TestConfigDefaults:
         assert cfg.clustering.best_n_neighbors == 0
         assert cfg.clustering.cluster_selection_method == "multi_metric"
         assert cfg.clustering.umap_selection_method == "convex_hull"
-        assert cfg.clustering.umap_min_dist == 0.3
+        assert cfg.clustering.umap_min_dist == 0.5
         assert cfg.clustering.umap_spread == 1.0
 
     def test_marker_defaults(self) -> None:
@@ -299,7 +299,7 @@ integration:
   method: harmony
 
 clustering:
-  leiden_resolutions: [0.5, 1.0, 2.0]
+  param_grid_resolutions: [0.5, 1.0, 2.0]
   cluster_selection_method: "multi_metric"
 
 de:
@@ -341,7 +341,7 @@ execution:
         assert cfg.qc.max_pct_mito == 25.0
         assert cfg.hvg.n_top_genes == 3000
         assert cfg.pca.n_pcs_use == 40
-        assert cfg.clustering.leiden_resolutions == [0.5, 1.0, 2.0]
+        assert cfg.clustering.param_grid_resolutions == [0.5, 1.0, 2.0]
         assert cfg.de.n_genes == 100
         assert cfg.trajectory.root_cell_types == ["RGC"]
         assert cfg.trajectory.n_diffmap_comps == 10
