@@ -152,6 +152,11 @@ def main():
         log.info("subcluster_types not configured, skipping.")
         sys.exit(2)
 
+    # Fallback: use first configured subcluster type when --cell-type is not provided
+    if args.cell_type is None and cfg.marker.subcluster_types:
+        args.cell_type = cfg.marker.subcluster_types[0]
+        log.info("Using configured subcluster type: %s", args.cell_type)
+
     # ── (a) Load annotated data ───────────────────────────────────────
     input_path = os.path.join(cfg.h5ad_dir, "05_annotated.h5ad")
     if not os.path.exists(input_path):

@@ -524,6 +524,9 @@ def main():
         adata.obs["leiden"] = adata.obs[leiden_col].copy()
         adata.obsm["X_umap"] = adata.obsm[umap_col].copy()
         with timed_substep("Save checkpoint (post-selection)", log=log):
+            # 清理 cluster_grid_results 中的不可序列化值，避免 h5py 写入失败
+            if "cluster_grid_results" in adata.uns:
+                adata.uns["cluster_grid_results"] = None
             safe_write(adata, cfg.cluster_h5ad, cfg=cfg)
         log.info("Final checkpoint saved: %s (resolution=%.1f)", cfg.cluster_h5ad, best_r)
     else:
