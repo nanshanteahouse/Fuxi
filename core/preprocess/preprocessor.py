@@ -196,6 +196,7 @@ def run_preprocess(
     data_root: Optional[str] = None,
     paper_context: Optional[dict] = None,
     query_ncbi: bool = False,
+    download: bool = False,
     dry_run: bool = False,
     force: bool = False,
     no_extract: bool = False,
@@ -225,6 +226,8 @@ def run_preprocess(
                        (species, tissue, expression_type, genome, assay_type,
                        features, is_nuclei, etc.).
         query_ncbi:    Query NCBI for metadata (GEO mode with internet).
+        download:     Auto-download GSE data from GEO before preprocessing
+                       (GEO mode only; requires wget or curl).
         dry_run:       Report only, don't write files.
         force:         Overwrite existing files.
         no_extract:    Skip archive extraction.
@@ -254,6 +257,27 @@ def run_preprocess(
                 print(f"[ERROR] {e}", file=sys.stderr)
                 return 1
         gse_dir = os.path.join(data_root, gse_id)
+
+        # ── Optional: auto-download from GEO ───────────────────────
+        if download:
+            from core.geo_downloader import download_gse
+
+            if not quiet:
+                print(f"\n[Phase 0] Auto-downloading {gse_id} from GEO...")
+            dl_result = download_gse(
+                gse_id=gse_id,
+                dest_dir=gse_dir,
+                dry_run=dry_run,
+                skip_existing=not force,
+                quiet=quiet,
+            )
+            # failed == -1 signals a hard listing/download failure
+            if dl_result.get("failed", 0) < 0:
+                print(
+                    f"[ERROR] Failed to list/download files for {gse_id}.",
+                    file=sys.stderr,
+                )
+                return 1
     else:
         print("[ERROR] Either --gse or --input-dir must be provided.", file=sys.stderr)
         return 1
@@ -724,8 +748,8 @@ Examples:
         input_dir=args.input_dir,
         dataset_name=args.name,
         data_root=args.data_root,
-        download=args.download,
         query_ncbi=args.query_ncbi,
+        download=args.download,
         dry_run=args.dry_run,
         force=args.force,
         no_extract=args.no_extract,
