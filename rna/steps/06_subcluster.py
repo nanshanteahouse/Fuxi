@@ -359,7 +359,7 @@ def main():
                 log.info("  Fallback to %s for 'leiden'", avail[-1])
             else:
                 log.warning("No Leiden results available — skipping cluster label.")
-            sub.obs["leiden"] = "0"
+                sub.obs["leiden"] = "0"
 
     # ── (i) Save UMAP plots ───────────────────────────────────────────
     fig_dir = os.path.join(cfg.figure_dir, "06_subcluster")
