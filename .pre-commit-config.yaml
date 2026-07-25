@@ -41,7 +41,7 @@ repos:
     hooks:
       - id: smoke-test
         name: smoke test
-        entry: .venv/bin/python -m pytest tests/ -m smoke -x --tb=short
+        entry: .venv/bin/python -m pytest tests/test_smoke.py -x --tb=short -q --no-header
         language: system
         pass_filenames: false
         stages: [pre-push]

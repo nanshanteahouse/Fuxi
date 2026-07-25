@@ -9,6 +9,7 @@ Tag: @pytest.mark.smoke
 Run:  python -m pytest tests/ -m smoke -x --tb=short
 """
 
+import concurrent.futures
 import subprocess
 import sys
 from pathlib import Path
@@ -53,43 +54,37 @@ def test_spatial_module_imports() -> None:
 
 
 # ── Pipeline discovery ───────────────────────────────────────────────────
+# NOTE: All 3 modality --list invocations run in parallel via ThreadPoolExecutor.
+# Each subprocess pays ~18s Python startup + anndata import on WSL2; serial = 54s,
+# parallel = ~20s. Total smoke suite target: <30s to avoid GitHub SSH idle
+# timeout (~60-90s) during pre-push hook.
 
 
-def test_pipeline_list_rna() -> None:
-    """run_pipeline --modality rna --list exits cleanly."""
-    result = subprocess.run(
-        [sys.executable, "-m", "core.run_pipeline", "--modality", "rna", "--list"],
-        capture_output=True,
-        text=True,
-        cwd=str(REPO_ROOT),
-        timeout=60,
-    )
-    assert result.returncode == 0, f"stderr: {result.stderr}"
-    assert "00_load" in result.stdout
+def test_pipeline_list_all_modalities_parallel() -> None:
+    """All 3 modality --list commands exit cleanly and print step list.
 
+    Replaces three separate test_pipeline_list_{rna,atac,spatial} tests that ran
+    sequentially. Parallelization cuts total wall from ~54s to ~20s, fitting
+    within GitHub's SSH idle timeout during pre-push hook execution.
+    """
+    modalities = ["rna", "atac", "spatial"]
 
-def test_pipeline_list_atac() -> None:
-    """run_pipeline --modality atac --list exits cleanly."""
-    result = subprocess.run(
-        [sys.executable, "-m", "core.run_pipeline", "--modality", "atac", "--list"],
-        capture_output=True,
-        text=True,
-        cwd=str(REPO_ROOT),
-        timeout=60,
-    )
-    assert result.returncode == 0, f"stderr: {result.stderr}"
+    def _run_one(modality: str) -> tuple[str, subprocess.CompletedProcess]:
+        result = subprocess.run(
+            [sys.executable, "-m", "core.run_pipeline", "--modality", modality, "--list"],
+            capture_output=True,
+            text=True,
+            cwd=str(REPO_ROOT),
+            timeout=60,
+        )
+        return modality, result
 
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        results = dict(executor.map(_run_one, modalities))
 
-def test_pipeline_list_spatial() -> None:
-    """run_pipeline --modality spatial --list exits cleanly."""
-    result = subprocess.run(
-        [sys.executable, "-m", "core.run_pipeline", "--modality", "spatial", "--list"],
-        capture_output=True,
-        text=True,
-        cwd=str(REPO_ROOT),
-        timeout=60,
-    )
-    assert result.returncode == 0, f"stderr: {result.stderr}"
+    for modality, result in results.items():
+        assert result.returncode == 0, f"{modality} --list failed: {result.stderr}"
+        assert "00_load" in result.stdout, f"{modality}: missing '00_load' in output"
 
 
 # ── Config template discovery ────────────────────────────────────────────
