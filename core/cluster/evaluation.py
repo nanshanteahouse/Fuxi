@@ -1105,7 +1105,7 @@ def enrich_grid_results(
 
     marker_dict = getattr(cfg.marker, "marker_dict", None) or {}
     has_markers = bool(marker_dict)
-    n_stab_seeds = getattr(cfg.clustering, "multi_metric_n_stability_seeds", 5)
+    n_stab_seeds = getattr(cfg.clustering, "stability_n_seeds", 12)
     dominance_threshold = getattr(cfg.clustering, "multi_metric_coverage_ratio_threshold", 2.5)
     leiden_flavor = getattr(cfg.clustering, "leiden_flavor", "igraph")
     device = getattr(cfg.execution, "device", "cpu")
@@ -1324,10 +1324,8 @@ def select_best_umap_params(
         log.info("UMAP params (manual): min_dist=%.2f, spread=%.1f", md, sp)
         return md, sp, "manual", []
 
-    if method != "convex_hull":
-        raise ValueError(
-            f"Unknown umap_selection_method: {method!r}. Valid options: 'convex_hull', None"
-        )
+    # method is not None → auto-sweep mode. The scoring metric is controlled by
+    # the `metric` parameter (umap_selection_metric in config).
 
     # ── Auto-sweep (empty grid → fallback) ──
     if (

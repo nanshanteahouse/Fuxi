@@ -369,8 +369,7 @@ clustering:
     kb_annotatable_rate: 0.1
   stability_n_seeds: 12
   multi_metric_adaptive_resolution: true
-  multi_metric_coverage_ratio_threshold: 1.5
-  multi_metric_coherence_dominance: 1.5
+  multi_metric_coverage_ratio_threshold: 2.5
   multi_metric_granularity_cv_threshold: 0.05
   multi_metric_granularity_min_clusters: 10
   multi_metric_de_gate_threshold: 25
@@ -390,7 +389,7 @@ clustering:
   umap_selection_metric: trustworthiness
   param_grid_min_dist: [0.1, 0.3, 0.5]
   param_grid_spread: [1.0]
-  umap_min_dist: 0.3
+  umap_min_dist: 0.5
   umap_spread: 1.0
   umap_plot_mode: auto
   umap_plot_max_cells: 50000

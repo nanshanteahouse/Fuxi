@@ -256,6 +256,10 @@ class ClusteringSettings(BaseModel):
     )
     param_grid_resolutions: list = Field(default_factory=lambda: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
     leiden_flavor: str = "igraph"
+    leiden_n_iterations: int = Field(
+        default=2,
+        description="Leiden n_iterations for main clustering paths (grid search, annotate, subcluster, batch diagnostics). Use -1 for full convergence.",
+    )
     best_resolution: float = 1.0
     best_n_neighbors: int = 0
     cluster_selection_method: Optional[str] = "multi_metric"
@@ -272,16 +276,24 @@ class ClusteringSettings(BaseModel):
         default=12,
         description="Number of random seeds for stability evaluation in multi-metric clustering.",
     )
+    stability_leiden_n_iterations: int = Field(
+        default=1000,
+        description="Leiden n_iterations for the stability sub-path in multi-metric selection. 1000 or -1 = full convergence for accurate ARI.",
+    )
     multi_metric_adaptive_resolution: bool = True
-    multi_metric_coverage_ratio_threshold: float = 1.5
-    multi_metric_coherence_dominance: float = 1.5
+    multi_metric_coverage_ratio_threshold: float = 2.5
     multi_metric_granularity_cv_threshold: float = 0.05
     multi_metric_granularity_min_clusters: int = 10
     multi_metric_de_gate_threshold: int = 25
     umap_selection_method: Optional[str] = "convex_hull"
+    umap_selection_metric: Literal["trustworthiness", "convex_hull"] = "trustworthiness"
     param_grid_min_dist: Optional[list] = Field(default_factory=lambda: [0.1, 0.3, 0.5])
     param_grid_spread: Optional[list] = Field(default_factory=lambda: [1.0])
-    umap_min_dist: float = 0.3
+    umap_min_dist: float = 0.5
+    de_pairwise_max_clusters: int = Field(
+        default=30,
+        description="Max clusters for pairwise DE in _select_de_gated. Above this, falls back to one-vs-rest for performance. 0 = always pairwise (no cap).",
+    )
     umap_spread: float = 1.0
     umap_color_by_batch: bool = False
     batch_key_override: Optional[str] = None

@@ -30,7 +30,7 @@ clustering:
   # umap_selection_method: "convex_hull"
   # param_grid_min_dist: [0.1, 0.3, 0.5]
   # param_grid_spread: [1.0]
-  # umap_min_dist: 0.3
+  # umap_min_dist: 0.5
   # umap_spread: 1.0
 
 # ── Integration / Batch Correction ─────────────────────────────────────────
