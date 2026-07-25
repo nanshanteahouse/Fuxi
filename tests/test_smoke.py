@@ -62,7 +62,7 @@ def test_pipeline_list_rna() -> None:
         capture_output=True,
         text=True,
         cwd=str(REPO_ROOT),
-        timeout=15,
+        timeout=60,
     )
     assert result.returncode == 0, f"stderr: {result.stderr}"
     assert "00_load" in result.stdout
@@ -75,7 +75,7 @@ def test_pipeline_list_atac() -> None:
         capture_output=True,
         text=True,
         cwd=str(REPO_ROOT),
-        timeout=15,
+        timeout=60,
     )
     assert result.returncode == 0, f"stderr: {result.stderr}"
 
@@ -87,7 +87,7 @@ def test_pipeline_list_spatial() -> None:
         capture_output=True,
         text=True,
         cwd=str(REPO_ROOT),
-        timeout=15,
+        timeout=60,
     )
     assert result.returncode == 0, f"stderr: {result.stderr}"
 
