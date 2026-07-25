@@ -246,11 +246,13 @@ class AmbientSettings(BaseModel):
 class ClusteringSettings(BaseModel):
     """Clustering, UMAP, and parameter grid search settings."""
 
-    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+    model_config = ConfigDict(extra="ignore", validate_assignment=True)
 
-    n_neighbors: int = 30
-    leiden_resolutions: List[float] = Field(default_factory=lambda: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
     param_grid_n_neighbors: list = Field(default_factory=lambda: [15, 20, 30])
+    param_grid_n_neighbors_adaptive: bool = Field(
+        default=True,
+        description="When True, auto-compute param_grid_n_neighbors based on adata.n_obs (adaptive scaling). When False, use the explicit param_grid_n_neighbors value.",
+    )
     param_grid_resolutions: list = Field(default_factory=lambda: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0])
     leiden_flavor: str = "igraph"
     best_resolution: float = 1.0
@@ -265,7 +267,10 @@ class ClusteringSettings(BaseModel):
             "kb_annotatable_rate": 0.1,
         }
     )
-    multi_metric_n_stability_seeds: int = 5
+    stability_n_seeds: int = Field(
+        default=12,
+        description="Number of random seeds for stability evaluation in multi-metric clustering.",
+    )
     multi_metric_adaptive_resolution: bool = True
     multi_metric_coverage_ratio_threshold: float = 1.5
     multi_metric_coherence_dominance: float = 1.5
@@ -286,6 +291,39 @@ class ClusteringSettings(BaseModel):
     # datasets actually finish. 'skip' disables plotting entirely.
     umap_plot_mode: Literal["auto", "full", "subsample", "skip"] = "auto"
     umap_plot_max_cells: int = 50000
+    # plot_per_combo: skip per-(n_neighbors, resolution) UMAP subplot loop.
+    # When False, skips the per-combo individual UMAP scatter plots (the dominant
+    # matplotlib cost at scale — Li2026 1M cells: ~2h for this loop alone).
+    # Summary grid figure, best-params UMAP, batch-colored UMAP, and other
+    # aggregate plots still generate regardless of this flag.
+    plot_per_combo: bool = Field(
+        default=False,
+        description="Plot per-(n_neighbors, resolution) UMAP subplots. Disable to save ~80% plot wall time at 1M scale.",
+    )
+
+    # ── Funnel mode ──
+    funnel_enabled: bool = Field(
+        default=True,
+        description="Enable progressive funnel grid search for datasets > funnel_threshold.",
+    )
+    funnel_threshold: int = Field(
+        default=100_000, description="Minimum n_obs to trigger funnel mode."
+    )
+    funnel_subsample_size: int = Field(
+        default=50_000, description="Subsample size for funnel grid search."
+    )
+    funnel_top_k: int = Field(
+        default=3, description="Number of top candidates to re-validate on full data."
+    )
+
+    # ── Target mode ──
+    target_n_clusters: int | None = Field(
+        default=None,
+        description="Target cluster count. When set, binary-search resolution instead of grid.",
+    )
+    target_search_max_iters: int = Field(
+        default=10, description="Max iterations for binary search in target mode."
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════
