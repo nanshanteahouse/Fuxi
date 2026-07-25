@@ -509,6 +509,7 @@ def main():
             or _prev_info.get("timestamp")
             or time.strftime("%Y-%m-%dT%H:%M:%S"),
             "last_run_timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "partial": True,  # set to False at end of full run
         }
     else:
         pipeline_summary = None
@@ -540,20 +541,78 @@ def main():
             stderr=None,
         )
         _perf_report = None
-        if _HAVE_MONITOR and getattr(CFG, "perf_monitoring", True):
-            with monitor_performance(f"Step[{num}]", child_pid=step_proc.pid) as perf:
+        _was_interrupted = False
+        try:
+            if _HAVE_MONITOR and getattr(CFG, "perf_monitoring", True):
+                with monitor_performance(f"Step[{num}]", child_pid=step_proc.pid) as perf:
+                    step_proc.wait()
+                    _perf_report = perf
+            else:
                 step_proc.wait()
-                _perf_report = perf
-        else:
-            step_proc.wait()
+        except (KeyboardInterrupt, SystemExit):
+            # SIGTERM/SIGINT/Ctrl+C — kill child if still alive, then fall through
+            # to the normal add_step path so partial perf is recorded.
+            _was_interrupted = True
+            try:
+                step_proc.kill()
+                step_proc.wait(timeout=5)
+            except Exception:
+                pass
         elapsed = time.time() - step_t0
         result = step_proc
 
-        if result.returncode == 2:
+        # Determine exit status for perf_report
+        if _was_interrupted:
+            _exit_status = "killed"
+        elif result.returncode == 2:
+            _exit_status = "skipped"
+        elif result.returncode != 0:
+            _exit_status = "failed"
+        else:
+            _exit_status = "completed"
+
+        # Always record + persist immediately (even on kill/failure) so perf_report
+        # survives interruption — single-step / SIGTERM no longer lose history.
+        if pipeline_summary is not None and _HAVE_MONITOR and _perf_report is not None:
+            _perf_report.exit_status = _exit_status
+            # Read checkpoint shape (only meaningful when step completed)
+            if _exit_status == "completed":
+                ckpt_file = CHECKPOINT_FILES[i]
+                ckpt_path = os.path.join(CFG.h5ad_dir, ckpt_file) if ckpt_file else ""
+                n_cells, n_genes = _get_checkpoint_shape(ckpt_path)
+                if n_cells == 0 and n_genes == 0:
+                    dep_file = _get_step_dependency(
+                        i, STEPS, CHECKPOINT_FILES, modality=args.modality
+                    )
+                    if dep_file:
+                        dep_path = os.path.join(CFG.h5ad_dir, dep_file)
+                        if dep_path != ckpt_path:
+                            n_cells, n_genes = _get_checkpoint_shape(dep_path)
+                _perf_report.n_cells = n_cells
+                _perf_report.n_genes = n_genes
+                ckpt_size = (
+                    os.path.getsize(ckpt_path) / (1024 * 1024)
+                    if ckpt_path and os.path.exists(ckpt_path) and "*" not in ckpt_path
+                    else 0.0
+                )
+                _perf_report.checkpoint_mib = round(ckpt_size, 1)
+
+            pipeline_summary.add_step(num, desc, _perf_report)
+            # Per-step persistence: save perf_report after every step so
+            # single-step runs and interrupted runs both leave a usable trail.
+            try:
+                pipeline_summary.save_json(_perf_report_path)
+            except Exception as _save_err:
+                print(f"[run] Warning: failed to save perf_report: {_save_err}")
+
+        # ── Exit handling per status ───────────────────────────────
+        if _exit_status == "skipped":
             print(f"[run] Step [{num}] skipped (no --cell-type for pipeline mode)")
             step_times.append((num, desc, 0))
             continue
-
+        if _was_interrupted:
+            print(f"\n[run] Step [{num}] killed (interrupted by user)")
+            sys.exit(130)
         if result.returncode != 0:
             print(f"\n[run] Step [{num}] failed (exit code={result.returncode})")
             print("[run] To continue after fixing the issue:")
@@ -561,28 +620,6 @@ def main():
                 f"      python {__file__} --modality {args.modality} --resume --config {args.config}"
             )
             sys.exit(1)
-        if pipeline_summary is not None and _HAVE_MONITOR and _perf_report is not None:
-            # Read output checkpoint shape
-            ckpt_file = CHECKPOINT_FILES[i]
-            ckpt_path = os.path.join(CFG.h5ad_dir, ckpt_file) if ckpt_file else ""
-            n_cells, n_genes = _get_checkpoint_shape(ckpt_path)
-            if n_cells == 0 and n_genes == 0:
-                dep_file = _get_step_dependency(i, STEPS, CHECKPOINT_FILES, modality=args.modality)
-                if dep_file:
-                    dep_path = os.path.join(CFG.h5ad_dir, dep_file)
-                    if dep_path != ckpt_path:
-                        n_cells, n_genes = _get_checkpoint_shape(dep_path)
-
-            _perf_report.n_cells = n_cells
-            _perf_report.n_genes = n_genes
-            ckpt_size = (
-                os.path.getsize(ckpt_path) / (1024 * 1024)
-                if ckpt_path and os.path.exists(ckpt_path) and "*" not in ckpt_path
-                else 0.0
-            )
-            _perf_report.checkpoint_mib = round(ckpt_size, 1)
-
-            pipeline_summary.add_step(num, desc, _perf_report)
 
         # ── Optional checkpoint cleanup ──────────────────────────────
         if args.cleanup or getattr(CFG, "cleanup_intermediates", False):
@@ -602,6 +639,9 @@ def main():
     total_elapsed = sum(t for _, _, t in step_times)
     if pipeline_summary is not None:
         pipeline_summary.pipeline_info["total_wall_sec"] = total_elapsed
+        # Mark pipeline as complete (not partial) only if we reached the end normally.
+        # Single-step / interrupted runs keep partial=True (set at init).
+        pipeline_summary.pipeline_info["partial"] = False
     print(f"\n{'=' * 60}")
     print(f"[run] Fuxi {args.modality.upper()}-seq pipeline execution finished.")
     print(f"{'=' * 60}")

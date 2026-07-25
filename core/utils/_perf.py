@@ -23,6 +23,7 @@ class PerformanceReport:
     n_cells: int = 0
     n_genes: int = 0
     checkpoint_mib: float = 0.0  # MiB = 1024² bytes
+    exit_status: str = "completed"  # "completed" | "killed" | "failed" | "skipped"
 
 
 @contextmanager
@@ -134,6 +135,7 @@ class PerformanceSummary:
             n_cells=perf.n_cells,
             n_genes=perf.n_genes,
             checkpoint_mib=perf.checkpoint_mib,
+            exit_status=perf.exit_status,
         )
         key = str(step_num)
         for i, s in enumerate(self.steps):
@@ -172,6 +174,7 @@ class PerformanceSummary:
                     n_cells=s.get("n_cells", 0),
                     n_genes=s.get("n_genes", 0),
                     checkpoint_mib=s.get("checkpoint_mib", 0.0),
+                    exit_status=s.get("exit_status", "completed"),
                 )
             )
         return inst
@@ -191,6 +194,7 @@ class PerformanceSummary:
                     "n_cells": s.n_cells,
                     "n_genes": s.n_genes,
                     "checkpoint_mib": s.checkpoint_mib,
+                    "exit_status": s.exit_status,
                 }
             )
 
@@ -215,10 +219,26 @@ class PerformanceSummary:
         }
 
     def save_json(self, path: str) -> None:
-        """Write pretty-printed JSON, creating parent dirs if needed."""
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w") as f:
-            json.dump(self.to_dict(), f, indent=2)
+        """Write pretty-printed JSON atomically.
+
+        Writes to ``<path>.tmp.<pid>`` then ``os.replace`` for an atomic
+        same-fs rename, so an interrupted save never leaves a partially
+        written ``perf_report.json`` (which would also break the next
+        ``PerformanceSummary.load_existing`` call).
+        """
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        tmp_path = f"{path}.tmp.{os.getpid()}"
+        try:
+            with open(tmp_path, "w") as f:
+                json.dump(self.to_dict(), f, indent=2)
+            os.replace(tmp_path, path)  # atomic same-fs rename
+        except Exception:
+            # Clean up tmp file on failure so it doesn't leak
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
     def print_terminal_summary(
         self, n_jobs: int = 0, modality: str = "", config_path: str = ""
