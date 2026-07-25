@@ -1,0 +1,31 @@
+# ═══════════════════════════════════════════════════════════════════════
+# Fuxi — GPU 加速 (RAPIDS-singlecell)
+# ═══════════════════════════════════════════════════════════════════════
+#
+# 声明源: pyproject.toml [project.optional-dependencies] rapids
+#   内容: rapids-singlecell-cu13[rapids]
+#         → 包含 cuml / cudf / cupy / cugraph / cuvs / librmm (CUDA 13)
+#
+# 等价: pip install -e ".[rapids]" --extra-index-url=https://pypi.nvidia.com
+#
+# ⚠️  必须传 --extra-index-url=https://pypi.nvidia.com
+#     否则找不到 cupy-cuda13x[ctk] / cudf-cu13 / cuml-cu13 等 NVIDIA 私有包
+#
+# 硬件要求:
+#   - NVIDIA GPU, compute capability >= 7.0 (Turing+)
+#   - Windows NVIDIA driver >= 545.00 (CUDA 13 compat, WSL2 同样适用)
+#   - Linux/WSL2 x86_64
+#
+# 为什么 cu13 而不是 cu12?
+#   Fuxi 默认拉的 torch wheel 是 CUDA 13 build (torch 2.x+cu130)。
+#   RAPIDS cu12 wheel 的 NVRTC JIT 会扫到 cu13 的 cuda_fp6.hpp/cuda_fp4.hpp
+#   头文件，与 cu12 nvrtc 不兼容报 NVRTC_ERROR_COMPILATION。
+#   cu13 与 torch 的 CUDA 13 对齐，避免双 CUDA wheel 冲突。
+#   - Linux/WSL2 x86_64
+#
+# 体积警告: 完整安装 ~5-8 GB (含 CUDA runtime libraries)
+#
+# 使用: 在 config.yaml 设 `execution.device: gpu` (或 auto 自动检测)
+# ═══════════════════════════════════════════════════════════════════════
+--extra-index-url=https://pypi.nvidia.com
+-e ".[rapids]"

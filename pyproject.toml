@@ -135,6 +135,7 @@ sccoda = ["sccoda>=0.1"]  # pip confirmed: ``pip index versions sccoda`` → 0.1
 # ── Methodology (heavyweight / third-party — keep independent) ───────
 cellbender = ["cellbender"]  # broadinstitute/CellBender (PyPI: cellbender); GPU recommended
 soupx = ["soupx-python"]     # third-party Python port of SoupX; package name=``soupx-python``, import name=``soupx``
+rapids = ["rapids-singlecell-cu13[rapids]"]  # GPU acceleration (PCA/neighbors/UMAP/Leiden/Harmony); needs --extra-index-url=https://pypi.nvidia.com
 
 # ── Development ──────────────────────────────────────────────────────
 dev = [

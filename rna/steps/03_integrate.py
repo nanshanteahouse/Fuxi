@@ -32,7 +32,16 @@ import scanpy as sc
 import scipy.sparse as sp
 
 from core.kb.cell_cycle import load_cell_cycle_genes
-from core.utils import record_memory_skip, resolve_config, safe_write, setup_logger, timed_substep
+from core.utils import (
+    gpu_harmony,
+    gpu_pca,
+    record_memory_skip,
+    resolve_config,
+    resolve_device,
+    safe_write,
+    setup_logger,
+    timed_substep,
+)
 
 # Cell cycle gene lists — externalized to core/kb/cell_cycle/
 # Previously hardcoded as _S_GENES / _G2M_GENES (Tirosh et al., 2016).
@@ -299,12 +308,14 @@ def main():
     _solver = "arpack" if mem_policy in ("balanced", "memory") else "randomized"
     log.info("PCA (%d components, solver=%s)...", cfg.pca.n_pcs_full, _solver)
     with timed_substep("PCA", log=log):
-        sc.pp.pca(
-            adata,
+        # GPU PCA ignores solver arg (uses cuVS default); CPU path honors _solver
+        _pca_kwargs = dict(
             n_comps=cfg.pca.n_pcs_full,
-            svd_solver=_solver,
             random_state=cfg.execution.random_seed,
         )
+        if not resolve_device(cfg.execution.device, log):
+            _pca_kwargs["svd_solver"] = _solver
+        gpu_pca(adata, log=log, device=cfg.execution.device, **_pca_kwargs)
         var_ratio = adata.uns["pca"]["variance_ratio"]
         log.info("  top-5 variance ratio: %.4f", var_ratio[:5].sum())
         log.info("  Cumulative variance ratio first 50 PCs: %.4f", var_ratio[:50].sum())
@@ -401,8 +412,6 @@ def main():
                 "warnings": collinear_warnings,
             }
         elif bk_list:
-            import harmonypy as hm
-
             # Unified NaN detection across all batch keys
             nan_mask = adata.obs[bk_list].isna().any(axis=1)
             if nan_mask.any():
@@ -416,15 +425,16 @@ def main():
             log.info("Harmony correction (batch_keys=%s)...", bk_list)
             try:
                 with timed_substep("Harmony", log=log):
-                    ho = hm.run_harmony(
-                        adata.obsm["X_pca"][:, : cfg.pca.n_pcs_use],
-                        adata.obs,
-                        vars_use=bk_list,
+                    gpu_harmony(
+                        adata,
+                        key=bk_list,
+                        output_key="X_integrated",
+                        log=log,
+                        device=cfg.execution.device,
                         random_state=cfg.execution.random_seed,
                         max_iter_harmony=cfg.integration.max_iter,
                     )
-                    adata.obsm["X_integrated"] = ho.Z_corr
-                log.info("  Harmony complete, output shape: %s", ho.Z_corr.shape)
+                log.info("  Harmony complete, output shape: %s", adata.obsm["X_integrated"].shape)
             except Exception as e:
                 log.warning("Harmony correction failed (%s) — continuing with raw PCA", e)
                 adata.obsm["X_integrated"] = adata.obsm["X_pca"].copy()

@@ -546,6 +546,11 @@ class ExecutionConfig(BaseModel):
     scanpy_verbosity: int = 2
     force_csr: bool = True
     use_float32: bool = True
+    # ── Device selection (GPU acceleration via rapids-singlecell) ──
+    # auto = detect at runtime, fall back to CPU if RAPIDS unavailable
+    # gpu  = force GPU, raise on missing RAPIDS
+    # cpu  = force CPU (skip detection entirely)
+    device: Literal["auto", "cpu", "gpu"] = "auto"
     # ── Memory / performance policy ──
     # speed   = no tradeoffs (dense PCA, full regress_out, fastest)
     # balanced = avoid dense copies (arpack PCA, skip regress_out)

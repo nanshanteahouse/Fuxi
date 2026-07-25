@@ -2,7 +2,6 @@
 
 import logging
 import os
-import shutil
 from typing import Optional
 
 import anndata
@@ -41,16 +40,43 @@ def safe_write(
         tmpdir = getattr(cfg, "h5ad_tempdir", tmpdir)
     anndata.settings.allow_write_nullable_strings = True
 
-    # WSL /mnt mounts: use explicit copy+unlink instead of shutil.move
-    # to avoid "Invalid cross-device link" on DrvFs (Windows mounts).
+    # WSL /mnt mounts: prefer writing to a tmp file then atomic rename.
+    # If the configured tmpdir is on a different filesystem than target
+    # (e.g. tmpfs -> 9p DrvFs), shutil.copy2 corrupts h5 metadata on 4GB+
+    # files. Fall back to a hidden tmp file in target's directory so the
+    # final rename is a same-fs atomic os.replace.
     _wsl = target.startswith("/mnt/")
     logging.getLogger(__name__).info("Writing %s ...", os.path.basename(target))
     if _wsl:
-        os.makedirs(tmpdir, exist_ok=True)
-        tmp_path = os.path.join(tmpdir, os.path.basename(target))
-        adata.write(tmp_path, compression=compression)
-        shutil.copy2(tmp_path, target)
-        os.unlink(tmp_path)
+        target_dir = os.path.dirname(target) or "."
+        try:
+            target_dev = os.stat(target_dir).st_dev
+        except OSError:
+            target_dev = None
+        tmp_dev = None
+        if os.path.exists(tmpdir):
+            try:
+                tmp_dev = os.stat(tmpdir).st_dev
+            except OSError:
+                tmp_dev = None
+
+        # Cross-device -> use hidden tmp file in target dir for atomic rename.
+        if tmp_dev is not None and target_dev is not None and tmp_dev != target_dev:
+            os.makedirs(target_dir, exist_ok=True)
+            tmp_path = os.path.join(target_dir, f".{os.path.basename(target)}.tmp.{os.getpid()}")
+        else:
+            os.makedirs(tmpdir, exist_ok=True)
+            tmp_path = os.path.join(tmpdir, os.path.basename(target))
+
+        try:
+            adata.write(tmp_path, compression=compression)
+            os.replace(tmp_path, target)  # atomic same-fs rename
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
     else:
         adata.write(target, compression=compression)
 

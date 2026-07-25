@@ -16,8 +16,9 @@ from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
-import scanpy as sc
 import scipy.stats as stats
+
+from core.utils._gpu import gpu_leiden, gpu_neighbors
 
 logger = logging.getLogger(__name__)
 
@@ -129,9 +130,17 @@ def _precompute_leiden_labels(
         return None
     adata_local = adata.copy()
     try:
-        sc.pp.neighbors(adata_local, n_neighbors=n_neighbors, use_rep=use_rep)
-        sc.tl.leiden(
+        gpu_neighbors(
             adata_local,
+            log=None,
+            device="auto",
+            n_neighbors=n_neighbors,
+            use_rep=use_rep,
+        )
+        gpu_leiden(
+            adata_local,
+            log=None,
+            device="auto",
             resolution=resolution,
             key_added="_diag_leiden",
             flavor="igraph",

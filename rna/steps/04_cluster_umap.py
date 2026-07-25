@@ -25,7 +25,16 @@ from sklearn.metrics import silhouette_score
 from core.cluster.evaluation import select_best_umap_params
 from core.cluster.grid_search import grid_search_clustering, select_best_params
 from core.config.schema import SILHOUETTE_SAMPLE_THRESHOLD
-from core.utils import resolve_config, safe_plot, safe_write, setup_logger, timed_substep
+from core.utils import (
+    gpu_leiden,
+    gpu_neighbors,
+    gpu_umap,
+    resolve_config,
+    safe_plot,
+    safe_write,
+    setup_logger,
+    timed_substep,
+)
 
 
 def _smart_plot_umap(adata, color, ax, title, cfg, log, legend_fontsize=8):
@@ -142,8 +151,10 @@ def main():
     # Scanpy-specific callables (close over CFG and use_rep)
     def _neighbors_fn(adata, n_neighbors=15, **kwargs):
         actual_dims = adata.obsm[use_rep].shape[1]
-        sc.pp.neighbors(
+        gpu_neighbors(
             adata,
+            log=log,
+            device=cfg.execution.device,
             n_neighbors=n_neighbors,
             n_pcs=min(cfg.pca.n_pcs_use, actual_dims),
             use_rep=use_rep,
@@ -151,8 +162,10 @@ def main():
         )
 
     def _umap_fn(adata, **kwargs):
-        sc.tl.umap(
+        gpu_umap(
             adata,
+            log=log,
+            device=cfg.execution.device,
             min_dist=umap_min_dist,
             spread=umap_spread,
             random_state=cfg.execution.random_seed,
@@ -161,8 +174,10 @@ def main():
     def _clusterer_fn(adata, resolution=1.0, n_neighbors=15, **kwargs):
         leiden_key = f"leiden_{n_neighbors}_{resolution}"
         umap_key = f"umap_{n_neighbors}_{resolution}"
-        sc.tl.leiden(
+        gpu_leiden(
             adata,
+            log=log,
+            device=cfg.execution.device,
             resolution=resolution,
             key_added=leiden_key,
             random_state=cfg.execution.random_seed,
@@ -170,6 +185,8 @@ def main():
             directed=False,
             n_iterations=2,
         )
+        adata.obsm[umap_key] = adata.obsm["X_umap"].copy()
+        return leiden_key
         adata.obsm[umap_key] = adata.obsm["X_umap"].copy()
         return leiden_key
 

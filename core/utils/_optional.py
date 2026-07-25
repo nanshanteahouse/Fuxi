@@ -1,4 +1,4 @@
-"""Optional dependency guards and GPU detection for scVI integration."""
+"""Optional dependency guards and GPU detection for scVI + RAPIDS integration."""
 
 import importlib.util
 import logging
@@ -158,3 +158,50 @@ def gpu_available_torch() -> bool:
         return torch.cuda.is_available()
     except ImportError:
         return False
+
+
+# Module-level cache for rapids-singlecell availability
+_rapids_available: bool | None = None
+
+
+def gpu_available_rapids() -> bool:
+    """Authoritative GPU check via ``rapids_singlecell`` import + cupy runtime probe.
+
+    Three-stage check:
+      1. ``nvidia-smi`` pre-check (cheap, no Python imports)
+      2. Lazy import of ``rapids_singlecell`` (fails fast if [rapids] extra not installed)
+      3. Probe ``cupy.cuda.runtime.getDevice()`` to confirm CUDA runtime works
+
+    Returns ``False`` gracefully if any stage fails — never raises.
+    Result is cached at module level after the first call.
+    """
+    global _rapids_available
+    if _rapids_available is not None:
+        return _rapids_available
+
+    if not gpu_available_nvidia_smi():
+        _rapids_available = False
+        return False
+
+    try:
+        import cupy as cp  # cupy is the most reliable CUDA runtime probe
+        import rapids_singlecell as rsc  # noqa: F401
+
+        cp.cuda.runtime.getDevice()
+        _rapids_available = True
+    except (ImportError, Exception):
+        _rapids_available = False
+    return _rapids_available
+
+
+def require_rapids(feature: str = "GPU-accelerated clustering / UMAP") -> None:
+    """Lazily check if rapids-singlecell is available and a CUDA GPU is usable.
+
+    Raises ``ImportError`` with a clear install hint when missing. Use at the
+    top of GPU-accelerated code paths to fail fast with a helpful message.
+    """
+    if not gpu_available_rapids():
+        raise ImportError(
+            f"rapids-singlecell + CUDA GPU is required for {feature}. "
+            "Install with: pip install fuxi[rapids] --extra-index-url=https://pypi.nvidia.com"
+        )
