@@ -123,7 +123,7 @@ python core/run_reproduce.py <paper_dir>           # reproduce a single paper
 
 **Automated (recommended):**
 ```bash
-python core/preprocess/preprocessor.py --gse <GSE_ID> --data-root $FUXI_DATA_ROOT
+python core/preprocess/preprocessor.py --gse <GSE_ID> --data-root $FUXI_DATA_ROOT --download
 ```
 **Manual:** Create `projects/{modality}/{GSE_ID}/config_<GSE_ID>.yaml` from `templates/config_templates/`.
 

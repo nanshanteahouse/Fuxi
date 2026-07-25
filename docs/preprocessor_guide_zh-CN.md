@@ -28,6 +28,7 @@
 | 📋 生成 `dataset.yaml` | 创建数据集元信息清单（样本列表、文件路径、格式） | 手工编辑 YAML |
 | ⚙️ 生成 `config_*.yaml` | 创建可直接运行的 Pipeline 配置文件（模板自动匹配格式） | 从零开始写 ~80 行 YAML config |
 | 🌐 NCBI 查询（可选） | 获取数据集标题、物种、是否为 SuperSeries | 打开浏览器查 GEO 网页 |
+| ⬇️ 自动下载（可选） | 预处理前先从 GEO 下载数据（一条命令从编号到配置） | `wget` / `curl` 下载，然后解压、整理、重命名 |
 
 **简单来说：下载完数据 → 运行一个命令 → 配置文件自动生成 → 下一步直接跑 Pipeline。**
 
@@ -70,6 +71,10 @@ export LLM_API_KEY=sk-your-api-key-here
 ### 场景 1：标准 GEO 数据集（有 GSE 编号 + 能上网）
 
 ```bash
+# 一条命令从零开始（下载 + 检测 + 生成配置）：
+python core/preprocess/preprocessor.py --gse GSE00001 --download
+
+# 如果数据已经下载好了，只需获取 NCBI 元数据：
 python core/preprocess/preprocessor.py --gse GSE00001 --query-ncbi
 ```
 
@@ -83,6 +88,7 @@ python core/preprocess/preprocessor.py --gse GSE00001 --query-ncbi
 | `dataset.yaml` | ✅ 完整生成 |
 | assay_type（scRNA-seq / snRNA-seq） | ✅ 自动检测 |
 | `config_*.yaml` | ✅ 完整生成 |
+| 数据下载 | ✅ 从 GEO 自动下载（已存在则跳过） |
 
 **运行后的输出示例：**
 ```

@@ -18,6 +18,7 @@ preprocessor.py — Fuxi 预处理管线
     python core/preprocess/preprocessor.py --gse GSE12345
     python core/preprocess/preprocessor.py --gse GSE12345 --dry-run
     python core/preprocess/preprocessor.py --gse GSE12345 --query-ncbi --verbose
+    python core/preprocess/preprocessor.py --gse GSE12345 --download
 """
 
 import argparse

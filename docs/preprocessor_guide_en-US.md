@@ -28,6 +28,7 @@ After you've downloaded single-cell data from GEO, ArrayExpress, or other source
 | 📋 Generate `dataset.yaml` | Creates a dataset metadata manifest (samples, file paths, formats) | Hand-edit YAML |
 | ⚙️ Generate `config_*.yaml` | Creates a ready-to-run pipeline configuration (format-matched template) | Write ~80 lines of YAML config from scratch |
 | 🌐 NCBI query (optional) | Fetches title, species, SuperSeries info | Open browser, look up on GEO website |
+| ⬇️ Auto-download (optional) | Downloads data from GEO before detection (one command from accession to config) | `wget` or `curl` download, then extract, organize, rename |
 
 **TL;DR: Download data → run one command → config files are generated → next step is the actual pipeline.**
 
@@ -70,6 +71,10 @@ Pick the command that matches your situation:
 ### Scenario 1: Standard GEO dataset (have accession ID + internet)
 
 ```bash
+# One command from scratch (download + detect + generate):
+python core/preprocess/preprocessor.py --gse GSE00001 --download
+
+# If data is already downloaded, just fetch NCBI metadata:
 python core/preprocess/preprocessor.py --gse GSE00001 --query-ncbi
 ```
 
@@ -83,6 +88,7 @@ python core/preprocess/preprocessor.py --gse GSE00001 --query-ncbi
 | `dataset.yaml` | ✅ Fully generated |
 | Assay type (scRNA-seq / snRNA-seq) | ✅ Auto-detected |
 | `config_*.yaml` | ✅ Fully generated |
+| Data download | ✅ Auto-downloaded from GEO (skipped if already present) |
 
 **Example output:**
 ```
