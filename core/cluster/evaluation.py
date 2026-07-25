@@ -1070,8 +1070,8 @@ def enrich_grid_results(
       - kb_annotatable_rate (via tissue knowledge base, if *cfg.tissue_kb* is set)
       - splitting_gain (per n_neighbors group)
 
-    The list is modified **in place** and also stored at
-    ``adata.uns["cluster_grid_results"]``.
+    The list is modified **in place** and returned. The caller is
+    responsible for persistence (e.g. via ``param_grid_summary.csv``).
 
     Parameters
     ----------
@@ -1254,9 +1254,6 @@ def enrich_grid_results(
             gains = _compute_splitting_gain(group_sorted)
             for entry in group:
                 entry["splitting_gain"] = gains.get(entry["resolution"], 0.0)
-
-    # Store enriched results in adata.uns
-    adata.uns["cluster_grid_results"] = results_summary
 
     return results_summary
 
