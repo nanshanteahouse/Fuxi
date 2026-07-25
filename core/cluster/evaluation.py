@@ -18,16 +18,17 @@ import logging
 from typing import Literal
 
 import numpy as np
+from scipy import stats
 from scipy.spatial import ConvexHull
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_MULTI_METRIC_WEIGHTS = {
-    "silhouette": 0.2,
-    "stability": 0.2,
-    "cluster_coherence": 0.3,
-    "splitting_gain": 0.2,
-    "kb_annotatable_rate": 0.1,
+    "silhouette": 0.15,
+    "stability": 0.20,
+    "cluster_coherence": 0.45,
+    "splitting_gain": 0.15,
+    "kb_annotatable_rate": 0.05,
 }
 
 
@@ -268,6 +269,8 @@ def _compute_stability(
     n_seeds=5,
     base_seed=42,
     device: str = "cpu",
+    cfg=None,
+    n_iterations=-1,
 ):
     """Compute cross-seed clustering stability via pairwise ARI.
 
@@ -293,8 +296,12 @@ def _compute_stability(
         Mean pairwise ARI.  1.0 when *n_seeds* <= 1 or all clusterings
         are identical.
     """
+    # Resolve n_iterations from config when available
+    if cfg is not None:
+        n_iterations = getattr(cfg.clustering, "stability_leiden_n_iterations", n_iterations)
+
     if n_seeds <= 1:
-        return 1.0
+        return float("nan")
 
     import scanpy as sc
     from sklearn.metrics import adjusted_rand_score
@@ -302,7 +309,7 @@ def _compute_stability(
     seeds = range(base_seed, base_seed + n_seeds)
     temp_keys = [f"_temp_stab_{i}" for i in range(n_seeds)]
 
-    label_sets = []
+    label_sets, consecutive_aris = [], []
     for i, seed in enumerate(seeds):
         key = temp_keys[i]
         try:
@@ -318,7 +325,7 @@ def _compute_stability(
                     # cuGraph doesn't accept flavor/directed/n_iterations;
                     # gpu_leiden strips them on the GPU path automatically.
                     flavor=leiden_flavor,
-                    n_iterations=2,
+                    n_iterations=n_iterations,
                     directed=False,
                 )
             else:
@@ -328,15 +335,25 @@ def _compute_stability(
                     key_added=key,
                     random_state=seed,
                     flavor=leiden_flavor,
-                    n_iterations=2,
+                    n_iterations=n_iterations,
                     directed=False,
                 )
             label_sets.append(adata.obs[key].values)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Stability seed {seed} failed: {e}")
         finally:
             if key in adata.obs.columns:
                 del adata.obs[key]
+        # Early termination: check if last 2 consecutive ARIs are 1.0
+        if len(label_sets) >= 2:
+            ari = adjusted_rand_score(label_sets[-2], label_sets[-1])
+            consecutive_aris.append(ari)
+            if len(consecutive_aris) >= 2 and all(a == 1.0 for a in consecutive_aris[-2:]):
+                logger.info(
+                    f"Early termination at seed {seed + 1}/{n_seeds}: "
+                    "last 2 consecutive ARIs are 1.0"
+                )
+                break
 
     # Final cleanup: remove any remaining temp columns
     for col in list(adata.obs.columns):
@@ -345,7 +362,7 @@ def _compute_stability(
 
     n_runs = len(label_sets)
     if n_runs <= 1:
-        return 1.0
+        return float("nan")
 
     # Compute pairwise ARI
     aris = []
@@ -358,7 +375,13 @@ def _compute_stability(
 
 
 def _compute_cluster_coherence(
-    adata, cluster_key, per_cell_scores, dominance_threshold=1.5, min_expression=0.05
+    adata,
+    cluster_key,
+    per_cell_scores,
+    dominance_threshold=2.5,
+    min_expression=0.05,
+    min_cluster_size=10,
+    log=None,
 ):
     """Per-cluster marker coherence metric that peaks at intermediate resolution.
 
@@ -370,7 +393,8 @@ def _compute_cluster_coherence(
         (b) best_score / max(second_best, 1e-10) > dominance_threshold
       - This ensures the cluster has ONE clearly dominant cell type
 
-    coherence = n_coherent / n_total_clusters
+    coherence = n_coherent / n_valid_clusters
+    where n_valid_clusters excludes clusters smaller than min_cluster_size.
 
     Parameters
     ----------
@@ -382,22 +406,28 @@ def _compute_cluster_coherence(
         by the caller (e.g. via ``sc.tl.score_genes()``).
     dominance_threshold : float
         Minimum ratio of best score to second-best for coherence.
-    min_expression : float
+    min_expression : float or str
         Minimum mean expression for a cluster to be considered (not noise).
+        If a string starting with 'p' (e.g. 'p25'), interpreted as a percentile
+        of per-cell scores for the best-matching cell type.
+    min_cluster_size : int
+        Minimum number of cells a cluster must have to be evaluated.
+        Clusters below this threshold are skipped.
+    log : Logger or None
 
     Returns
     -------
     float
         Fraction of clusters that are coherent (0.0-1.0).
-        1.0 if *per_cell_scores* is empty or has no valid entries.
+        NaN if *per_cell_scores* is empty or has no valid entries.
     """
     if not per_cell_scores:
-        return 1.0
+        return float("nan")
 
     # Check for any valid (non-None) entries
     has_valid = any(v is not None for v in per_cell_scores.values())
     if not has_valid:
-        return 1.0
+        return float("nan")
 
     cluster_labels = adata.obs[cluster_key].values
     unique_clusters = np.unique(cluster_labels)
@@ -409,9 +439,24 @@ def _compute_cluster_coherence(
     cell_types = list(per_cell_scores.keys())
     n_cells = len(cluster_labels)
     n_coherent = 0
+    n_valid_clusters = 0
+    _log = log or logger
 
     for cluster in unique_clusters:
         mask = cluster_labels == cluster
+        cluster_size = int(np.sum(mask))
+
+        # Skip clusters smaller than min_cluster_size
+        if cluster_size < min_cluster_size:
+            _log.debug(
+                "Skipping cluster %s in coherence: size %d < min_cluster_size %d",
+                cluster,
+                cluster_size,
+                min_cluster_size,
+            )
+            continue
+
+        n_valid_clusters += 1
         mean_scores = []
         for ct in cell_types:
             scores = per_cell_scores[ct]
@@ -424,18 +469,29 @@ def _compute_cluster_coherence(
         # Sort by mean score descending
         mean_scores.sort(key=lambda x: x[1], reverse=True)
         top_score = mean_scores[0][1]
+        best_ct = mean_scores[0][0]
 
-        if top_score <= min_expression:
+        # Resolve threshold (float or percentile string)
+        threshold = min_expression
+        if isinstance(min_expression, str) and min_expression.startswith("p"):
+            pct = int(min_expression[1:])
+            if best_ct in per_cell_scores and per_cell_scores[best_ct] is not None:
+                threshold = float(np.percentile(per_cell_scores[best_ct], pct))
+
+        if top_score <= threshold:
             continue
 
-        if len(mean_scores) == 1:
-            n_coherent += 1
+        if len(mean_scores) < 2:
+            return float("nan")
         else:
             second_score = mean_scores[1][1]
             if top_score / max(second_score, 1e-10) > dominance_threshold:
                 n_coherent += 1
 
-    return n_coherent / n_clusters
+    if n_valid_clusters == 0:
+        return float("nan")
+
+    return n_coherent / n_valid_clusters
 
 
 def _compute_splitting_gain(valid_by_resolution: list[dict]) -> dict[float, float]:
@@ -535,14 +591,14 @@ def _select_multi_metric(valid, weights=None, log=None):
         elif has_coherence and has_splitting_gain:
             # Degrade to 4-metric (no kb_annotatable_rate)
             active_weights = {
-                "silhouette": 0.2,
-                "stability": 0.2,
-                "cluster_coherence": 0.35,
-                "splitting_gain": 0.25,
+                "silhouette": 0.15,
+                "stability": 0.20,
+                "cluster_coherence": 0.50,
+                "splitting_gain": 0.15,
             }
         elif has_coherence:
             # Degrade to 3-metric (no splitting_gain)
-            active_weights = {"silhouette": 0.25, "stability": 0.25, "cluster_coherence": 0.5}
+            active_weights = {"silhouette": 0.20, "stability": 0.25, "cluster_coherence": 0.55}
         else:
             active_weights = {"silhouette": 0.5, "stability": 0.5}
     else:
@@ -605,12 +661,33 @@ def _select_multi_metric(valid, weights=None, log=None):
         for k in active_weights:
             active_weights[k] /= total_w
 
+    # ── Build weight string for reason ──
+    _weight_short = {
+        "silhouette": "sil",
+        "stability": "stab",
+        "cluster_coherence": "coh",
+        "splitting_gain": "split",
+        "kb_annotatable_rate": "kb",
+    }
+    _wp: list[str] = []
+    for _mk in [
+        "silhouette",
+        "stability",
+        "cluster_coherence",
+        "splitting_gain",
+        "kb_annotatable_rate",
+    ]:
+        if _mk in active_weights:
+            _wp.append(f"{_weight_short[_mk]}:{active_weights[_mk]:.2f}")
+    weights_str = "weights=" + ",".join(_wp)
+
     # ── Normalise each metric to [0, 1] ──
     def _normalize(values):
-        vmin, vmax = float(np.min(values)), float(np.max(values))
-        if vmax - vmin < 1e-10:
-            return np.ones_like(values)
-        return (values - vmin) / (vmax - vmin + 1e-10)
+        n = len(values)
+        if n <= 1:
+            return np.array([0.5])
+        ranks = stats.rankdata(values)
+        return (ranks - 1) / (n - 1)
 
     norm = {}
     if "silhouette" in active_weights:
@@ -629,7 +706,8 @@ def _select_multi_metric(valid, weights=None, log=None):
     for metric_name, w in active_weights.items():
         composite += w * norm[metric_name]
 
-    # ── 3-tier resolution recommendation logging ──
+    # ── 3-tier resolution recommendation ──
+    tier_str = ""
     try:
         entries_by_resolution = sorted(
             [(valid[i], composite[i]) for i in range(n)], key=lambda x: x[0]["resolution"]
@@ -656,14 +734,19 @@ def _select_multi_metric(valid, weights=None, log=None):
                     fine_entry = entry
                     break
 
+        coarse_r = f"{coarse_entry['resolution']:.2f}" if coarse_entry else "nan"
+        coarse_k = coarse_entry["n_clusters"] if coarse_entry else 0
+        fine_r = f"{fine_entry['resolution']:.2f}" if fine_entry else "nan"
+        fine_k = fine_entry["n_clusters"] if fine_entry else 0
+
+        tier_str = (
+            f"coarse: r={coarse_r} (k={coarse_k})"
+            f" / balanced: r={balanced_entry['resolution']:.2f} (k={balanced_entry['n_clusters']})"
+            f" / fine: r={fine_r} (k={fine_k})"
+        )
         (log or logger).info(
-            "[multi_metric 3-tier] coarse: r=%.2f (k=%d) / balanced: r=%.2f (k=%d) / fine: r=%.2f (k=%d)",
-            coarse_entry["resolution"] if coarse_entry else float("nan"),
-            coarse_entry["n_clusters"] if coarse_entry else 0,
-            balanced_entry["resolution"],
-            balanced_entry["n_clusters"],
-            fine_entry["resolution"] if fine_entry else float("nan"),
-            fine_entry["n_clusters"] if fine_entry else 0,
+            "[multi_metric 3-tier] %s",
+            tier_str,
         )
     except Exception as exc:
         logger.debug("3-tier computation skipped: %s", exc)
@@ -688,7 +771,9 @@ def _select_multi_metric(valid, weights=None, log=None):
         f"stab={stab_val:.3f}(n={stab_norm_val:.2f}) "
         f"coherence={coh_val:.3f} "
         f"split_gain={split_val:.3f} kb_rate={kb_val:.3f} k={k}"
-    )
+        f" {weights_str}"
+        f" {tier_str}"
+    ).rstrip()
 
     return (
         best["n_neighbors"],
@@ -819,10 +904,10 @@ def _select_de_gated(valid, adata, de_gate_threshold=25):
 
     For subtype-level data where silhouette scores are flat across resolutions,
     this method selects the highest resolution that maintains a minimum number of
-    differentially expressed genes between every cluster pair.
+    differentially expressed genes (one-vs-rest) for every cluster.
 
     Algorithm follows Shekhar 2016 merge.clusters.DE pattern (inverted):
-    select highest resolution where pairwise DE >= threshold.
+    select highest resolution where one-vs-rest DE >= threshold.
 
     Parameters
     ----------
@@ -832,7 +917,7 @@ def _select_de_gated(valid, adata, de_gate_threshold=25):
     adata : AnnData
         Annotated data matrix.
     de_gate_threshold : int
-        Minimum number of DE genes required between every cluster pair.
+        Minimum number of DE genes required for every cluster (one-vs-rest).
         Default 25.
 
     Returns
@@ -849,48 +934,40 @@ def _select_de_gated(valid, adata, de_gate_threshold=25):
             entry["n_clusters"],
             entry["resolution"],
             entry["cluster_key"],
-            "de_gated(single_entry, min_pairwise_de=N/A)",
+            "de_gated(single_entry, min_de=N/A)",
         )
 
     # Sort by resolution ascending for deterministic iteration
     sorted_entries = sorted(valid, key=lambda e: e.get("resolution", 0.0))
 
-    # Collect (entry, min_pairwise_de) for each resolution
-    candidates = []  # list of (entry, min_pairwise_de)
+    # Collect (entry, min_de) for each resolution
+    candidates = []  # list of (entry, min_de)
 
     for entry in sorted_entries:
         cluster_key = entry["cluster_key"]
 
-        # Check if rank_genes_groups already computed for this groupby key
-        existing_rg = adata.uns.get("rank_genes_groups")
-        recompute = True
-        if existing_rg is not None:
-            existing_params = existing_rg.get("params", {})
-            if existing_params.get("groupby") == cluster_key:
-                recompute = False
+        try:
+            sc.tl.rank_genes_groups(
+                adata,
+                groupby=cluster_key,
+                method="wilcoxon",
+                n_genes=50,
+                use_raw=True,
+                key_added=f"_de_gated_{cluster_key}",
+            )
+        except Exception as e:
+            logger.warning(
+                "rank_genes_groups failed for cluster_key=%s (resolution=%.2f): %s",
+                cluster_key,
+                entry["resolution"],
+                e,
+            )
+            continue
 
-        if recompute:
-            try:
-                sc.tl.rank_genes_groups(
-                    adata,
-                    groupby=cluster_key,
-                    method="wilcoxon",
-                    n_genes=50,
-                    use_raw=True,
-                )
-            except Exception as e:
-                logger.warning(
-                    "rank_genes_groups failed for cluster_key=%s (resolution=%.2f): %s",
-                    cluster_key,
-                    entry["resolution"],
-                    e,
-                )
-                continue
-
-        # Extract min pairwise DE count: for each group, count genes with
+        # Extract min one-vs-rest DE count: for each group, count genes with
         # padj < 0.05 AND log2FC > 1.0, then take the minimum across groups.
         try:
-            rg = adata.uns["rank_genes_groups"]
+            rg = adata.uns[f"_de_gated_{cluster_key}"]
             pvals_adj = rg["pvals_adj"]
             logfoldchanges = rg["logfoldchanges"]
             group_names = pvals_adj.dtype.names
@@ -909,7 +986,7 @@ def _select_de_gated(valid, adata, de_gate_threshold=25):
                 n_de = int(np.sum((padj < 0.05) & (lfc > 1.0)))
                 de_counts.append(n_de)
 
-            min_pairwise_de = int(min(de_counts))
+            min_de = int(min(de_counts))
         except Exception as e:
             logger.warning(
                 "Failed to extract DE counts for cluster_key=%s: %s",
@@ -918,7 +995,12 @@ def _select_de_gated(valid, adata, de_gate_threshold=25):
             )
             continue
 
-        candidates.append((entry, min_pairwise_de))
+        candidates.append((entry, min_de))
+
+    # Clean up temp rank_genes_groups keys
+    for k in list(adata.uns):
+        if k.startswith("_de_gated_"):
+            del adata.uns[k]
 
     if not candidates:
         # All entries failed -> fallback to first entry
@@ -930,10 +1012,10 @@ def _select_de_gated(valid, adata, de_gate_threshold=25):
             entry["n_clusters"],
             entry["resolution"],
             entry["cluster_key"],
-            "de_gated(all_failed, min_pairwise_de=N/A)",
+            "de_gated(all_failed, min_de=N/A)",
         )
 
-    # Select entry with highest n_clusters where min_pairwise_de >= threshold
+    # Select entry with highest n_clusters where min_de >= threshold
     candidates_by_n = sorted(
         candidates,
         key=lambda c: c[0]["n_clusters"],
@@ -947,11 +1029,11 @@ def _select_de_gated(valid, adata, de_gate_threshold=25):
             best_min_de = min_de
             break
 
-    # If no entry meets threshold, fallback to lowest resolution (most conservative)
+    # If no entry meets threshold, fallback to entry with highest DE count
     if best_entry is None:
-        best_entry, best_min_de = candidates[0]
+        best_entry, best_min_de = max(candidates, key=lambda c: c[1])
         logger.info(
-            "DE-gated selection: best_resolution=%.2f, min_pairwise_de=%d "
+            "DE-gated selection: best_resolution=%.2f, min_de=%d "
             "(fallback: no entry met threshold=%d)",
             best_entry["resolution"],
             best_min_de,
@@ -959,7 +1041,7 @@ def _select_de_gated(valid, adata, de_gate_threshold=25):
         )
     else:
         logger.info(
-            "DE-gated selection: best_resolution=%.2f, min_pairwise_de=%d",
+            "DE-gated selection: best_resolution=%.2f, min_de=%d",
             best_entry["resolution"],
             best_min_de,
         )
@@ -968,8 +1050,215 @@ def _select_de_gated(valid, adata, de_gate_threshold=25):
         best_entry["n_clusters"],
         best_entry["resolution"],
         best_entry["cluster_key"],
-        f"de_gated(min_pairwise_de={best_min_de})",
+        f"de_gated(min_de={best_min_de})",
     )
+
+
+def enrich_grid_results(
+    adata,
+    results_summary,
+    cfg,
+    compute_per_cell_scores_fn=None,
+    log=None,
+    use_rep=None,
+):
+    """Enrich *results_summary* entries with multi-metric scores.
+
+    For each (n_neighbors, resolution) entry, computes:
+      - stability_score  (via cross-seed ARI)
+      - cluster_coherence (via marker gene per-cell scores)
+      - kb_annotatable_rate (via tissue knowledge base, if *cfg.tissue_kb* is set)
+      - splitting_gain (per n_neighbors group)
+
+    The list is modified **in place** and also stored at
+    ``adata.uns["cluster_grid_results"]``.
+
+    Parameters
+    ----------
+    adata : AnnData
+    results_summary : list[dict]
+        Each dict has keys: *n_neighbors*, *resolution*, *cluster_key*.
+        Enriched with *stability_score*, *cluster_coherence*, etc. IN PLACE.
+    cfg : Config
+    compute_per_cell_scores_fn : callable or None
+        ``(adata, cfg) -> dict[str, np.ndarray]``
+        Pre-computed per-cell scores for each cell type.
+        When ``None`` and ``cfg.marker.marker_dict`` has entries, the
+        default marker-based logic (``sc.tl.score_genes``) is used.
+    log : Logger or None
+    use_rep : str or None
+        Key in ``adata.obsm`` for the embedding (e.g. ``'X_pca'``).
+        Required when the KNN graph needs rebuilding.
+
+    Returns
+    -------
+    list[dict]
+        The same *results_summary* (modified in place).
+    """
+    import logging as _logging
+
+    import numpy as np
+    import scanpy as sc
+
+    if log is None:
+        log = _logging.getLogger(__name__)
+
+    marker_dict = getattr(cfg.marker, "marker_dict", None) or {}
+    has_markers = bool(marker_dict)
+    n_stab_seeds = getattr(cfg.clustering, "multi_metric_n_stability_seeds", 5)
+    dominance_threshold = getattr(cfg.clustering, "multi_metric_coverage_ratio_threshold", 2.5)
+    leiden_flavor = getattr(cfg.clustering, "leiden_flavor", "igraph")
+    device = getattr(cfg.execution, "device", "cpu")
+
+    # Group results by n_neighbors
+    by_n = {}
+    for r in results_summary:
+        n_ = r.get("n_neighbors")
+        by_n.setdefault(n_, []).append(r)
+
+    for n_val, group in by_n.items():
+        # --- Check if KNN rebuild is needed (optimisation) ---
+        _need_rebuild_knn = True
+        try:
+            _nb_params = adata.uns.get("neighbors", {}).get("params", {}) or {}
+            if (
+                _nb_params.get("n_neighbors") == n_val
+                and use_rep is not None
+                and _nb_params.get("use_rep") == use_rep
+                and "connectivities" in adata.obsp
+            ):
+                _need_rebuild_knn = False
+        except Exception:
+            pass
+
+        if _need_rebuild_knn:
+            if use_rep is None:
+                log.warning(
+                    "KNN rebuild needed but use_rep is None -- skipping n_neighbors=%d",
+                    n_val,
+                )
+                continue
+            try:
+                sc.pp.neighbors(
+                    adata,
+                    n_neighbors=n_val,
+                    n_pcs=cfg.pca.n_pcs_use,
+                    use_rep=use_rep,
+                    random_state=cfg.execution.random_seed,
+                )
+            except Exception as e:
+                log.warning(
+                    "KNN rebuild failed for n_neighbors=%d: %s -- skipping group",
+                    n_val,
+                    e,
+                )
+                continue
+
+        # --- Pre-compute per-cell scores ---
+        per_cell_scores = {}
+        if compute_per_cell_scores_fn is not None:
+            try:
+                scores = compute_per_cell_scores_fn(adata, cfg)
+                if scores is not None:
+                    per_cell_scores = scores
+            except Exception as e:
+                log.warning(
+                    "per_cell_scores computation failed: %s -- falling back to no markers",
+                    e,
+                )
+        elif has_markers and adata.raw is not None:
+            # Default marker_dict-based scoring (RNA and Spatial common case)
+            from anndata import utils as anndata_utils
+
+            adata.raw._var.index = anndata_utils.make_index_unique(adata.raw._var.index, join="-")
+            try:
+                for ct, genes in marker_dict.items():
+                    valid_genes = [g for g in genes if g in adata.raw.var_names]
+                    if valid_genes:
+                        sc.tl.score_genes(adata, gene_list=valid_genes, score_name=f"_score_{ct}")
+                        per_cell_scores[ct] = adata.obs[f"_score_{ct}"].values.copy()
+                # Clean up temporary score columns
+                for col in list(adata.obs.columns):
+                    if col.startswith("_score_") and col in adata.obs.columns:
+                        adata.obs.drop(columns=[col], inplace=True)
+            except Exception as e:
+                log.warning(
+                    "Marker score pre-computation failed: %s -- falling back to no markers",
+                    e,
+                )
+                per_cell_scores = {}
+        elif has_markers and adata.raw is None:
+            log.warning(
+                "adata.raw is None -- cannot compute marker coverage. Degrading to silhouette+stability only."
+            )
+            has_markers = False
+
+        # --- Compute stability + marker coverage for each entry ---
+        for entry in group:
+            try:
+                resolution = entry["resolution"]
+                ck = entry["cluster_key"]
+
+                entry["stability_score"] = _compute_stability(
+                    adata,
+                    resolution=resolution,
+                    leiden_flavor=leiden_flavor,
+                    n_seeds=n_stab_seeds,
+                    device=device,
+                    cfg=cfg,
+                )
+
+                if per_cell_scores:
+                    entry["cluster_coherence"] = _compute_cluster_coherence(
+                        adata,
+                        ck,
+                        per_cell_scores,
+                        dominance_threshold=dominance_threshold,
+                    )
+
+                # --- KB annotatable rate ---
+                if getattr(cfg, "tissue_kb", None) and per_cell_scores:
+                    labels = adata.obs[ck].values
+                    unique_clusters = np.unique(labels)
+                    n_total = len(unique_clusters)
+                    n_annotatable = 0
+                    for cl in unique_clusters:
+                        mask_ = labels == cl
+                        best_score = 0.0
+                        for ct_ in per_cell_scores:
+                            scores = per_cell_scores[ct_]
+                            if scores is not None and len(scores) == len(labels):
+                                mean_val = float(np.mean(scores[mask_]))
+                                if mean_val > best_score:
+                                    best_score = mean_val
+                        if best_score > 0.5:
+                            n_annotatable += 1
+                    rate = n_annotatable / n_total if n_total > 0 else 0.0
+                    entry["kb_annotatable_rate"] = rate
+                    log.info("KB annotatable rate: %.3f", rate)
+
+            except Exception as e:
+                log.warning(
+                    "Enrichment failed for n_neighbors=%d, resolution=%.1f: %s",
+                    entry.get("n_neighbors"),
+                    entry.get("resolution"),
+                    e,
+                )
+                entry["stability_score"] = None
+                entry["cluster_coherence"] = None
+                entry["kb_annotatable_rate"] = None
+
+        # --- Compute splitting_gain for this n_neighbors group ---
+        if len(group) >= 2:
+            group_sorted = sorted(group, key=lambda e: e.get("resolution", 0.0))
+            gains = _compute_splitting_gain(group_sorted)
+            for entry in group:
+                entry["splitting_gain"] = gains.get(entry["resolution"], 0.0)
+
+    # Store enriched results in adata.uns
+    adata.uns["cluster_grid_results"] = results_summary
+
+    return results_summary
 
 
 def select_best_umap_params(
@@ -982,15 +1271,12 @@ def select_best_umap_params(
     use_rep,
     log,
     device="cpu",
+    metric="trustworthiness",
 ):  # noqa: N803
     """Sweep min_dist × spread on the best (n_neighbors) neighbor graph,
     or use manual fallback.
 
     The KNN graph is rebuilt once (or reused if already present).
-    Selection `method` follows the same logic as cluster_selection_method:
-
-        "convex_hull"  — auto-sweep, pick largest convex-hull area (default)
-        None            — manual: use CFG.clustering.umap_min_dist / CFG.clustering.umap_spread directly
 
     Parameters
     ----------
@@ -999,15 +1285,26 @@ def select_best_umap_params(
     best_n : int
         Best n_neighbors value (from select_best_params).
     min_dist_grid : list of float or None
-        Values to sweep in "convex_hull" mode.
+        Values to sweep in auto-sweep mode.
     spread_grid : list of float or None
-        Values to sweep in "convex_hull" mode.
+        Values to sweep in auto-sweep mode.
     method : str or None
         "convex_hull" | None
     CFG : Config
     use_rep : str
         Key in adata.obsm for PCA (e.g. 'X_pca_harmony' or 'X_pca').
     log : logging.Logger
+    device : str
+        "cpu" or GPU device name.
+    metric : str
+        "trustworthiness" | "convex_hull" | "fixed"
+
+        Controls how UMAP parameters are selected:
+        - "trustworthiness": compute sklearn trustworthiness for each
+          (min_dist, spread) combo, pick highest score (default).
+        - "convex_hull": pick combo with largest convex hull area (legacy).
+        - "fixed": skip sweep entirely, use CFG.clustering.umap_min_dist
+          and umap_spread as-is (saves ~3700s on large datasets).
 
     Returns
     -------
@@ -1016,7 +1313,7 @@ def select_best_umap_params(
     method_label : str
         Human-readable method name for logging.
     results : list of dict
-        Each dict: {min_dist, spread, convex_hull_area}
+        Each dict: {min_dist, spread, <metric>_score} plus "coords" when run.
         Empty list if sweep was skipped.
     """
     import scanpy as sc
@@ -1035,7 +1332,7 @@ def select_best_umap_params(
             f"Unknown umap_selection_method: {method!r}. Valid options: 'convex_hull', None"
         )
 
-    # ── Auto-sweep: convex_hull ──
+    # ── Auto-sweep (empty grid → fallback) ──
     if (
         min_dist_grid is None
         or spread_grid is None
@@ -1044,9 +1341,9 @@ def select_best_umap_params(
         md = getattr(CFG.clustering, "umap_min_dist", 0.3)
         sp = getattr(CFG.clustering, "umap_spread", 1.0)
         log.info(
-            "UMAP params (convex_hull, empty grid → fallback): min_dist=%.2f, spread=%.1f", md, sp
+            "UMAP params (%s, empty grid → fallback): min_dist=%.2f, spread=%.1f", metric, md, sp
         )
-        return md, sp, "convex_hull", []
+        return md, sp, metric, []
 
     # ── Reuse neighbor graph if it already matches best_n + use_rep ──
     # grid_search_clustering already built KNN for the selected n_neighbors;
@@ -1097,13 +1394,15 @@ def select_best_umap_params(
             return (
                 getattr(CFG.clustering, "umap_min_dist", 0.3),
                 getattr(CFG.clustering, "umap_spread", 1.0),
-                "convex_hull",
+                metric,
                 [],
             )
-
     # ── Sweep ──
     results = []
-    best_area = -1.0
+    if metric == "trustworthiness":
+        best_score = -1.0
+    else:
+        best_area = -1.0
     best_md = min_dist_grid[0]
     best_sp = spread_grid[0]
 
@@ -1143,38 +1442,70 @@ def select_best_umap_params(
                     )
                 coords = adata.obsm["X_umap"]
                 _prev_embedding = np.asarray(coords).copy()
-                hull = ConvexHull(coords)
-                area = float(hull.volume)  # 2D → area
-                results.append(
-                    {
-                        "min_dist": md,
-                        "spread": sp,
-                        "convex_hull_area": area,
-                        # Save coords so the comparison figure can reuse them
-                        # without re-running UMAP (huge win on 1M-cell datasets:
-                        # ~3 × 47min cold spectral = ~2.4h saved).
-                        "coords": _prev_embedding,
-                    }
-                )
-                log.info("  min_dist=%.2f, spread=%.1f → convex_hull_area=%.2f", md, sp, area)
-                if area > best_area:
-                    best_area = area
-                    best_md = md
-                    best_sp = sp
+
+                if metric == "trustworthiness":
+                    from sklearn.manifold.t_sne import trustworthiness
+
+                    score = float(
+                        trustworthiness(
+                            adata.obsm[use_rep],
+                            coords,
+                            n_neighbors=15,
+                        )
+                    )
+                    results.append(
+                        {
+                            "min_dist": md,
+                            "spread": sp,
+                            "trustworthiness": score,
+                            "coords": _prev_embedding,
+                        }
+                    )
+                    log.info("  min_dist=%.2f, spread=%.1f → trustworthiness=%.4f", md, sp, score)
+                    if score > best_score:
+                        best_score = score
+                        best_md = md
+                        best_sp = sp
+                else:
+                    hull = ConvexHull(coords)
+                    area = float(hull.volume)  # 2D → area
+                    results.append(
+                        {
+                            "min_dist": md,
+                            "spread": sp,
+                            "convex_hull_area": area,
+                            # Save coords so the comparison figure can reuse them
+                            # without re-running UMAP (huge win on 1M-cell datasets:
+                            # ~3 × 47min cold spectral = ~2.4h saved).
+                            "coords": _prev_embedding,
+                        }
+                    )
+                    log.info("  min_dist=%.2f, spread=%.1f → convex_hull_area=%.2f", md, sp, area)
+                    if area > best_area:
+                        best_area = area
+                        best_md = md
+                        best_sp = sp
             except Exception as e:
                 log.warning("  UMAP failed (min_dist=%.2f, spread=%.1f): %s", md, sp, e)
-                results.append(
-                    {
-                        "min_dist": md,
-                        "spread": sp,
-                        "convex_hull_area": None,
-                    }
-                )
+                entry = {"min_dist": md, "spread": sp}
+                if metric == "trustworthiness":
+                    entry["trustworthiness"] = None
+                else:
+                    entry["convex_hull_area"] = None
+                results.append(entry)
 
-    log.info(
-        "Best UMAP params (convex_hull): min_dist=%.2f, spread=%.1f (area=%.2f)",
-        best_md,
-        best_sp,
-        best_area,
-    )
-    return best_md, best_sp, "convex_hull", results
+    if metric == "trustworthiness":
+        log.info(
+            "Best UMAP params (trustworthiness): min_dist=%.2f, spread=%.1f (score=%.4f)",
+            best_md,
+            best_sp,
+            best_score,
+        )
+    else:
+        log.info(
+            "Best UMAP params (convex_hull): min_dist=%.2f, spread=%.1f (area=%.2f)",
+            best_md,
+            best_sp,
+            best_area,
+        )
+    return best_md, best_sp, metric, results

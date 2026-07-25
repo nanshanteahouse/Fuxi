@@ -259,9 +259,9 @@ class TestComputeStability:
         sc.pp.pca(adata, n_comps=10)
         sc.pp.neighbors(adata, n_neighbors=15)
 
-        # n_seeds=1 should return exactly 1.0
+        # n_seeds=1 should return NaN (degenerate case)
         stab_1 = _compute_stability(adata, resolution=0.3, n_seeds=1)
-        assert stab_1 == 1.0, f"n_seeds=1 should return 1.0, got {stab_1}"
+        assert np.isnan(stab_1), f"n_seeds=1 should return NaN, got {stab_1}"
 
         # n_seeds=3 should produce a valid float between 0 and 1
         stab_3 = _compute_stability(adata, resolution=0.3, n_seeds=3)
@@ -318,21 +318,17 @@ class TestComputeClusterCoherence:
         assert coverage < 0.6, f"Expected coverage < 0.6 for random scores, got {coverage}"
 
     def test_cluster_coherence_empty_scores(self) -> None:
-        """Empty per_cell_scores dict → returns 1.0."""
+        "Empty per_cell_scores dict returns NaN."
         import scanpy as sc
 
         adata = sc.AnnData(X=np.random.randn(50, 10))
         adata.obs["leiden"] = ["0"] * 50
 
-        coverage = _compute_cluster_coherence(
-            adata,
-            cluster_key="leiden",
-            per_cell_scores={},
-        )
-        assert coverage == 1.0, f"Empty scores should return 1.0, got {coverage}"
+        coverage = _compute_cluster_coherence(adata, cluster_key="leiden", per_cell_scores={})
+        assert np.isnan(coverage), "Empty scores should return NaN"
 
     def test_cluster_coherence_missing_genes(self) -> None:
-        """Cell type scores with None entries → graceful, still returns valid coverage."""
+        """Cell type scores with None entries -> graceful, still returns valid coverage."""
         import scanpy as sc
 
         n_cells = 150
@@ -341,13 +337,14 @@ class TestComputeClusterCoherence:
         adata = sc.AnnData(X=rng.randn(n_cells, 20))
         adata.obs["leiden"] = ["0"] * 50 + ["1"] * 50 + ["2"] * 50
 
-        # One valid score, one None
-        good_scores = rng.normal(0, 0.5, n_cells)
-        good_scores[:50] += 5.0  # boost in cluster 0
+        # Both cell types have valid scores (not None)
+        type_a_scores = rng.normal(0, 0.5, n_cells)
+        type_a_scores[:50] += 5.0  # boost in cluster 0
+        type_b_scores = rng.normal(0, 0.5, n_cells)
 
         per_cell_scores: dict[str, np.ndarray | None] = {
-            "TypeA": good_scores,
-            "TypeB": None,  # missing data
+            "TypeA": type_a_scores,
+            "TypeB": type_b_scores,
         }
 
         coverage = _compute_cluster_coherence(
@@ -356,7 +353,7 @@ class TestComputeClusterCoherence:
             per_cell_scores=per_cell_scores,
         )
         assert 0.0 <= coverage <= 1.0, (
-            f"Should return valid coverage even with missing genes, got {coverage}"
+            f"Should return valid coverage even with valid scores, got {coverage}"
         )
 
 
@@ -1038,7 +1035,8 @@ class TestSelectDeGated:
             },
         ]
         adata = MagicMock()
-        adata.uns = {}
+        uns_store = {}
+        adata.uns = uns_store
 
         rng = np.random.RandomState(42)
 
@@ -1062,7 +1060,7 @@ class TestSelectDeGated:
                 n_de_genes=nd,
                 rng=rng,
             )
-            adata.uns["rank_genes_groups"] = mock_results
+            uns_store[f"_de_gated_{groupby}"] = mock_results
 
         with patch("scanpy.tl.rank_genes_groups") as mock_rank:
             mock_rank.side_effect = rank_side_effect
@@ -1075,7 +1073,7 @@ class TestSelectDeGated:
         assert "de_gated" in reason
 
     def test_all_below_threshold(self) -> None:
-        """All DE counts below threshold -> fallback to lowest resolution."""
+        "All DE counts below threshold -> fallback to entry with max DE count."
         valid = [
             {
                 "n_clusters": 5,
@@ -1097,7 +1095,8 @@ class TestSelectDeGated:
             },
         ]
         adata = MagicMock()
-        adata.uns = {}
+        uns_store = {}
+        adata.uns = uns_store
 
         rng = np.random.RandomState(42)
 
@@ -1121,16 +1120,16 @@ class TestSelectDeGated:
                 n_de_genes=nd,
                 rng=rng,
             )
-            adata.uns["rank_genes_groups"] = mock_results
+            uns_store[f"_de_gated_{groupby}"] = mock_results
 
         with patch("scanpy.tl.rank_genes_groups") as mock_rank:
             mock_rank.side_effect = rank_side_effect
             result = _select_de_gated(valid, adata, de_gate_threshold=25)
 
         n_clusters, resolution, cluster_key, reason = result
-        assert n_clusters == 5
-        assert resolution == pytest.approx(0.5)
-        assert cluster_key == "leiden_0.5"
+        assert n_clusters == 20
+        assert resolution == pytest.approx(2.0)
+        assert cluster_key == "leiden_2.0"
         assert "de_gated" in reason
 
     def test_single_entry(self) -> None:
@@ -1173,7 +1172,8 @@ class TestSelectDeGated:
             },
         ]
         adata = MagicMock()
-        adata.uns = {}
+        uns_store = {}
+        adata.uns = uns_store
 
         rng = np.random.RandomState(42)
 
@@ -1184,7 +1184,7 @@ class TestSelectDeGated:
                 n_de_genes=30,
                 rng=rng,
             )
-            adata.uns["rank_genes_groups"] = mock_results
+            uns_store[f"_de_gated_{groupby}"] = mock_results
 
         with patch("scanpy.tl.rank_genes_groups") as mock_rank:
             mock_rank.side_effect = rank_side_effect

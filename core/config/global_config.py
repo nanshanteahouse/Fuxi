@@ -96,7 +96,7 @@ class GlobalClusteringConfig(BaseModel):
 
     cluster_selection_method: str = "multi_metric"
     umap_selection_method: str = "convex_hull"
-    param_grid_min_dist: list[float] = [0.1, 0.3, 0.5]
+    umap_selection_metric: str = "trustworthiness"
     param_grid_spread: list[float] = [1.0]
     umap_min_dist: float = 0.3
     umap_spread: float = 1.0

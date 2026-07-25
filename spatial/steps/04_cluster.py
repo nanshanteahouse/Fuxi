@@ -210,126 +210,15 @@ def main():
             )
 
         # ── Multi-metric enrichment (for multi_metric selection method) ──
-        import logging as _logging
+        from core.cluster.evaluation import enrich_grid_results
 
-        from core.cluster.evaluation import (
-            _compute_cluster_coherence,
-            _compute_splitting_gain,
-            _compute_stability,
+        enrich_grid_results(
+            adata,
+            results_summary,
+            cfg,
+            log=log,
+            use_rep=use_rep,
         )
-
-        _log_enrich = _logging.getLogger(__name__)
-
-        marker_dict = getattr(cfg.marker, "marker_dict", None) or {}
-        has_markers = bool(marker_dict)
-        n_stab_seeds = getattr(cfg.clustering, "multi_metric_n_stability_seeds", 5)
-        dominance_threshold = getattr(cfg.clustering, "multi_metric_coverage_ratio_threshold", 1.5)
-
-        # Group results by n_neighbors
-        by_n = {}
-        for r in results_summary:
-            n = r.get("n_neighbors")
-            by_n.setdefault(n, []).append(r)
-
-        for n_val, group in by_n.items():
-            try:
-                sc.pp.neighbors(
-                    adata,
-                    n_neighbors=n_val,
-                    n_pcs=cfg.pca.n_pcs_use,
-                    use_rep=use_rep,
-                    random_state=cfg.execution.random_seed,
-                )
-            except Exception as e:
-                _log_enrich.warning(
-                    "KNN rebuild failed for n_neighbors=%d: %s \u2014 skipping group", n_val, e
-                )
-                continue
-
-            per_cell_scores = {}
-            if has_markers and adata.raw is not None:
-                from anndata import utils as anndata_utils
-
-                adata.raw._var.index = anndata_utils.make_index_unique(
-                    adata.raw._var.index, join="-"
-                )
-                try:
-                    for ct, genes in marker_dict.items():
-                        valid_genes = [g for g in genes if g in adata.raw.var_names]
-                        if valid_genes:
-                            sc.tl.score_genes(
-                                adata, gene_list=valid_genes, score_name=f"_score_{ct}"
-                            )
-                            per_cell_scores[ct] = adata.obs[f"_score_{ct}"].values.copy()
-                    for col in list(adata.obs.columns):
-                        if col.startswith("_score_") and col in adata.obs.columns:
-                            adata.obs.drop(columns=[col], inplace=True)
-                except Exception as e:
-                    _log_enrich.warning(
-                        "Marker score pre-computation failed: %s \u2014 falling back to no markers",
-                        e,
-                    )
-                    has_markers = False
-            elif has_markers and adata.raw is None:
-                _log_enrich.warning(
-                    "adata.raw is None \u2014 cannot compute marker coverage. Degrading to silhouette+stability only."
-                )
-                has_markers = False
-
-            for entry in group:
-                try:
-                    resolution = entry["resolution"]
-                    ck = entry["cluster_key"]
-                    entry["stability_score"] = _compute_stability(
-                        adata,
-                        resolution=resolution,
-                        leiden_flavor=getattr(cfg.clustering, "leiden_flavor", "igraph"),
-                        n_seeds=n_stab_seeds,
-                    )
-                    if has_markers and per_cell_scores:
-                        entry["cluster_coherence"] = _compute_cluster_coherence(
-                            adata,
-                            ck,
-                            per_cell_scores,
-                            dominance_threshold=dominance_threshold,
-                        )
-
-                    if getattr(cfg, "tissue_kb", None) and per_cell_scores:
-                        labels = adata.obs[ck].values
-                        unique_clusters = np.unique(labels)
-                        n_total = len(unique_clusters)
-                        n_annotatable = 0
-                        for cl in unique_clusters:
-                            mask = labels == cl
-                            best_score = 0.0
-                            for ct in per_cell_scores:
-                                scores = per_cell_scores[ct]
-                                if scores is not None and len(scores) == len(labels):
-                                    mean_val = float(np.mean(scores[mask]))
-                                    if mean_val > best_score:
-                                        best_score = mean_val
-                            if best_score > 0.5:
-                                n_annotatable += 1
-                        rate = n_annotatable / n_total if n_total > 0 else 0.0
-                        entry["kb_annotatable_rate"] = rate
-                        _log_enrich.info("KB annotatable rate: %.3f", rate)
-
-                except Exception as e:
-                    _log_enrich.warning(
-                        "Enrichment failed for n_neighbors=%d, resolution=%.1f: %s",
-                        entry.get("n_neighbors"),
-                        entry.get("resolution"),
-                        e,
-                    )
-                    entry["stability_score"] = None
-                    entry["cluster_coherence"] = None
-                    entry["kb_annotatable_rate"] = None
-
-            if len(group) >= 2:
-                group_sorted = sorted(group, key=lambda e: e.get("resolution", 0.0))
-                gains = _compute_splitting_gain(group_sorted)
-                for entry in group:
-                    entry["splitting_gain"] = gains.get(entry["resolution"], 0.0)
 
     # ── Generate per-param UMAP plots ──
     for n in n_neighbors_grid:
@@ -446,7 +335,15 @@ def main():
         )
 
     best_md, best_sp, umap_method_label, sweep_results = select_best_umap_params(
-        adata, best_n, min_dist_grid, spread_grid, umap_method, cfg, use_rep, log
+        adata,
+        best_n,
+        min_dist_grid,
+        spread_grid,
+        umap_method,
+        cfg,
+        use_rep,
+        log,
+        metric=getattr(cfg.clustering, "umap_selection_metric", "trustworthiness"),
     )
     log.info(
         "Rebuilding UMAP with selected params (min_dist=%.2f, spread=%.1f) [%s]...",

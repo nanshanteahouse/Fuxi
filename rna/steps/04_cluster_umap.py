@@ -215,6 +215,27 @@ def main():
     umap_min_dist = getattr(cfg.clustering, "umap_min_dist", 0.3)
     umap_spread = getattr(cfg.clustering, "umap_spread", 1.0)
 
+    # ── KB suggestion for target_n_clusters ──
+    if getattr(cfg.clustering, "target_n_clusters", None) is None and getattr(cfg, "tissue", None):
+        from core.kb import suggest_target_n_clusters
+
+        try:
+            suggested = suggest_target_n_clusters(cfg.tissue, getattr(cfg, "species", None))
+            if suggested is not None:
+                log.info(
+                    "KB suggests target_n_clusters=%d for tissue=%s species=%s. "
+                    "Set clustering.target_n_clusters=%d in config to activate target mode.",
+                    suggested,
+                    cfg.tissue,
+                    getattr(cfg, "species", None),
+                    suggested,
+                )
+        except Exception:
+            log.debug(
+                "KB suggestion failed (tissue=%s, species=%s)",
+                cfg.tissue,
+                getattr(cfg, "species", None),
+            )
     # ── Grid search via shared core ──
 
     # Scanpy-specific callables (close over CFG and use_rep)
@@ -256,8 +277,6 @@ def main():
         )
         adata.obsm[umap_key] = adata.obsm["X_umap"].copy()
         return leiden_key
-        adata.obsm[umap_key] = adata.obsm["X_umap"].copy()
-        return leiden_key
 
     def _evaluation_fn(adata, cluster_key, **kwargs):
         labels = adata.obs[cluster_key].values
@@ -281,20 +300,71 @@ def main():
             )
 
     with timed_substep("Grid search (Leiden)", log=log):
-        results_summary = grid_search_clustering(
-            adata,
-            param_grid={
-                "n_neighbors": n_neighbors_grid,
-                "resolution": resolutions_grid,
-            },
-            clusterer=_clusterer_fn,
-            neighbor_fn=_neighbors_fn,
-            umap_fn=_umap_fn,
-            evaluation_fn=_evaluation_fn,
-            group_key="n_neighbors",
-            n_jobs=cfg.execution.n_jobs,
-            random_seed=cfg.execution.random_seed,
-        )
+        # ── Three-mode dispatch ──
+        if getattr(cfg.clustering, "target_n_clusters", None) is not None:
+            log.warning("TARGET mode: target_n_clusters=%d", cfg.clustering.target_n_clusters)
+            adata.uns["grid_scan_mode"] = "target"
+            from core.cluster.target import target_grid_search
+
+            results_summary = target_grid_search(adata, cfg, log=log)
+
+        elif getattr(cfg.clustering, "funnel_enabled", False) and adata.n_obs > getattr(
+            cfg.clustering, "funnel_threshold", 100000
+        ):
+            log.warning(
+                "FUNNEL mode: n_obs=%d > threshold=%d. Subsample size=%d, top_k=%d",
+                adata.n_obs,
+                getattr(cfg.clustering, "funnel_threshold", 100000),
+                getattr(cfg.clustering, "funnel_subsample_size", 50000),
+                getattr(cfg.clustering, "funnel_top_k", 3),
+            )
+            adata.uns["grid_scan_mode"] = "funnel"
+
+            def _funnel_full_grid_fn(sub_adata, cfg):
+                from core.cluster.evaluation import enrich_grid_results
+
+                sub_results = grid_search_clustering(
+                    sub_adata,
+                    param_grid={
+                        "n_neighbors": n_neighbors_grid,
+                        "resolution": resolutions_grid,
+                    },
+                    clusterer=_clusterer_fn,
+                    neighbor_fn=_neighbors_fn,
+                    umap_fn=_umap_fn,
+                    evaluation_fn=_evaluation_fn,
+                    group_key="n_neighbors",
+                    n_jobs=cfg.execution.n_jobs,
+                    random_seed=cfg.execution.random_seed,
+                )
+                for r in sub_results:
+                    if "score" in r:
+                        r["silhouette_score"] = r.pop("score")
+                enrich_grid_results(sub_adata, sub_results, cfg, log=log, use_rep=use_rep)
+                return sub_results
+
+            from core.cluster.funnel import run_funnel_grid_search
+
+            best_entry = run_funnel_grid_search(adata, cfg, _funnel_full_grid_fn, log=log)
+            results_summary = [best_entry]
+
+        else:
+            log.info("FULL GRID mode: n_obs=%d", adata.n_obs)
+            adata.uns["grid_scan_mode"] = "full"
+            results_summary = grid_search_clustering(
+                adata,
+                param_grid={
+                    "n_neighbors": n_neighbors_grid,
+                    "resolution": resolutions_grid,
+                },
+                clusterer=_clusterer_fn,
+                neighbor_fn=_neighbors_fn,
+                umap_fn=_umap_fn,
+                evaluation_fn=_evaluation_fn,
+                group_key="n_neighbors",
+                n_jobs=cfg.execution.n_jobs,
+                random_seed=cfg.execution.random_seed,
+            )
 
     # Rename score → silhouette_score for select_best_params compatibility
     for r in results_summary:
@@ -340,180 +410,54 @@ def main():
         )
     else:
         # ── Multi-metric enrichment (for multi_metric selection method) ──
-        import logging as _logging
+        from core.cluster.evaluation import enrich_grid_results
 
-        from core.cluster.evaluation import (
-            _compute_cluster_coherence,
-            _compute_splitting_gain,
-            _compute_stability,
+        enrich_grid_results(
+            adata,
+            results_summary,
+            cfg,
+            log=log,
+            use_rep=use_rep,
         )
-
-        _log_enrich = _logging.getLogger(__name__)
-
-        marker_dict = getattr(cfg.marker, "marker_dict", None) or {}
-        has_markers = bool(marker_dict)
-        n_stab_seeds = getattr(cfg.clustering, "multi_metric_n_stability_seeds", 5)
-        dominance_threshold = getattr(cfg.clustering, "multi_metric_coverage_ratio_threshold", 1.5)
-
-        # Group results by n_neighbors
-        by_n = {}
-        for r in results_summary:
-            n = r.get("n_neighbors")
-            by_n.setdefault(n, []).append(r)
-
-        for n_val, group in by_n.items():
-            # Rebuild KNN only if the current graph doesn't already match n_val.
-            # grid_search_clustering leaves the last group's KNN on adata;
-            # if multi_metric's first n_val happens to equal it, skip the rebuild.
-            _need_rebuild_knn = True
-            try:
-                _nb_params = adata.uns.get("neighbors", {}).get("params", {}) or {}
-                if (
-                    _nb_params.get("n_neighbors") == n_val
-                    and _nb_params.get("use_rep") == use_rep
-                    and "connectivities" in adata.obsp
-                ):
-                    _need_rebuild_knn = False
-            except Exception:
-                pass
-            if _need_rebuild_knn:
-                try:
-                    sc.pp.neighbors(
-                        adata,
-                        n_neighbors=n_val,
-                        n_pcs=cfg.pca.n_pcs_use,
-                        use_rep=use_rep,
-                        random_state=cfg.execution.random_seed,
-                    )
-                except Exception as e:
-                    _log_enrich.warning(
-                        "KNN rebuild failed for n_neighbors=%d: %s — skipping group", n_val, e
-                    )
-                    continue
-
-            # Pre-compute per_cell_scores once per group (only if markers available AND adata.raw exists)
-            per_cell_scores = {}
-            if has_markers and adata.raw is not None:
-                from anndata import utils as anndata_utils
-
-                adata.raw._var.index = anndata_utils.make_index_unique(
-                    adata.raw._var.index, join="-"
-                )
-                try:
-                    for ct, genes in marker_dict.items():
-                        valid_genes = [g for g in genes if g in adata.raw.var_names]
-                        if valid_genes:
-                            sc.tl.score_genes(
-                                adata, gene_list=valid_genes, score_name=f"_score_{ct}"
-                            )
-                            per_cell_scores[ct] = adata.obs[f"_score_{ct}"].values.copy()
-                    # Clean up temporary score columns
-                    for col in list(adata.obs.columns):
-                        if col.startswith("_score_") and col in adata.obs.columns:
-                            adata.obs.drop(columns=[col], inplace=True)
-                except Exception as e:
-                    _log_enrich.warning(
-                        "Marker score pre-computation failed: %s — falling back to no markers", e
-                    )
-                    has_markers = False
-            elif has_markers and adata.raw is None:
-                _log_enrich.warning(
-                    "adata.raw is None — cannot compute marker coverage. Degrading to silhouette+stability only."
-                )
-                has_markers = False
-
-            # Compute stability + marker_coverage for each combo in this group
-            for entry in group:
-                try:
-                    resolution = entry["resolution"]
-                    ck = entry["cluster_key"]
-                    entry["stability_score"] = _compute_stability(
-                        adata,
-                        resolution=resolution,
-                        leiden_flavor=cfg.clustering.leiden_flavor,
-                        n_seeds=n_stab_seeds,
-                        device=cfg.execution.device,
-                    )
-                    if has_markers and per_cell_scores:
-                        entry["cluster_coherence"] = _compute_cluster_coherence(
-                            adata,
-                            ck,
-                            per_cell_scores,
-                            dominance_threshold=dominance_threshold,
-                        )
-                    # ── KB annotatable rate ──
-                    if getattr(cfg, "tissue_kb", None) and per_cell_scores:
-                        labels = adata.obs[ck].values
-                        unique_clusters = np.unique(labels)
-                        n_total = len(unique_clusters)
-                        n_annotatable = 0
-                        for cl in unique_clusters:
-                            mask = labels == cl
-                            best_score = 0.0
-                            for ct in per_cell_scores:
-                                scores = per_cell_scores[ct]
-                                if scores is not None and len(scores) == len(labels):
-                                    mean_val = float(np.mean(scores[mask]))
-                                    if mean_val > best_score:
-                                        best_score = mean_val
-                            if best_score > 0.5:
-                                n_annotatable += 1
-                        rate = n_annotatable / n_total if n_total > 0 else 0.0
-                        entry["kb_annotatable_rate"] = rate
-                        _log_enrich.info(f"KB annotatable rate: {rate:.3f}")
-
-                except Exception as e:
-                    _log_enrich.warning(
-                        "Enrichment failed for n_neighbors=%d, resolution=%.1f: %s",
-                        entry.get("n_neighbors"),
-                        entry.get("resolution"),
-                        e,
-                    )
-                    entry["stability_score"] = None
-                    entry["cluster_coherence"] = None
-                    entry["kb_annotatable_rate"] = None
-
-            # ── Compute splitting_gain for this n_neighbors group ──
-            if len(group) >= 2:
-                group_sorted = sorted(group, key=lambda e: e.get("resolution", 0.0))
-                gains = _compute_splitting_gain(group_sorted)
-                for entry in group:
-                    entry["splitting_gain"] = gains.get(entry["resolution"], 0.0)
     # ── Single-param UMAP plots ──
     # This loop is the largest matplotlib cost in step 04 on big datasets
-    # (Li2026: 18 plots × 1M cells ≈ 2h). _smart_plot_umap dispatches by
-    # cfg.clustering.umap_plot_mode (auto/subsample/skip/full).
-    for n in n_neighbors_grid:
-        for res in resolutions_grid:
-            umap_key = f"umap_{n}_{res}"
-            leiden_key = f"leiden_{n}_{res}"
-            if umap_key not in adata.obsm or leiden_key not in adata.obs:
-                continue
-            saved = adata.obsm.get("X_umap")
-            adata.obsm["X_umap"] = adata.obsm[umap_key].copy()
-            try:
-                fig, ax = plt.subplots(figsize=(6, 5))
-                drawn = _smart_plot_umap(
-                    adata,
-                    color=leiden_key,
-                    ax=ax,
-                    title=f"UMAP (n_neighbors={n}, resolution={res})",
-                    cfg=cfg,
-                    log=log,
-                )
-                if drawn:
-                    fig.savefig(
-                        os.path.join(fig_dir, f"leiden_grid_n{n}_r{res}.png"),
-                        dpi=cfg.plot.figure_dpi,
-                        bbox_inches="tight",
+    # (Li2026: 18 plots × 1M cells ≈ 2h). Config clustering.plot_per_combo
+    # controls whether per-combo plots are generated. Disable to save ~80%
+    # plot wall time at 1M scale. Summary/aggregate plots still generate.
+    if cfg.clustering.plot_per_combo:
+        for n in n_neighbors_grid:
+            for res in resolutions_grid:
+                umap_key = f"umap_{n}_{res}"
+                leiden_key = f"leiden_{n}_{res}"
+                if umap_key not in adata.obsm or leiden_key not in adata.obs:
+                    continue
+                saved = adata.obsm.get("X_umap")
+                adata.obsm["X_umap"] = adata.obsm[umap_key].copy()
+                try:
+                    fig, ax = plt.subplots(figsize=(6, 5))
+                    drawn = _smart_plot_umap(
+                        adata,
+                        color=leiden_key,
+                        ax=ax,
+                        title=f"UMAP (n_neighbors={n}, resolution={res})",
+                        cfg=cfg,
+                        log=log,
                     )
-                    log.info("    Plot saved: umap_grid_n%d_r%.1f.png", n, res)
-                plt.close(fig)
-            except Exception as e:
-                log.warning("    Single-param UMAP plot save failed: %s", e)
-            finally:
-                if saved is not None:
-                    adata.obsm["X_umap"] = saved
+                    if drawn:
+                        fig.savefig(
+                            os.path.join(fig_dir, f"leiden_grid_n{n}_r{res}.png"),
+                            dpi=cfg.plot.figure_dpi,
+                            bbox_inches="tight",
+                        )
+                        log.info("    Plot saved: umap_grid_n%d_r%.1f.png", n, res)
+                    plt.close(fig)
+                except Exception as e:
+                    log.warning("    Single-param UMAP plot save failed: %s", e)
+                finally:
+                    if saved is not None:
+                        adata.obsm["X_umap"] = saved
+    else:
+        log.info("Per-combo UMAP plots skipped (plot_per_combo=False)")
 
     # ── 汇总 CSV ──
     df_summary = pd.DataFrame(results_summary)
@@ -534,7 +478,7 @@ def main():
     # ── 自动选择最佳参数并生成最终 checkpoint ──
     df_summary = pd.DataFrame(results_summary)
 
-    method = getattr(cfg.clustering, "cluster_selection_method", "pareto_elbow")
+    method = getattr(cfg.clustering, "cluster_selection_method", "multi_metric")
 
     # Warn if best_resolution is explicitly set to non-default but will be ignored
     if method is not None and (
@@ -619,6 +563,7 @@ def main():
             use_rep,
             log,
             device=cfg.execution.device,
+            metric=getattr(cfg.clustering, "umap_selection_metric", "trustworthiness"),
         )
 
     # Rebuild UMAP with selected params and re-save checkpoint.
