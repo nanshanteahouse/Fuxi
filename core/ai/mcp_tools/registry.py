@@ -158,9 +158,21 @@ def _search_papers(query: str) -> str:
     reg = _load_registry()
     q = query.lower().strip()
 
+    # Parse prefix syntax (e.g., "author:Shekhar") — bypasses general match
+    author_value = None
+    if ":" in q:
+        prefix, value = q.split(":", 1)
+        value = value.strip()
+        if prefix == "author":
+            author_value = value
+            q = value  # search by author name only
+
     def matches(p) -> bool:
         if not q:
             return True
+        if author_value is not None:
+            # prefix mode: match against first_author only
+            return author_value in (p.first_author or "").lower()
         fields = [
             p.title or "",
             p.first_author or "",
@@ -169,16 +181,11 @@ def _search_papers(query: str) -> str:
             p.pmid or "",
             p.slug or "",
         ]
+        # Also match by linked dataset IDs (GSE/E-MTAB/...)
+        fields.extend(ds_id for ds_id, _ in reg.get_dataset_links(p.paper_id))
         return any(q in f.lower() for f in fields)
 
     results = [p for p in reg.papers if matches(p)]
-
-    # If query looks like "author:X", filter by author
-    if ":" in q:
-        prefix, value = q.split(":", 1)
-        value = value.strip()
-        if prefix == "author":
-            results = [p for p in results if value in (p.first_author or "").lower()]
 
     output = []
     for p in results:
