@@ -34,6 +34,8 @@ from typing import Any, Optional
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.paper.slug import build_slug
+
 logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════
@@ -919,79 +921,10 @@ def _cmd_list_papers(
         print()
 
 
-_JOURNAL_ABBREVS = {
-    "cell": "cell",
-    "neuron": "neuron",
-    "nature": "nature",
-    "science": "science",
-    "nature communications": "natcomms",
-    "nature genetics": "natgenet",
-    "cell genomics": "cellgenom",
-    "cell reports": "cellrep",
-    "scientific reports": "scirep",
-    "scientific data": "scidata",
-    "plos biology": "plosbiol",
-    "plos genetics": "plosgenet",
-    "genome biology": "genomebiol",
-    "developmental cell": "devcell",
-    "development": "development",
-    "elife": "elife",
-    "iscience": "iscience",
-    "frontiers in immunology": "frontimmunol",
-    "frontiers in genetics": "frontgenet",
-    "proceedings of the national academy of sciences": "pnas",
-    "nature methods": "natmethods",
-    "the journal of clinical investigation": "jci",
-    "jci insight": "jciinsight",
-    "nucleic acids research": "nucleicacidsres",
-    "advanced science": "advsci",
-    "national science review": "natsci_rev",
-    "protein & cell": "proteincell",
-    "biorxiv": "biorxiv",
-    "research square": "researchsq",
-    "stem cell reports": "stemcellrep",
-    # PubMed abbreviated names (from actual metadata)
-    "stem cells": "stemcells",
-    "cell rep": "cellrep",
-    "nat commun": "natcomms",
-    "nat genet": "natgenet",
-    "cell genom": "cellgenom",
-    "sci rep": "scirep",
-    "sci adv": "sciadv",
-    "sci data": "scidata",
-    "plos biol": "plosbiol",
-    "plos genet": "plosgenet",
-    "genome biol": "genomebiol",
-    "genome med": "genomemed",
-    "dev cell": "devcell",
-    "front genet": "frontgenet",
-    "front immunol": "frontimmunol",
-    "front mol neurosci": "frontmolneurosci",
-    "proc natl acad sci u s a": "pnas",
-    "adv sci (weinh)": "advsci",
-    "nucleic acids res": "nucleicacidsres",
-    "protein cell": "proteincell",
-    "invest ophthalmol vis sci": "iovs",
-    "exp eye res": "expeyeres",
-    "hum mol genet": "hummolgenet",
-    "j clin invest": "jci",
-    "j cell mol med": "jcellmolmed",
-    "commun biol": "communbiol",
-    "cancer med": "cancermed",
-    "stem cells transl med": "stemcellstranslmed",
-    "pnas nexus": "pnasnexus",
-    "cell mol immunol": "cellmolimmunol",
-    "res sq": "researchsq",
-}
-
-
-def _build_slug_local(first_author: str, year: str, journal: str, pmid: Optional[str]) -> str:
-    author = re.sub(r"[^a-z]", "", (first_author or "unknown").lower())[:20] or "unknown"
-    yr = (year or "0000")[:4]
-    j = (journal or "").strip().lower()
-    j = re.sub(r"\s+", " ", j)
-    ab = _JOURNAL_ABBREVS.get(j, "unknown")
-    return f"{author}{yr}_{ab}"
+# Slug generation lives in core.paper.slug.
+# Old _JOURNAL_ABBREVS dict and _build_slug_local removed — Plan A migration
+# replaced {author}{year}_{journal} with {author}{year}_{topic}.
+# See notes/slug-migrationPlan if you need the historical context.
 
 
 def _select_datasets_interactive(
@@ -1103,18 +1036,21 @@ def _register_from_insights(
     meta = insights.get("paper_meta", {}) or {}
     pmid = str(meta.get("pmid", "") or "")
     if not pmid:
-        # no PMID --- 用 author-year-journal 构造 paper_id
-        first_auth = str(meta.get("first_author", "") or "")
-        year = str(meta.get("year", "") or "")
-        journal = str(meta.get("journal", "") or "")
-        pmid = f"no-pmid-{_build_slug_local(first_auth, year, journal, None)}"
-
-    slug = _build_slug_local(
-        str(meta.get("first_author", "")),
-        str(meta.get("year", "")),
-        str(meta.get("journal", "")),
-        pmid if not pmid.startswith("no-pmid-") else None,
-    )
+        # no PMID --- slug doubles as synthetic paper_id
+        slug = build_slug(
+            first_author=str(meta.get("first_author", "") or ""),
+            year=str(meta.get("year", "") or ""),
+            paper_meta=meta,
+            insights=insights,
+        )
+        pmid = f"no-pmid-{slug}"
+    else:
+        slug = build_slug(
+            first_author=str(meta.get("first_author", "") or ""),
+            year=str(meta.get("year", "") or ""),
+            paper_meta=meta,
+            insights=insights,
+        )
 
     if registry.get_paper(pmid):
         print(f"\u26a0\ufe0f Paper {pmid} exists, skip")
