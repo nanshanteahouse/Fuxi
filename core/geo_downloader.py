@@ -115,25 +115,64 @@ def _ncbi_api_key() -> Optional[str]:
     return key or None
 
 
-def _ncbi_fetch(url: str, raw: bool = False) -> bytes | str:
-    """Rate-limited HTTPS GET with NCBI-appropriate User-Agent.
+def _ncbi_fetch(url: str, raw: bool = False, max_retries: int = 3) -> bytes | str:
+    """Rate-limited HTTPS GET with NCBI-appropriate User-Agent and retry.
+
+    Retries up to *max_retries* times with exponential backoff on HTTP 429/503
+    and transient network errors (URLError, OSError).
 
     Args:
         url: Full HTTPS URL to fetch.
         raw: If True, return bytes; otherwise decode as UTF-8.
+        max_retries: Maximum retry attempts (default 3).
 
     Returns:
         Response body as bytes or str.
 
     Raises:
-        urllib.error.HTTPError: On non-2xx responses.
-        urllib.error.URLError: On network failures.
+        urllib.error.HTTPError: On non-retryable HTTP errors.
+        RuntimeError: After exhausting all retries.
     """
-    time.sleep(_NCBI_RATE_LIMIT)
-    req = urllib.request.Request(url, headers={"User-Agent": _NCBI_USER_AGENT})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        data = resp.read()
-    return data if raw else data.decode("utf-8", errors="replace")
+    last_error: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            time.sleep(_NCBI_RATE_LIMIT)
+            req = urllib.request.Request(url, headers={"User-Agent": _NCBI_USER_AGENT})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = resp.read()
+            return data if raw else data.decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 503):
+                wait = 1.0 * (2**attempt)
+                log.warning(
+                    "NCBI HTTP %d for %s, retry %d/%d in %.1fs...",
+                    e.code,
+                    url,
+                    attempt + 1,
+                    max_retries,
+                    wait,
+                )
+                time.sleep(wait)
+                last_error = e
+            else:
+                raise
+        except (urllib.error.URLError, OSError) as e:
+            last_error = e
+            if attempt < max_retries - 1:
+                wait = 0.5 * (2**attempt)
+                log.warning(
+                    "Network error for %s: %s, retry %d/%d in %.1fs...",
+                    url,
+                    e,
+                    attempt + 1,
+                    max_retries,
+                    wait,
+                )
+                time.sleep(wait)
+            else:
+                raise RuntimeError(f"NCBI fetch failed after {max_retries} attempts: {last_error}")
+
+    raise RuntimeError(f"NCBI fetch failed after {max_retries} attempts: {last_error}")
 
 
 # ═══════════════════════════════════════════════════════════════════

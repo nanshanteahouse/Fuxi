@@ -846,7 +846,7 @@ def _cmd_status(
         paper = registry.get_paper(pmid) or registry.get_paper_by_pmid(pmid)
         if paper is None:
             print(f"\u274c PMID {pmid} not found in registry")
-            print(f"\U0001f4a1 Run: python core/paper_insights.py --pmid {pmid}")
+            print(f"\U0001f4a1 Run: python core/paper/insights.py --pmid {pmid}")
             print(f"    Then: python -m core.registry register --pmid {pmid}")
             return
         print(f"\U0001f4cb Paper: {paper.paper_id}  ({paper.slug})")
@@ -1142,6 +1142,7 @@ def _cmd_add_paper(
     download: bool = False,
     select_all: bool = False,
     datasets: list[str] | None = None,
+    fast: bool = False,
 ) -> MasterRegistry:
     import subprocess
     import sys
@@ -1150,45 +1151,75 @@ def _cmd_add_paper(
     insights = None
     subdir = ""
 
-    # ── PMID / XML / PDF 模式：调 paper_insights ──
+    # ── PMID / XML / PDF 模式 ──
     if pmid or xml or pdf:
-        cmd = [sys.executable, "core/paper_insights.py"]
-        if pmid:
-            cmd.extend(["--pmid", pmid])
-            print(f"\U0001f50d pmid={pmid}: calling paper_insights ...")
-        if xml:
-            cmd.extend(["--xml", xml])
-            print(f"\U0001f50d xml={xml}: calling paper_insights ...")
-        elif pdf:
-            cmd.extend(["--pdf", pdf])
-            print(f"\U0001f50d pdf={pdf}: calling paper_insights ...")
-        result = subprocess.run(cmd, text=True)
-        if result.returncode != 0:
-            print(f"\u274c paper_insights failed (exit={result.returncode})")
-            if result.stderr:
-                print(result.stderr[-500:])
-            return registry
-        # 扫描新生成的 insights.yaml
-        for d in sorted(os.listdir(papers_root)):
-            ipath = os.path.join(papers_root, d, "insights.yaml")
-            if not os.path.isfile(ipath):
-                continue
-            try:
-                with open(ipath) as f:
-                    data = yaml.safe_load(f)
-                m = data.get("paper_meta", {}) or {}
-                # PMID 模式：按 PMID 匹配；XML 模式：匹配第一个
-                if pmid and str(m.get("pmid", "")) == pmid:
-                    insights, subdir = data, d
-                    break
-                if xml and insights is None:
-                    insights, subdir = data, d
-                    break
-            except Exception:
-                continue
-        if insights is None:
-            print(f"\u274c No insights.yaml found for PMID={pmid or xml}")
-            return registry
+        # Fast mode: bypass LLM, use PubMed metadata directly
+        if fast and pmid and not (xml or pdf):
+            from core.paper.converter import _fetch_pubmed_metadata
+
+            print(f"\U0001f50d pmid={pmid}: fast mode (PubMed metadata only) ...")
+            meta = _fetch_pubmed_metadata(pmid)
+            if not meta or not meta.get("title"):
+                print(f"\u274c Failed to fetch PubMed metadata for PMID {pmid}")
+                return registry
+            slug_base = (meta.get("title", "") or "").lower().replace(" ", "-")
+            slug_base = "".join(c for c in slug_base if c.isalnum() or c == "-").strip("-")
+            subdir = f"pmid_{pmid}"
+            insights = {
+                "paper_meta": {
+                    "pmid": pmid,
+                    "title": meta.get("title", ""),
+                    "journal": meta.get("journal", ""),
+                    "year": meta.get("year", ""),
+                    "first_author": meta.get("first_author", ""),
+                    "doi": meta.get("doi", ""),
+                },
+                "data_access": {"geo_ids": []},
+            }
+        else:
+            # Full mode: run paper_insights via subprocess (LLM-powered)
+            if not os.path.isfile("core/paper/insights.py"):
+                print(
+                    "\u274c core/paper/insights.py not found — use --fast for quick registration"
+                )
+                return registry
+            cmd = [sys.executable, "core/paper/insights.py"]
+            if pmid:
+                cmd.extend(["--pmid", pmid])
+                print(f"\U0001f50d pmid={pmid}: calling paper_insights ...")
+            if xml:
+                cmd.extend(["--xml", xml])
+                print(f"\U0001f50d xml={xml}: calling paper_insights ...")
+            elif pdf:
+                cmd.extend(["--pdf", pdf])
+                print(f"\U0001f50d pdf={pdf}: calling paper_insights ...")
+            result = subprocess.run(cmd, text=True)
+            if result.returncode != 0:
+                print(f"\u274c paper_insights failed (exit={result.returncode})")
+                if result.stderr:
+                    print(result.stderr[-500:])
+                return registry
+            # 扫描新生成的 insights.yaml
+            for d in sorted(os.listdir(papers_root)):
+                ipath = os.path.join(papers_root, d, "insights.yaml")
+                if not os.path.isfile(ipath):
+                    continue
+                try:
+                    with open(ipath) as f:
+                        data = yaml.safe_load(f)
+                    m = data.get("paper_meta", {}) or {}
+                    # PMID 模式：按 PMID 匹配；XML 模式：匹配第一个
+                    if pmid and str(m.get("pmid", "")) == pmid:
+                        insights, subdir = data, d
+                        break
+                    if xml and insights is None:
+                        insights, subdir = data, d
+                        break
+                except Exception:
+                    continue
+            if insights is None:
+                print(f"\u274c No insights.yaml found for PMID={pmid or xml}")
+                return registry
 
     # ── paper-dir 模式：直接从已有目录读取 ──
     elif paper_dir:
@@ -1289,6 +1320,34 @@ def _cmd_register_gse(
 
     if linked:
         print(f"\n   Total new links: {linked}")
+
+    # Auto-link subseries datasets to the same PMIDs (SuperSeries inheritance)
+    is_ss = meta.get("is_superseries", False)
+    subseries_ids = meta.get("subseries_ids", [])
+    if is_ss and subseries_ids and pmid_list:
+        sub_linked = 0
+        for sub_id in subseries_ids:
+            if sub_id not in registry.datasets:
+                continue
+            for pmid in pmid_list:
+                paper = registry.get_paper(pmid)
+                if paper is None:
+                    continue
+                existing = any(
+                    ln.paper_id == pmid and ln.dataset_id == sub_id for ln in registry.links
+                )
+                if not existing:
+                    registry.links.append(
+                        PaperDatasetLink(
+                            paper_id=pmid,
+                            dataset_id=sub_id,
+                            role=LinkRole.RELATED,
+                        )
+                    )
+                    sub_linked += 1
+                    print(f"\u2705  Inherited {sub_id} \u2192 {pmid} (from SuperSeries {gse_id})")
+        if sub_linked:
+            print(f"   SubSeries links inherited: {sub_linked}")
     if dry_run:
         print("\n\U0001f4a1 --dry-run, not saved")
     return registry
@@ -1418,6 +1477,250 @@ def _auto_verify(registry: MasterRegistry) -> None:
         print(f"  {icon} {f['source']}: {f['message']}")
 
 
+def _cmd_scan_register(
+    registry: MasterRegistry,
+    dry_run: bool = False,
+    reg_path: str | None = None,
+) -> MasterRegistry:
+    """Scan FUXI_DATA_ROOT for GSE* directories and batch-register them.
+
+    For each GSE directory found, fetches SOFT metadata from NCBI to
+    discover PMID(s), creates DatasetEntry, and links to existing papers.
+    SuperSeries auto-link their subseries datasets automatically.
+
+    Progress is printed in real-time with per-GSE status.
+    """
+    from core.geo_downloader import fetch_soft_metadata
+
+    data_root = os.environ.get("FUXI_DATA_ROOT", "")
+    if not data_root or not os.path.isdir(data_root):
+        print("\u274c FUXI_DATA_ROOT not set or not a directory")
+        return registry
+
+    gse_dirs = sorted(
+        d
+        for d in os.listdir(data_root)
+        if d.startswith("GSE") and os.path.isdir(os.path.join(data_root, d))
+    )
+    if not gse_dirs:
+        print(f"\u274c No GSE* directories found in {data_root}")
+        return registry
+
+    total = len(gse_dirs)
+    registered = skipped = failed = new_links = 0
+    print(f"\n\U0001f50d Scanning {total} GSE directories in {data_root}\n")
+
+    for idx, gse_id in enumerate(gse_dirs, 1):
+        if gse_id in registry.datasets:
+            ds = registry.datasets[gse_id]
+            print(f"[{idx:3d}/{total}] {gse_id} \u2713 already registered (status={ds.status})")
+            skipped += 1
+            continue
+
+        try:
+            meta = fetch_soft_metadata(gse_id)
+        except Exception as e:
+            print(f"[{idx:3d}/{total}] {gse_id} \u274c NCBI fetch failed: {e}")
+            failed += 1
+            # Still register with data_downloaded if dir exists
+            data_path = os.path.join(data_root, gse_id)
+            if os.path.isdir(data_path):
+                registry.datasets[gse_id] = DatasetEntry(
+                    repository=RepositoryType.GEO,
+                    status="data_downloaded",
+                    data_root=f"{{FUXI_DATA_ROOT}}/{gse_id}",
+                )
+                print("         \u2139\ufe0f  Registered as data_downloaded (no PMID link)")
+            continue
+
+        pmid_list = meta.get("pmid", []) or []
+        is_ss = meta.get("is_superseries", False)
+        subseries_ids = meta.get("subseries_ids", [])
+        ss_tag = " [SuperSeries]" if is_ss else ""
+
+        # Create dataset entry
+        data_path = os.path.join(data_root, gse_id)
+        status = "data_downloaded" if os.path.isdir(data_path) else "data_not_downloaded"
+        registry.datasets[gse_id] = DatasetEntry(
+            repository=RepositoryType.GEO,
+            status=status,
+            data_root=f"{{FUXI_DATA_ROOT}}/{gse_id}",
+            type="SuperSeries" if is_ss else "SingleAccession",
+            non_pipeline=is_ss,
+            subseries=[{"id": sid, "role": "subseries"} for sid in subseries_ids] if is_ss else [],
+            paper_pmids=pmid_list,
+        )
+
+        # Link to papers
+        gse_links = 0
+        for pmid in pmid_list:
+            paper = registry.get_paper(pmid)
+            if paper is None:
+                continue
+            existing = any(
+                ln.paper_id == pmid and ln.dataset_id == gse_id for ln in registry.links
+            )
+            if not existing:
+                registry.links.append(
+                    PaperDatasetLink(paper_id=pmid, dataset_id=gse_id, role=LinkRole.RELATED)
+                )
+                gse_links += 1
+                new_links += 1
+
+        # Auto-link subseries
+        sub_linked = 0
+        if is_ss and subseries_ids and pmid_list:
+            for sub_id in subseries_ids:
+                if sub_id not in registry.datasets:
+                    continue
+                for pmid in pmid_list:
+                    paper = registry.get_paper(pmid)
+                    if paper is None:
+                        continue
+                    existing = any(
+                        ln.paper_id == pmid and ln.dataset_id == sub_id for ln in registry.links
+                    )
+                    if not existing:
+                        registry.links.append(
+                            PaperDatasetLink(
+                                paper_id=pmid,
+                                dataset_id=sub_id,
+                                role=LinkRole.RELATED,
+                            )
+                        )
+                        sub_linked += 1
+                        new_links += 1
+
+        pmid_str = ", ".join(pmid_list) if pmid_list else "no PMID"
+        extra = f" (+{sub_linked} sub)" if sub_linked else ""
+        print(f"[{idx:3d}/{total}] {gse_id}{ss_tag} \u2192 PMID: {pmid_str}  \u2713{extra}")
+        registered += 1
+
+    # Summary
+    print(f"\n{'=' * 60}")
+    print(f"Scan complete: {registered} new, {skipped} skipped, {failed} failed")
+    print(f"New links created: {new_links}")
+    print(
+        f"Papers: {len(registry.papers)}, Datasets: {len(registry.datasets)}, Links: {len(registry.links)}"
+    )
+
+    if not dry_run and reg_path:
+        save_master_registry(registry, reg_path)
+    elif dry_run:
+        print("\n\U0001f4a1 --dry-run, not saved")
+
+    return registry
+
+
+def _cmd_heal_orphans(
+    registry: MasterRegistry,
+    dry_run: bool = False,
+) -> MasterRegistry:
+    """Attempt to heal orphan datasets via known resolution strategies.
+
+    Strategies (tried in order):
+    1. SuperSeries inheritance: if orphan is a subseries of a registered
+       SuperSeries, inherit the parent's PMID links.
+    2. GEO page scraping: fetch the GEO accession HTML page and extract
+       PMIDs from pubmed_id spans (fallback when SOFT metadata has no PMID).
+    """
+    orphans = registry.find_orphans()
+    if not orphans:
+        print("\u2705 No orphan datasets to heal")
+        return registry
+
+    print(f"\n\U0001f3e5 Healing {len(orphans)} orphan dataset(s)...\n")
+
+    healed = 0
+    for ds_id, ds in orphans:
+        healed_this = False
+
+        # Strategy 1: SuperSeries inheritance
+        for parent_id, parent_ds in registry.datasets.items():
+            if not parent_ds.subseries:
+                continue
+            sub_ids = [s.get("id", s.get("gse_id", "")) for s in parent_ds.subseries]
+            if ds_id not in sub_ids:
+                continue
+            # Find parent's linked PMIDs
+            parent_pmids = set()
+            for ln in registry.links:
+                if ln.dataset_id == parent_id:
+                    parent_pmids.add(ln.paper_id)
+            if not parent_pmids:
+                parent_pmids = set(parent_ds.paper_pmids or [])
+            if not parent_pmids:
+                continue
+
+            for pmid in parent_pmids:
+                paper = registry.get_paper(pmid)
+                if paper is None:
+                    continue
+                existing = any(
+                    ln.paper_id == pmid and ln.dataset_id == ds_id for ln in registry.links
+                )
+                if not existing:
+                    registry.links.append(
+                        PaperDatasetLink(
+                            paper_id=pmid,
+                            dataset_id=ds_id,
+                            role=LinkRole.RELATED,
+                        )
+                    )
+                    healed_this = True
+                    print(
+                        f"  \u2705 {ds_id} \u2192 PMID {pmid} (inherited from SuperSeries {parent_id})"
+                    )
+            break  # first matching parent is enough
+
+        # Strategy 2: GEO page scraping (only if strategy 1 didn't work)
+        if not healed_this:
+            try:
+                import urllib.request
+
+                url = f"https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc={ds_id}"
+                req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    html = resp.read().decode("utf-8", errors="replace")
+                m = re.search(r'class="pubmed_id"\s+id="([^"]+)"', html)
+                if m:
+                    pmids_raw = m.group(1)
+                    scraped_pmids = [
+                        p.strip() for p in pmids_raw.split(",") if re.match(r"^\d{8}$", p.strip())
+                    ]
+                    for pmid in scraped_pmids:
+                        paper = registry.get_paper(pmid)
+                        if paper is None:
+                            continue
+                        existing = any(
+                            ln.paper_id == pmid and ln.dataset_id == ds_id for ln in registry.links
+                        )
+                        if not existing:
+                            registry.links.append(
+                                PaperDatasetLink(
+                                    paper_id=pmid,
+                                    dataset_id=ds_id,
+                                    role=LinkRole.RELATED,
+                                )
+                            )
+                            healed_this = True
+                            print(f"  \u2705 {ds_id} \u2192 PMID {pmid} (scraped from GEO page)")
+            except Exception:
+                pass  # scraping is best-effort
+
+        if healed_this:
+            healed += 1
+        else:
+            print(f"  \u26a0\ufe0f  {ds_id}: no resolution found")
+
+    print(f"\nHealed: {healed}/{len(orphans)}")
+
+    if dry_run:
+        print("\n\U0001f4a1 --dry-run, not saved")
+
+    return registry
+
+
 def main() -> None:
     import argparse
 
@@ -1443,6 +1746,11 @@ def main() -> None:
 
     sub.add_parser("find-orphans", help="查找孤儿数据集")
 
+    p_heal = sub.add_parser(
+        "heal-orphans", help="自动修复孤儿数据集（SuperSeries继承 + GEO页面抓取）"
+    )
+    p_heal.add_argument("--dry-run", action="store_true", help="预览不写入")
+
     p_register = sub.add_parser(
         "register", help="注册论文/数据集（--pmid | --gse | --xml | --pdf）"
     )
@@ -1465,6 +1773,16 @@ def main() -> None:
         dest="register_all",
         action="store_true",
         help="注册论文中全部 GEO 数据集（跳过交互确认）",
+    )
+    p_register.add_argument(
+        "--fast",
+        action="store_true",
+        help="Fast paper registration: skip LLM insights, use PubMed metadata only",
+    )
+    p_register.add_argument(
+        "--scan",
+        action="store_true",
+        help="Scan FUXI_DATA_ROOT and batch-register all GSE* directories",
     )
 
     p_add = sub.add_parser("add-paper", help="[DEPRECATED] 请改用 register --pmid")
@@ -1508,6 +1826,7 @@ def main() -> None:
         "verify",
         "reset-gse",
         "find-orphans",
+        "heal-orphans",
         "add-paper",
         "register",
         "deregister",
@@ -1544,14 +1863,28 @@ def main() -> None:
                 mod_str = ", ".join(ds.modalities.keys()) if ds.modalities else "?"
                 print(f"  - {ds_id}  ({mod_str}, status={ds.status})")
         registry.find_orphan_supplements()
+    elif args.command == "heal-orphans":
+        registry = _cmd_heal_orphans(registry, dry_run=args.dry_run)
+        if not args.dry_run:
+            save_master_registry(registry, reg_path)
+            _auto_verify(registry)
     elif args.command == "register":
-        if args.gse:
+        # --scan: batch-register all GSEs in FUXI_DATA_ROOT
+        if getattr(args, "scan", False):
+            registry = _cmd_scan_register(registry, dry_run=args.dry_run, reg_path=reg_path)
+            if not args.dry_run:
+                _auto_verify(registry)
+        elif args.gse:
             registry = _cmd_register_gse(registry, args.gse, dry_run=args.dry_run)
+            if not args.dry_run:
+                save_master_registry(registry, reg_path)
+                _auto_verify(registry)
         elif args.pmid or args.xml_path or args.pdf or args.paper_dir:
             datasets_list = None
             if hasattr(args, "datasets") and args.datasets:
                 datasets_list = [d.strip() for d in args.datasets.split(",")]
             select_all = getattr(args, "register_all", False)
+            fast_mode = getattr(args, "fast", False)
             registry = _cmd_add_paper(
                 registry,
                 pmid=args.pmid or "",
@@ -1562,9 +1895,15 @@ def main() -> None:
                 download=args.download,
                 select_all=select_all,
                 datasets=datasets_list,
+                fast=fast_mode,
             )
+            if not args.dry_run:
+                save_master_registry(registry, reg_path)
+                _auto_verify(registry)
         else:
-            print("\u274c Must specify --pmid, --gse, --xml, --pdf, or --paper-dir")
+            print(
+                "\u274c Must specify --pmid, --gse, --xml, --pdf, --paper-dir, --scan, or --heal-orphans"
+            )
             return
         if not args.dry_run:
             save_master_registry(registry, reg_path)
