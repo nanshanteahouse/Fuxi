@@ -1486,6 +1486,7 @@ def select_best_umap_params(
     _prev_embedding = None
     for md in min_dist_grid:
         for sp in spread_grid:
+            # ── Stage 1: UMAP embedding ──
             try:
                 # UMAP init: first combo uses spectral/paga; subsequent combos
                 # warm-start from the previous embedding (legal scanpy API,
@@ -1517,9 +1518,30 @@ def select_best_umap_params(
                     )
                 coords = adata.obsm["X_umap"]
                 _prev_embedding = np.asarray(coords).copy()
-
+            except Exception as e:
+                # UMAP itself broke — no embedding produced, nothing to score.
+                log.warning(
+                    "  UMAP step failed (min_dist=%.2f, spread=%.1f): %s",
+                    md,
+                    sp,
+                    e,
+                )
+                entry = {"min_dist": md, "spread": sp}
                 if metric == "trustworthiness":
-                    from sklearn.manifold.t_sne import trustworthiness
+                    entry["trustworthiness"] = None
+                else:
+                    entry["convex_hull_area"] = None
+                results.append(entry)
+                continue
+
+            # ── Stage 2/3: scoring (UMAP already succeeded; coords are valid).
+            # Separate try so a scoring-side failure (bad import, ConvexHull
+            # degeneracy, …) is not misattributed to the UMAP step above.
+            try:
+                if metric == "trustworthiness":
+                    # sklearn ≥1.6 renamed `t_sne.py` → `_t_sne.py` (private);
+                    # `trustworthiness` is now exported directly from sklearn.manifold.
+                    from sklearn.manifold import trustworthiness
 
                     score = float(
                         trustworthiness(
@@ -1561,7 +1583,20 @@ def select_best_umap_params(
                         best_md = md
                         best_sp = sp
             except Exception as e:
-                log.warning("  UMAP failed (min_dist=%.2f, spread=%.1f): %s", md, sp, e)
+                # UMAP ran fine; only the metric computation broke. Report it as
+                # a scoring failure so the log doesn't blame the embedding.
+                label = (
+                    "Trustworthiness scoring"
+                    if metric == "trustworthiness"
+                    else "ConvexHull scoring"
+                )
+                log.warning(
+                    "  %s failed (min_dist=%.2f, spread=%.1f): %s",
+                    label,
+                    md,
+                    sp,
+                    e,
+                )
                 entry = {"min_dist": md, "spread": sp}
                 if metric == "trustworthiness":
                     entry["trustworthiness"] = None
