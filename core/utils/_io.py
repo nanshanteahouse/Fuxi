@@ -6,6 +6,8 @@ from typing import Optional
 
 import anndata
 
+from core.utils._path import is_wsl
+
 
 def safe_write(
     adata,
@@ -45,7 +47,7 @@ def safe_write(
     # (e.g. tmpfs -> 9p DrvFs), shutil.copy2 corrupts h5 metadata on 4GB+
     # files. Fall back to a hidden tmp file in target's directory so the
     # final rename is a same-fs atomic os.replace.
-    _wsl = target.startswith("/mnt/")
+    _wsl = is_wsl() and target.startswith("/mnt/")
     logging.getLogger(__name__).info("Writing %s ...", os.path.basename(target))
     if _wsl:
         target_dir = os.path.dirname(target) or "."
