@@ -26,6 +26,7 @@ run_pipeline.py — Fuxi (伏羲) 统一管线主控
 import argparse
 import logging
 import os
+import runpy
 import subprocess
 import sys
 import time
@@ -382,6 +383,12 @@ def main():
         default="auto",
         help="(RNA only) Annotation method: auto=AI, unified=KB-based",
     )
+    parser.add_argument(
+        "--in-process",
+        action="store_true",
+        default=False,
+        help="Run steps in-process via runpy (debug mode: avoids Python/scanpy re-import overhead)",
+    )
     args = parser.parse_args()
 
     # ── Get modality config ──────────────────────────────────────────
@@ -526,31 +533,54 @@ def main():
             extra_args.extend(["--cell-type", args.cell_type])
 
         step_t0 = time.time()
-        step_proc = subprocess.Popen(
-            [python_exe, script_path] + extra_args,
-            stdout=None,
-            stderr=None,
-        )
-        _perf_report = None
-        _was_interrupted = False
-        try:
-            if _HAVE_MONITOR and getattr(CFG, "perf_monitoring", True):
-                with monitor_performance(f"Step[{num}]", child_pid=step_proc.pid) as perf:
-                    step_proc.wait()
-                    _perf_report = perf
-            else:
-                step_proc.wait()
-        except (KeyboardInterrupt, SystemExit):
-            # SIGTERM/SIGINT/Ctrl+C — kill child if still alive, then fall through
-            # to the normal add_step path so partial perf is recorded.
-            _was_interrupted = True
+        if args.in_process:
+            # ── In-process execution (debug mode) ──────────────────
+            # Uses runpy.run_path to avoid Python+scanpy re-import
+            # overhead during development. Not for production: the
+            # step script shares the same process namespace, which
+            # can cause state leakage between steps.
+            _perf_report = None
+            _was_interrupted = False
+            _saved_argv = sys.argv
+            sys.argv = [script_path] + extra_args
             try:
-                step_proc.kill()
-                step_proc.wait(timeout=5)
-            except Exception:
-                pass
-        elapsed = time.time() - step_t0
-        result = step_proc
+                runpy.run_path(script_path, run_name="__main__")
+                _exit_code = 0
+            except SystemExit as e:
+                _exit_code = e.code if e.code is not None else 0
+            except KeyboardInterrupt:
+                _was_interrupted = True
+                _exit_code = 130
+            finally:
+                sys.argv = _saved_argv
+            elapsed = time.time() - step_t0
+            result = type("_ProcResult", (), {"returncode": _exit_code})()
+        else:
+            step_proc = subprocess.Popen(
+                [python_exe, script_path] + extra_args,
+                stdout=None,
+                stderr=None,
+            )
+            _perf_report = None
+            _was_interrupted = False
+            try:
+                if _HAVE_MONITOR and getattr(CFG, "perf_monitoring", True):
+                    with monitor_performance(f"Step[{num}]", child_pid=step_proc.pid) as perf:
+                        step_proc.wait()
+                        _perf_report = perf
+                else:
+                    step_proc.wait()
+            except (KeyboardInterrupt, SystemExit):
+                # SIGTERM/SIGINT/Ctrl+C — kill child if still alive, then fall through
+                # to the normal add_step path so partial perf is recorded.
+                _was_interrupted = True
+                try:
+                    step_proc.kill()
+                    step_proc.wait(timeout=5)
+                except Exception:
+                    pass
+            elapsed = time.time() - step_t0
+            result = step_proc
 
         # Determine exit status for perf_report
         if _was_interrupted:
