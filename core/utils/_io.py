@@ -92,40 +92,41 @@ def safe_write(
     size_mb = os.path.getsize(target) / 1e6
     logger = logging.getLogger(__name__)
     logger.info("Saved %s (%.1f MB)", os.path.basename(target), size_mb)
-    # Verify file integrity
-    if hasattr(adata, "mod"):
-        # MuData — scanpy's sc.read does not support .h5mu
-        try:
-            import muon as mu
+    # Verify file integrity (gated by cfg.verify_write_integrity)
+    if cfg and cfg.verify_write_integrity:
+        if hasattr(adata, "mod"):
+            # MuData — scanpy's sc.read does not support .h5mu
+            try:
+                import muon as mu
 
-            _verify = mu.read_h5mu(target)
-            logger.info(
-                "Integrity check (MuData): %s verified OK",
-                os.path.basename(target),
-            )
-        except ImportError:
-            logger.info(
-                "Integrity check skipped for MuData %s (muon not available)",
-                os.path.basename(target),
-            )
-        except Exception as e:
-            logger.error(
-                "Integrity check FAILED for %s: %s — file may be corrupted!",
-                os.path.basename(target),
-                e,
-            )
-    else:
-        try:
-            import scanpy as sc
+                _verify = mu.read_h5mu(target)
+                logger.info(
+                    "Integrity check (MuData): %s verified OK",
+                    os.path.basename(target),
+                )
+            except ImportError:
+                logger.info(
+                    "Integrity check skipped for MuData %s (muon not available)",
+                    os.path.basename(target),
+                )
+            except Exception as e:
+                logger.error(
+                    "Integrity check FAILED for %s: %s — file may be corrupted!",
+                    os.path.basename(target),
+                    e,
+                )
+        else:
+            try:
+                import scanpy as sc
 
-            _verify = sc.read(target, backed="r")
-            logger.info("Integrity check: %s verified OK", os.path.basename(target))
-        except Exception as e:
-            logger.error(
-                "Integrity check FAILED for %s: %s — file may be corrupted!",
-                os.path.basename(target),
-                e,
-            )
+                _verify = sc.read(target, backed="r")
+                logger.info("Integrity check: %s verified OK", os.path.basename(target))
+            except Exception as e:
+                logger.error(
+                    "Integrity check FAILED for %s: %s — file may be corrupted!",
+                    os.path.basename(target),
+                    e,
+                )
 
 
 def safe_plot(
