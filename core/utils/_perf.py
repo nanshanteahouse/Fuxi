@@ -8,6 +8,7 @@ import time as _time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Optional
+from core.utils._gpu import is_gpu_active
 
 
 @dataclass
@@ -87,18 +88,21 @@ def monitor_performance(step_name: str = "", log=None, child_pid: Optional[int] 
         # psutil memory_info().rss returns bytes → convert to MiB (1024²)
         report.peak_rss_mib = round(peak_rss / (1024 * 1024), 1)
         report.avg_cpu_pct = round(sum(cpu_samples) / max(len(cpu_samples), 1), 1)
-        try:
-            out = (
-                _sp.check_output(
-                    ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"]
+        if is_gpu_active():
+            try:
+                out = (
+                    _sp.check_output(
+                        ["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"]
+                    )
+                    .decode()
+                    .strip()
+                    .split("\n")
                 )
-                .decode()
-                .strip()
-                .split("\n")
-            )
-            report.gpu_mem_mb = sum(float(m) for m in out)
-        except Exception:
-            report.gpu_mem_mb = -1.0
+                report.gpu_mem_mb = sum(float(m) for m in out)
+            except Exception:
+                report.gpu_mem_mb = -1.0
+        else:
+            report.gpu_mem_mb = 0.0
         if log:
             log.info(
                 "[perf] wall=%.1fs cpu=%.1fs mem=%.1fMiB cpu%%=%.1f%% gpu=%.0fMB",
