@@ -595,7 +595,7 @@ def main():
     # ── 保存 ──
     out_path = os.path.join(cfg.h5ad_dir, "03_integrated.h5ad")
     with timed_substep("Save checkpoint", log=log):
-        safe_write(adata, out_path, cfg=cfg)
+        safe_write(adata, out_path, cfg=cfg, step_alias="integrated")
     log.info("Step 03 complete, took %.1fs", time.time() - t0)
 
 

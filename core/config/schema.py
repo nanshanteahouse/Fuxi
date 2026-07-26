@@ -752,9 +752,16 @@ class Config(BaseModel):
     # 执行环境相关（留在根级，与 ExecutionConfig 配合使用）
     # ═══════════════════════════════════════════════════════════════════
     h5ad_compression: str = "gzip"
-    h5ad_tempdir: str = "/tmp/Fuxi"
+    per_step_h5ad_compression: dict[str, str] = Field(
+        default_factory=lambda: {"integrated": "lzf"}
+    )
+    h5ad_tempdir: str = Field(
+        default="/tmp/Fuxi",
+        description="Temporary directory for h5ad writes. Default /tmp/Fuxi uses tmpfs (RAM-backed, fast but volatile). On WSL2 with /mnt/ data, cross-filesystem rename costs ~1.5-2x. For large datasets (>4 GB), set to the same filesystem as the output directory to avoid cross-device copy overhead.",
+    )
     cleanup_intermediates: bool = False
     perf_monitoring: bool = True
+    verify_write_integrity: bool = True
 
     # ═══════════════════════════════════════════════════════════════════
     # ATAC → RNA 整合 / Spatial RNA 参考

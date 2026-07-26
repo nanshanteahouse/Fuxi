@@ -16,6 +16,7 @@ def safe_write(
     compression: str = "gzip",
     cfg=None,
     compression_override: Optional[str] = None,
+    step_alias: str | None = None,
 ) -> None:
     """
     安全写入 h5ad 文件，避免 WSL /mnt 挂载的文件锁定问题。
@@ -30,8 +31,15 @@ def safe_write(
         cfg: 可选的 Config 对象 — 传入后优先使用 cfg.h5ad_compression
         compression_override: 显式覆盖 — 优先级高于 cfg.h5ad_compression。
             用于 SnapATAC2 兼容写（compression_override=None 写未压缩文件）。
+        step_alias: 步别名（如 "integrated"）— 在 cfg.per_step_h5ad_compression 中查找压缩配置。
+            优先级高于 compression_override 和 cfg.h5ad_compression。
     """
-    # Resolution order: compression_override > cfg.h5ad_compression > compression default
+    # Resolution order: per_step_h5ad_compression > compression_override > cfg.h5ad_compression > default
+    if step_alias is not None and cfg is not None:
+        per_step_cfg = getattr(cfg, "per_step_h5ad_compression", {})
+        step_compression = per_step_cfg.get(step_alias)
+        if step_compression is not None:
+            compression = step_compression
     if compression_override is not None:
         compression = compression_override
     elif cfg is not None:
