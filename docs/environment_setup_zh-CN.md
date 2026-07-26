@@ -328,7 +328,6 @@ python -c "import snapatac2; print('Snapatac2:', snapatac2.__version__)"
 - 务必设置 `HDF5_USE_FILE_LOCKING=FALSE`。
 - 如果数据已在 Windows 磁盘上，可以用 `cp -r /mnt/e/geo_data ~/data/` 复制到 WSL 内部。
 - **虚拟环境也应放在 WSL2 内部**（如 `~/.local/venvs/fuxi`），而非 `/mnt/d/.../.venv`。Python 有 10 万+ 小文件（`site-packages/`），9p 协议对大量小文件的 I/O 极慢——`pip install` 在 `/mnt` 上可能耗时 30 分钟以上。
-- 如果你只需要运行管线（不需要开发），推荐使用[生产部署指南](deployment_guide_zh-CN.md)的 `bin/bootstrap-prod.sh` 一键部署，自动将 venv 放在 Linux 原生文件系统上。
 
 ### 7.3 macOS
 
