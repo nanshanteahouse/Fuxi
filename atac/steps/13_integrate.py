@@ -20,6 +20,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import scanpy as sc
 
 from core.utils import resolve_config, setup_logger
+from core.utils._io import safe_write
 
 
 def main():
@@ -76,7 +77,7 @@ def main():
 
         mu.pp.pca(mdata, n_comps=min(30, mdata.n_obs - 1))
 
-        mdata.write(cfg.integrated_h5ad)
+        safe_write(mdata, cfg.integrated_h5ad, cfg=cfg)
         log.info("Saved integrated MuData.")
     except Exception as e:
         log.warning("Integration failed: %s", e)

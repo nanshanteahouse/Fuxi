@@ -35,6 +35,8 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 
+from core.utils._io import safe_write
+
 logger = logging.getLogger(__name__)
 
 
@@ -259,9 +261,9 @@ class LabelTransferReport:
         with open(os.path.join(output_dir, f"{prefix}_summary.json"), "w") as f:
             json.dump(self.to_dict(), f, indent=2)
 
-    def save_annotated_query(self, output_h5ad: str):
+    def save_annotated_query(self, output_h5ad: str, cfg=None):
         """保存已标注转移标签的 query h5ad。"""
-        self.query_adata.write(output_h5ad)
+        safe_write(self.query_adata, output_h5ad, cfg=cfg)
 
 
 # ── Main entry point ──────────────────────────────────────────────────

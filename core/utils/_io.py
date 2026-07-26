@@ -24,8 +24,7 @@ def safe_write(
     mv 是原子操作（在同一文件系统内），确保不会留下损坏的中间文件。
 
     参数:
-        adata: AnnData 对象
-        target: 目标 .h5ad 路径
+        adata: AnnData 或 MuData 对象
         tmpdir: 临时目录（cfg 传入时优先使用 cfg.h5ad_tempdir）
         compression: 默认 h5py 压缩方式 ('gzip' | 'lzf' | 'zstd')
         cfg: 可选的 Config 对象 — 传入后优先使用 cfg.h5ad_compression
@@ -85,19 +84,40 @@ def safe_write(
     size_mb = os.path.getsize(target) / 1e6
     logger = logging.getLogger(__name__)
     logger.info("Saved %s (%.1f MB)", os.path.basename(target), size_mb)
-
     # Verify file integrity
-    try:
-        import scanpy as sc
+    if hasattr(adata, "mod"):
+        # MuData — scanpy's sc.read does not support .h5mu
+        try:
+            import muon as mu
 
-        _verify = sc.read(target, backed="r")
-        logger.info("Integrity check: %s verified OK", os.path.basename(target))
-    except Exception as e:
-        logger.error(
-            "Integrity check FAILED for %s: %s — file may be corrupted!",
-            os.path.basename(target),
-            e,
-        )
+            _verify = mu.read_h5mu(target)
+            logger.info(
+                "Integrity check (MuData): %s verified OK",
+                os.path.basename(target),
+            )
+        except ImportError:
+            logger.info(
+                "Integrity check skipped for MuData %s (muon not available)",
+                os.path.basename(target),
+            )
+        except Exception as e:
+            logger.error(
+                "Integrity check FAILED for %s: %s — file may be corrupted!",
+                os.path.basename(target),
+                e,
+            )
+    else:
+        try:
+            import scanpy as sc
+
+            _verify = sc.read(target, backed="r")
+            logger.info("Integrity check: %s verified OK", os.path.basename(target))
+        except Exception as e:
+            logger.error(
+                "Integrity check FAILED for %s: %s — file may be corrupted!",
+                os.path.basename(target),
+                e,
+            )
 
 
 def safe_plot(
