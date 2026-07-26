@@ -8,6 +8,7 @@ import time as _time
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Optional
+
 from core.utils._gpu import is_gpu_active
 
 

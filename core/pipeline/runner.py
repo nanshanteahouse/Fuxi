@@ -41,6 +41,7 @@ except ImportError:
 _repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _repo_root not in sys.path:
     sys.path.insert(0, _repo_root)
+from core.utils import _set_blas_env  # noqa: E402
 
 # ── Performance monitor (optional) ──────────────────────────────────
 try:
@@ -415,17 +416,7 @@ def main():
 
     # ── BLAS / OpenMP thread limits ──────────────────────────────────
     if CFG.execution.n_jobs > 0 and getattr(CFG.execution, "limit_blas_threads", True):
-        for var in [
-            "OMP_NUM_THREADS",
-            "MKL_NUM_THREADS",
-            "OPENBLAS_NUM_THREADS",
-            "NUMEXPR_NUM_THREADS",
-            "VECLIB_MAXIMUM_THREADS",
-            "PYTORCH_ENABLE_MPS_FALLBACK",
-            "TORCH_NUM_THREADS",
-        ]:
-            if var not in os.environ:
-                os.environ[var] = str(CFG.execution.n_jobs)
+        _set_blas_env(CFG.execution.n_jobs, overwrite=False)
         print(f"[run] Set BLAS/OpenMP threads to {CFG.execution.n_jobs} via env vars")
 
     # ── Resolve paths ────────────────────────────────────────────────

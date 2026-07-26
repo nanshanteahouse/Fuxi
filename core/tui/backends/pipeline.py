@@ -18,6 +18,7 @@ from core.pipeline.runner import (
     _get_step_dependency,
     find_first_incomplete,
 )
+from core.utils import _set_blas_env
 
 # ═══════════════════════════════════════════════════════════════════
 #  Repo root resolution
@@ -43,14 +44,6 @@ def _resolve_repo_root() -> str:
 # ═══════════════════════════════════════════════════════════════════
 #  Streaming subprocess runner
 # ═══════════════════════════════════════════════════════════════════
-
-# Environment variables for BLAS / OpenMP thread limits — set before
-# every subprocess launch to prevent oversubscription on shared nodes.
-_BLAS_ENV_VARS = {
-    "OMP_NUM_THREADS": "4",
-    "OPENBLAS_NUM_THREADS": "4",
-    "MKL_NUM_THREADS": "4",
-}
 
 
 async def run_step(
@@ -109,9 +102,8 @@ async def run_step(
         args_list.extend(extra_args)
 
     # ── Environment: enforce BLAS thread limits ────────────────────
+    _set_blas_env(4)
     proc_env = dict(os.environ)
-    for var, value in _BLAS_ENV_VARS.items():
-        proc_env.setdefault(var, value)
 
     # ── Launch subprocess ──────────────────────────────────────────
     proc = await asyncio.create_subprocess_exec(

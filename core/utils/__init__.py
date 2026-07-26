@@ -107,6 +107,7 @@ from core.utils._cross_modality import (  # noqa: F401
     find_rna_marker_csv,
     load_scRNA_markers,
 )
+from core.utils._exec import _set_blas_env  # noqa: F401
 from core.utils._gpu import (  # noqa: F401
     gpu_harmony,
     gpu_leiden,
