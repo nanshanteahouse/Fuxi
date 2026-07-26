@@ -80,9 +80,6 @@ def main():
             )
     except ImportError:
         pass
-    # ── 读取 ──
-    adata = sc.read(cfg.qc_h5ad)
-    log.info("Loaded: %d cells × %d genes", adata.n_obs, adata.n_vars)
 
     # ── HVG（自动降级：CFG.hvg.flavor → seurat_v3 → cell_ranger → seurat）──
     batch_key = cfg.hvg.batch_key if cfg.hvg.batch_key in adata.obs else None

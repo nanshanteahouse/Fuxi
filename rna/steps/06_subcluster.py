@@ -423,9 +423,10 @@ def main():
         plt.close(fig)
         log.info("Multi-resolution UMAP saved for %s", safe_cell_type)
 
-    # ── Save intermediate results before AI annotation ─────────────────
-    safe_write(sub, output_path, cfg=cfg)
-    log.info("Intermediate results saved (pre-AI): %s", output_path)
+    # ── Save intermediate results before AI annotation (pre-AI checkpoint) ──
+    if cfg.ai.enabled and cfg.ai.subcluster:
+        safe_write(sub, output_path, cfg=cfg)
+        log.info("Intermediate results saved (pre-AI): %s", output_path)
 
     # ── (j) AI-based subcluster annotation ────────────────────────────
     if cfg.ai.enabled and cfg.ai.subcluster:

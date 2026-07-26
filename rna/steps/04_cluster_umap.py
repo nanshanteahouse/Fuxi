@@ -7,7 +7,7 @@ Step 04: 邻居图 + UMAP + 多参数网格 Leiden 聚类
   - 保存所有组合结果用于交互比较
 
 输入: 03_integrated.h5ad
-输出: 04_grid_results.h5ad (含所有参数组合的邻居图、UMAP、Leiden 标签)
+输出: 04_clustered.h5ad (所有参数组合的邻居图、UMAP、Leiden 标签)
 """
 
 import argparse
@@ -878,14 +878,6 @@ def main():
                 log.info("  Multi-resolution Leiden plot (n=%d) saved", n)
             except Exception as e:
                 log.warning("  Multi-resolution comparison plot (n=%d) failed: %s", n, e)
-
-    # ── 保存临时 h5ad (非最终 checkpoint) ──
-    temp_path = os.path.join(cfg.h5ad_dir, "04_grid_results.h5ad")
-    try:
-        safe_write(adata, temp_path, cfg=cfg)
-        log.info("Temporary h5ad saved: %s", temp_path)
-    except Exception as e:
-        log.error("Temporary h5ad save failed: %s", e)
 
     log.info("Step 04 complete, took %.1fs", time.time() - t0)
 
