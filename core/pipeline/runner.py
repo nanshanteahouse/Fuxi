@@ -24,6 +24,7 @@ run_pipeline.py — Fuxi (伏羲) 统一管线主控
 """
 
 import argparse
+import cProfile
 import logging
 import os
 import runpy
@@ -389,6 +390,12 @@ def main():
         default=False,
         help="Run steps in-process via runpy (debug mode: avoids Python/scanpy re-import overhead)",
     )
+    parser.add_argument(
+        "--profile",
+        type=str,
+        default=None,
+        help="Enable cProfile profiling; path to .prof file or directory for per-step profiles",
+    )
     args = parser.parse_args()
 
     # ── Get modality config ──────────────────────────────────────────
@@ -533,6 +540,11 @@ def main():
             extra_args.extend(["--cell-type", args.cell_type])
 
         step_t0 = time.time()
+
+        # ── Profiling setup ─────────────────────────────────────────
+        if args.profile:
+            _profiler = cProfile.Profile()
+            _profiler.enable()
         if args.in_process:
             # ── In-process execution (debug mode) ──────────────────
             # Uses runpy.run_path to avoid Python+scanpy re-import
@@ -581,6 +593,16 @@ def main():
                     pass
             elapsed = time.time() - step_t0
             result = step_proc
+
+        # ── Profiling teardown ──────────────────────────────────────
+        if args.profile:
+            _profiler.disable()
+            if args.profile.endswith(".prof"):
+                _prof_path = args.profile
+            else:
+                _prof_path = os.path.join(args.profile, f"step-{num}.prof")
+                os.makedirs(args.profile, exist_ok=True)
+            _profiler.dump_stats(_prof_path)
 
         # Determine exit status for perf_report
         if _was_interrupted:
