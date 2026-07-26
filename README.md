@@ -87,6 +87,21 @@ fuxi/
 └── docs/                  # Pipeline & architecture docs
 ```
 
+
+## Production Deployment
+
+To deploy Fuxi to a production machine (runtime only, no dev tools):
+
+```bash
+# First-time setup (on production machine)
+bin/bootstrap-prod.sh
+
+# Daily updates (on dev machine)
+bin/deploy.sh
+```
+
+See the [Deployment Guide](docs/deployment_guide_zh-CN.md) for details.
+
 ## Quick Start
 
 ### Prerequisites

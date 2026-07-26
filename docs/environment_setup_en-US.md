@@ -327,6 +327,8 @@ If you see `All core packages loaded successfully` followed by version numbers, 
 - Store data inside WSL2 (e.g., `/home/user/data/`) rather than under `/mnt/c/` or `/mnt/e/`. Cross-filesystem HDF5 access is significantly slower.
 - Always set `HDF5_USE_FILE_LOCKING=FALSE`.
 - If your data is already on a Windows drive, copy it in: `cp -r /mnt/e/geo_data ~/data/`
+- **Place the virtualenv inside WSL2 as well** (e.g. `~/.local/venvs/fuxi`), not at `/mnt/d/.../.venv`. Python has 100k+ small files in `site-packages/`, and the 9p protocol is extremely slow for many small files — `pip install` on `/mnt` can take 30+ minutes.
+- If you only need to run pipelines (not develop), consider using the [Production Deployment Guide](deployment_guide_en-US.md) with `bin/bootstrap-prod.sh`, which automatically places the venv on the Linux-native filesystem.
 
 ### 7.3 macOS
 

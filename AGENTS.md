@@ -18,6 +18,8 @@ Subject: imperative, lowercase, ≤72 chars. Body explains *why*, not *what*.
 
 **Core scripts.** Step scripts under `rna/steps/`, `atac/steps/`, `spatial/steps/`, `bulk/steps/` must not be edited in place. Copy to `projects/{modality}/{GSE_ID}/` first.
 **Ad-hoc scripts.** One-off / dataset-specific analysis scripts under `adhoc/`. Not part of the pipeline, no compatibility guarantee — use once and discard.
+**Dev/Prod separation.** Source code deploys to production via rsync (no GitHub round-trip). `bin/bootstrap-prod.sh` (first-time setup) and `bin/deploy.sh` (daily updates) sync source to `$FUXI_PROD_DIR` while keeping prod-local files (`.env`, `global.yaml`, `projects/`, `results/`) untouched. The venv lives on Linux-native fs (`~/.local/venvs/fuxi-prod`) for fast I/O. See `docs/deployment_guide_zh-CN.md`.
+
 
 ## Running methods
 
@@ -31,6 +33,22 @@ Both modes use `--step N` to run one step at a time. The difference is whether t
 **TUI mode** — Launch the unified terminal interface: `python -m core.tui`. Keyboard-navigable dashboard with registry browser, pipeline runner, config editor, and results viewer. Ideal for project exploration and batch management.
 **MCP mode** — Start an AI-accessible server that lets LLM agents (Claude Desktop, VS Code Copilot, custom agents) query the registry, check pipeline status, and trigger downloads/preprocessing/pipeline runs through the Model Context Protocol. See `docs/mcp_guide_zh-CN.md` for setup instructions.
 
+### Dev → Prod deployment
+
+```bash
+# First-time: initialize production environment
+bin/bootstrap-prod.sh
+
+# Daily: sync source from dev to prod (run on dev machine)
+bin/deploy.sh                 # rsync + pip install
+bin/deploy.sh --dry-run       # preview changes
+bin/deploy.sh --no-reinstall  # source-only sync
+```
+
+Production runs use the prod venv:
+```bash
+~/.local/venvs/fuxi-prod/bin/python /mnt/e/fuxi-prod/core/run_pipeline.py --modality rna --list
+```
 
 
 

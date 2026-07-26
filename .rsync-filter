@@ -1,0 +1,67 @@
+# ═══════════════════════════════════════════════════════════════════════
+# Fuxi rsync filter — controls dev → prod deployment
+# ═══════════════════════════════════════════════════════════════════════
+# Used by bin/deploy.sh and bin/bootstrap-prod.sh via:
+#   rsync --filter='merge .rsync-filter'
+#
+# Rule order matters — first match wins.
+#   P  protect  → exclude from transfer + never delete/overwrite on receiver
+#   +  include  → sync from dev
+#   -  exclude  → skip (without protection; --delete may remove on receiver)
+# ═══════════════════════════════════════════════════════════════════════
+
+# ── Protect prod-local files (never touch) ─────────────────────────────
+# These exist only on prod and must never be overwritten or deleted.
+P projects
+P .env
+P global.yaml
+P results
+P logs
+P cache
+
+# ── Exclude Python bytecode & build artifacts ──────────────────────────
+- **/__pycache__/
+- **/*.pyc
+- **/*.pyo
+- **/*.egg-info/
+- **/dist/
+- **/build/
+- **/cache/
+- **/logs/
+- **/results/
+
+# ── Include source trees ───────────────────────────────────────────────
++ /core/
++ /core/**
++ /rna/
++ /rna/**
++ /atac/
++ /atac/**
++ /spatial/
++ /spatial/**
++ /bulk/
++ /bulk/**
++ /templates/
++ /templates/**
++ /requirements/
++ /requirements/**
++ /tools/
++ /tools/**
++ /docs/
++ /docs/**
++ /bin/
++ /bin/**
+
+# ── Include top-level files ────────────────────────────────────────────
++ /pyproject.toml
++ /requirements.txt
++ /global.example.yaml
++ /.env.example
++ /README.md
++ /LICENSE
++ /CITATION.cff
++ /CHANGELOG.md
++ /version.txt
+
+# ── Exclude everything else ────────────────────────────────────────────
+- *
