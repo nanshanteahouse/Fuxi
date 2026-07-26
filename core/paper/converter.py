@@ -88,6 +88,8 @@ from typing import Optional  # noqa: E402
 from urllib.error import HTTPError, URLError  # noqa: E402
 from urllib.request import Request, urlopen  # noqa: E402
 
+from core.paper.slug import build_slug  # noqa: E402
+
 logger = logging.getLogger(__name__)
 
 
@@ -140,12 +142,23 @@ def _elem_text(el: Optional[ET.Element]) -> str:
     return "".join(el.itertext()).strip()
 
 
-def _slugify(value: str, max_len: int = 60) -> str:
-    """Replace non-alphanumeric chars (except hyphen) with underscore, capped at max_len."""
-    value = re.sub(r"[^\w\s-]", "_", value)
-    value = re.sub(r"[-\s]+", "_", value)
-    value = value.strip("_")
-    return value[:max_len].rstrip("_")
+def _paper_name_from_meta(meta: dict) -> str:
+    """Compute the on-disk directory name for a paper from its metadata.
+
+    With PMID: returns the bare PMID string (matches the registry invariant
+    ``paper_dir == pmid`` established by the slug migration).
+    Without PMID (e.g. biorxiv preprint, markdown-only fixture): returns
+    ``build_slug()`` result so the directory name still aligns with the slug
+    system (e.g. ``doe2020_fictional_singlecell_study``).
+    """
+    pmid = str(meta.get("pmid") or "").strip()
+    if pmid:
+        return pmid
+    return build_slug(
+        first_author=str(meta.get("first_author") or ""),
+        year=str(meta.get("year") or ""),
+        paper_meta={"title": meta.get("title") or ""},
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════════
@@ -595,27 +608,9 @@ class PmcXmlSource(PaperSource):
     # ── Paper name ─────────────────────────────────────────────────────────────────
 
     def _compute_paper_name(self) -> str:
-        """Build paper name in ``{pmid}_{year}_{first_author}_{journal}_{title_slug}`` format.
-
-        PMID prefix ensures global uniqueness and easy PubMed lookup.
-        Falls back to ``{year}_{first_author}_{journal}_{title_slug}`` if no PMID.
-        """
+        """Return PMID (if known) else build_slug() — aligns with registry paper_dir invariant."""
         meta = self._metadata if self._metadata is not None else self._parse_metadata()
-        pmid = str(meta.get("pmid", "")).strip()
-        year = str(meta.get("year", "XXXX"))
-        author = _slugify(str(meta.get("first_author", "Unknown")), max_len=20)
-        journal = _slugify(str(meta.get("journal", "Journal")), max_len=10)
-        title_slug = _slugify(str(meta.get("title", "")), max_len=40)
-
-        if pmid:
-            name = f"{pmid}_{year}_{author}_{journal}_{title_slug}".strip("_")
-        else:
-            name = f"{year}_{author}_{journal}_{title_slug}".strip("_")
-        # Enforce 120-char limit (was 100, +9 for PMID prefix)
-        name = name[:120].rstrip("_")
-        # Replace any remaining special characters
-        name = _slugify(name, max_len=120)
-        return name or "Unknown_Paper"
+        return _paper_name_from_meta(meta)
 
     # ── Public API ─────────────────────────────────────────────────────────────────
 
@@ -793,19 +788,9 @@ class PubmedSource(PaperSource):
     # ── Paper name ─────────────────────────────────────────────────────────────────
 
     def _compute_paper_name(self) -> str:
+        """Return PMID (if known) else build_slug() — aligns with registry paper_dir invariant."""
         meta = self.get_metadata()
-        pmid = str(meta.get("pmid", "")).strip()
-        year = str(meta.get("year") or "XXXX")
-        author = _slugify(str(meta.get("first_author") or "Unknown"), max_len=20)
-        journal = _slugify(str(meta.get("journal") or "Journal"), max_len=10)
-        title_slug = _slugify(str(meta.get("title") or ""), max_len=40)
-        if pmid:
-            name = f"{pmid}_{year}_{author}_{journal}_{title_slug}".strip("_")
-        else:
-            name = f"{year}_{author}_{journal}_{title_slug}".strip("_")
-        name = name[:120].rstrip("_")
-        name = _slugify(name, max_len=120)
-        return name or "Unknown_Paper"
+        return _paper_name_from_meta(meta)
 
     def get_paper_name(self) -> str:
         if self._paper_name is None:
@@ -947,24 +932,9 @@ class MarkdownSource(PaperSource):
     # ── Paper name ─────────────────────────────────────────────────────────────────
 
     def _compute_paper_name(self) -> str:
-        """Build paper name in ``{pmid}_{year}_{first_author}_{journal}_{title}`` format.
-
-        For PDF sources, PMID is extracted from filename if named as '<PMID>.pdf'.
-        """
+        """Return PMID (if parsed from filename) else build_slug() — aligns with registry paper_dir invariant."""
         meta = self._metadata if self._metadata is not None else self._parse_filename_meta()
-        pmid = str(meta.get("pmid", "")).strip()
-        year = str(meta.get("year") or "XXXX")
-        author = _slugify(str(meta.get("first_author") or "Unknown"), max_len=20)
-        journal = _slugify(str(meta.get("journal") or "Journal"), max_len=10)
-        title_slug = _slugify(str(meta.get("title") or ""), max_len=40)
-
-        if pmid:
-            name = f"{pmid}_{year}_{author}_{journal}_{title_slug}".strip("_")
-        else:
-            name = f"{year}_{author}_{journal}_{title_slug}".strip("_")
-        name = name[:120].rstrip("_")
-        name = _slugify(name, max_len=120)
-        return name or "Unknown_Paper"
+        return _paper_name_from_meta(meta)
 
     # ── Public API ─────────────────────────────────────────────────────────────────
 
@@ -1173,17 +1143,12 @@ class Pymupdf4llmSource(PaperSource):
         return meta
 
     def get_paper_name(self) -> str:
-        """Build paper name from PDF-derived metadata instead of temp-file name."""
-        meta = self.get_metadata()
-        year = str(meta.get("year") or "XXXX")
-        author = _slugify(str(meta.get("first_author") or "PDF"), max_len=20)
-        journal = _slugify(str(meta.get("journal") or "Paper"), max_len=10)
-        title_slug = _slugify(str(meta.get("title") or ""), max_len=40)
+        """Return PMID (if known) else build_slug() — overrides default to use PDF-derived metadata.
 
-        name = f"{year}_{author}_{journal}_{title_slug}".strip("_")
-        name = name[:100].rstrip("_")
-        name = _slugify(name, max_len=100)
-        return name or "Unknown_Paper"
+        Unlike the filename-based default, this uses ``get_metadata()`` which may
+        round-trip through PubMed when ``self._pmid`` is set.
+        """
+        return _paper_name_from_meta(self.get_metadata())
 
     def get_sections(self) -> dict[str, str]:
         return self._md_source.get_sections()

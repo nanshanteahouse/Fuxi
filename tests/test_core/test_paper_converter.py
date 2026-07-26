@@ -232,10 +232,10 @@ class TestPmcXmlSource:
     def test_paper_name(self) -> None:
         src = PmcXmlSource(xml_path=str(PMC_FIXTURE))
         name = src.get_paper_name()
-        assert "114514" in name and "2024_Smith" in name, f"Unexpected paper name: {name}"
-        assert "Synthetic_Single_Cell" in name
+        # With PMID, paper_name is the bare PMID (matches registry paper_dir == pmid invariant)
+        assert name == "114514", f"Expected '114514', got: {name!r}"
         # Ensure filesystem-safe: no special chars
-        assert re.match(r"^[\w_]+$", name), f"Paper name not filesystem-safe: {name}"
+        assert re.match(r"^\w+$", name), f"Paper name not filesystem-safe: {name}"
 
     @skipif_no_pmc_fixture
     def test_get_text(self) -> None:
@@ -781,15 +781,17 @@ class TestCli:
         assert result.returncode != 0
         assert "mutually exclusive" in result.stderr.lower()
 
-    def test_positional_only_with_md_file(self) -> None:
+    def test_positional_only_with_md_file(self, tmp_path: Path) -> None:
         """Positional argument with an existing .md file works (returns non-zero
         only if LLM API key is missing, not because of argparse failure)."""
         if not FAKE_MD.exists():
             pytest.skip("Fake paper .md not found")
         self._run(str(FAKE_MD), "--help")  # just test parsing, use --help
-        # Actually test positional-only mode: the script should parse without error
-        # (it may fail later due to missing LLM key, but argparse should succeed)
-        result2 = self._run(str(FAKE_MD))
+        # Actually test positional-only mode: redirect output to tmp_path so we
+        # don't pollute projects/papers/ with a synthetic-fixture directory.
+        # The script may fail at runtime (missing LLM key) but argparse should succeed.
+        out_yaml = tmp_path / "insights.yaml"
+        result2 = self._run(str(FAKE_MD), "--output", str(out_yaml))
         # The script might fail at runtime (missing LLM key), but shouldn't crash
         # with argparse error
         assert "usage:" not in result2.stderr.lower() or "error:" not in result2.stderr.lower()
