@@ -198,10 +198,23 @@ def main():
             else cfg.data_input.matrix_file
         )
         matrix_ext = os.path.splitext(base)[1].lower()
-        if matrix_ext in (".csv",):
-            # True CSV format: gene × cell, first column = gene names
-            log.info("Loading from CSV: %s", cfg.data_input.matrix_file)
-            sep = getattr(cfg.data_input, "csv_sep", ",")
+        if matrix_ext in (".csv", ".tsv", ".txt"):
+            # True table format (CSV/TSV/TXT): gene x cell, first column = gene names
+            log.info("Loading from table matrix: %s", cfg.data_input.matrix_file)
+            # Auto-detect separator if not explicitly configured
+            csv_sep_cfg = getattr(cfg.data_input, "csv_sep", None)
+            if csv_sep_cfg:
+                sep = csv_sep_cfg
+            else:
+                try:
+                    peek = pd.read_csv(
+                        cfg.data_input.matrix_file, sep=None, engine="python", nrows=1
+                    )
+                    sep = "	" if len(peek.columns) > 1 else ","
+                    log.info("Auto-detected separator: %r", sep)
+                except Exception:
+                    sep = "	"
+                    log.info("Fallback to tab separator")
             decimal = getattr(cfg.data_input, "csv_decimal", ".")
             df = pd.read_csv(cfg.data_input.matrix_file, index_col=0, sep=sep)
             if decimal != ".":
