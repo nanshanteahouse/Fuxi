@@ -100,6 +100,10 @@ integration:
     batch_key: sample
     use_gpu: true
     train_size: 0.9
+    batch_size: 128
+    early_stopping: false
+    precision: "32"              # "16-mixed" / "bf16-mixed" for GPU speedup
+    # Advanced params: see global.example.yaml → integration.scvi
 
 # ── PCA ──
 pca:
