@@ -48,7 +48,7 @@ jobs:
       - name: Install deps
         run: uv pip install -e ".[all]"
       - name: Pyright
-        run: uv pip install pyright==1.1.411 && uv run pyright --level error
+        run: uv pip install pyright==1.1.411 && pyright --level error
 
   # ════════════════════════════════════════════════════════════════════════
   # Smoke test (fast gate)
@@ -68,7 +68,7 @@ jobs:
       - name: Install deps
         run: uv pip install -e ".[all,dev]"
       - name: Smoke test
-        run: uv run pytest tests/ -m smoke -v --tb=short
+        run: pytest tests/ -m smoke -v --tb=short
 
   # ════════════════════════════════════════════════════════════════════════
   # Unit tests (split by modality for parallelism)
@@ -89,7 +89,7 @@ jobs:
       - name: Install deps
         run: uv pip install -e ".[all,dev]"
       - name: Test core
-        run: uv run pytest tests/test_core/ -v --tb=short --cov=core --cov-report=xml --cov-report=term
+        run: pytest tests/test_core/ -v --tb=short --cov=core --cov-report=xml --cov-report=term
 
   test-rna:
     needs: [lint, smoke]
@@ -107,7 +107,7 @@ jobs:
       - name: Install deps
         run: uv pip install -e ".[all,dev]"
       - name: Test RNA
-        run: uv run pytest tests/test_rna/ -v --tb=short --cov=rna --cov-report=xml --cov-report=term
+        run: pytest tests/test_rna/ -v --tb=short --cov=rna --cov-report=xml --cov-report=term
 
   # ════════════════════════════════════════════════════════════════════════
   # Coverage report (aggregate)

@@ -20,6 +20,10 @@ filterwarnings = [
     'ignore::DeprecationWarning:pkg_resources.*',
 ]
 [tool.ruff]
+# NOTE: target-version intentionally py313 (not py314). Ruff 0.15.x has a
+# formatter bug where py314 target rewrites `except (A, B):` into invalid Py2
+# syntax `except A, B:` (PEP 758 requires `from __future__ import except_as`, which
+# ruff doesn't honor). Revisit when astral-sh/ruff#16475 is fixed.
 target-version = "py313"
 line-length = 99
 
@@ -50,6 +54,16 @@ exclude = [
 "tests/**/*.py" = ["N802"]
 [tool.ruff.lint.isort]
 known-first-party = ["core", "rna", "atac", "spatial", "bulk"]
+
+[tool.ruff.format]
+exclude = [
+    "notes/",
+    "projects/",
+    "adhoc/",
+    ".venv/",
+    "__pycache__/",
+    "*.md",  # don't reformat ```python blocks inside Markdown docs
+]
 
 [tool.coverage.run]
 source = ["core", "rna", "atac", "spatial", "bulk"]
@@ -129,7 +143,10 @@ paper = [
 scvi = ["scvi-tools>=1.5,<2"]
 celltypist = ["celltypist>=1.6"]
 scvelo = ["scvelo>=0.3"]
-sccoda = ["sccoda>=0.1"]  # pip confirmed: ``pip index versions sccoda`` → 0.1.9 available
+# Marker required: sccoda → tensorflow has no cp314 wheels; project requires py3.14+, so
+# the dep is silently skipped on this project's supported Python. Keeps `uv lock`/
+# `uv sync` resolvable instead of failing on the win32/all-platforms universal lock split.
+sccoda = ["sccoda>=0.1; python_version < '3.14'"]
 
 # ── Methodology (heavyweight / third-party — keep independent) ───────
 cellbender = ["cellbender"]  # broadinstitute/CellBender (PyPI: cellbender); GPU recommended
