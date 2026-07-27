@@ -17,7 +17,7 @@ config.py — Fuxi (伏羲) 统一配置 (Pydantic v2)
 """
 
 import os
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 # ── Auto-load .env from repo root ────────────────────────────────────
 # This runs before any data_root() call, so FUXI_DATA_ROOT in .env
@@ -199,6 +199,16 @@ class SCVIConfig(BaseModel):
     batch_key: str = "sample"
     use_gpu: bool = True
     train_size: float = 0.9
+
+    # ── Training control (high-frequency overrides) ──
+    batch_size: int = 128
+    early_stopping: bool = False
+    precision: Literal["32", "16-mixed", "bf16-mixed"] = "32"
+
+    # ── Passthrough dicts (advanced params via global.yaml) ──
+    trainer_kwargs: dict[str, Any] = {}
+    plan_kwargs: dict[str, Any] = {}
+    datasplitter_kwargs: dict[str, Any] = {}
 
 
 # ═══════════════════════════════════════════════════════════════════════
