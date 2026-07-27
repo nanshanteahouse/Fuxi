@@ -253,14 +253,17 @@ class DatasetEntry(BaseModel):
     relationships: list[DatasetRelationship] = []
     subseries: list[dict[str, str]] = []  # for SuperSeries: [{id: GSE..., note: ""}, ...]
     notes: str = ""
-    # ── 数据集补充字段（手工维护在 datasets.yaml 中）──
-    species: str = ""
+    # ── 数据集补充字段（部分可由 GEO SOFT 注册时自动填充）──
+    title: str = ""  # GEO Series title (auto-filled at registration)
+    species: str = ""  # normalised pipeline key, e.g. 'human', 'mouse' (auto-filled)
     tissue: str = ""
-    data_format: str = ""
+    assay_type: str = ""  # e.g. 'Expression profiling by high throughput sequencing'
+    data_format: str = ""  # platform hint, e.g. 'Illumina NovaSeq 6000'
+    description: str = ""  # GEO Series summary (auto-filled, truncated)
     size_desc: str = ""
     parent_series: str = ""
-    n_samples: Optional[int] = None
-    n_cells: Optional[int] = None
+    n_samples: Optional[int] = None  # GSM sample count (auto-filled from SOFT)
+    n_cells: Optional[int] = None  # only from local data files
     sample_info: str = ""
     paper_pmids: list[str] = []
 
@@ -1213,6 +1216,51 @@ def _cmd_add_paper(
     )
 
 
+def _dataset_entry_from_soft(
+    gse_id: str,
+    meta: dict,
+    data_root: str,
+    status: str,
+) -> DatasetEntry:
+    """Build a DatasetEntry from parsed GEO SOFT metadata.
+
+    Auto-fills title / species / n_samples / assay_type / description
+    from the SOFT fields that the registration flow used to discard.
+    """
+    from core.preprocess.format_detector import _normalise_species
+
+    is_ss = meta.get("is_superseries", False)
+    subseries_ids = meta.get("subseries_ids", []) or []
+    organism = meta.get("organism", "") or ""
+    species = _normalise_species(organism) if organism else ""
+    n_samples = meta.get("n_samples") or None
+    title = (meta.get("title") or "").strip()
+    series_type = (meta.get("series_type") or "").strip()
+    platform = (meta.get("platform_title") or "").strip()
+    summary = (meta.get("summary") or "").strip()
+    # Truncate long descriptions to keep datasets.yaml readable
+    if summary and len(summary) > 500:
+        summary = summary[:497].rstrip() + "..."
+
+    pmid_list = meta.get("pmid", []) or []
+
+    return DatasetEntry(
+        repository=RepositoryType.GEO,
+        status=status,
+        data_root=data_root,
+        type="SuperSeries" if is_ss else "SingleAccession",
+        non_pipeline=is_ss,
+        subseries=[{"id": sid, "note": ""} for sid in subseries_ids] if is_ss else [],
+        title=title,
+        species=species,
+        n_samples=n_samples,
+        assay_type=series_type,
+        data_format=platform,
+        description=summary,
+        paper_pmids=pmid_list,
+    )
+
+
 def _cmd_register_gse(
     registry: MasterRegistry,
     gse_id: str,
@@ -1247,17 +1295,12 @@ def _cmd_register_gse(
         data_root = f"{{FUXI_DATA_ROOT}}/{gse_id}"
         resolved = resolve_path(data_root)
         status = "data_downloaded" if os.path.isdir(resolved) else "data_not_downloaded"
-        subseries_list = [{"id": sid, "note": ""} for sid in meta.get("subseries_ids", [])]
-        is_ss = meta.get("is_superseries", False)
-        registry.datasets[gse_id] = DatasetEntry(
-            repository=RepositoryType.GEO,
-            status=status,
-            data_root=data_root,
-            type="SuperSeries" if is_ss else "SingleAccession",
-            non_pipeline=is_ss,
-            subseries=subseries_list if is_ss else [],
+        registry.datasets[gse_id] = _dataset_entry_from_soft(
+            gse_id, meta, data_root=data_root, status=status
         )
-        print(f"\u2705  Created dataset entry: {gse_id} ({status})")
+        sp = registry.datasets[gse_id].species or "?"
+        ns = registry.datasets[gse_id].n_samples
+        print(f"\u2705  Created dataset entry: {gse_id} ({status}, species={sp}, n_samples={ns})")
     else:
         ds = registry.datasets[gse_id]
         print(f"\u2139\ufe0f  Dataset {gse_id} already exists (status={ds.status})")
@@ -1510,14 +1553,8 @@ def _cmd_scan_register(
         # Create dataset entry
         data_path = os.path.join(data_root, gse_id)
         status = "data_downloaded" if os.path.isdir(data_path) else "data_not_downloaded"
-        registry.datasets[gse_id] = DatasetEntry(
-            repository=RepositoryType.GEO,
-            status=status,
-            data_root=f"{{FUXI_DATA_ROOT}}/{gse_id}",
-            type="SuperSeries" if is_ss else "SingleAccession",
-            non_pipeline=is_ss,
-            subseries=[{"id": sid, "role": "subseries"} for sid in subseries_ids] if is_ss else [],
-            paper_pmids=pmid_list,
+        registry.datasets[gse_id] = _dataset_entry_from_soft(
+            gse_id, meta, data_root=f"{{FUXI_DATA_ROOT}}/{gse_id}", status=status
         )
 
         # Link to papers
@@ -1578,6 +1615,99 @@ def _cmd_scan_register(
     elif dry_run:
         print("\n\U0001f4a1 --dry-run, not saved")
 
+    return registry
+
+
+def _cmd_backfill_metadata(
+    registry: MasterRegistry,
+    gse_filter: str | None = None,
+    force: bool = False,
+    dry_run: bool = False,
+    reg_path: str | None = None,
+) -> MasterRegistry:
+    """Re-fetch GEO SOFT metadata and backfill empty DatasetEntry fields.
+
+    Populates title / species / n_samples / assay_type / data_format /
+    description for every GEO dataset that is currently missing them.
+    Skips non-GEO repositories and (by default) datasets that already have
+    the fields populated — pass --force to overwrite.
+    """
+    from core.geo_downloader import fetch_soft_metadata
+
+    targets = [
+        (gse_id, ds)
+        for gse_id, ds in registry.datasets.items()
+        # Match explicit GEO repository, or GSE-prefixed IDs whose
+        # repository field was never set (legacy entries).
+        if ds.repository == RepositoryType.GEO or gse_id.upper().startswith("GSE")
+    ]
+    if gse_filter:
+        needle = gse_filter.upper()
+        targets = [(g, d) for g, d in targets if g.upper() == needle]
+        if not targets:
+            print(f"\u274c No GEO dataset matching '{gse_filter}'")
+            return registry
+
+    def _needs_backfill(ds: DatasetEntry) -> bool:
+        if force:
+            return True
+        return not (ds.title and ds.species and ds.n_samples is not None)
+
+    todo = [(g, d) for g, d in targets if _needs_backfill(d)]
+    if not todo:
+        print("\u2705 All GEO datasets already have metadata — nothing to backfill")
+        print("   (pass --force to re-fetch and overwrite)")
+        return registry
+
+    print(f"\n\U0001f501 Backfilling metadata for {len(todo)} dataset(s)\n")
+    filled = failed = 0
+    for idx, (gse_id, ds) in enumerate(todo, 1):
+        prefix = f"[{idx:3d}/{len(todo)}] {gse_id}"
+        try:
+            meta = fetch_soft_metadata(gse_id)
+        except Exception as e:
+            print(f"{prefix} \u274c fetch failed: {e}")
+            failed += 1
+            continue
+
+        new_entry = _dataset_entry_from_soft(
+            gse_id, meta, data_root=ds.data_root, status=ds.status
+        )
+        # Preserve fields the backfill source cannot know (config-bound, manual).
+        new_entry.dataset_yaml = ds.dataset_yaml
+        new_entry.relationships = ds.relationships
+        new_entry.notes = ds.notes
+        new_entry.tissue = ds.tissue
+        new_entry.size_desc = ds.size_desc
+        new_entry.parent_series = ds.parent_series
+        new_entry.n_cells = ds.n_cells
+        new_entry.sample_info = ds.sample_info
+        new_entry.modalities = ds.modalities
+        new_entry.paper_pmids = ds.paper_pmids or meta.get("pmid", []) or []
+        # When not --force, keep any user-set title/species/n_samples.
+        if not force:
+            if ds.title:
+                new_entry.title = ds.title
+            if ds.species:
+                new_entry.species = ds.species
+            if ds.n_samples is not None:
+                new_entry.n_samples = ds.n_samples
+
+        registry.datasets[gse_id] = new_entry
+        sp = new_entry.species or "?"
+        ns = new_entry.n_samples if new_entry.n_samples is not None else "?"
+        print(f"{prefix} \u2705 species={sp}, n_samples={ns}")
+        filled += 1
+
+    print(f"\n{'=' * 60}")
+    print(
+        f"Backfill complete: {filled} filled, {failed} failed, {len(todo) - filled - failed} skipped"
+    )
+
+    if dry_run:
+        print("\U0001f4a1 --dry-run, not saved")
+    elif reg_path is not None:
+        save_master_registry(registry, reg_path)
     return registry
 
 
@@ -1787,6 +1917,20 @@ def main() -> None:
         "--force", "-f", action="store_true", help="Skip confirmation prompt"
     )
     p_deregister.add_argument("--dry-run", action="store_true", help="Preview without deleting")
+
+    p_backfill = sub.add_parser(
+        "backfill-metadata",
+        help="Re-fetch GEO SOFT metadata and backfill empty dataset fields",
+    )
+    p_backfill.add_argument(
+        "--gse", default=None, help="Only backfill this single GSE (default: all GEO datasets)"
+    )
+    p_backfill.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite even fields that are already populated",
+    )
+    p_backfill.add_argument("--dry-run", action="store_true", help="Preview without saving")
     args = parser.parse_args()
     reg_path = args.registry if hasattr(args, "registry") else None
 
@@ -1800,6 +1944,8 @@ def main() -> None:
         "register",
         "deregister",
         "status",
+        "list-papers",
+        "backfill-metadata",
         "list-papers",
     ):
         registry = load_master_registry(reg_path)
@@ -1914,6 +2060,20 @@ def main() -> None:
             reg_path=reg_path,
         )
         if not args.dry_run:
+            save_master_registry(registry, reg_path)
+            _auto_verify(registry)
+
+    elif args.command == "backfill-metadata":
+        registry = _cmd_backfill_metadata(
+            registry,
+            gse_filter=args.gse,
+            force=args.force,
+            dry_run=args.dry_run,
+            reg_path=reg_path,
+        )
+        if not args.dry_run:
+            _auto_verify(registry)
+
             save_master_registry(registry, reg_path)
             _auto_verify(registry)
 
