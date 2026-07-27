@@ -22,7 +22,7 @@ import re
 import textwrap
 from typing import Any
 
-from core.config.schema import ClusteringSettings
+from core.config.schema import ClusteringSettings, Config, IntegrationSettings, MarkerSettings
 
 # ── Paths ──────────────────────────────────────────────────────────────
 
@@ -68,6 +68,31 @@ _TEST1_ALLOWLIST: set[str] = {
     "multi_metric_granularity_min_clusters",
     "param_grid_n_neighbors_adaptive",
 }
+
+_TEST4_ALLOWLIST: set[str] = {
+    # Flattened attribute accesses used by utility functions that receive
+    # cfg as a duck-typed object (cfg: Any), not a proper Config instance.
+    # These are intentionally non-standard — the code falls back to defaults.
+    "ai_cache_responses",
+    "downsample_target",
+    "downsample_strategy",
+    "downsample_random_seed",
+    "downsample_max_per_sample",
+    "interactive",
+    "reasoning_effort",
+    "thinking_enabled",
+    "timeout",
+    "use_float32",
+}
+
+# ── Test 5 allowlist: MarkerSettings.quality_gate_min_pass_rate ──────
+_TEST5_ALLOWLIST: set[str] = set()
+# quality_gate_min_pass_rate is referenced in rna/steps/05_annotate_major.py
+
+# ── Test 6 allowlist: IntegrationSettings.collinearity_guard ────────
+_TEST6_ALLOWLIST: set[str] = set()
+# collinearity_guard is referenced in rna/steps/03_integrate.py
+
 
 # ── Helpers ────────────────────────────────────────────────────────────
 
@@ -293,10 +318,10 @@ class TestClusteringSchemaConsistency:
 
     # Pairs: (field_name, file_relpath, line_no)
     _KNOWN_FALLBACK_PAIRS: list[tuple[str, str, int]] = [
-        ("multi_metric_coverage_ratio_threshold", "core/cluster/evaluation.py", 1189),
-        ("stability_n_seeds", "core/cluster/evaluation.py", 1188),
-        ("stability_leiden_n_iterations", "core/cluster/evaluation.py", 301),
-        ("leiden_flavor", "core/cluster/evaluation.py", 1190),
+        ("multi_metric_coverage_ratio_threshold", "core/cluster/evaluation/enrichment.py", 75),
+        ("stability_n_seeds", "core/cluster/evaluation/enrichment.py", 74),
+        ("stability_leiden_n_iterations", "core/cluster/evaluation/stability.py", 52),
+        ("leiden_flavor", "core/cluster/evaluation/enrichment.py", 76),
         ("umap_selection_metric", "rna/steps/04_cluster_umap.py", 567),
     ]
 
@@ -335,6 +360,283 @@ class TestClusteringSchemaConsistency:
             + "\n\nUpdate the schema default, the code fallback, or both "
             "so they are identical."
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Test 4 — Config.species field
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestConfigSpeciesField:
+    """Verify Config.species field consistency."""
+
+    def test_dead_species_field(self) -> None:
+        """'species' field must be referenced in >=1 production .py file."""
+        field_name = "species"
+        assert field_name in Config.model_fields, "species not in Config.model_fields"
+        py_files = _collect_production_py_files()
+        found = False
+        for fpath in py_files:
+            content = _safe_read(fpath)
+            if field_name in content:
+                found = True
+                break
+        assert found or field_name in _TEST4_ALLOWLIST, textwrap.dedent("""\
+            Dead Config field 'species' — not referenced in any production .py file.
+            Add to _TEST4_ALLOWLIST if this is intentional.""")
+
+    def test_no_ghost_config_fields(self) -> None:
+        """No getattr(cfg|config, ...) references a non-existent Config field."""
+        schema_fields = set(Config.model_fields.keys())
+        py_files = _collect_production_py_files()
+        _getattr_config_re = re.compile(
+            r'getattr\(\s*(?:cfg|config)\s*,\s*["\']([a-zA-Z_][a-zA-Z0-9_]*)["\']'
+        )
+        ghosts: dict[str, list[tuple[pathlib.Path, int]]] = {}
+        for fpath in py_files:
+            content = _safe_read(fpath)
+            for lineno, line in enumerate(content.splitlines(), start=1):
+                for m in _getattr_config_re.finditer(line):
+                    name = m.group(1)
+                    if name not in schema_fields and name not in _TEST4_ALLOWLIST:
+                        ghosts.setdefault(name, []).append((fpath, lineno))
+        if not ghosts:
+            return
+        msg_lines = ["Ghost Config field(s) accessed via getattr():", ""]
+        for name, locations in sorted(ghosts.items()):
+            msg_lines.append(f"  \u2022 {name!r}  (used in {len(locations)} location(s)):")
+            for fpath, lineno in locations:
+                rel = fpath.relative_to(_REPO)
+                msg_lines.append(f"      {rel}:{lineno}")
+        msg_lines.append("")
+        msg_lines.append("Either add these fields to Config or remove the ghost getattr calls.")
+        assert not ghosts, "\n".join(msg_lines)
+
+    def test_species_schema_drift(self) -> None:
+        """Verify species field type and default haven't drifted."""
+        field_info = Config.model_fields["species"]
+        assert field_info.annotation is str, (
+            f"Config.species expected annotation=str, got {field_info.annotation}"
+        )
+        assert field_info.default == "human", (
+            f"Config.species expected default='human', got {field_info.default!r}"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Test 5 — MarkerSettings.quality_gate_min_pass_rate
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestMarkerQualityGateField:
+    """Verify MarkerSettings.quality_gate_min_pass_rate field consistency."""
+
+    def test_dead_quality_gate_field(self) -> None:
+        """'quality_gate_min_pass_rate' must be referenced in >=1 production .py file."""
+        field_name = "quality_gate_min_pass_rate"
+        assert field_name in MarkerSettings.model_fields, (
+            f"{field_name} not in MarkerSettings.model_fields"
+        )
+        py_files = _collect_production_py_files()
+        found = False
+        for fpath in py_files:
+            content = _safe_read(fpath)
+            if field_name in content:
+                found = True
+                break
+        assert found or field_name in _TEST5_ALLOWLIST, textwrap.dedent(f"""\
+            Dead MarkerSettings field '{field_name}' — not referenced in any production .py file.
+            Add to _TEST5_ALLOWLIST if this is intentional.""")
+
+    def test_no_ghost_marker_fields(self) -> None:
+        """No getattr(cfg.marker, ...) references a non-existent MarkerSettings field."""
+        schema_fields = set(MarkerSettings.model_fields.keys())
+        py_files = _collect_production_py_files()
+        _getattr_marker_re = re.compile(
+            r'getattr\(\s*cfg\.marker\s*,\s*["\']([a-zA-Z_][a-zA-Z0-9_]*)["\']'
+        )
+        ghosts: dict[str, list[tuple[pathlib.Path, int]]] = {}
+        for fpath in py_files:
+            content = _safe_read(fpath)
+            for lineno, line in enumerate(content.splitlines(), start=1):
+                for m in _getattr_marker_re.finditer(line):
+                    name = m.group(1)
+                    if name not in schema_fields:
+                        ghosts.setdefault(name, []).append((fpath, lineno))
+        if not ghosts:
+            return
+        msg_lines = ["Ghost MarkerSettings field(s) accessed via getattr():", ""]
+        for name, locations in sorted(ghosts.items()):
+            msg_lines.append(f"  \u2022 {name!r}  (used in {len(locations)} location(s)):")
+            for fpath, lineno in locations:
+                rel = fpath.relative_to(_REPO)
+                msg_lines.append(f"      {rel}:{lineno}")
+        msg_lines.append("")
+        msg_lines.append(
+            "Either add these fields to MarkerSettings or remove the ghost getattr calls."
+        )
+        assert not ghosts, "\n".join(msg_lines)
+
+    def test_quality_gate_schema_drift(self) -> None:
+        """Verify quality_gate_min_pass_rate type and default haven't drifted."""
+        field_info = MarkerSettings.model_fields["quality_gate_min_pass_rate"]
+        assert field_info.annotation is float, (
+            f"MarkerSettings.quality_gate_min_pass_rate expected annotation=float, "
+            f"got {field_info.annotation}"
+        )
+        assert field_info.default == 0.10, (
+            f"MarkerSettings.quality_gate_min_pass_rate expected default=0.10, "
+            f"got {field_info.default!r}"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Test 6 — IntegrationSettings.collinearity_guard
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestIntegrationCollinearityField:
+    """Verify IntegrationSettings.collinearity_guard field consistency."""
+
+    def test_dead_collinearity_guard_field(self) -> None:
+        """'collinearity_guard' must be referenced in >=1 production .py file."""
+        field_name = "collinearity_guard"
+        assert field_name in IntegrationSettings.model_fields, (
+            f"{field_name} not in IntegrationSettings.model_fields"
+        )
+        py_files = _collect_production_py_files()
+        found = False
+        for fpath in py_files:
+            content = _safe_read(fpath)
+            if field_name in content:
+                found = True
+                break
+        assert found or field_name in _TEST6_ALLOWLIST, textwrap.dedent(f"""\
+            Dead IntegrationSettings field '{field_name}' — not referenced in any production .py file.
+            Add to _TEST6_ALLOWLIST if this is intentional.""")
+
+    def test_no_ghost_integration_fields(self) -> None:
+        """No getattr(cfg.integration, ...) references a non-existent IntegrationSettings field."""
+        schema_fields = set(IntegrationSettings.model_fields.keys())
+        py_files = _collect_production_py_files()
+        _getattr_integration_re = re.compile(
+            r'getattr\(\s*cfg\.integration\s*,\s*["\']([a-zA-Z_][a-zA-Z0-9_]*)["\']'
+        )
+        ghosts: dict[str, list[tuple[pathlib.Path, int]]] = {}
+        for fpath in py_files:
+            content = _safe_read(fpath)
+            for lineno, line in enumerate(content.splitlines(), start=1):
+                for m in _getattr_integration_re.finditer(line):
+                    name = m.group(1)
+                    if name not in schema_fields:
+                        ghosts.setdefault(name, []).append((fpath, lineno))
+        if not ghosts:
+            return
+        msg_lines = ["Ghost IntegrationSettings field(s) accessed via getattr():", ""]
+        for name, locations in sorted(ghosts.items()):
+            msg_lines.append(f"  \u2022 {name!r}  (used in {len(locations)} location(s)):")
+            for fpath, lineno in locations:
+                rel = fpath.relative_to(_REPO)
+                msg_lines.append(f"      {rel}:{lineno}")
+        msg_lines.append("")
+        msg_lines.append(
+            "Either add these fields to IntegrationSettings or remove the ghost getattr calls."
+        )
+        assert not ghosts, "\n".join(msg_lines)
+
+    def test_collinearity_guard_schema_drift(self) -> None:
+        """Verify collinearity_guard type and default haven't drifted."""
+        field_info = IntegrationSettings.model_fields["collinearity_guard"]
+        assert field_info.annotation is bool, (
+            f"IntegrationSettings.collinearity_guard expected annotation=bool, "
+            f"got {field_info.annotation}"
+        )
+        assert field_info.default is True, (
+            f"IntegrationSettings.collinearity_guard expected default=True, "
+            f"got {field_info.default!r}"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Test 7 — _normalize_species_validator existence (AST)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestSpeciesValidatorExistence:
+    """Verify _normalize_species_validator exists with correct decorator via AST."""
+
+    def test_dead_validator_exists(self) -> None:
+        """_normalize_species_validator function must exist in schema.py."""
+        schema_path = _REPO / "core" / "config" / "schema.py"
+        content = _safe_read(schema_path)
+        assert content, "Cannot read core/config/schema.py"
+        tree = ast.parse(content, filename=str(schema_path))
+        found = False
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.FunctionDef)
+                and node.name == "_normalize_species_validator"
+                and any(
+                    isinstance(d, ast.Call)
+                    and isinstance(d.func, ast.Name)
+                    and d.func.id == "model_validator"
+                    and any(
+                        kw.arg == "mode"
+                        and isinstance(kw.value, ast.Constant)
+                        and kw.value.value == "after"
+                        for kw in d.keywords
+                    )
+                    for d in node.decorator_list
+                )
+            ):
+                found = True
+                break
+        assert found, textwrap.dedent("""\
+            _normalize_species_validator not found or missing @model_validator(mode="after").
+            This validator normalises species in Config.__init__.
+            Expected in core/config/schema.py on the Config class.""")
+
+    def test_no_ghost_validator_references(self) -> None:
+        """No external code references a non-existent validator."""
+        schema_path = _REPO / "core" / "config" / "schema.py"
+        py_files = [f for f in _collect_production_py_files() if f != schema_path]
+        ghosts: list[tuple[pathlib.Path, int]] = []
+        for fpath in py_files:
+            content = _safe_read(fpath)
+            for lineno, line in enumerate(content.splitlines(), start=1):
+                if "_normalize_species_validator" in line:
+                    ghosts.append((fpath, lineno))
+        assert not ghosts, (
+            f"Found {len(ghosts)} external reference(s) to _normalize_species_validator:\n"
+            + "\n".join(f"  {f.relative_to(_REPO)}:{lineno}" for f, lineno in ghosts)
+        )
+
+    def test_validator_schema_drift(self) -> None:
+        """Verify the validator's body hasn't been gutted."""
+        schema_path = _REPO / "core" / "config" / "schema.py"
+        content = _safe_read(schema_path)
+        assert content, "Cannot read core/config/schema.py"
+        tree = ast.parse(content, filename=str(schema_path))
+        validator_body_lines = 0
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == "_normalize_species_validator":
+                body = node.body
+                start = (
+                    1
+                    if (
+                        body
+                        and isinstance(body[0], ast.Expr)
+                        and isinstance(body[0].value, ast.Constant)
+                        and isinstance(body[0].value.value, str)
+                    )
+                    else 0
+                )
+                validator_body_lines = len(body) - start
+                break
+        assert validator_body_lines >= 3, textwrap.dedent(f"""\
+            _normalize_species_validator body appears too short ({validator_body_lines} lines).
+            Expected at least 3 statements (import, normalisation logic, return).
+            The validator may have been gutted or replaced with a no-op.""")
 
 
 # ── Formatting ─────────────────────────────────────────────────────────
