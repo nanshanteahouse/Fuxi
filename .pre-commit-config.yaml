@@ -22,8 +22,10 @@ repos:
     rev: v0.11.0
     hooks:
       - id: ruff
-        args: [--fix]
+        args: ["--fix"]
+        exclude: ^adhoc/
       - id: ruff-format
+        exclude: ^adhoc/
 
   # ── Type checking (local, slower — pre-push only) ─────────────────────
   - repo: local
