@@ -41,6 +41,67 @@ integration:
   # gini_batch_threshold: 0.3
   # gini_biology_threshold: 0.6
 
+    # ── scVI (deep generative model, method: scvi) ───────────────────────
+    # All parameters below are preset with scVI defaults. Uncomment and
+    # override in global.yaml for project-wide defaults, or in project
+    # config_{GSE}.yaml for per-dataset tuning.
+    # WARNING: trainer_kwargs keys that duplicate explicit args (max_epochs,
+    # batch_size, early_stopping, train_size, precision, plan_kwargs, etc.)
+    # are silently filtered — set those as top-level scvi: fields instead.
+    # GOTCHA: `trainer_kwargs: {}` in project config WIPES global defaults
+    # (deep_merge treats {} as 'clear all'). To inherit global values, simply
+    # omit the key or override individual sub-keys like trainer_kwargs.gradient_clip_val.
+    scvi:
+      # ── Core (usually set per-project) ──
+      # n_latent: 30                       # Latent space dimensionality
+      # n_layers: 2                        # Encoder/Decoder layer count
+      # n_hidden: 128                      # Hidden layer width
+      # max_epochs: 400                    # Max training epochs (None = heuristic)
+      # batch_size: 128                    # Minibatch size
+      # early_stopping: false              # Stop when validation ELBO plateaus
+      # train_size: 0.9                    # Train fraction (<1.0 needed for early_stopping)
+      # precision: "32"                    # "16-mixed" / "bf16-mixed" for GPU speedup
+      # batch_key: sample                  # obs column for batch correction
+      # use_gpu: true                      # Use GPU if available
+
+      # ── Advanced: Trainer (pl.Trainer passthrough) ──
+      # trainer_kwargs:
+      #   gradient_clip_val: null           # Max gradient norm (null = no clipping)
+      #   gradient_clip_algorithm: "norm"   # "norm" or "value"
+      #   accumulate_grad_batches: 1        # Gradient accumulation steps
+      #   check_val_every_n_epoch: 1       # Validation frequency (epochs)
+      #   early_stopping_patience: 45      # Epochs without improvement before stop
+      #   early_stopping_min_delta: 0.0    # Min ELBO improvement to reset patience
+      #   early_stopping_monitor: "elbo_validation"
+      #   early_stopping_warmup_epochs: 0  # Ignore early stopping for N epochs
+      #   early_stopping_mode: "min"       # "min" (loss) or "max"
+      #   limit_train_batches: 1.0         # Fraction of train data per epoch
+      #   limit_val_batches: 1.0           # Fraction of val data per epoch
+      #   strategy: "auto"                 # "auto" / "ddp" / "deepspeed"
+
+      # ── Advanced: TrainingPlan (optimizer/scheduler) ──
+      # plan_kwargs:
+      #   lr: 0.001                        # Initial learning rate
+      #   weight_decay: 0.000001           # L2 regularization strength
+      #   optimizer: "Adam"               # "Adam" / "AdamW" / "Custom"
+      #   eps: 0.01                        # Adam epsilon
+      #   reduce_lr_on_plateau: false      # Decay LR when validation plateaus
+      #   lr_patience: 30                 # Epochs before LR decay triggers
+      #   lr_factor: 0.6                  # LR decay multiplier
+      #   lr_threshold: 0.0               # Min improvement to reset LR patience
+      #   lr_min: 0.0                     # Minimum learning rate floor
+      #   n_epochs_kl_warmup: 400         # KL annealing duration (epochs)
+      #   n_steps_kl_warmup: null         # KL annealing duration (steps, overrides epochs)
+      #   max_kl_weight: 1.0              # Max KL weight after warmup
+      #   min_kl_weight: 0.0              # Min KL weight
+      #   compile: false                  # torch.compile acceleration (PyTorch 2.0+)
+
+      # ── Advanced: DataSplitter (DataLoader) ──
+      # datasplitter_kwargs:
+      #   num_workers: 0                  # DataLoader parallel workers
+      #   drop_last: false                # Drop incomplete final batch
+      #   pin_memory: false               # CUDA pinned memory
+
 # ── Quality Control ────────────────────────────────────────────────────────
 qc:
   # max_pct_mito: 20.0                  # Max mitochondrial percentage
