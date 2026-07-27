@@ -270,11 +270,23 @@ def _select_multi_metric(valid, weights=None, log=None):
     """
     n = len(valid)
 
+    # -- Single-result fast path: skip multi-metric scoring --
+    if n == 1:
+        r = valid[0]
+        return (
+            r["n_neighbors"],
+            r["resolution"],
+            "multi_metric",
+            f"single_result k={r['n_clusters']} composite={r.get('composite_score', 0):.4f}",
+        )
+
     # ── Gather raw scores ──
     sil_scores = np.array([r["silhouette_score"] for r in valid])
-    stab_scores = np.array([r.get("stability_score", 0.0) for r in valid])
+    stab_scores = np.array([r.get("stability_score") or 0.0 for r in valid])
 
-    has_coherence = any("cluster_coherence" in r for r in valid)
+    has_coherence = any(
+        "cluster_coherence" in r and r["cluster_coherence"] is not None for r in valid
+    )
     coh_scores: np.ndarray = np.zeros(n)
     if has_coherence:
         coh_scores = np.array([r.get("cluster_coherence", 0.0) for r in valid])
@@ -321,11 +333,15 @@ def _select_multi_metric(valid, weights=None, log=None):
         active_weights.pop("kb_annotatable_rate", None)
 
     # -- Coherence mismatch auto-degrade: if all entries have cluster_coherence < 0.1 --
-    if has_coherence and float(np.max(coh_scores)) < 0.1:
+    if (
+        has_coherence
+        and any(c is not None for c in coh_scores)
+        and float(np.max([c for c in coh_scores if c is not None])) < 0.1
+    ):
         logger.warning(
             "Max cluster_coherence=%.4f < 0.1 across all entries — marker_dict may be mismatched. "
             "Degrading to silhouette+stability only.",
-            float(np.max(coh_scores)),
+            float(np.max([c for c in coh_scores if c is not None])),
         )
         has_coherence = False
         active_weights = {"silhouette": 0.5, "stability": 0.5}
