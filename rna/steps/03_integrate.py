@@ -47,6 +47,27 @@ from core.utils import (
 # Previously hardcoded as _S_GENES / _G2M_GENES (Tirosh et al., 2016).
 # Loading is deferred to the score_cell_cycle block below via load_cell_cycle_genes().
 
+# ── scVI train() named params (must not appear in trainer_kwargs) ──
+_SCVI_EXPLICIT_KWARGS: frozenset[str] = frozenset(
+    {
+        "max_epochs",
+        "accelerator",
+        "devices",
+        "train_size",
+        "validation_size",
+        "shuffle_set_split",
+        "load_sparse_tensor",
+        "batch_size",
+        "early_stopping",
+        "datasplitter_kwargs",
+        "plan_config",
+        "plan_kwargs",
+        "datamodule",
+        "trainer_config",
+        "precision",  # explicit pass-through (consumed by **trainer_kwargs inside scVI)
+    }
+)
+
 
 def main():
     t0 = time.time()
@@ -569,12 +590,51 @@ def main():
                 n_layers=cfg.integration.scvi.n_layers,
                 n_hidden=cfg.integration.scvi.n_hidden,
             )
+            # ── Validate early_stopping preconditions ──
+            if cfg.integration.scvi.early_stopping and cfg.integration.scvi.train_size >= 1.0:
+                raise ValueError(
+                    "early_stopping=True requires train_size < 1.0 "
+                    "(scVI needs a validation set to monitor ELBO). "
+                    f"Got train_size={cfg.integration.scvi.train_size}."
+                )
+
+            # ── Guard: CPU + mixed precision crash (D1) ──
+            # PyTorch lacks fp16 matmul on CPU → RuntimeError
+            if cfg.integration.scvi.precision != "32" and not use_gpu:
+                log.warning(
+                    "scVI precision=%s is unsafe on CPU (PyTorch lacks fp16 matmul) "
+                    "— downgrading to '32'. Set use_gpu=true or precision='32'.",
+                    cfg.integration.scvi.precision,
+                )
+                _precision = "32"
+            else:
+                _precision = cfg.integration.scvi.precision
             t_start = time.time()
+            # Filter out keys that duplicate explicit args (prevents TypeError)
+            _trainer_kwargs = {
+                k: v
+                for k, v in cfg.integration.scvi.trainer_kwargs.items()
+                if k not in _SCVI_EXPLICIT_KWARGS
+            }
+            if _trainer_kwargs != cfg.integration.scvi.trainer_kwargs:
+                _conflicts = set(cfg.integration.scvi.trainer_kwargs) & _SCVI_EXPLICIT_KWARGS
+                log.warning(
+                    "scVI trainer_kwargs contains explicit-arg keys %s — filtered out "
+                    "(use top-level SCVIConfig fields instead)",
+                    _conflicts,
+                )
+
             model.train(
                 max_epochs=cfg.integration.scvi.max_epochs,
+                batch_size=cfg.integration.scvi.batch_size,
+                early_stopping=cfg.integration.scvi.early_stopping,
                 train_size=cfg.integration.scvi.train_size,
                 accelerator="gpu" if use_gpu else "cpu",
                 devices=1,
+                precision=_precision,
+                **_trainer_kwargs,
+                plan_kwargs=cfg.integration.scvi.plan_kwargs or None,
+                datasplitter_kwargs=cfg.integration.scvi.datasplitter_kwargs or None,
             )
             elapsed = time.time() - t_start
             log.info("scVI training completed in %.1f seconds", elapsed)
