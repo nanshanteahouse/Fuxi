@@ -228,6 +228,37 @@
   .detail-field .v a { color: var(--accent); text-decoration: none; }
   .detail-field .v a:hover { text-decoration: underline; }
 
+  /* ───────── superseries / subseries hierarchy ───────── */
+  .superseries-toggle {
+    cursor: pointer; color: var(--purple); font-size: 11px; margin-right: 4px;
+    user-select: none; transition: transform .12s; display: inline-block; width: 12px;
+  }
+  .superseries-toggle.open { transform: rotate(90deg); }
+  .superseries-toggle.placeholder { color: var(--muted); opacity: .35; cursor: default; }
+
+  /* child rows: collapsed by default; shown via .expanded or .search-forced */
+  tr.subseries-row { display: none; }
+  tr.subseries-row.expanded,
+  tr.subseries-row.search-forced { display: table-row; }
+  tr.subseries-row.hidden,
+  tr.subseries-row.hidden-by-filter { display: none !important; }
+  tr.subseries-row > td {
+    background: var(--bg-elev) !important;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border-soft);
+  }
+  tr.subseries-row > td:first-child {
+    padding-left: 30px;
+    position: relative;
+  }
+  tr.subseries-row > td:first-child::before {
+    content: "└"; position: absolute; left: 14px; top: 7px;
+    color: var(--purple); opacity: .55; font-family: monospace;
+  }
+  tr.subseries-row .td-id { font-size: 11px; opacity: .9; }
+  /* superseries parent row highlight */
+  tr.superseries-parent > td { border-bottom: 1px solid rgba(163,113,247,.18); }
+
   /* ───────── ext link ───────── */
   .ext-link { color: var(--accent); text-decoration: none; border-bottom: 1px dashed transparent; }
   .ext-link:hover { border-bottom-color: var(--accent); }
@@ -539,7 +570,12 @@ function sortColumn(tableId, colIdx) {
   const tbody = document.querySelector(`#${tableId} tbody`);
   if (!tbody) return;
   const isDetailable = tableId === 'papersWrap';
-  const rows = Array.from(tbody.querySelectorAll('tr:not(.detail-row)'));
+  const isHierarchical = tableId === 'datasetsWrap';
+  // Top-level rows only — exclude detail rows (papers) and subseries rows (datasets).
+  const rowSelector = isHierarchical
+    ? 'tr:not(.detail-row):not(.subseries-row)'
+    : 'tr:not(.detail-row)';
+  const rows = Array.from(tbody.querySelectorAll(rowSelector));
   const prev = sortState[tableId];
   const isAsc = !(prev && prev.col === colIdx && prev.dir === 1);
   sortState[tableId] = { col: colIdx, dir: isAsc ? 1 : -1 };
@@ -550,8 +586,17 @@ function sortColumn(tableId, colIdx) {
     return (isAsc ? 1 : -1) * naturalCompare(ca, cb);
   });
 
-  // reorder with paired detail rows
-  if (isDetailable) {
+  if (isHierarchical) {
+    // Move each parent row, then its children (queried by data-parent) immediately after.
+    rows.forEach(parent => {
+      tbody.appendChild(parent);
+      const pid = parent.dataset.dsid;
+      if (!pid) return;
+      const children = tbody.querySelectorAll(`tr.subseries-row[data-parent="${pid}"]`);
+      children.forEach(c => tbody.appendChild(c));
+    });
+  } else if (isDetailable) {
+    // reorder with paired detail rows
     const detailRows = [];
     rows.forEach(r => {
       const next = r.nextElementSibling;
@@ -658,39 +703,101 @@ function renderDatasets() {
   });
   html.push('</tr></thead><tbody>');
 
+  // ── build parent → [existing children] map and reverse child → parent map ──
+  // Only SuperSeries parents with ≥1 child present in DATA.datasets become collapsible.
+  const parentMap = {};    // parentId → [childId, ...] (only children that exist in data)
+  const childToParent = {}; // childId → parentId
   for (const dsId of keys) {
     const ds = DATA.datasets[dsId];
-    const orphan = !DATA.links.some(ln => ln.dataset_id === dsId);
-    const paperLinks = LINK_MAP[dsId] || [];
-    const paperTags = paperLinks.map(pl => {
-      const cls = pl.role === 'primary' ? 'role-primary' : 'role-secondary';
-      return `<a class="gse-tag ${cls}" title="role: ${escapeAttr(pl.role)}">${escapeHtml(pl.slug || pl.paper_id)}</a>`;
-    }).join('');
-    const cellsStr = ds.n_cells ? Number(ds.n_cells).toLocaleString() : '—';
-    const pipelineHtml = pipelineBadge(ds);
-    const superSeriesBadge = (ds.type === 'SuperSeries') ? ' <span class="badge badge-superseries" title="SuperSeries container — no own pipeline">SS</span>' : '';
-    const nonPipeBadge    = (ds.non_pipeline && ds.type !== 'SuperSeries') ? ' <span class="badge badge-nonpipeline" title="Non-pipeline: bulk / STARR — Fuxi pipeline does not run">non-pipeline</span>' : '';
-    const orphanBadge = orphan ? ' <span class="badge badge-warn">orphan</span>' : '';
-    const statusHtml = datasetStatusBadge(ds);
-    const sampleInfoStr = ds.sample_info || ds.notes || '';
-    const search = [dsId, ds.species, ds.tissue, ds.size_desc, ds.n_cells, ds.sample_info, ds.notes, paperLinks.map(p => p.slug).join(' ')].filter(x => x != null).join(' ').toLowerCase();
+    if (ds.type === 'SuperSeries' && Array.isArray(ds.subseries) && ds.subseries.length > 0) {
+      const present = ds.subseries
+        .map(s => (s && s.id) ? s.id : null)
+        .filter(id => id && DATA.datasets[id]);
+      if (present.length > 0) {
+        parentMap[dsId] = present;
+        for (const cid of present) childToParent[cid] = dsId;
+      }
+    }
+  }
 
-    html.push(
-      `<tr data-role="dataset" data-dsid="${escapeHtml(dsId)}" data-search="${escapeAttr(search)}">`,
-      `<td class="td-id" style="color:${orphan ? 'var(--orange)' : 'var(--accent)'}">${gseLink(dsId)}${orphanBadge}${superSeriesBadge}${nonPipeBadge}</td>`,
-      `<td>${statusHtml}</td>`,
-      `<td>${escapeHtml(ds.species || '—')}</td>`,
-      `<td class="td-clamp-1"><span title="${escapeAttr(ds.tissue || '')}">${escapeHtml(ds.tissue || '—')}</span></td>`,
-      `<td style="color:var(--muted);white-space:nowrap">${escapeHtml(ds.size_desc || '—')}</td>`,
-      `<td class="td-num">${cellsStr}</td>`,
-      `<td>${pipelineHtml}</td>`,
-      `<td><div class="gse-list">${paperTags || '<span style="color:var(--muted)">—</span>'}</div></td>`,
-      `<td class="td-clamp-2"><span title="${escapeAttr(sampleInfoStr)}">${escapeHtml(sampleInfoStr || '—')}</span></td>`,
-      `</tr>`
-    );
+  for (const dsId of keys) {
+    // Skip children — they render only under their parent.
+    if (childToParent[dsId]) continue;
+
+    const ds = DATA.datasets[dsId];
+    const childIds = parentMap[dsId] || [];
+    const isCollapsibleSuper = childIds.length > 0;
+    html.push(renderDatasetRow(dsId, ds, { isCollapsibleSuper, childCount: childIds.length }));
+
+    // Render child rows immediately after parent. Default collapsed via .subseries-row CSS.
+    for (const childId of childIds) {
+      const childDs = DATA.datasets[childId];
+      html.push(renderDatasetRow(childId, childDs, { parentId: dsId }));
+    }
   }
   html.push('</tbody></table>');
   document.getElementById('datasetsWrap').innerHTML = html.join('');
+}
+
+/* Render one dataset row. opts differentiate parent / child / plain row. */
+function renderDatasetRow(dsId, ds, opts = {}) {
+  const orphan = !DATA.links.some(ln => ln.dataset_id === dsId);
+  const paperLinks = LINK_MAP[dsId] || [];
+  const paperTags = paperLinks.map(pl => {
+    const cls = pl.role === 'primary' ? 'role-primary' : 'role-secondary';
+    return `<a class="gse-tag ${cls}" title="role: ${escapeAttr(pl.role)}">${escapeHtml(pl.slug || pl.paper_id)}</a>`;
+  }).join('');
+  const cellsStr = ds.n_cells ? Number(ds.n_cells).toLocaleString() : '—';
+  const pipelineHtml = pipelineBadge(ds);
+  const superSeriesBadge = (ds.type === 'SuperSeries') ? ' <span class="badge badge-superseries" title="SuperSeries container — no own pipeline">SS</span>' : '';
+  const nonPipeBadge    = (ds.non_pipeline && ds.type !== 'SuperSeries') ? ' <span class="badge badge-nonpipeline" title="Non-pipeline: bulk / STARR — Fuxi pipeline does not run">non-pipeline</span>' : '';
+  const orphanBadge = orphan ? ' <span class="badge badge-warn">orphan</span>' : '';
+  const statusHtml = datasetStatusBadge(ds);
+  const sampleInfoStr = ds.sample_info || ds.notes || '';
+  const search = [dsId, ds.species, ds.tissue, ds.size_desc, ds.n_cells, ds.sample_info, ds.notes, paperLinks.map(p => p.slug).join(' ')].filter(x => x != null).join(' ').toLowerCase();
+
+  // ── row class + leading cell ornament ──
+  let rowClass = 'data-role="dataset"';
+  let idCellExtras = orphanBadge + superSeriesBadge + nonPipeBadge;
+  let toggleHtml = '';
+
+  if (opts.parentId) {
+    // Child row: indented, hidden by default (.subseries-row CSS).
+    rowClass = `class="subseries-row" data-role="dataset" data-parent="${escapeHtml(opts.parentId)}"`;
+  } else if (opts.isCollapsibleSuper) {
+    // Collapsible SuperSeries parent: ▸ toggle + parent highlight.
+    rowClass = 'class="superseries-parent" data-role="dataset"';
+    toggleHtml = `<span class="superseries-toggle" onclick="toggleSuperseries(this,'${escapeAttr(dsId)}')" title="${opts.childCount} sub-series — click to expand">▸</span>`;
+    idCellExtras = ` <span class="badge badge-info" title="${opts.childCount} sub-series">${opts.childCount}</span>` + idCellExtras;
+  }
+
+  return [
+    `<tr ${rowClass} data-dsid="${escapeHtml(dsId)}" data-search="${escapeAttr(search)}">`,
+    `<td class="td-id" style="color:${orphan ? 'var(--orange)' : 'var(--accent)'}">${toggleHtml}${gseLink(dsId)}${idCellExtras}</td>`,
+    `<td>${statusHtml}</td>`,
+    `<td>${escapeHtml(ds.species || '—')}</td>`,
+    `<td class="td-clamp-1"><span title="${escapeAttr(ds.tissue || '')}">${escapeHtml(ds.tissue || '—')}</span></td>`,
+    `<td style="color:var(--muted);white-space:nowrap">${escapeHtml(ds.size_desc || '—')}</td>`,
+    `<td class="td-num">${cellsStr}</td>`,
+    `<td>${pipelineHtml}</td>`,
+    `<td><div class="gse-list">${paperTags || '<span style="color:var(--muted)">—</span>'}</div></td>`,
+    `<td class="td-clamp-2"><span title="${escapeAttr(sampleInfoStr)}">${escapeHtml(sampleInfoStr || '—')}</span></td>`,
+    `</tr>`
+  ].join('');
+}
+
+/* Toggle collapse state of a SuperSeries parent's child rows. */
+function toggleSuperseries(el, parentId) {
+  const row = el.closest('tr');
+  if (!row) return;
+  const open = el.classList.toggle('open');
+  el.textContent = open ? '▾' : '▸';
+  // Flip .expanded on every following .subseries-row[data-parent=parentId].
+  // (Children are contiguous after parent, but query by data attr for robustness
+  //  against sort reordering — children always carry data-parent.)
+  document.querySelectorAll(`#datasetsWrap tbody tr.subseries-row[data-parent="${parentId}"]`).forEach(child => {
+    child.classList.toggle('expanded', open);
+  });
 }
 
 /* ───────── pipeline badge — uses modalities.<mod>.status ───────── */
@@ -795,11 +902,36 @@ function wireSearch() {
       if (next && next.classList.contains('detail-row')) next.classList.toggle('hidden', !match);
       if (match) p++;
     });
-    document.querySelectorAll('#datasetsWrap tbody tr').forEach(row => {
+    // ── datasets: parent/child aware search ──
+    // Pass 1: per-row search match + filter check.
+    const datasetRows = document.querySelectorAll('#datasetsWrap tbody tr');
+    let anyChildMatched = new Set(); // parentIds whose child(ren) matched the query
+    datasetRows.forEach(row => {
       const match = (!q || row.dataset.search.includes(q)) && !row.classList.contains('hidden-by-filter');
       row.classList.toggle('hidden', !match);
-      if (match) d++;
+      // Track query-matched children so their parent can be force-shown.
+      if (q && match && row.classList.contains('subseries-row')) {
+        const pid = row.dataset.parent;
+        if (pid) anyChildMatched.add(pid);
+      }
     });
+    // Pass 2: resolve hierarchy.
+    // - Child: if query active AND child matched → .search-forced (visible despite collapsed).
+    //         if no query → clear .search-forced (let user's collapse state rule).
+    // - Parent: if any of its children matched the query → ensure parent visible.
+    datasetRows.forEach(row => {
+      if (row.classList.contains('subseries-row')) {
+        const childMatched = q && row.dataset.search.includes(q) && !row.classList.contains('hidden-by-filter');
+        row.classList.toggle('search-forced', childMatched);
+      } else if (row.classList.contains('superseries-parent')) {
+        const pid = row.dataset.dsid;
+        if (pid && anyChildMatched.has(pid)) {
+          row.classList.remove('hidden');
+        }
+      }
+    });
+    // Count visible logical rows (hidden = false).
+    datasetRows.forEach(row => { if (!row.classList.contains('hidden')) d++; });
     document.querySelectorAll('#linksWrap tbody tr').forEach(row => {
       const match = !q || row.dataset.search.includes(q);
       row.classList.toggle('hidden', !match);
