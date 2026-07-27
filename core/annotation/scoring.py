@@ -239,6 +239,7 @@ _SPECIES_SYNONYMS: Dict[str, str] = {
     "mouse": "Mus musculus",
     "mus_musculus": "Mus musculus",
     "macaque": "Macaca fascicularis",
+    "macaca_fascicularis": "Macaca fascicularis",
     "cynomolgus": "Macaca fascicularis",
     "marmoset": "Callithrix jacchus",
     "zebrafish": "Danio rerio",
