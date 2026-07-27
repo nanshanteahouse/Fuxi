@@ -368,7 +368,10 @@ def main():
 
     pseudo_df = build_pseudobulk(adata, group_col, use_raw=True, log=log)
 
-    species = getattr(cfg.grn, "species", "human")
+    # cfg.grn.species may default to "human"; fall back to cfg.species
+    # (normalised by resolve_config) so non-human datasets use the correct
+    # CollecTRI network instead of silently running human.
+    species = getattr(cfg.grn, "species", None) or cfg.species
     log.info("Regulon: CollecTRI (%s)", species)
     net = dc.op.collectri(organism=species)
     net = net[net["weight"] > 0].copy()

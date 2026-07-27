@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Literal, Optional
 # This runs before any data_root() call, so FUXI_DATA_ROOT in .env
 # is available to the pipeline without manual sourcing.
 from dotenv import load_dotenv
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from core.config.global_config import GlobalPlotConfig
 
@@ -791,6 +791,24 @@ class Config(BaseModel):
     # ═══════════════════════════════════════════════════════════════════
     # 系统发育过滤 (phylogenetic filtering for KB)
     # ═══════════════════════════════════════════════════════════════════
+    @model_validator(mode="after")
+    def _normalize_species_validator(self):
+        """Defence-in-depth: normalise species to canonical pipeline key.
+
+        The canonical normalisation happens in ``resolve_config`` (single
+        source of truth), but this validator catches any path that
+        instantiates Config directly (tests, scripts, ad-hoc usage).
+        """
+        from core.preprocess.format_detector import _SPECIES_NORMALISE
+
+        raw = self.species
+        norm = _SPECIES_NORMALISE.get(raw)
+        if norm is None:
+            norm = _SPECIES_NORMALISE.get(raw.lower(), raw)
+        if norm != raw:
+            object.__setattr__(self, "species", norm)
+        return self
+
     target_class: str = ""
     target_order: str = ""
 

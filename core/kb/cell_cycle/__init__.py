@@ -17,7 +17,10 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-_AVAILABLE_SPECIES = {"human", "mouse", "macaca", "zebrafish"}
+_AVAILABLE_SPECIES = {"human", "mouse", "macaque", "macaca", "zebrafish"}
+# Note: "macaque" is the canonical pipeline key (matches cfg.species);
+# "macaca" is kept as a legacy alias for backward compatibility with
+# existing macaca.py / macaca.yaml module files.
 
 
 def load_cell_cycle_genes(species: str) -> Tuple[List[str], List[str]]:
@@ -40,6 +43,11 @@ def load_cell_cycle_genes(species: str) -> Tuple[List[str], List[str]]:
         If *species* is not supported.
     """
     species = species.lower()
+    # Canonicalise pipeline key "macaque" to the on-disk module name "macaca".
+    # New datasets emit cfg.species="macaque" (pipeline key); old datasets may
+    # still use "macaca" directly.
+    if species == "macaque":
+        species = "macaca"
     if species not in _AVAILABLE_SPECIES:
         raise ValueError(
             f"Unsupported species '{species}' for cell-cycle scoring. "

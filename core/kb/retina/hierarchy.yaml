@@ -21,7 +21,6 @@ categories:
       - Developing_BC_Photo_Precursors
       - ASCL1_Reprogrammed_MG
       - Proliferating_MG
-      - Fetal_RPE
     fallback_markers:
       - VSX2
       - SOX2
@@ -126,6 +125,7 @@ categories:
       - T_Cell
       - Macrophage
       - Melanocyte
+      - Fetal_RPE  # was under Progenitor; biologically RPE is non-neural epithelium
     fallback_markers:
       - RPE65
       - PECAM1

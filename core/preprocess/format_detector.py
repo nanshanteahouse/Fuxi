@@ -758,6 +758,7 @@ _SPECIES_NORMALISE: Dict[str, str] = {
     "Xenopus tropicalis": "frog",
     # Macaca fascicularis (cynomolgus) — also maps to macaque
     "Macaca fascicularis": "macaque",
+    "macaca_fascicularis": "macaque",  # underscored form from geo_downloader fallback
     # Ictidomys tridecemlineatus
     "Ictidomys tridecemlineatus": "squirrel",
     # Anolis sagrei

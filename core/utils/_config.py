@@ -186,6 +186,42 @@ def resolve_config(config_path: Optional[str] = None) -> Config:
     # ── Validate merged config ──
     cfg = Config.model_validate(merged)
 
+    # ── Normalise species to canonical pipeline key (single source of truth) ──
+    # Preprocessor / GEO downloader may emit underscored forms
+    # ("mus_musculus", "macaca_fascicularis") or Latin binomials that break
+    # downstream lookups (cell cycle, GRN collectri, LIANA mygene, etc.).
+    # Normalise once here so every downstream reader sees the canonical key.
+    from core.preprocess.format_detector import _SPECIES_NORMALISE
+
+    _norm = _SPECIES_NORMALISE.get(cfg.species)
+    if _norm is None:
+        _norm = _SPECIES_NORMALISE.get(cfg.species.lower(), cfg.species)
+    if _norm != cfg.species:
+        logging.getLogger("core").info(
+            "Normalised species %r → %r (canonical pipeline key)",
+            cfg.species,
+            _norm,
+        )
+        cfg.species = _norm
+
+    # Sync per-module species fields when they carry the default "human"
+    # but the root species is different. Prevents GRN/enrichment from silently
+    # running on the human network for non-human datasets.
+    _cfg_grn = getattr(cfg, "grn", None)
+    if (
+        _cfg_grn is not None
+        and getattr(_cfg_grn, "species", "human") == "human"
+        and cfg.species != "human"
+    ):
+        _cfg_grn.species = cfg.species
+    _cfg_enr = getattr(cfg, "enrichment", None)
+    if (
+        _cfg_enr is not None
+        and getattr(_cfg_enr, "organism", "human") == "human"
+        and cfg.species != "human"
+    ):
+        _cfg_enr.organism = cfg.species
+
     # ── Resolve n_jobs ──
     if cfg.execution.n_jobs == 0:
         cfg.execution.n_jobs = os.cpu_count() or 1

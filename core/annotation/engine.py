@@ -476,6 +476,45 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
     )
     decision_map = dict(zip(decision_clusters, decisions))
 
+    # ── Cell-type-aware category guard ─────────────────────────────────
+    # Override the Fisher-score Broad_* winner with the canonical parent of
+    # the chosen fine cell_type. Fixes systematic Broad_Neuron over-matching
+    # for glial / immune / endothelial clusters (caused by weak Broad_Neuron
+    # fallback markers TUBB3/ELAVL4/SLC17A6 hitting random housekeeping genes).
+    _broad_parent_map: dict[str, str] = {}
+    _hier = kb.get("_hierarchy") or {}
+    for _cat_name, _cat_def in (_hier.get("categories") or {}).items():
+        _broad_key = f"{CATEGORY_PREFIX}{_cat_name}"
+        for _member in _cat_def.get("members") or []:
+            _broad_parent_map[_member] = _broad_key
+
+    if _broad_parent_map:
+        _n_overrides = 0
+        for _cl_str, _decision in decision_map.items():
+            _fine_type = getattr(_decision, "cell_type", "") or ""
+            _expected_broad = _broad_parent_map.get(_fine_type, "")
+            _current_broad = cell_category_map.get(_cl_str, "")
+            if _expected_broad and _current_broad != _expected_broad:
+                # Respect the adult-tissue Broad_Progenitor exclusion:
+                # only allow Progenitor override in developmental mode.
+                if _expected_broad == f"{CATEGORY_PREFIX}Progenitor" and not allows_transitions:
+                    continue
+                logger.debug(
+                    "Category guard: cluster %s (%s) %s → %s",
+                    _cl_str,
+                    _fine_type,
+                    _current_broad,
+                    _expected_broad,
+                )
+                cell_category_map[_cl_str] = _expected_broad
+                _n_overrides += 1
+        if _n_overrides:
+            logger.info(
+                "Category guard: overrode %d/%d cluster categories using fine cell_type parent",
+                _n_overrides,
+                len(decision_map),
+            )
+
     # ── f. AI fallback for low-confidence clusters ────────────────────────
     ai_enabled = getattr(CFG.ai, "enabled", False)
     ai_annot_on = getattr(CFG.ai, "ai_annotation", False)

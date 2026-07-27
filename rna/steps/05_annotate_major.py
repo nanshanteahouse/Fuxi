@@ -60,23 +60,59 @@ def _warn_if_low_coverage(adata, cfg, log):
 
 
 def _update_quality_report_pass_rate(adata, cfg):
-    """Update 05_annotation_quality.json pass_rate from marker_validation column."""
-    quality_path = os.path.join(cfg.table_dir, "05_annotation_quality_step05.json")
-    if not os.path.exists(quality_path):
+    """Update 05_annotation_quality.json pass_rate from the marker_validation column.
+
+    Handles all three annotation paths:
+      - Unified KB: ``engine._write_quality_report`` wrote the file with
+        pass_rate=0 because ``marker_validation`` had not been set yet;
+        this function rewrites it with the correct value.
+      - AI mode / Score_genes fallback: no file exists; this function
+        creates one from scratch.
+
+    For developing tissue (``tissue_maturity == 'developing'``) MARGINAL
+    clusters count at half weight, since transitional states are
+    biologically meaningful and should not be reported as failures.
+    """
+    quality_path = os.path.join(cfg.table_dir, "05_annotation_quality.json")
+
+    # Load existing report (from engine.py) or start fresh (AI / score_genes paths)
+    if os.path.exists(quality_path):
+        try:
+            with open(quality_path, "r") as f:
+                quality = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            quality = {}
+    else:
+        quality = {}
+
+    if "marker_validation" not in adata.obs:
+        # Persist whatever we have (or nothing if newly created) and bail out.
+        if quality:
+            with open(quality_path, "w") as f:
+                json.dump(quality, f, indent=2)
         return
-    try:
-        with open(quality_path, "r") as f:
-            quality = json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return
-    if "marker_validation" in adata.obs:
-        pass_cells = (adata.obs["marker_validation"] == "PASS").sum()
-        pass_rate = pass_cells / max(adata.n_obs, 1)
-        quality["pass_rate"] = round(pass_rate, 4)
-        quality["kb_blind_spot"] = bool(pass_rate < 0.1)
-        quality["recommended_strictness"] = (
-            "relaxed" if pass_rate < 0.1 else "deep" if pass_rate < 0.3 else "default"
-        )
+
+    pass_cells = int((adata.obs["marker_validation"] == "PASS").sum())
+    marginal_cells = int((adata.obs["marker_validation"] == "MARGINAL").sum())
+    strict_pass_rate = pass_cells / max(adata.n_obs, 1)
+
+    # Developmental tissue: transitional clusters (MARGINAL) are biologically
+    # meaningful — count them at half weight so the report does not look alarming.
+    is_developing = getattr(cfg, "tissue_maturity", "") == "developing"
+    if is_developing and marginal_cells > 0:
+        weighted_pass_rate = (pass_cells + marginal_cells * 0.5) / max(adata.n_obs, 1)
+    else:
+        weighted_pass_rate = strict_pass_rate
+
+    quality["pass_rate"] = round(weighted_pass_rate, 4)
+    quality["strict_pass_rate"] = round(strict_pass_rate, 4)
+    quality["pass_cells"] = pass_cells
+    quality["marginal_cells"] = marginal_cells
+    quality["kb_blind_spot"] = bool(strict_pass_rate < 0.1)
+    quality["recommended_strictness"] = (
+        "relaxed" if strict_pass_rate < 0.1 else "deep" if strict_pass_rate < 0.3 else "default"
+    )
+
     with open(quality_path, "w") as f:
         json.dump(quality, f, indent=2)
 
