@@ -513,17 +513,21 @@ def compute_qc_metrics(adata, cfg, log):
     log.info("Computing QC metrics...")
 
     # Auto-detect mt_gene_pattern for non-human species
+    mt_candidates = ["MT-", "mt-", "Mt-"]
     mt_pattern = cfg.qc.mt_gene_pattern
     if not any(adata.var_names.str.startswith(mt_pattern)):
-        alt = "mt-" if mt_pattern == "MT-" else "MT-"
-        if any(adata.var_names.str.startswith(alt)):
-            log.info(
-                "Auto-switched mt_gene_pattern: '%s' -> '%s' (no '%s' genes found)",
-                mt_pattern,
-                alt,
-                mt_pattern,
-            )
-            cfg.qc.mt_gene_pattern = alt
+        for alt in mt_candidates:
+            if any(adata.var_names.str.startswith(alt)):
+                log.info("Auto-switched mt_gene_pattern: '%s' -> '%s'", mt_pattern, alt)
+                cfg.qc.mt_gene_pattern = alt
+                break
+        else:  # no candidate matched
+            if not cfg.qc.mt_gene_list:
+                log.warning(
+                    "No MT genes detected (%s candidates failed: %s)",
+                    mt_pattern,
+                    mt_candidates,
+                )
 
     mt_mask = adata.var_names.str.startswith(cfg.qc.mt_gene_pattern)
     if cfg.qc.mt_gene_list:

@@ -484,7 +484,10 @@ def main():
                 log.info("AI annotation: %d subcluster types identified", n_ai_types)
 
                 # Log per-cluster AI mapping
-                for cluster_id in sorted(sub.obs["leiden"].unique(), key=lambda x: int(x)):
+                for cluster_id in sorted(
+                    sub.obs["leiden"].unique(),
+                    key=lambda x: (len(x), x) if (x.isascii() and x.isdigit()) else (999, x),
+                ):
                     label = ai_labels.get(str(cluster_id), "Unmapped")
                     count = (sub.obs["leiden"] == cluster_id).sum()
                     log.info("  Subcluster %s → %s (%d cells)", cluster_id, label, count)
@@ -542,7 +545,10 @@ def main():
     log.info("  Subclusters:     %d", n_clusters)
     log.info("  Resolution:      %.1f", cfg.marker.subcluster_resolution)
     log.info("  Per-cluster counts:")
-    for cluster_id in sorted(sub.obs["leiden"].unique(), key=lambda x: int(x)):
+    for cluster_id in sorted(
+        sub.obs["leiden"].unique(),
+        key=lambda x: (len(x), x) if (x.isascii() and x.isdigit()) else (999, x),
+    ):
         count = (sub.obs["leiden"] == cluster_id).sum()
         pct = 100.0 * count / n_cells
         log.info("    Cluster %s: %d cells (%.1f%%)", cluster_id, count, pct)

@@ -7,6 +7,8 @@ all.  Every field has a sensible default so no project is required to specify
 them; projects override only what differs via global.yaml.
 """
 
+from typing import Optional
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -94,7 +96,7 @@ class GlobalClusteringConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
-    cluster_selection_method: str = "multi_metric"
+    cluster_selection_method: Optional[str] = "multi_metric"
     umap_selection_method: str = "convex_hull"
     umap_selection_metric: str = "trustworthiness"
     param_grid_spread: list[float] = [1.0]

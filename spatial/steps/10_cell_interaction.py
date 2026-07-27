@@ -252,6 +252,20 @@ def main():
     # ── Ensure gene symbols (LIANA uses HGNC symbols) ───────────────────
     adata = ensure_gene_symbols(adata, species=cfg.species, log=log)
 
+    # Ortholog conversion for non-human species (P2-1)
+    # Note: This is a SAFETY NET for ensure_gene_symbols failures.
+    # When mygene succeeds, var_names are already gene symbols and
+    # convert_species_gene_names enters the gene_symbol branch which
+    # only marks orphan IDs (FUN-*, LOC*) — it does NOT do full
+    # mouse→human ortholog mapping. The real conversion happens via
+    # mygene in ensure_gene_symbols. (Metis C3)
+    if cfg.species != "human":
+        from rna.ortholog import convert_species_gene_names
+
+        n_before = adata.n_vars
+        convert_species_gene_names(adata, species=cfg.species)
+        log.info("Ortholog pass: %s → human (%d → %d genes)", cfg.species, n_before, adata.n_vars)
+
     # Auto-select mouse-compatible LR database
     lr_db = cfg.cci.lr_database
     if lr_db == "consensus" and cfg.species.lower() in ("mouse", "mus musculus"):

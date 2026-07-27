@@ -64,8 +64,15 @@ def ensure_gene_symbols(adata, log: object = None, species: str = "human"):
             adata.n_vars,
         )
 
-    import mygene
+    try:
+        import mygene
+    except ImportError:
+        mygene = None
 
+    if mygene is None:
+        raise ImportError(
+            "mygene package required for Ensembl ID → gene symbol conversion. Install: pip install mygene"
+        )
     mg = mygene.MyGeneInfo()
 
     # Batch query mygene.info in chunks of 1000

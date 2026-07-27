@@ -165,6 +165,52 @@ def _normalize_gene_symbols(
     return out
 
 
+def _adapt_gene_sets_for_species(gene_sets: list, species: str) -> list:
+    """Adapt Enrichr gene-set library names for the target species.
+
+    Enrichr human libraries (e.g. KEGG_2021_Human) do not have mouse-specific
+    equivalents under the same name. When the pipeline runs on mouse data this
+    function replaces ``_Human`` with ``_Mouse`` so the library is valid.
+
+    Uses ``cfg.species`` rather than ``cfg.enrichment.organism`` because the
+    latter may be None when only the top-level species field is set.
+
+    Args:
+        gene_sets: List of Enrichr library names (e.g. ``KEGG_2021_Human``).
+        species:  Species identifier from config (“human”, “mouse”, “macaque”, ...).
+
+    Returns:
+        Adapted list with ``_Human`` → ``_Mouse`` substituted when applicable.
+    """
+    logger = logging.getLogger(__name__)
+    sp = species.lower().strip()
+
+    if sp == "mouse":
+        adapted = [gs.replace("_Human", "_Mouse") for gs in gene_sets]
+        changed = [(o, n) for o, n in zip(gene_sets, adapted) if o != n]
+        if changed:
+            logger.info(
+                "Species is mouse: replaced _Human with _Mouse in %d gene set(s): %s",
+                len(changed),
+                [f"{o}→{n}" for o, n in changed],
+            )
+        else:
+            logger.info(
+                "Species is mouse: no _Human suffix found in gene sets (%d sets)", len(gene_sets)
+            )
+        return adapted
+
+    if sp == "human":
+        logger.info("Species is human: gene sets unchanged (%d sets)", len(gene_sets))
+    else:
+        logger.info(
+            "Species '%s' has no dedicated Enrichr libraries; keeping _Human gene sets (%d sets)",
+            species,
+            len(gene_sets),
+        )
+    return list(gene_sets)
+
+
 def _load_marker_table(cfg, log) -> pd.DataFrame:
     """Load marker gene table from Step 07, supporting both pseudobulk and rank_genes_groups paths.
 
@@ -742,7 +788,7 @@ def main():
 
     # ── Load tissue-specific gene sets (v4.0+) ──
     tissue_gene_sets = getattr(cfg.enrichment, "gene_sets_tissue", [])
-    all_gene_sets = list(cfg.enrichment.gene_sets)
+    all_gene_sets = _adapt_gene_sets_for_species(list(cfg.enrichment.gene_sets), cfg.species)
     if tissue_gene_sets:
         log.info("Tissue-specific gene set libraries: %s", tissue_gene_sets)
         all_gene_sets.extend(tissue_gene_sets)

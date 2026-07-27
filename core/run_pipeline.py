@@ -16,5 +16,9 @@ if _repo_root not in sys.path:
 
 from core.pipeline.runner import main  # noqa: E402
 
+# Ensure HDF5 file locking is disabled on WSL before any h5py import
+os.environ.setdefault("HDF5_USE_FILE_LOCKING", "FALSE")
+# Defense-in-depth: core/utils/__init__.py also sets this
+
 if __name__ == "__main__":
     main()

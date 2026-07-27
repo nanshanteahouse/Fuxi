@@ -120,6 +120,7 @@ rna = [
     "liana>=1.0.0",
     "statsmodels>=0.14",
     "igraph>=1.0",
+    "mygene>=3.2",
 ]
 atac = [
     "snapatac2>=2.9.0",
@@ -129,6 +130,7 @@ atac = [
 spatial = [
     "squidpy>=1.8.1",
     "liana>=1.0.0",
+    "mygene>=3.2",
 ]
 bulk = [
     "pydeseq2>=0.5",
