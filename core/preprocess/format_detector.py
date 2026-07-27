@@ -736,6 +736,8 @@ _SPECIES_NORMALISE: Dict[str, str] = {
     # Pig
     "sus_scrofa": "pig",
     "Sus scrofa": "pig",
+    "sus_scrofa_domesticus": "pig",
+    "Sus scrofa domesticus": "pig",
     # Macaque (rhesus)
     "macaca_mulatta": "macaque",
     "Macaca mulatta": "macaque",
@@ -768,6 +770,8 @@ _SPECIES_NORMALISE: Dict[str, str] = {
     "Tupaia chinensis": "tree_shrew",
     # Tupaia belangeri
     "Tupaia belangeri": "tree_shrew",
+    "tupaia_belangeri_chinensis": "tree_shrew",
+    "Tupaia belangeri chinensis": "tree_shrew",
     # Mustela putorius furo
     "Mustela putorius furo": "ferret",
     # Ovis aries
