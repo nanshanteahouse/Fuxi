@@ -81,7 +81,7 @@ class TestGeneTrends:
         )
 
         log = logging.getLogger("test_gene_trends_happy")
-        gene_trends(adata, cfg, log, branch_results=branch_results)
+        gene_trends(adata, cfg, log, cfg.table_dir, branch_results=branch_results)
 
         # The function should produce a log message with gene counts
         assert "Gene trends along pseudotime" in caplog.text, (
@@ -111,7 +111,7 @@ class TestGeneTrends:
         cfg = Config()
         log = logging.getLogger("test_gene_trends_no_dpt")
 
-        result = gene_trends(adata, cfg, log)
+        result = gene_trends(adata, cfg, log, cfg.table_dir)
 
         assert result is None
         assert "No DPT" in caplog.text
@@ -128,7 +128,7 @@ class TestGeneTrends:
         cfg = Config()
         log = logging.getLogger("test_gene_trends_no_raw")
 
-        result = gene_trends(adata, cfg, log)
+        result = gene_trends(adata, cfg, log, cfg.table_dir)
 
         assert result is None
         assert "No raw data" in caplog.text
@@ -251,7 +251,7 @@ class TestGenePriorityOrder:
         )
 
         log = logging.getLogger("test_gene_priority_order")
-        gene_trends(adata, cfg, log, branch_results=branch_results)
+        gene_trends(adata, cfg, log, cfg.table_dir, branch_results=branch_results)
 
         # The log shows the unique count after deduplication
         assert "Gene trends along pseudotime" in caplog.text
@@ -297,7 +297,7 @@ class TestHeatmapBinning:
             }
         )
         log = logging.getLogger("test_heatmap_binning")
-        gene_trends(adata, cfg, log, branch_results=branch_results)
+        gene_trends(adata, cfg, log, cfg.table_dir, branch_results=branch_results)
 
         # The heatmap block runs when union_genes >= 5 AND n_bins >= 2.
         # With 5 unique pt values, n_bins = 4, so the safe_plot call fires.

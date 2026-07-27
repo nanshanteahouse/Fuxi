@@ -36,8 +36,14 @@ class TestEvidenceFusionImport:
             "explanation",
             "alternative_rules",
             "diagnostic",
+            "tier",
+            "consensus",
+            "n_sources",
+            "subtype_resolution",
         }
-        assert fields == expected, f"Missing fields: {expected - fields}"
+        missing = expected - fields
+        extra = fields - expected
+        assert fields == expected, f"missing={missing}, extra={extra}"
 
 
 class TestFuseAllClusters:

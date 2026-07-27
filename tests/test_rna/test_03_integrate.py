@@ -116,6 +116,10 @@ def _make_cfg(
     cfg.modality = "rna"
     cfg.tissue = "test"
     cfg.species = "human"
+    # Plot config (production code reads cfg.plot.qc_figure_size[0] / palette / dpi)
+    cfg.plot.qc_figure_size = [8, 5]
+    cfg.plot.figure_dpi = 150
+    cfg.plot.palette.qc_threshold = "red"
 
     return cfg
 
