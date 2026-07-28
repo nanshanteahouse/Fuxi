@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Step 03: 归一化 + HVG 选择 + PCA + Harmony 批次校正（整合版）
+Step 03: 归一化 + HVG 选择 + PCA + 批次校正（Harmony/Combat/scVI）
 ===============================================================
 整合原 Step 02 + Step 03 为单一步骤，并加入 regress_out。
 
@@ -13,7 +13,7 @@ Step 03: 归一化 + HVG 选择 + PCA + Harmony 批次校正（整合版）
   6. regress_out (cell cycle scores 或 pct_counts_mt) on HVG 子集 ← normalize 后
   7. 全基因副本赋值 .raw
   8. PCA (n_pcs_full, elbow 图)
-  9. Harmony 批次校正
+  9. 批次校正（Harmony/Combat/scVI）
 
 输入: 02_qc.h5ad
 输出: 03_integrated.h5ad (X = log1p(normalized) on HVGs, .raw = 全基因,
@@ -76,7 +76,9 @@ def main():
     args = args_parser.parse_args()
     cfg = resolve_config(args.config)
     log = setup_logger("03_integrate", os.path.join(cfg.log_dir, "03_integrate.log"))
-    log.info("Step 03: Normalize + HVG selection + PCA + Harmony (integrated)")
+    log.info(
+        "Step 03: Normalize + HVG selection + PCA + batch integration (%s)", cfg.integration.method
+    )
     from core.utils import validate_adata
 
     # ── 读取 ──

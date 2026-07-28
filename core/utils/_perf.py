@@ -5,11 +5,37 @@ import os
 import subprocess as _sp
 import threading
 import time as _time
+import unicodedata
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Optional
 
 from core.utils._gpu import is_gpu_active
+
+
+def _display_width(s: str) -> int:
+    """Terminal display width accounting for CJK fullwidth and emoji characters."""
+    w = 0
+    for ch in s:
+        ea = unicodedata.east_asian_width(ch)
+        w += 2 if ea in ("W", "F") else 1
+    return w
+
+
+def _pad(s: str, width: int, align: str = "<") -> str:
+    """Pad string to `width` display columns, respecting terminal char width."""
+    dw = _display_width(s)
+    if dw >= width:
+        return s
+    padding = width - dw
+    if align == "<":
+        return s + " " * padding
+    elif align == ">":
+        return " " * padding + s
+    else:  # "^"
+        left = padding // 2
+        right = padding - left
+        return " " * left + s + " " * right
 
 
 @dataclass
@@ -276,7 +302,7 @@ class PerformanceSummary:
                 meta_parts.append(config_path)
             meta_line = "  |  ".join(meta_parts)
             print(f"╔{'═' * (total_w - 2)}╗")
-            print(f"║  {meta_line:<{total_w - 4}}║")
+            print(f"║  {_pad(meta_line, total_w - 4)}║")
             print(f"╚{'═' * (total_w - 2)}╝")
 
         def _h(w):
@@ -301,11 +327,11 @@ class PerformanceSummary:
             step_label, desc = (s["step"].split(" ", 1) + [""])[:2]
             cells_str = f"{s['n_cells'] / 1000:.1f}k" if s["n_cells"] else ""
             print(
-                f"{_b}{step_label:<{c_step}}{_b}{desc:<{c_desc}}{_b}"
-                f"{f'{s["wall_sec"]:.1f}s':>{c_wall}}{_b}"
-                f"{f'{s["cpu_sec"]:.1f}s':>{c_cpu}}{_b}"
-                f"{f'{s["peak_rss_mib"]:,.0f}':>{c_mem}}{_b}"
-                f"{cells_str:>{c_cells}}{_b}"
+                f"{_b}{_pad(step_label, c_step)}{_b}{_pad(desc, c_desc)}{_b}"
+                f"{_pad(f'{s["wall_sec"]:.1f}s', c_wall, '>')}{_b}"
+                f"{_pad(f'{s["cpu_sec"]:.1f}s', c_cpu, '>')}{_b}"
+                f"{_pad(f'{s["peak_rss_mib"]:,.0f}', c_mem, '>')}{_b}"
+                f"{_pad(cells_str, c_cells, '>')}{_b}"
             )
 
         print(bot_sep)
@@ -319,22 +345,22 @@ class PerformanceSummary:
             peak_str += f" ({summary['max_peak_rss_step']})"
         left_w = c_step + 1 + c_desc  # merged left cell width
         right_w = c_wall + 1 + c_cpu + 1 + c_mem + 1 + c_cells  # merged right cell width
-        print(f"{_b}{total_str:<{left_w}}{_b}{peak_str:<{right_w}}{_b}")
+        print(f"{_b}{_pad(total_str, left_w)}{_b}{_pad(peak_str, right_w)}{_b}")
 
         # Memory reference estimates
         n_genes_val = next((s["n_genes"] for s in steps_list if s["n_genes"]), 0)
         n_cells_total = sum(s["n_cells"] for s in steps_list) if steps_list else 0
         if n_cells_total and n_genes_val:
             mem_per_1k = summary["max_peak_rss_mib"] / (n_cells_total / 1000)
-            mem_line = f" \U0001f4d0 Memory reference: ~{mem_per_1k:.2f} MiB per 1k cells at {n_genes_val:,} genes"
-            print(f"{_b}{mem_line:<{total_w - 2}}{_b}")
+            mem_line = f"[mem] Memory reference: ~{mem_per_1k:.2f} MiB per 1k cells at {n_genes_val:,} genes"
+            print(f"{_b}{_pad(mem_line, total_w - 2)}{_b}")
             est = self._estimate_memory(summary["max_peak_rss_mib"], n_cells_total, n_genes_val)
             parts = []
             for k, v in est.items():
-                parts.append(f"{k} × {n_genes_val:,}: ~{v:.1f} GiB")
-            est_line = "    \u2192 " + "  ".join(parts)
-            print(f"{_b}{est_line:<{total_w - 2}}{_b}")
-            print(f"{_b}{'(linear estimate, actual varies)':<{total_w - 2}}{_b}")
+                parts.append(f"{k} x {n_genes_val:,}: ~{v:.1f} GiB")
+            est_line = "    -> " + "  ".join(parts)
+            print(f"{_b}{_pad(est_line, total_w - 2)}{_b}")
+            print(f"{_b}{_pad('(linear estimate, actual varies)', total_w - 2)}{_b}")
 
         print(bot)
 
