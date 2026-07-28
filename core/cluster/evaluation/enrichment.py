@@ -108,7 +108,7 @@ def enrich_grid_results(
                 sc.pp.neighbors(
                     adata,
                     n_neighbors=n_val,
-                    n_pcs=cfg.pca.n_pcs_use,
+                    n_pcs=min(cfg.pca.n_pcs_use, adata.obsm[use_rep].shape[1]),
                     use_rep=use_rep,
                     random_state=cfg.execution.random_seed,
                 )

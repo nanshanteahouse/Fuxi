@@ -617,7 +617,7 @@ def select_best_umap_params(
                     log=log,
                     device=device,
                     n_neighbors=best_n,
-                    n_pcs=CFG.pca.n_pcs_use,
+                    n_pcs=min(CFG.pca.n_pcs_use, adata.obsm[use_rep].shape[1]),
                     use_rep=use_rep,
                     random_state=CFG.execution.random_seed,
                 )
@@ -625,7 +625,7 @@ def select_best_umap_params(
                 sc.pp.neighbors(
                     adata,
                     n_neighbors=best_n,
-                    n_pcs=CFG.pca.n_pcs_use,
+                    n_pcs=min(CFG.pca.n_pcs_use, adata.obsm[use_rep].shape[1]),
                     use_rep=use_rep,
                     random_state=CFG.execution.random_seed,
                 )
