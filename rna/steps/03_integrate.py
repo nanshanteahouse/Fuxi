@@ -645,6 +645,13 @@ def main():
             latent = model.get_latent_representation()
             adata.obsm["X_integrated"] = latent
             log.info("  scVI latent shape: %s", latent.shape)
+            if latent.shape[1] != cfg.pca.n_pcs_use:
+                log.warning(
+                    "scVI latent has %d dims but cfg.pca.n_pcs_use=%d -- "
+                    "downstream consumers expecting %d dims may misbehave. "
+                    "Set pca.n_pcs_use=%d in your project config to match.",
+                    latent.shape[1], cfg.pca.n_pcs_use, cfg.pca.n_pcs_use, latent.shape[1],
+                )
 
         except Exception as e:
             log.warning("scVI integration failed (%s) — falling back to raw PCA", e)

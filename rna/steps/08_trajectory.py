@@ -39,7 +39,7 @@ def recompute_neighbors(adata, cfg, log):
         use_rep = "X_integrated" if "X_integrated" in adata.obsm else "X_pca"
         sc.pp.neighbors(
             adata,
-            n_pcs=cfg.pca.n_pcs_use,
+            n_pcs=min(cfg.pca.n_pcs_use, adata.obsm[use_rep].shape[1]),
             n_neighbors=cfg.clustering.n_neighbors,
             use_rep=use_rep,
             random_state=cfg.execution.random_seed,
