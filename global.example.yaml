@@ -16,7 +16,9 @@ execution:
   # limit_blas_threads: true
   # force_csr: true                     # Force CSR matrix format
   # use_float32: true                   # Cast to float32
-
+# ── Doublet Detection (Scrublet) ──────────────────────────────────────────
+# scrublet:
+#   serial_threshold: 15000  # cells: >threshold → serial, ≤threshold → parallel
 # ── Differential Expression ────────────────────────────────────────────────
 de:
   # method: "wilcoxon"                  # DE method

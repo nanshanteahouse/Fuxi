@@ -121,6 +121,7 @@ class ScrubletSettings(BaseModel):
     min_cells: int = 3
     min_gene_var_pctl: int = 85
     n_prin_comps: int = 30
+    serial_threshold: int = 15000  # cells: >threshold → serial, ≤threshold → parallel
 
     on_non_counts: Literal["skip_warn", "skip_silent", "abort"] = (
         "skip_warn"  # policy when expression_type != raw_counts

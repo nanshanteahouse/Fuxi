@@ -122,10 +122,10 @@ def detect_doublets_parallel(adata, cfg, log):
 
     sample_groups = adata.obs.groupby(groupby_col, observed=True)
 
-    # Memory-aware scheduling: large samples (>15000 cells) serially,
-    # small samples (<=15000) in parallel. For backed AnnData, subsets are
+    # Memory-aware scheduling: large samples (>serial_threshold cells) serially,
+    # small samples (<=serial_threshold) in parallel. For backed AnnData, subsets are
     # extracted via .to_memory() to avoid pulling the full sparse matrix.
-    memory_threshold = 15000
+    memory_threshold = getattr(cfg.scrublet, "serial_threshold", 15000)
     large_names, large_idxs = [], []
     small_names, small_idxs = [], []
     for name, idx in sample_groups.indices.items():
