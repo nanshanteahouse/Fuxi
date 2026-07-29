@@ -528,9 +528,11 @@ def main():
     if leiden_col is None:
         leiden_col = f"leiden_{best_n}_{best_r}"
 
-    if leiden_col in adata.obs and umap_col in adata.obsm:
+    if leiden_col in adata.obs:
         adata.obs["leiden"] = adata.obs[leiden_col].copy()
-        adata.obsm["X_umap"] = adata.obsm[umap_col].copy()
+        # Funnel mode: UMAP already in X_umap from re-validation; full grid: copy per-combo UMAP
+        if umap_col in adata.obsm:
+            adata.obsm["X_umap"] = adata.obsm[umap_col].copy()
         with timed_substep("Save checkpoint (post-selection)", log=log):
             safe_write(adata, cfg.cluster_h5ad, cfg=cfg)
         log.info("Final checkpoint saved: %s (resolution=%.1f)", cfg.cluster_h5ad, best_r)
