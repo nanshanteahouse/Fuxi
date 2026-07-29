@@ -279,6 +279,9 @@ def _compute_splitting_gain(valid_by_resolution: list[dict]) -> dict[float, floa
         k_prev = prev["n_clusters"]
         k_curr = curr["n_clusters"]
 
+        if k_prev is None or k_curr is None:
+            continue
+
         delta_k = k_curr - k_prev
         delta_r = r_curr - r_prev
 
