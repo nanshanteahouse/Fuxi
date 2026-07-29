@@ -196,7 +196,7 @@ def run_cci_permutation(
     n_perms: int = 1000,
     seed: int = 1337,
     use_raw: bool = True,
-    n_jobs: int = 1,
+    n_jobs: int = 1,  # noqa: ARG001 (deprecated, kept for backward compat)
     log: object = None,
 ) -> pd.DataFrame:
     """Run LIANA+ rank_aggregate permutation testing for ligand-receptor
@@ -246,7 +246,6 @@ def run_cci_permutation(
         n_perms=n_perms,
         seed=seed,
         use_raw=use_raw,
-        n_jobs=n_jobs,
         inplace=False,
         verbose=False,
     )
