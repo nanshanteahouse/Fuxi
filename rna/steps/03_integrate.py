@@ -245,6 +245,17 @@ def main():
             except Exception as e:
                 log.warning("Cell cycle scoring failed (skipped): %s", e)
 
+    # ── 保存全基因副本到 .raw，尽早释放全基因矩阵 ──
+    # 归一化和细胞周期打分后 adata_full 已无其他用途；
+    # 提前释放可避免与下游 regress_out / PCA 叠加峰值。
+    import gc
+
+    adata.raw = adata_full
+    log.info(".raw saved (full genes: %d vars)", adata_full.n_vars)
+    del adata_full
+    gc.collect()
+    log.info("  full-gene reference released early (before regress_out/PCA)")
+
     # ── 回归技术变异 / 细胞周期分数 (HVG 子集, normalize+log1p 后) ──
     # regress_out internally densifies → large temporary allocation; skip in
     # balanced/memory modes unless cell cycle scoring is explicitly enabled.
@@ -301,15 +312,7 @@ def main():
     if cfg.normalization.score_cell_cycle or cfg.normalization.use_regress_out:
         validate_adata(adata, stage_name="regress_out", logger=log)
 
-    # ── 保存全基因副本到 .raw ──
-    adata.raw = adata_full
-    log.info(".raw saved (full genes: %d vars)", adata_full.n_vars)
-    # Release full-gene reference to free memory
-    del adata_full
-    import gc
-
-    gc.collect()
-    log.info("  full-gene reference released from local namespace")
+    # ── .raw already saved and full-gene reference released after cell cycle scoring ──
 
     # ── 可选: 自动性别检测 ──
     if getattr(cfg.normalization, "detect_sex", False):
@@ -560,10 +563,7 @@ def main():
                 )
 
             # Verify counts are integer-valued
-            if sp.issparse(adata.layers["counts"]):
-                mean_count = adata.layers["counts"].toarray().mean()
-            else:
-                mean_count = adata.layers["counts"].mean()
+            mean_count = adata.layers["counts"].mean()
             log.info("  mean raw count per cell: %.2f", mean_count)
 
             # GPU detection
@@ -650,7 +650,10 @@ def main():
                     "scVI latent has %d dims but cfg.pca.n_pcs_use=%d -- "
                     "downstream consumers expecting %d dims may misbehave. "
                     "Set pca.n_pcs_use=%d in your project config to match.",
-                    latent.shape[1], cfg.pca.n_pcs_use, cfg.pca.n_pcs_use, latent.shape[1],
+                    latent.shape[1],
+                    cfg.pca.n_pcs_use,
+                    cfg.pca.n_pcs_use,
+                    latent.shape[1],
                 )
 
         except Exception as e:

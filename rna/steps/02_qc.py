@@ -658,6 +658,9 @@ def filter_cells(adata, thresholds, cfg, log):
 
     mask = ~f_doublet & ~f_any
     adata = adata[mask].copy()
+    import gc
+
+    gc.collect()
     log.info("  After QC filtering: %d cells", adata.n_obs)
     return adata
 
