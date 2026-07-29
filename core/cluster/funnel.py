@@ -350,6 +350,19 @@ def _validate_on_full(
     # Compute composite scores from enriched metrics
     _compute_composite_scores(full_results, cfg, log=_log)
 
+    # Compute UMAP on full data (was missing — BugFix)
+    # KNN is already built above with the per-group n_neighbors
+    _log.info("Full validation: computing UMAP on %d cells …", adata.n_obs)
+    try:
+        sc.tl.umap(
+            adata,
+            min_dist=getattr(cfg.clustering, "umap_min_dist", 0.3),
+            spread=getattr(cfg.clustering, "umap_spread", 1.0),
+            random_state=cfg.execution.random_seed,
+        )
+    except Exception as e:
+        _log.warning("UMAP on full data failed (non-fatal): %s", e)
+
     return full_results
 
 
