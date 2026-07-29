@@ -518,8 +518,15 @@ def main():
     adata.uns["best_n_neighbors"] = best_n
     adata.uns["cluster_selection_method"] = method_name
 
-    leiden_col = f"leiden_{best_n}_{best_r}"
+    # Resolve cluster_key from results (funnel uses funnel_{n}_{r}, full grid uses leiden_{n}_{r})
+    leiden_col = None
     umap_col = f"umap_{best_n}_{best_r}"
+    for r in results_summary:
+        if r.get("n_neighbors") == best_n and r.get("resolution") == best_r:
+            leiden_col = r.get("cluster_key")
+            break
+    if leiden_col is None:
+        leiden_col = f"leiden_{best_n}_{best_r}"
 
     if leiden_col in adata.obs and umap_col in adata.obsm:
         adata.obs["leiden"] = adata.obs[leiden_col].copy()
