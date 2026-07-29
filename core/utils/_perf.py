@@ -38,6 +38,22 @@ def _pad(s: str, width: int, align: str = "<") -> str:
         return " " * left + s + " " * right
 
 
+def _truncate(s: str, width: int) -> str:
+    """Truncate string to `width` display columns, appending '…' if too wide."""
+    if _display_width(s) <= width:
+        return s
+    result: list[str] = []
+    dw = 0
+    ellipsis_w = 1  # U+2026 '…' renders as 1 column in most terminals
+    for ch in s:
+        w = 2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+        if dw + w + ellipsis_w > width:
+            break
+        result.append(ch)
+        dw += w
+    return "".join(result) + "\u2026"
+
+
 @dataclass
 class PerformanceReport:
     """Performance metrics for a pipeline step."""
@@ -285,11 +301,17 @@ class PerformanceSummary:
 
         # Column widths
         c_step = 6
-        c_desc = 26
         c_wall = 8
         c_cpu = 8
         c_mem = 8
         c_cells = 7
+
+        # Dynamic description width: auto-size from descriptions, capped at 60
+        desc_max = max(
+            (_display_width((s["step"].split(" ", 1) + [""])[1]) for s in steps_list),
+            default=26,
+        )
+        c_desc = max(26, min(60, desc_max))
 
         total_w = c_step + c_desc + c_wall + c_cpu + c_mem + c_cells + 7  # borders
 
@@ -327,7 +349,7 @@ class PerformanceSummary:
             step_label, desc = (s["step"].split(" ", 1) + [""])[:2]
             cells_str = f"{s['n_cells'] / 1000:.1f}k" if s["n_cells"] else ""
             print(
-                f"{_b}{_pad(step_label, c_step)}{_b}{_pad(desc, c_desc)}{_b}"
+                f"{_b}{_pad(step_label, c_step)}{_b}{_pad(_truncate(desc, c_desc), c_desc)}{_b}"
                 f"{_pad(f'{s["wall_sec"]:.1f}s', c_wall, '>')}{_b}"
                 f"{_pad(f'{s["cpu_sec"]:.1f}s', c_cpu, '>')}{_b}"
                 f"{_pad(f'{s["peak_rss_mib"]:,.0f}', c_mem, '>')}{_b}"
