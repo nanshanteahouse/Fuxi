@@ -123,18 +123,17 @@ def detect_doublets_parallel(adata, cfg, log):
     sample_groups = adata.obs.groupby(groupby_col, observed=True)
 
     # Memory-aware scheduling: large samples (>15000 cells) serially,
-    # small samples (<=15000) in parallel to avoid OOM on big groups.
+    # small samples (<=15000) in parallel. For backed AnnData, subsets are
+    # extracted via .to_memory() to avoid pulling the full sparse matrix.
     memory_threshold = 15000
-    large_names, large_subsets, large_idxs = [], [], []
-    small_names, small_subsets, small_idxs = [], [], []
+    large_names, large_idxs = [], []
+    small_names, small_idxs = [], []
     for name, idx in sample_groups.indices.items():
         if len(idx) > memory_threshold:
             large_names.append(name)
-            large_subsets.append(adata[idx])
             large_idxs.append(idx)
         else:
             small_names.append(name)
-            small_subsets.append(adata[idx])
             small_idxs.append(idx)
 
     results = []
@@ -144,10 +143,12 @@ def detect_doublets_parallel(adata, cfg, log):
             "  Large groups (%s) — processing serially",
             ", ".join(f"{n}({len(i)} cells)" for n, i in zip(large_names, large_idxs)),
         )
-    for sub, name in zip(large_subsets, large_names):
+    for name, idx in zip(large_names, large_idxs):
+        sub = adata[idx].to_memory()  # extract concrete subset from backed h5ad
         results.append(run_scrublet_sample(sub, name, cfg))
+        del sub  # release early
 
-    if small_subsets:
+    if small_names:
         n_jobs = min(cfg.execution.n_jobs or os.cpu_count() or 1, len(small_names))
         log.info(
             "  Small samples — processing %d groups in parallel (n_jobs=%d)",
@@ -155,11 +156,10 @@ def detect_doublets_parallel(adata, cfg, log):
             n_jobs,
         )
         small_results = Parallel(n_jobs=n_jobs)(
-            delayed(run_scrublet_sample)(sub, name, cfg)
-            for sub, name in zip(small_subsets, small_names)
+            delayed(run_scrublet_sample)(adata[idx].to_memory(), name, cfg)
+            for name, idx in zip(small_names, small_idxs)
         )
         results.extend(small_results)
-
     all_scores = np.zeros(adata.n_obs)
     all_pred = np.zeros(adata.n_obs, dtype=bool)
     all_names = large_names + small_names
@@ -196,13 +196,20 @@ def main():
     log = setup_logger("01_doublet", os.path.join(cfg.log_dir, "01_doublet.log"))
     log.info("Step 01a: Scrublet doublet detection")
 
-    adata = sc.read(cfg.raw_h5ad)
-    log.info("Loaded: %s — %d cells × %d genes", cfg.raw_h5ad, adata.n_obs, adata.n_vars)
+    # Use backed mode — only load one sample group into memory at a time.
+    # The raw_h5ad for large datasets (1M+ cells) occupies ~56 GiB uncompressed;
+    # backed='r' keeps it on disk and reads only the requested indices.
+    adata = sc.read(cfg.raw_h5ad, backed="r")
+    log.info(
+        "Opened in backed mode: %s — %d cells × %d genes", cfg.raw_h5ad, adata.n_obs, adata.n_vars
+    )
 
     detect_doublets_parallel(adata, cfg, log)
 
     out_path = os.path.join(cfg.h5ad_dir, "01_doublet.h5ad")
-    safe_write(adata, out_path, cfg=cfg)
+    # Convert to memory for safe_write (backs the sparse matrix before writing)
+    adata_full = adata.to_memory()
+    safe_write(adata_full, out_path, cfg=cfg)
     log.info("Step 01a complete, took %.1fs", time.time() - t0)
 
 
