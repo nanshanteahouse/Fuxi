@@ -358,11 +358,47 @@ def main():
             adata.obs["sample"] = sample_name
             log.info("  Sample: %s, %d cells × %d genes", sample_name, adata.n_obs, adata.n_vars)
         else:
-            adatas = []
-            for f in h5_files:
-                log.info("Loading from 10X HDF5: %s", f)
-                a = sc.read_10x_h5(f)
-                sample_name = os.path.basename(f)
+            # ── Iterative concat (memory-safe): load one file, concat immediately ──
+            # Avoids keeping all AnnData objects in memory simultaneously.
+            # Each file is loaded, suffixed, dedup'd, then concatenated with the
+            # running accumulator. Only 2 AnnData objects kept in memory at a time.
+            import gc
+
+            n_total = len(h5_files)
+            first_file = h5_files[0]
+            log.info("Loading from 10X HDF5 (multi-file, iterative): %d files", n_total)
+            log.info("  [1/%d] %s", n_total, os.path.basename(first_file))
+
+            adata = sc.read_10x_h5(first_file)
+            if adata.var_names.duplicated().any():
+                adata.var_names_make_unique()
+            # Assign suffix -0 to match original scanpy sc.concat(..., index_unique="-") behavior
+            adata.obs_names = [f"{bc}-0" for bc in adata.obs_names]
+            sample_name = os.path.basename(first_file)
+            if suffix and sample_name.endswith(suffix):
+                sample_name = sample_name[: -len(suffix)].rstrip("_")
+            elif suffix:
+                alt = suffix.lstrip("_")
+                if alt and sample_name.endswith(alt):
+                    sample_name = sample_name[: -len(alt)].rstrip("_")
+            else:
+                sample_name = os.path.splitext(sample_name)[0]
+            adata.obs["sample"] = sample_name
+
+            import warnings as _warn
+
+            for i, h5_file in enumerate(h5_files[1:], start=1):
+                fname = os.path.basename(h5_file)
+                # Suppress scanpy's internal UserWarning about non-unique var_names
+                # (we handle dedup ourselves with var_names_make_unique)
+                with _warn.catch_warnings():
+                    _warn.simplefilter("ignore", UserWarning)
+                    a = sc.read_10x_h5(h5_file)
+                if a.var_names.duplicated().any():
+                    a.var_names_make_unique()
+                a.obs_names = [f"{bc}-{i}" for bc in a.obs_names]
+
+                sample_name = os.path.basename(h5_file)
                 if suffix and sample_name.endswith(suffix):
                     sample_name = sample_name[: -len(suffix)].rstrip("_")
                 elif suffix:
@@ -372,12 +408,16 @@ def main():
                 else:
                     sample_name = os.path.splitext(sample_name)[0]
                 a.obs["sample"] = sample_name
-                adatas.append(a)
-                log.info("  %s: %d cells", sample_name, a.n_obs)
-            for a in adatas:
-                if a.var_names.duplicated().any():
-                    a.var_names_make_unique()
-            adata = sc.concat(adatas, index_unique="-")
+
+                adata = sc.concat([adata, a], join="outer")
+                del a
+                _ = gc.collect()
+
+                if (i + 1) % 10 == 0:
+                    log.info("  [%d/%d] %s — %d cells", i + 1, n_total, fname[:50], adata.n_obs)
+                elif n_total > 50 and (i + 1) % 5 == 0:
+                    log.info("  [%d/%d] %s", i + 1, n_total, fname[:50])
+
             log.info("Merge complete: %d cells × %d genes", adata.n_obs, adata.n_vars)
 
         if "gene_ids" in adata.var:
