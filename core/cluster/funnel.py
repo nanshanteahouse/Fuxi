@@ -350,12 +350,6 @@ def _validate_on_full(
     # Compute composite scores from enriched metrics
     _compute_composite_scores(full_results, cfg, log=_log)
 
-    # Clean up temporary Leiden columns
-    for r in full_results:
-        ck = r.get("cluster_key", "")
-        if ck in adata.obs.columns:
-            del adata.obs[ck]
-
     return full_results
 
 
@@ -482,7 +476,13 @@ def run_funnel_grid_search(
         "Funnel: best from full validation → n_nei=%d r=%.2f composite=%.4f",
         best.get("n_neighbors"),
         best.get("resolution"),
-        best.get("composite_score", 0.0),
     )
+
+    # Clean up temp columns EXCEPT the best one
+    best_key = best.get("cluster_key", "")
+    for r in full_results:
+        ck = r.get("cluster_key", "")
+        if ck != best_key and ck in adata.obs.columns:
+            del adata.obs[ck]
 
     return best
