@@ -507,20 +507,23 @@ def gene_trends(adata, cfg, log, table_dir, branch_results: Optional[pd.DataFram
     if len(union_genes) >= 5:
         n_bins = min(10, int(adata.obs["dpt_pseudotime"].dropna().nunique() - 1))
         if n_bins >= 2:
-            adata_sub = adata[adata.obs["dpt_pseudotime"].notna()].copy()
-            adata_sub.obs["dpt_pseudotime_bin"] = pd.qcut(
-                adata_sub.obs["dpt_pseudotime"], q=n_bins, duplicates="drop"
-            ).astype(str)  # type: ignore[union-attr]
-            safe_plot(
-                sc.pl.heatmap,
-                adata_sub,
-                var_names=union_genes,
-                groupby="dpt_pseudotime_bin",
-                use_raw=True,
-                show=False,
-                save="dev_gene_heatmap.pdf",
-                cfg=cfg,
-            )
+            try:
+                adata_sub = adata[adata.obs["dpt_pseudotime"].notna()].copy()
+                adata_sub.obs["dpt_pseudotime_bin"] = pd.qcut(
+                    adata_sub.obs["dpt_pseudotime"], q=n_bins, duplicates="drop"
+                ).astype(str)  # type: ignore[union-attr]
+                safe_plot(
+                    sc.pl.heatmap,
+                    adata_sub,
+                    var_names=union_genes,
+                    groupby="dpt_pseudotime_bin",
+                    use_raw=True,
+                    show=False,
+                    save="dev_gene_heatmap.pdf",
+                    cfg=cfg,
+                )
+            except (ValueError, TypeError) as e:
+                log.warning("Gene trend heatmap skipped: qcut failed (%s)", e)
         else:
             log.info("Not enough unique pseudotime values (%d) for heatmap binning.", n_bins)
 
