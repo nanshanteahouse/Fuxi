@@ -19,6 +19,7 @@ Subject: imperative, lowercase, ≤72 chars. Body explains *why*, not *what*.
 **Core scripts.** Step scripts under `rna/steps/`, `atac/steps/`, `spatial/steps/`, `bulk/steps/` must not be edited in place. Copy to `projects/{modality}/{GSE_ID}/` first.
 **Ad-hoc scripts.** One-off / dataset-specific analysis scripts under `adhoc/`. Not part of the pipeline, no compatibility guarantee — use once and discard.
 
+**Code organization.** Soft caps: 500 LOC for core modules and step scripts, 400 for utility modules. Algorithm engines under `*_utils/` at 500 LOC.
 ## Running methods
 
 ### Running modes
@@ -52,6 +53,13 @@ python core/run_pipeline.py --modality bulk --list
 python core/run_pipeline.py --modality bulk --config projects/bulk/<GSE_ID>/config_<GSE_ID>.yaml
 python core/run_pipeline.py --modality bulk --step 2 --config ...
 
+# Step range / subclustering / subset
+python core/run_pipeline.py --modality rna --steps 0-2 --config ...
+python core/run_pipeline.py --modality rna --step 6 --cell-type "Müller Glia" --config ...
+# Subset: filter cells by sample/obs criteria (Step 00)
+python core/run_pipeline.py --modality rna --config config_pcw8.yaml
+# Config: CFG.downsample.sample_keep=["SCR205"] or CFG.downsample.obs_filter="stage=='PCW8'"
+
 # Paper tools
 python core/paper/insights.py --pmid <PMID>       # AI paper interpretation
 python core/paper/insights.py --pmid <PMID> --methodology  # + methodology patterns
@@ -67,6 +75,14 @@ python core/pipeline/reproduce.py <paper_dir>           # reproduce a single pap
 python -m core.ai.mcp_server                         # stdio mode (for AI agents)
 python -m core.ai.mcp_server --http 8080             # HTTP mode (for remote clients)
 ```
+
+### Adding a dataset
+
+**Automated (recommended):**
+```bash
+python core/preprocess/preprocessor.py --gse <GSE_ID> --data-root $FUXI_DATA_ROOT --download
+```
+**Manual:** Copy from `templates/config_templates/` to `projects/{modality}/{GSE_ID}/config_<GSE_ID>.yaml`.
 
 ### Key paths
 
@@ -85,100 +101,38 @@ python -m core.ai.mcp_server --http 8080             # HTTP mode (for remote cli
 | TUI | `core/tui/` (7 backends, 6 screens, 4 widgets) — `python -m core.tui` |
 | MCP server | `core/ai/mcp_server.py` (10 tools: registry + pipeline + execution) — `python -m core.ai.mcp_server` |
 
+### Key design patterns
+
+**Step dispatch.** `core/run_pipeline.py` runs each step as a separate `subprocess.run()` — never import steps directly. Steps self-identify checkpoint files; skip if output exists. `--resume` scans for first missing checkpoint.
+
+**Config loading.** `resolve_config()` loads `.yaml` via `yaml.safe_load()` + `Config.model_validate()`. Each call returns a new Config instance. Path resolution via `model_post_init` hook.
+
+**Three annotation modes (RNA Step 05):**
+1. **Unified KB** (if `CFG.tissue_kb` set): marker scoring → evidence fusion → optional AI fallback
+2. **AI** (if `CFG.ai.enabled`): LLM with StandardOntology normalization
+3. **Score_genes** (fallback): `sc.tl.score_genes()` with `CFG.marker.marker_dict`
+
+**Cluster selection (Step 04).** Controlled by `CFG.clustering.cluster_selection_method`:
+- `multi_metric` (RNA default, MMACS v2): 5-metric composite, tissue or subtype path
+- `pareto_elbow` (ATAC/Spatial default): Pareto frontier over n_clusters vs silhouette
+- `silhouette` / `None` (manual)
+UMAP sweep auto-selects `min_dist`/`spread` via convex hull area.
+
+**snRNA-seq adaptation.** Auto-detected from GEO keywords → `CFG.qc.is_nuclei=True`. Tightens mito threshold to `max_pct_mito_nuclei` (default 3.0%) and MAD multiplier to 1.5×.
+
+**Subset filtering.** Step 00 supports `CFG.downsample.sample_keep` and `CFG.downsample.obs_filter`. Output dirs auto-append `_subset`.
+
 ### Dataset & Paper lookup
 
-When user requests to analyze a dataset, look up a paper, or reproduce results,
-use targeted queries first rather than scanning the entire registry.
-
-#### 1. Targeted status check (preferred for exact IDs)
-
-```bash
-# Check a single GSE — shows registration, data, config, pipeline status
-python -m core.paper.registry status --gse GSE123456
-
-# Check a paper and all its linked datasets
-python -m core.paper.registry status --pmid 31493975
-```
-
-This is the **primary entry point** for any exact GSE or PMID query.
-One command replaces piecing together 3+ separate checks, and would have
-prevented the "not registered" misdiagnosis described earlier.
-
-#### 2. Fuzzy paper search (vague description)
-
-```bash
-# Search by keyword in title, author, journal, year, PMID, slug
-python -m core.paper.registry list-papers --query "retina development"
-python -m core.paper.registry list-papers --query "author:Norrie"
-python -m core.paper.registry list-papers --query "2024"
-```
-
-Use `list-papers` when the user gives a vague description (no exact PMID/GSE).
-Once narrowed to a candidate, use `status --pmid` for the full picture.
-
-#### 3. Global registry commands
-
-```bash
-python -m core.paper.registry report          # summary counts
-python -m core.paper.registry verify          # consistency check
-python -m core.paper.registry find-orphans    # orphan datasets
-```
-
-#### 4. Decision tree from `status` output
-
-| Status shows | Next step |
-|---|---|
-| Data downloaded + config exists | `python core/run_pipeline.py --modality <mod> --config <path>` |
-| Data downloaded + no config | Generate config via `core/preprocess/` or copy from `templates/config_templates/` |
-| Data not downloaded | Download data (GEO) then repeat status check |
-| Not registered | `register --gse <GSE>` or `register --pmid <PMID>` first |
-| PMID not in registry | `python core/paper/insights.py --pmid <PMID>` then register |
-
-#### 5. Registration
-
-```bash
-python -m core.paper.registry register --gse GSE123456              # GSE → PMID auto-link
-python -m core.paper.registry register --gse GSE123456 --dry-run    # preview first
-python -m core.paper.registry register --pmid 31493975              # paper → GSE linkage
-```
-
-#### 6. Programmatic query (for scripts / advanced use)
-
-```python
-from core.paper.registry import load_master_registry
-reg = load_master_registry()
-reg.get_dataset_links("41578023")     # paper → datasets
-reg.get_paper_links("GSE123456")      # dataset → papers
-reg.get_paper(paper_id="41578023")    # by PMID/slug
-reg.find_orphans()
-
+When user asks about a dataset (GSE), paper (PMID), or reproduction:
+use `python -m core.paper.registry status --gse <ID>` or `--pmid <ID>`.
+Read `docs/agent/registry_lookup.md` for the full decision tree, fuzzy search,
+registration commands, and programmatic API reference.
 ### Methodology Pattern Analysis
 
-Extract and compare the methodological "fingerprint" of any single-cell/omics paper —
-domain-agnostic across retina, cancer, immunology, and beyond.
-
-The framework captures 5 dimensions:
-- **archetype** — what type of study (atlas, development, perturbation, disease_comp, multiomic, ...)
-- **strategy** — experimental design (species, tissue, cell count, modalities, validation)
-- **narrative** — how the story is told (argument_structure: bottom_up / top_down / comparative / ...)
-- **toolbox** — computational pipeline (framework, algorithms, AI usage)
-- **contribution** — what the paper leaves to the field (novelty, reusable assets, field impact)
-
-```bash
-# Single paper
-python core/paper/insights.py --pmid <PMID> --methodology
-
-# Batch backfill all registered papers
-python adhoc/migration_scripts/methodology_batch.py
-python adhoc/migration_scripts/methodology_batch.py --dry-run    # preview first
-python adhoc/migration_scripts/methodology_batch.py --workers 8  # custom concurrency
-
-# Read methodology_patterns from insights.yaml
-python -c "import yaml; d=yaml.safe_load(open('projects/papers/<paper>/insights.yaml')); print(d.get('methodology_patterns', {}).get('archetype', {})"
-
-# Schema reference
-# templates/schemas/methodology_patterns.yaml
-```
+Extract methodological fingerprints from papers (5 dimensions: archetype,
+strategy, narrative, toolbox, contribution).
+See `docs/agent/methodology_patterns.md` for commands and schema reference.
 
 ### Critical conventions
 
@@ -192,57 +146,9 @@ python -c "import yaml; d=yaml.safe_load(open('projects/papers/<paper>/insights.
 
 ## Session report generation
 
-When the user **explicitly asks** to summarize the session or write a report
-("写报告", "写总结", "生成报告", "总结一下", "记录一下", "write a report",
-"summarize"), generate a markdown report under `notes/` covering:
-
-- What was found / the problem
-- How it was solved
-- Results and outcomes
-- Gaps, caveats, or future work
-
-### Topic → directory mapping
-
-Analyze the session's dominant subject and place the report accordingly:
-
-```
-Dominant subject                 → Directory        Naming format
-──────────────────────────────────────────────────────────────────
-Bug diagnosis / system audit    → audit/            YYYY-MM-DD_<topic>.md
-Architecture change / migration → engineering/      YYYY-MM-DD_<topic>.md
-Feature implementation          → features/         YYYY-MM-DD_<topic>.md
-Technical research / lit review → research/         YYYY-MM-DD_<topic>.md
-Knowledge-base update           → kb/               YYYY-MM-DD_<topic>.md
-Paper insights / supplements    → supplements/      YYYY-MM-DD_<topic>.md
-Reproduction verification       → reproduction/     YYYY-MM-DD_<topic>.md
-Reference docs / indices        → reference/        YYYY-MM-DD_<topic>.md
-Work log / weekly summary       → logs/             recent_work_summary_YYYY-MM-DD.md
-```
-
-Boundary decisions:
-- **audit vs engineering** — if both bug diagnosis AND fix implementation are
-  present, choose by dominant purpose: evaluation → audit, implementation →
-  engineering.
-- **features vs engineering** — small-scoped local changes → features;
-  system-level architecture changes → engineering.
-
-### Naming rules
-
-- **`YYYY-MM-DD_<topic>.md`** — date is for sorting only; `<topic>` is a short
-  slug identifying the report content (e.g. `atac_pipeline_rewrite`). Use the
-  report completion date.
-- **`recent_work_summary_YYYY-MM-DD.md`** — the date *describes* the covered
-  time period. This format is used only for work-log entries under `logs/`.
-
-### Edge cases
-
-- If the session spans multiple topics, pick the dominant one. When truly
-  unsure, ask the user.
-- If the user asks for a report on a past event (not the current session),
-  produce it with the event date, not today's date.
-- After writing any report, update `notes/INDEX.md` to add the new entry
-  under the corresponding directory section.
-- If the notes/ topic classification itself changes, update this mapping.
+When user explicitly asks for a report (写报告, 写总结, write a report, etc.),
+generate a markdown report under `notes/`. Read `docs/agent/report_generation.md`
+for directory mapping, naming rules, and edge cases.
 
 ## Notes are private — never commit
 
@@ -258,29 +164,5 @@ internal reference only and must **never** appear in the public repository.
 
 ## Pre-push hooks & SSH keep-alive
 
-Fuxi ships `pre-push` hooks via pre-commit (see `.pre-commit-config.yaml`):
-pyright (type check) + smoke test (`pytest tests/test_smoke.py` ≈ 20–45s).
-Total pre-push wall: typically 50–80s on WSL2 (anndata import + RAPIDS
-preload + subprocess startup).
-
-GitHub's SSH server closes idle connections after ~60s. Without keep-alive,
-the connection drops during the pre-push window and `git push` fails with
-`Connection to github.com closed by remote host` — requiring `--no-verify`
-to push, which bypasses the smoke gate.
-
-**One-time setup per clone** (recommended after `git clone`):
-
-```bash
-git config --local core.sshCommand "ssh -o ServerAliveInterval=15 -o ServerAliveCountMax=6"
-```
-
-This sends a keep-alive packet every 15s (up to 6 retries = 90s tolerance),
-keeping the SSH tunnel alive while pre-push hooks run. The smoke test
-parallelization in `tests/test_smoke.py` (concurrent.futures for the 3
-modality `--list` checks) keeps hook wall under 60s; combined with keep-
-alive, push works reliably without `--no-verify`.
-
-If you still see SSH disconnects:
-- Verify `git config --local --get core.sshCommand` returns the keep-alive string
-- Or run `GIT_SSH_COMMAND="ssh -o ServerAliveInterval=15" git push` for one push
-- As a last resort, `git push --no-verify` (skips smoke gate)
+Pre-push: pyright type check + smoke test (~50-80s on WSL2).
+If `git push` fails with SSH disconnect, see `docs/agent/ssh_troubleshooting.md`.
