@@ -19,6 +19,9 @@ execution:
 # ── Doublet Detection (Scrublet) ──────────────────────────────────────────
 # scrublet:
 #   serial_threshold: 15000  # cells: >threshold → serial, ≤threshold → parallel
+# ── Cell Type Annotation ────────────────────────────────────────────────────
+# marker:
+#   # candidate_pool_expand_steps: [50, 100, 200]  # adaptive scoring expansion tiers → n_genes for DE
 # ── Differential Expression ────────────────────────────────────────────────
 de:
   # method: "wilcoxon"                  # DE method
@@ -34,6 +37,8 @@ clustering:
   # param_grid_spread: [1.0]
   # umap_min_dist: 0.5
   # umap_spread: 1.0
+  # umap_maxiter: null                  # Max UMAP iterations (null = auto/unlimited). 200-500 on 1M+ cells bounds convergence.
+  # umap_n_epochs: null                  # UMAP training epochs (null = auto). Lower (e.g., 500) trades slight quality for speed.
 
 # ── Integration / Batch Correction ─────────────────────────────────────────
 integration:

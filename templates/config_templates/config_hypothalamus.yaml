@@ -75,6 +75,7 @@ qc:
 
 # ── Scrublet (doublet detection) ──
 scrublet:
+  # serial_threshold: 15000             # cells: >threshold → serial, ≤threshold → parallel
   run: true
 
 # ── HVG ──
@@ -119,6 +120,8 @@ clustering:
   # batch_key_override: null  # optionally override integration.batch_key
 
 # ── Known hypothalamus cell type markers ──
+  # umap_maxiter: null                    # max UMAP iterations (null=auto). 200-500 for 1M+ cells.
+  # umap_n_epochs: null                   # UMAP training epochs (null=auto)
 marker:
   marker_dict:
     NE: [HES1, HES5, SOX2, NES, NOTCH1]
@@ -133,6 +136,7 @@ marker:
     Mural: [RGS5, PDGFRB, ACTA2, MYH11, CSPG4]
     VLMC: [LUM, DCN, COL1A1, COL3A1, FN1]
   subcluster_types: [NE, NP, Neuron]
+  # candidate_pool_expand_steps: [50, 100, 200]   # adaptive scoring tiers → n_genes
   subcluster_resolution: 0.4
   min_cells_subcluster: 50
 

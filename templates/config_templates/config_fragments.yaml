@@ -62,6 +62,8 @@ clustering:
   # batch_key_override: null  # optionally override integration.batch_key
 
 # ── Trajectory ──
+  # umap_maxiter: null                    # max UMAP iterations (null=auto). 200-500 for 1M+ cells.
+  # umap_n_epochs: null                   # UMAP training epochs (null=auto)
 trajectory:
   root_cell_types: []
   # terminal_cell_types: []
