@@ -84,7 +84,10 @@ def setup_logger(
     # ── Root logger 接管（整个进程只做一次）────────────────────────────
     if not _root_configured:
         root = logging.getLogger()
-        root.setLevel(logging.DEBUG)
+        root.setLevel(logging.INFO)
+
+        # Suppress verbose DEBUG from numba JIT (floods 1000s of lines in grid search)
+        logging.getLogger("numba").setLevel(logging.WARNING)
         # 清掉库 import 时 basicConfig 装的 handler
         root.handlers.clear()
 

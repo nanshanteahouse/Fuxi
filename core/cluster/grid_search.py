@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import itertools
+import logging
 from collections.abc import Callable, Sequence
 from typing import Any
 
@@ -47,7 +48,23 @@ from core.cluster.evaluation import (  # noqa: F401
     select_best_params,
 )
 
-# ---------------------------------------------------------------------------
+_logger = logging.getLogger(__name__)
+
+
+def _release_gpu_memory():
+    """Release cached GPU memory to prevent OOM between iterations."""
+    import gc
+
+    gc.collect()
+    try:
+        import cupy as cp
+
+        pool = cp.get_default_memory_pool()
+        pool.free_all_blocks()
+    except Exception:
+        pass
+
+
 #  Public API
 # ---------------------------------------------------------------------------
 
@@ -64,6 +81,7 @@ def grid_search_clustering(
     n_jobs: int = 1,
     random_seed: int = 42,
     stability_parallel_seeds: bool = False,
+    log: logging.Logger | None = None,
     **fixed_kwargs: Any,
 ) -> list[dict[str, Any]]:
     """Run a grid search over clustering parameters.
@@ -155,8 +173,8 @@ def grid_search_clustering(
         results,
         n_jobs=n_jobs,
         stability_parallel_seeds=stability_parallel_seeds,
+        log=log or _logger,
     )
-
     return results
 
 
@@ -264,6 +282,7 @@ def _grid_search_serial(
     results: list[dict[str, Any]],
     n_jobs: int = 1,
     stability_parallel_seeds: bool = False,
+    log: logging.Logger | None = None,
 ) -> None:
     """Serialize grid-search: group by *group_idx*, call neighbours/UMAP once."""
 
@@ -285,20 +304,39 @@ def _grid_search_serial(
                     if result is not None:
                         results.append(result)
         else:
-            for combo in combos:
+            n_total = len(combos)
+            for i, combo in enumerate(combos):
                 params = dict(zip(param_names, combo))
                 merged = {**fixed_kwargs, **params}
+                if log is not None:
+                    log.info(
+                        "  [%d/%d] %s",
+                        i + 1,
+                        n_total,
+                        ", ".join(f"{k}={v}" for k, v in params.items()),
+                    )
                 _try_one_combo(adata, clusterer, evaluation_fn, params, merged, results)
         return
 
     # --- grouped case ---
     # Partition combos by their group_key value
     group_values = sorted({c[group_idx] for c in combos})
-    for gv in group_values:
-        # Filter combos belonging to this group
+    n_groups = len(group_values)
+    for gi, gv in enumerate(group_values):
         group_combos = [c for c in combos if c[group_idx] == gv]
         if not group_combos:
             continue
+
+        if log is not None:
+            log.info(
+                "Group %d/%d: %s=%s (%d combo%s)",
+                gi + 1,
+                n_groups,
+                param_names[group_idx],
+                gv,
+                len(group_combos),
+                "s" if len(group_combos) > 1 else "",
+            )
 
         # Build params dict for the group (shared neighbour/UMAP)
         group_params: dict[str, Any] = {param_names[group_idx]: gv}
@@ -312,13 +350,18 @@ def _grid_search_serial(
                 # Skip entire group if neighbour computation fails
                 continue
 
+        _release_gpu_memory()  # Free GPU allocator cache after neighbor graph build
         # 2. UMAP (once per group)
         if umap_fn is not None:
             try:
                 umap_fn(adata, **group_merged)
-            except Exception:
+            except Exception as exc:
                 # UMAP failure is non-fatal — continue with clustering only
+                _logger.warning("UMAP failed for group %s: %s", gv, exc)
                 pass
+
+        # Free GPU memory between groups to prevent OOM accumulation
+        _release_gpu_memory()
 
         # 3. Evaluate each (resolution, ...) combo within the same graph
         if n_jobs > 1 and len(group_combos) > 1:
@@ -340,9 +383,16 @@ def _grid_search_serial(
                 results.extend([r for r in group_results if r is not None])
             except Exception:
                 # Fallback to serial if threading fails (e.g. segfault in leiden)
-                for combo in group_combos:
+                for i, combo in enumerate(group_combos):
                     params = dict(zip(param_names, combo))
                     merged = {**group_merged, **params}
+                    if log is not None:
+                        log.info(
+                            "  [%d/%d] %s",
+                            i + 1,
+                            len(group_combos),
+                            ", ".join(f"{k}={v}" for k, v in params.items()),
+                        )
                     _try_one_combo(
                         adata,
                         clusterer,
@@ -368,9 +418,16 @@ def _grid_search_serial(
                         if result is not None:
                             results.append(result)
             else:
-                for combo in group_combos:
+                for i, combo in enumerate(group_combos):
                     params = dict(zip(param_names, combo))
                     merged = {**group_merged, **params}
+                    if log is not None:
+                        log.info(
+                            "  [%d/%d] %s",
+                            i + 1,
+                            len(group_combos),
+                            ", ".join(f"{k}={v}" for k, v in params.items()),
+                        )
                     _try_one_combo(
                         adata,
                         clusterer,
@@ -394,8 +451,8 @@ def _try_one_combo(
     try:
         cluster_key = clusterer(adata, **merged_kwargs)
         entry["cluster_key"] = cluster_key
-    except Exception:
-        entry["error"] = "clusterer failed"
+    except Exception as exc:
+        entry["error"] = f"clusterer failed: {exc}"
         results.append(entry)
         return
 
@@ -437,8 +494,8 @@ def _make_combo_evaluator(
         try:
             cluster_key = clusterer(adata, **merged)
             entry["cluster_key"] = cluster_key
-        except Exception:
-            entry["error"] = "clusterer failed"
+        except Exception as exc:
+            entry["error"] = f"clusterer failed: {exc}"
             return entry
         try:
             labels = adata.obs[cluster_key]

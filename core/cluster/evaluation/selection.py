@@ -621,6 +621,16 @@ def select_best_umap_params(
                     use_rep=use_rep,
                     random_state=CFG.execution.random_seed,
                 )
+                # Release GPU allocator cache after KNN build
+                import gc
+
+                gc.collect()
+                try:
+                    import cupy as cp
+
+                    cp.get_default_memory_pool().free_all_blocks()
+                except Exception:
+                    pass
             else:
                 sc.pp.neighbors(
                     adata,
@@ -671,6 +681,8 @@ def select_best_umap_params(
                         min_dist=md,
                         spread=sp,
                         init_pos=_init,
+                        maxiter=CFG.clustering.umap_maxiter,
+                        n_epochs=CFG.clustering.umap_n_epochs,
                         random_state=CFG.execution.random_seed,
                     )
                 else:
@@ -679,10 +691,27 @@ def select_best_umap_params(
                         min_dist=md,
                         spread=sp,
                         init_pos=_init,
+                        maxiter=CFG.clustering.umap_maxiter,
+                        n_epochs=CFG.clustering.umap_n_epochs,
                         random_state=CFG.execution.random_seed,
                     )
                 coords = adata.obsm["X_umap"]
-                _prev_embedding = np.asarray(coords).copy()
+                _prev_embedding = (
+                    coords.get().copy()
+                    if hasattr(coords, "get") and not isinstance(coords, np.ndarray)
+                    else np.asarray(coords).copy()
+                )
+
+                # Release GPU memory between sweep iterations to prevent OOM
+                import gc
+
+                gc.collect()
+                try:
+                    import cupy as cp
+
+                    cp.get_default_memory_pool().free_all_blocks()
+                except Exception:
+                    pass
             except Exception as e:
                 # UMAP itself broke — no embedding produced, nothing to score.
                 log.warning(

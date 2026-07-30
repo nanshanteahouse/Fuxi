@@ -274,12 +274,12 @@ def _compute_splitting_gain(valid_by_resolution: list[dict]) -> dict[float, floa
     for i in range(1, len(sorted_entries)):
         prev = sorted_entries[i - 1]
         curr = sorted_entries[i]
-        r_prev = prev["resolution"]
-        r_curr = curr["resolution"]
-        k_prev = prev["n_clusters"]
-        k_curr = curr["n_clusters"]
+        r_prev = prev.get("resolution")
+        r_curr = curr.get("resolution")
+        k_prev = prev.get("n_clusters")
+        k_curr = curr.get("n_clusters")
 
-        if k_prev is None or k_curr is None:
+        if k_prev is None or k_curr is None or r_prev is None or r_curr is None:
             continue
 
         delta_k = k_curr - k_prev

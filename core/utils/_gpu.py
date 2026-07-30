@@ -6,7 +6,7 @@ Each helper:
 1. Reads the active ``cfg.execution.device`` setting (``auto`` / ``gpu`` / ``cpu``)
 2. Routes to ``rapids_singlecell`` when GPU is requested and available
 3. Falls back to the equivalent ``scanpy`` call when GPU is unavailable
-4. Logs which path was taken (one line per call, visible in step logs)
+4. Logs which path was taken (once per operation type, cached after first emit)
 
 The dispatch decision is cached per-process after the first call to avoid
 repeated ``nvidia-smi`` probes.
@@ -32,6 +32,12 @@ logger = logging.getLogger(__name__)
 # NOT the per-call decision — explicit device=cpu / device=gpu overrides
 # must always be respected regardless of cache state.
 _gpu_available_cache: bool | None = None
+
+# ── Per-process log-once cache ─────────────────────────────────────────
+# Prevents redundant dispatch logging during grid searches that call
+# gpu_* functions dozens of times without the device decision changing.
+_auto_device_logged: str | None = None  # last auto-resolve path logged
+_dispatched_ops_logged: set[str] = set()  # op names already emitted
 
 
 def _auto_detect_gpu() -> bool:
@@ -80,16 +86,20 @@ def resolve_device(device: str = "auto", log: logging.Logger | None = None) -> b
         return True
 
     # device == "auto"
-    if log is not None:
-        path = "GPU (rapids-singlecell)" if gpu_ok else "CPU (scanpy)"
+    global _auto_device_logged
+    path = "GPU (rapids-singlecell)" if gpu_ok else "CPU (scanpy)"
+    if log is not None and _auto_device_logged != path:
         log.info("[device] auto-resolved to %s", path)
+        _auto_device_logged = path
     return gpu_ok
 
 
 def reset_device_cache() -> None:
     """Reset the cached GPU probe result. Mainly for tests."""
-    global _gpu_available_cache
+    global _gpu_available_cache, _auto_device_logged, _dispatched_ops_logged
     _gpu_available_cache = None
+    _auto_device_logged = None
+    _dispatched_ops_logged.clear()
 
 
 def is_gpu_active() -> bool:
@@ -123,8 +133,9 @@ def gpu_neighbors(
         import rapids_singlecell as rsc
 
         rsc.get.anndata_to_GPU(adata)
-        if log is not None:
+        if log is not None and "neighbors" not in _dispatched_ops_logged:
             log.info("[device] sc.pp.neighbors → rsc.pp.neighbors (GPU)")
+            _dispatched_ops_logged.add("neighbors")
         return rsc.pp.neighbors(adata, **kwargs)
     import scanpy as sc
 
@@ -146,9 +157,13 @@ def gpu_umap(
         import rapids_singlecell as rsc
 
         rsc.get.anndata_to_GPU(adata)
-        if log is not None:
+        # rsc.tl.umap accepts maxiter but NOT n_epochs — cuml derives n_epochs internally
+        gpu_kwargs = dict(kwargs)
+        gpu_kwargs.pop("n_epochs", None)
+        if log is not None and "umap" not in _dispatched_ops_logged:
             log.info("[device] sc.tl.umap → rsc.tl.umap (GPU)")
-        return rsc.tl.umap(adata, **kwargs)
+            _dispatched_ops_logged.add("umap")
+        return rsc.tl.umap(adata, **gpu_kwargs)
     import scanpy as sc
 
     return sc.tl.umap(adata, **kwargs)
@@ -175,8 +190,9 @@ def gpu_leiden(
         gpu_kwargs.pop("flavor", None)
         gpu_kwargs.pop("directed", None)
         gpu_kwargs.pop("n_iterations", None)  # cuGraph uses max_iter
-        if log is not None:
+        if log is not None and "leiden" not in _dispatched_ops_logged:
             log.info("[device] sc.tl.leiden → rsc.tl.leiden (GPU)")
+            _dispatched_ops_logged.add("leiden")
         return rsc.tl.leiden(adata, **gpu_kwargs)
     import scanpy as sc
 
@@ -198,8 +214,9 @@ def gpu_pca(
         import rapids_singlecell as rsc
 
         rsc.get.anndata_to_GPU(adata)
-        if log is not None:
+        if log is not None and "pca" not in _dispatched_ops_logged:
             log.info("[device] sc.pp.pca → rsc.pp.pca (GPU)")
+            _dispatched_ops_logged.add("pca")
         return rsc.pp.pca(adata, **kwargs)
     import scanpy as sc
 
@@ -234,8 +251,9 @@ def gpu_harmony(
         import rapids_singlecell as rsc
 
         rsc.get.anndata_to_GPU(adata)
-        if log is not None:
+        if log is not None and "harmony" not in _dispatched_ops_logged:
             log.info("[device] harmonypy → rsc.pp.harmony_integrate (GPU)")
+            _dispatched_ops_logged.add("harmony")
         # rsc.pp.harmony_integrate writes to adjusted_basis (default X_pca_harmony).
         # Pass through any caller-provided kwargs (random_state, max_iter_harmony, etc.)
         # but let adjusted_basis be controlled by output_key (with caller override possible).

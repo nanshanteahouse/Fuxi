@@ -258,6 +258,8 @@ def main():
             device=cfg.execution.device,
             min_dist=umap_min_dist,
             spread=umap_spread,
+            maxiter=cfg.clustering.umap_maxiter,
+            n_epochs=cfg.clustering.umap_n_epochs,
             random_state=cfg.execution.random_seed,
         )
 
@@ -275,29 +277,38 @@ def main():
             directed=False,
             n_iterations=cfg.clustering.leiden_n_iterations,
         )
-        adata.obsm[umap_key] = adata.obsm["X_umap"].copy()
+        if "X_umap" in adata.obsm:
+            adata.obsm[umap_key] = adata.obsm["X_umap"].copy()
         return leiden_key
 
     def _evaluation_fn(adata, cluster_key, **kwargs):
+        import sys as _sys
+        import traceback
+
         labels = adata.obs[cluster_key].values
+        _rep_full = adata.obsm[use_rep]
+        _rep_type = type(_rep_full).__name__
         if adata.n_obs > SILHOUETTE_SAMPLE_THRESHOLD:
             rng = np.random.RandomState(cfg.execution.random_seed)
             idx = rng.choice(adata.n_obs, SILHOUETTE_SAMPLE_THRESHOLD, replace=False)
-            return float(
-                silhouette_score(
-                    adata.obsm[use_rep][
-                        idx, : min(cfg.pca.n_pcs_use, adata.obsm[use_rep].shape[1])
-                    ],
-                    labels[idx],
-                )
-            )
+            _rep = _rep_full[idx, : min(cfg.pca.n_pcs_use, _rep_full.shape[1])]
+            _labels = labels[idx]
         else:
-            return float(
-                silhouette_score(
-                    adata.obsm[use_rep][:, : min(cfg.pca.n_pcs_use, adata.obsm[use_rep].shape[1])],
-                    labels,
-                )
+            _rep = _rep_full[:, : min(cfg.pca.n_pcs_use, _rep_full.shape[1])]
+            _labels = labels
+        try:
+            if hasattr(_rep, "get") and not isinstance(_rep, np.ndarray):
+                _rep = _rep.get()  # cupy requires explicit .get()
+            else:
+                _rep = np.asarray(_rep)
+            return float(silhouette_score(_rep, _labels))
+        except Exception:
+            _sys.stderr.write(
+                f"[silhouette] {cluster_key}: rep={_rep_type} shape={_rep_full.shape}\
+"
             )
+            traceback.print_exc(file=_sys.stderr)
+            raise
 
     with timed_substep("Grid search (Leiden)", log=log):
         # ── Three-mode dispatch ──
@@ -336,6 +347,7 @@ def main():
                     group_key="n_neighbors",
                     n_jobs=cfg.execution.n_jobs,
                     random_seed=cfg.execution.random_seed,
+                    log=log,
                 )
                 for r in sub_results:
                     if "score" in r:
@@ -364,6 +376,7 @@ def main():
                 group_key="n_neighbors",
                 n_jobs=cfg.execution.n_jobs,
                 random_seed=cfg.execution.random_seed,
+                log=log,
             )
 
     # Rename score → silhouette_score for select_best_params compatibility
@@ -420,7 +433,34 @@ def main():
             log=log,
             use_rep=use_rep,
         )
-    # ── Single-param UMAP plots ──
+
+        # ── Sync GPU→CPU to prevent VRAM spill into system RAM ──
+        # After grid search + enrichment, AnnData may hold cupy arrays
+        # in obsm, obsp, and X. If VRAM is full, subsequent GPU ops
+        # spill into host memory swap → 60× slowdown + eventual OOM.
+        try:
+            import gc
+
+            import cupy as cp
+            import numpy as np
+            from scipy.sparse import csr_matrix
+
+            for key in list(adata.obsm.keys()):
+                arr = adata.obsm[key]
+                if hasattr(arr, "get"):
+                    adata.obsm[key] = arr.get()
+            for key in list(adata.obsp.keys()):
+                mat = adata.obsp[key]
+                if hasattr(mat, "get"):
+                    adata.obsp[key] = csr_matrix(mat.get())
+            if hasattr(adata.X, "get"):
+                adata.X = csr_matrix(adata.X.get())
+            gc.collect()
+            cp.get_default_memory_pool().free_all_blocks()
+            log.info("GPU arrays synced to CPU — VRAM released")
+        except Exception:
+            pass  # cupy not available or sync non-critical
+
     # This loop is the largest matplotlib cost in step 04 on big datasets
     # (Li2026: 18 plots × 1M cells ≈ 2h). Config clustering.plot_per_combo
     # controls whether per-combo plots are generated. Disable to save ~80%
@@ -600,6 +640,8 @@ def main():
             min_dist=best_md,
             spread=best_sp,
             init_pos=_final_init,
+            maxiter=cfg.clustering.umap_maxiter,
+            n_epochs=cfg.clustering.umap_n_epochs,
             random_state=cfg.execution.random_seed,
         )
         safe_write(adata, cfg.cluster_h5ad, cfg=cfg)

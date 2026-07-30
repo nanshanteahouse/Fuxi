@@ -358,6 +358,8 @@ def _validate_on_full(
             adata,
             min_dist=getattr(cfg.clustering, "umap_min_dist", 0.3),
             spread=getattr(cfg.clustering, "umap_spread", 1.0),
+            maxiter=getattr(cfg.clustering, "umap_maxiter", None),
+            n_epochs=getattr(cfg.clustering, "umap_n_epochs", None),
             random_state=cfg.execution.random_seed,
         )
     except Exception as e:
