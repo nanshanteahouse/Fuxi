@@ -19,7 +19,7 @@ import numpy as np
 import scanpy as sc
 from joblib import Parallel, delayed
 
-from core.utils import resolve_config, safe_write, setup_logger
+from core.utils import resolve_config, setup_logger
 
 
 def _resolve_doublet_rate(cfg, n_cells: int) -> float:
@@ -68,6 +68,25 @@ def run_scrublet_sample(adata_sub, sample_name, cfg):
     except Exception as e:
         warnings.warn(f"Scrublet failed for {sample_name}: {e}")
         return np.zeros(adata_sub.n_obs), np.zeros(adata_sub.n_obs, dtype=bool)
+
+
+def _extract_subset(adata, idx):
+    """Extract a fully-materialized subset from a backed AnnData.
+
+    Backed AnnData views (produced by ``adata[idx].to_memory()``) retain
+    ``ElementRef``/``SparseCSRMatrixView`` references to the HDF5 backing
+    file, making them unpicklable for joblib parallel dispatch.  This
+    constructs a clean AnnData from raw slices, breaking all back references.
+    """
+    import scipy.sparse as sp
+
+    sub = adata[idx]
+    x_mat = sub.X
+    if sp.issparse(x_mat):
+        x_mat = sp.csr_matrix(x_mat)  # materialize view to concrete CSR
+    else:
+        x_mat = np.array(x_mat)
+    return sc.AnnData(x_mat, obs=sub.obs.copy(), var=sub.var.copy())
 
 
 def detect_doublets_parallel(adata, cfg, log):
@@ -144,7 +163,7 @@ def detect_doublets_parallel(adata, cfg, log):
             ", ".join(f"{n}({len(i)} cells)" for n, i in zip(large_names, large_idxs)),
         )
     for name, idx in zip(large_names, large_idxs):
-        sub = adata[idx].to_memory()  # extract concrete subset from backed h5ad
+        sub = _extract_subset(adata, idx)
         results.append(run_scrublet_sample(sub, name, cfg))
         del sub  # release early
 
@@ -156,7 +175,7 @@ def detect_doublets_parallel(adata, cfg, log):
             n_jobs,
         )
         small_results = Parallel(n_jobs=n_jobs)(
-            delayed(run_scrublet_sample)(adata[idx].to_memory(), name, cfg)
+            delayed(run_scrublet_sample)(_extract_subset(adata, idx), name, cfg)
             for name, idx in zip(small_names, small_idxs)
         )
         results.extend(small_results)
@@ -185,6 +204,7 @@ def detect_doublets_parallel(adata, cfg, log):
         adata.n_obs,
         100 * all_pred.mean(),
     )
+    return all_scores, all_pred
 
 
 def main():
@@ -204,12 +224,24 @@ def main():
         "Opened in backed mode: %s — %d cells × %d genes", cfg.raw_h5ad, adata.n_obs, adata.n_vars
     )
 
-    detect_doublets_parallel(adata, cfg, log)
+    doublet_scores, doublet_pred = detect_doublets_parallel(adata, cfg, log)
 
     out_path = os.path.join(cfg.h5ad_dir, "01_doublet.h5ad")
-    # Convert to memory for safe_write (backs the sparse matrix before writing)
-    adata_full = adata.to_memory()
-    safe_write(adata_full, out_path, cfg=cfg)
+    # Lightweight write: copy raw h5ad + append only the 2 new obs columns,
+    # avoiding a full ~9 GB AnnData rewrite for just metadata.
+    import shutil
+
+    shutil.copy2(cfg.raw_h5ad, out_path)
+    log.info("Copied raw h5ad → %s (%.1f GiB)", out_path, os.path.getsize(out_path) / 2**30)
+    import pandas as pd
+
+    from core.utils import write_obs_columns_lightweight
+
+    obs_to_write = pd.DataFrame(
+        {"doublet_scores": doublet_scores, "predicted_doublet": doublet_pred},
+        index=adata.obs_names,
+    )
+    write_obs_columns_lightweight(out_path, obs_to_write, logger=log)
     log.info("Step 01a complete, took %.1fs", time.time() - t0)
 
 

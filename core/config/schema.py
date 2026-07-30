@@ -314,6 +314,14 @@ class ClusteringSettings(BaseModel):
         description="Max clusters for pairwise DE in _select_de_gated. Above this, falls back to one-vs-rest for performance. 0 = always pairwise (no cap).",
     )
     umap_spread: float = 1.0
+    umap_maxiter: Optional[int] = Field(
+        default=None,
+        description="Max UMAP iterations (None = auto/unlimited). Set to 200-500 on large datasets to bound convergence time.",
+    )
+    umap_n_epochs: Optional[int] = Field(
+        default=None,
+        description="Number of UMAP training epochs (None = auto). Lower values (e.g., 500) speed up at slight quality cost.",
+    )
     umap_color_by_batch: bool = False
     batch_key_override: Optional[str] = None
     # Performance: matplotlib scatter on >100k cells is the dominant cost in
@@ -372,7 +380,7 @@ class MarkerSettings(BaseModel):
     min_cells_subcluster: int = 50
     expert_rule_strictness: str = "default"
     expert_rule_top_n: int = 0
-    expert_rule_pval_cutoff: float = 0.0
+    candidate_pool_expand_steps: List[int] = Field(default_factory=lambda: [50, 100, 200])
     validation_n_top_genes: int = 15
     validation_min_overlap: float = 0.5
     validation_marginal_threshold: float = 0.25

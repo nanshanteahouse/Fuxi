@@ -28,7 +28,7 @@ import scanpy as sc
 
 from core.ai.json_extract import extract_json_block
 from core.annotation.engine import run_unified_annotation as unified_annotate
-from core.utils import resolve_config, safe_plot, safe_write, setup_logger
+from core.utils import resolve_config, safe_plot, setup_logger
 
 log: logging.Logger
 
@@ -55,7 +55,13 @@ def _warn_if_low_coverage(adata, cfg, log):
             n_unknown,
             adata.n_obs,
         )
-        safe_write(adata, cfg.annotated_h5ad, cfg=cfg)
+        import shutil as _shutil
+
+        from core.utils import write_obs_columns_lightweight
+
+        if not os.path.exists(cfg.annotated_h5ad):
+            _shutil.copy2(cfg.cluster_h5ad, cfg.annotated_h5ad)
+        write_obs_columns_lightweight(cfg.annotated_h5ad, adata.obs, logger=log)
         sys.exit(1)
 
 
@@ -199,7 +205,10 @@ def run_subclustering(adata, cfg, subcluster_types, resolution, min_cells, logge
         sub = adata[mask].copy()
         use_rep = "X_integrated" if "X_integrated" in sub.obsm else "X_pca"
         sc.pp.neighbors(
-            sub, n_pcs=min(cfg.pca.n_pcs_use, sub.obsm[use_rep].shape[1]), use_rep=use_rep, random_state=42
+            sub,
+            n_pcs=min(cfg.pca.n_pcs_use, sub.obsm[use_rep].shape[1]),
+            use_rep=use_rep,
+            random_state=42,
         )
         sc.tl.leiden(
             sub,
@@ -563,6 +572,21 @@ def main():
         adata.n_obs,
         adata.obs["leiden"].nunique(),
     )
+    _original_cols = set(adata.obs.columns)  # track for lightweight write diff
+
+    def _write_lightweight():
+        """Copy cluster h5ad (once) + append only new obs columns."""
+        import shutil
+
+        from core.utils import write_obs_columns_lightweight
+
+        if not os.path.exists(cfg.annotated_h5ad):
+            shutil.copy2(cfg.cluster_h5ad, cfg.annotated_h5ad)
+            log.info("Copied %s → %s", cfg.cluster_h5ad, cfg.annotated_h5ad)
+        _new_cols = [c for c in adata.obs.columns if c not in _original_cols]
+        if _new_cols:
+            write_obs_columns_lightweight(cfg.annotated_h5ad, adata.obs[_new_cols], logger=log)
+            log.info("Lightweight write: %d new columns appended", len(_new_cols))
 
     # ── 判断 AI 模式/Unified KB 模式是否可用 ────────────────────────────
     ai_enabled = getattr(cfg.ai, "enabled", False)
@@ -594,7 +618,7 @@ def main():
                 )
             _update_quality_report_pass_rate(adata, cfg)
             _warn_if_low_coverage(adata, cfg, log)
-            safe_write(adata, cfg.annotated_h5ad, cfg=cfg)
+            _write_lightweight()
             log.info("Step 05 (Unified mode) complete, took %.1fs", time.time() - t0)
             return
         log.warning("Unified annotation failed, falling back to Score_genes mode")
@@ -623,7 +647,7 @@ def main():
                 )
             _update_quality_report_pass_rate(adata, cfg)
             _warn_if_low_coverage(adata, cfg, log)
-            safe_write(adata, cfg.annotated_h5ad, cfg=cfg)
+            _write_lightweight()
             log.info("Step 05 (AI mode) complete, took %.1fs", time.time() - t0)
             return
         log.warning("AI annotation failed, falling back to Score_genes mode")
@@ -649,7 +673,7 @@ def main():
         )
     _update_quality_report_pass_rate(adata, cfg)
     _warn_if_low_coverage(adata, cfg, log)
-    safe_write(adata, cfg.annotated_h5ad, cfg=cfg)
+    _write_lightweight()
     log.info("Step 05 (score_genes mode) complete, took %.1fs", time.time() - t0)
 
 

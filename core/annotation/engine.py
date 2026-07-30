@@ -27,6 +27,7 @@ def _check_zero_scores_and_retry(
     target_class,
     target_order,
     tissue_kb,
+    CFG,  # noqa: N803
     logger,
 ):
     """Check for zero KB marker scores and attempt case-insensitive retry.
@@ -81,6 +82,7 @@ def _check_zero_scores_and_retry(
 
     # Detect retry eligibility up front so we can build the uppercased KB
     # copy at most once and reuse it across both retry paths.
+    _expand_steps = CFG.marker.candidate_pool_expand_steps
     zero_hit_clusters = [
         cl_str
         for cl_str, cs in all_scores.items()
@@ -105,7 +107,7 @@ def _check_zero_scores_and_retry(
                 if old_genes:
                     markers[tier] = {g.upper(): v for g, v in old_genes.items()}
 
-        def _retry_cluster_score(cl_str):
+        def _retry_cluster_score(cl_str, expand_steps=None):
             """Re-score a single cluster against the uppercased KB copy."""
             cl = int(cl_str) if cl_str.lstrip("-").isdigit() else cl_str
             cl_mask = marker_df["cluster"] == cl
@@ -120,6 +122,7 @@ def _check_zero_scores_and_retry(
                 target_class=target_class,
                 target_order=target_order,
                 adaptive_top_n=True,
+                expand_steps=expand_steps,
             )
 
         # Global retry: all clusters zero-hit (n_clusters_total >= 5).
@@ -130,7 +133,9 @@ def _check_zero_scores_and_retry(
                 "attempting case-insensitive normalization retry",
                 n_clusters_total,
             )
-            retry_scores = {str(cl): _retry_cluster_score(str(cl)) for cl in clusters}
+            retry_scores = {}
+            for cl in clusters:
+                retry_scores[str(cl)] = _retry_cluster_score(str(cl), expand_steps=_expand_steps)
             retry_total_hits = sum(
                 s.n_markers_found
                 for cluster_scores in retry_scores.values()
@@ -163,7 +168,7 @@ def _check_zero_scores_and_retry(
             )
             per_cluster_fixed = 0
             for cl_str in zero_hit_clusters:
-                retry_result = _retry_cluster_score(cl_str)
+                retry_result = _retry_cluster_score(cl_str, expand_steps=_expand_steps)
                 retry_hits = sum(s.n_markers_found for s in retry_result.values())
                 if retry_hits > 0:
                     all_scores[cl_str] = retry_result
@@ -241,9 +246,14 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
         Cluster -> FusionDecision mapping, or None on failure (triggers fallback).
     """
     # ── a. Compute marker genes ───────────────────────────────────────────
-    logger.info("Computing marker genes (Wilcoxon rank-sum)...")
+    _n_genes = max(CFG.marker.candidate_pool_expand_steps)
+    logger.info("Computing marker genes (Wilcoxon rank-sum, n_genes=%d)...", _n_genes)
     sc.tl.rank_genes_groups(
-        adata, groupby="leiden", method="wilcoxon", use_raw=True if adata.raw is not None else None
+        adata,
+        groupby="leiden",
+        method="wilcoxon",
+        n_genes=_n_genes,
+        use_raw=True if adata.raw is not None else None,
     )
     n_clusters = adata.obs["leiden"].nunique()
 
@@ -372,13 +382,13 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
             target_class=target_class,
             target_order=target_order,
             adaptive_top_n=True,
+            expand_steps=CFG.marker.candidate_pool_expand_steps,
         )
         all_top_genes[cl_str] = cl_data["names"].head(20).tolist()
         all_rules[cl_str] = apply_expert_rules(
             kb, cl_data, top_n=rule_top_n, pval_cutoff=rule_pval
         )
 
-    # ── e. Zero-score detection and case-insensitive retry ──────────────
     all_scores, total_hits, n_clusters_total = _check_zero_scores_and_retry(
         kb,
         all_scores,
@@ -388,6 +398,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
         target_class,
         target_order,
         CFG.tissue_kb,
+        CFG,
         logger,
     )
 

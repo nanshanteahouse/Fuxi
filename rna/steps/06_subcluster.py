@@ -207,9 +207,12 @@ def main():
     # cell type.  Re-select HVGs, re-normalize, re-run PCA + Harmony so
     # subcluster resolution is driven by relevant variation, not by the
     # full-dataset HVG set.
-    raw_path = os.path.join(cfg.h5ad_dir, "02_qc.h5ad")
+    # NOTE: .raw may be log-normalized (Step 03 default mode), so we still
+    # read 02_qc.h5ad for true raw counts — but use backed='r' to avoid
+    # loading the full ~9GB matrix into memory.
+    raw_path = cfg.qc_h5ad
     if os.path.exists(raw_path):
-        raw_adata = sc.read(raw_path)
+        raw_adata = sc.read(raw_path, backed="r")
         common_bc = list(sub.obs_names.intersection(raw_adata.obs_names))
         n_common = len(common_bc)
         if n_common < n_cells:
@@ -218,7 +221,7 @@ def main():
         if n_common >= min_cells:
             # Align both objects to the same barcode order
             sub = sub[common_bc].copy()
-            sub_raw = raw_adata[common_bc].copy()
+            sub_raw = raw_adata[common_bc].to_memory().copy()
             del raw_adata
             log.info("Raw subset loaded: %d cells, %d genes", sub_raw.n_obs, sub_raw.n_vars)
 

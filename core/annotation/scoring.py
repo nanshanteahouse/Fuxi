@@ -673,6 +673,7 @@ def score_cluster_against_kb(
     target_class: str = "",
     target_order: str = "",
     adaptive_top_n: bool = False,
+    expand_steps: list[int] = None,  # default [50,100,200] if None
 ) -> Dict[str, Score]:
     """Score one cluster against every cell type in the Knowledge Base.
 
@@ -753,7 +754,8 @@ def score_cluster_against_kb(
     top_in_bg = top_gene_set & all_type_markers
 
     if adaptive_top_n:
-        for _candidate_n in (50, 100, 200):
+        _steps = expand_steps if expand_steps is not None else [50, 100, 200]
+        for _candidate_n in _steps:
             if len(top_in_bg) / max(background_size, 1) >= 0.05:
                 break
             _cand = _filtered.head(_candidate_n)

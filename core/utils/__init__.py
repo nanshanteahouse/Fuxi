@@ -119,7 +119,7 @@ from core.utils._gpu import (  # noqa: F401
     resolve_device,
     sync_to_cpu,
 )
-from core.utils._io import safe_plot, safe_write  # noqa: F401
+from core.utils._io import safe_plot, safe_write, write_obs_columns_lightweight  # noqa: F401
 from core.utils._logging import setup_logger  # noqa: F401
 from core.utils._optional import (  # noqa: F401
     gpu_available_nvidia_smi,

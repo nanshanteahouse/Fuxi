@@ -129,6 +129,154 @@ def safe_write(
                 )
 
 
+def write_obs_columns_lightweight(
+    h5ad_path: str,
+    obs_df,  # pandas DataFrame with only the new columns
+    logger=None,
+):
+    """Append obs columns to an existing h5ad file via h5py (NO X rewrite).
+
+    Avoids rewriting the full HDF5 file when only obs/ columns change.
+    Saves ~9-11 GB of disk I/O per call on large datasets (1M+ cells).
+
+    Parameters
+    ----------
+    h5ad_path : str
+        Path to the existing h5ad file (opened in 'a' mode).
+    obs_df : pd.DataFrame
+        DataFrame containing ONLY the new columns to write (not all obs).
+        Must have the same index as the h5ad's /obs index.
+    logger : logging.Logger or None
+    """
+    import h5py
+    import numpy as np
+    import pandas as pd
+
+    _log = logger.info if logger else (lambda msg, *a: None)
+    _log("Lightweight obs write: %d column(s) → %s", len(obs_df.columns), h5ad_path)
+
+    with h5py.File(h5ad_path, "a") as f:
+        obs_group = f.require_group("obs")
+
+        for col_name in obs_df.columns:
+            series = obs_df[col_name]
+
+            # Remove any pre-existing entry (dataset or group)
+            if col_name in obs_group:
+                del obs_group[col_name]
+
+            if isinstance(series.dtype, pd.CategoricalDtype):
+                # AnnData 0.13+: categorical column → /obs/{col}/ as Group
+                col_grp = obs_group.create_group(col_name)
+                codes = series.cat.codes.to_numpy(dtype=np.int8)
+                categories = series.cat.categories.to_numpy(dtype=object)
+
+                ds_codes = col_grp.create_dataset(
+                    "codes",
+                    data=codes,
+                    dtype=np.int8,
+                    compression="gzip",
+                )
+                ds_codes.attrs["encoding-type"] = "array"
+                ds_codes.attrs["encoding-version"] = "0.2.0"
+
+                ds_cat = col_grp.create_dataset(
+                    "categories",
+                    data=categories.astype(h5py.string_dtype()),
+                    dtype=h5py.string_dtype(),
+                )
+                ds_cat.attrs["encoding-type"] = "string-array"
+                ds_cat.attrs["encoding-version"] = "0.2.0"
+
+            elif series.dtype == bool or series.dtype == np.bool_:
+                data = series.to_numpy(dtype=np.bool_)
+                ds = obs_group.create_dataset(
+                    col_name,
+                    data=data,
+                    dtype=np.bool_,
+                    compression="gzip",
+                )
+                ds.attrs["encoding-type"] = "array"
+                ds.attrs["encoding-version"] = "0.2.0"
+
+            elif pd.api.types.is_float_dtype(series):
+                data = series.to_numpy(dtype=np.float32)
+                ds = obs_group.create_dataset(
+                    col_name,
+                    data=data,
+                    dtype=np.float32,
+                    compression="gzip",
+                )
+                ds.attrs["encoding-type"] = "array"
+                ds.attrs["encoding-version"] = "0.2.0"
+
+            elif pd.api.types.is_integer_dtype(series):
+                data = series.to_numpy(dtype=np.int32)
+                ds = obs_group.create_dataset(
+                    col_name,
+                    data=data,
+                    dtype=np.int32,
+                    compression="gzip",
+                )
+                ds.attrs["encoding-type"] = "array"
+                ds.attrs["encoding-version"] = "0.2.0"
+
+            else:
+                # String/object → Group with codes+strings (AnnData 0.13 string format)
+                col_grp = obs_group.create_group(col_name)
+                arr = pd.array(series.astype(str), dtype="string")
+                codes_data = np.arange(len(arr), dtype=np.int8)
+                uniq = sorted(set(arr))
+                cat_map = {v: i for i, v in enumerate(uniq)}
+                codes_data = np.array([cat_map[v] for v in arr], dtype=np.int8)
+
+                ds_c = col_grp.create_dataset(
+                    "codes",
+                    data=codes_data,
+                    dtype=np.int8,
+                    compression="gzip",
+                )
+                ds_c.attrs["encoding-type"] = "array"
+                ds_c.attrs["encoding-version"] = "0.2.0"
+
+                ds_cat = col_grp.create_dataset(
+                    "categories",
+                    data=np.array(uniq).astype(h5py.string_dtype()),
+                    dtype=h5py.string_dtype(),
+                )
+                ds_cat.attrs["encoding-type"] = "string-array"
+                ds_cat.attrs["encoding-version"] = "0.2.0"
+
+            _log("  ↪ %s (%s)", col_name, series.dtype)
+
+        # ── Update column-order metadata (AnnData 0.13+ requires this) ──
+        _existing = list(obs_group.attrs.get("column-order", []))
+        _new_cols = list(obs_df.columns)
+        obs_group.attrs["column-order"] = _existing + [c for c in _new_cols if c not in _existing]
+
+    # ── Integrity check: re-open in backed mode, verify columns exist ──
+    try:
+        import scanpy as sc
+
+        _verify = sc.read(h5ad_path, backed="r")
+        _missing = [c for c in obs_df.columns if c not in _verify.obs.columns]
+        if _missing:
+            raise RuntimeError(f"Columns missing after write: {_missing}")
+        _log(
+            "  ↪ integrity check OK (%d obs columns, %d cells)",
+            len(_verify.obs.columns),
+            _verify.n_obs,
+        )
+    except Exception:
+        if logger:
+            logger.error(
+                "Lightweight write integrity FAILED — removing corrupt file: %s",
+                h5ad_path,
+            )
+        os.remove(h5ad_path)
+        raise
+
+
 def safe_plot(
     func,
     *args,
