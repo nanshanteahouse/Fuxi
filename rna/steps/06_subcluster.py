@@ -377,6 +377,8 @@ def main():
     safe_cell_type = args.cell_type.replace(" ", "_").replace("/", "_")
     safe_filename = f"05_sub_{safe_cell_type}.h5ad"
     output_path = os.path.join(cfg.h5ad_dir, safe_filename)
+    # ── Checkpoint: save core clustering before plotting/AI ──
+    safe_write(sub, output_path, cfg=cfg)
 
     # Leiden at best resolution
     safe_plot(

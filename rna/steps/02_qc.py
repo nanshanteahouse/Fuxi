@@ -848,7 +848,8 @@ def main():
     adata = filter_cells(adata, thresholds, cfg, log)
     sc.pp.filter_genes(adata, min_cells=cfg.qc.min_cells_per_gene)
     log.info("After gene filtering: %d genes", adata.n_vars)
-
+    # ── Checkpoint: save before plotting ──
+    safe_write(adata, cfg.qc_h5ad, cfg=cfg)
     # 5. QC SUMMARY — 事后评估过滤率
     n_after = adata.n_obs
     pct_removed = 100 * (n_before - n_after) / n_before if n_before else 0
@@ -874,7 +875,6 @@ def main():
             pct_removed,
         )
 
-    safe_write(adata, cfg.qc_h5ad, cfg=cfg)
     log.info("Step 02 complete, took %.1fs", time.time() - t0)
 
 

@@ -422,6 +422,9 @@ def main():
             if "perfectly collinear" in w.lower() and any(bc in w for bc in report.biology_cols)
         ]
 
+    # ── Checkpoint path (used across all integration methods) ──
+    out_path = os.path.join(cfg.h5ad_dir, "03_integrated.h5ad")
+
     if cfg.integration.method == "harmony":
         if collinear_warnings:
             log.error(
@@ -461,6 +464,9 @@ def main():
             except Exception as e:
                 log.warning("Harmony correction failed (%s) — continuing with raw PCA", e)
                 adata.obsm["X_integrated"] = adata.obsm["X_pca"].copy()
+            # ── Checkpoint before plotting ──
+            safe_write(adata, out_path, cfg=cfg, step_alias="integrated")
+
             # 对比图
             primary_key = bk_list[0]
             fig, axes = plt.subplots(1, 2, figsize=(14, 6))
@@ -522,6 +528,9 @@ def main():
                 random_state=cfg.execution.random_seed,
             )
             adata.obsm["X_integrated"] = adata.obsm["X_pca"].copy()
+            # ── Checkpoint before plotting ──
+            safe_write(adata, out_path, cfg=cfg, step_alias="integrated")
+
             # 对比图
             primary_key = bk_list[0]
             fig, axes = plt.subplots(1, 2, figsize=(14, 6))
@@ -665,7 +674,6 @@ def main():
         adata.obsm["X_integrated"] = adata.obsm["X_pca"].copy()
 
     # ── 保存 ──
-    out_path = os.path.join(cfg.h5ad_dir, "03_integrated.h5ad")
     with timed_substep("Save checkpoint", log=log):
         safe_write(adata, out_path, cfg=cfg, step_alias="integrated")
     log.info("Step 03 complete, took %.1fs", time.time() - t0)
