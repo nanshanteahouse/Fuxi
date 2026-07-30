@@ -282,12 +282,8 @@ def main():
         return leiden_key
 
     def _evaluation_fn(adata, cluster_key, **kwargs):
-        import sys as _sys
-        import traceback
-
         labels = adata.obs[cluster_key].values
         _rep_full = adata.obsm[use_rep]
-        _rep_type = type(_rep_full).__name__
         if adata.n_obs > SILHOUETTE_SAMPLE_THRESHOLD:
             rng = np.random.RandomState(cfg.execution.random_seed)
             idx = rng.choice(adata.n_obs, SILHOUETTE_SAMPLE_THRESHOLD, replace=False)
@@ -296,19 +292,10 @@ def main():
         else:
             _rep = _rep_full[:, : min(cfg.pca.n_pcs_use, _rep_full.shape[1])]
             _labels = labels
-        try:
-            if hasattr(_rep, "get") and not isinstance(_rep, np.ndarray):
-                _rep = _rep.get()  # cupy requires explicit .get()
-            else:
-                _rep = np.asarray(_rep)
-            return float(silhouette_score(_rep, _labels))
-        except Exception:
-            _sys.stderr.write(
-                f"[silhouette] {cluster_key}: rep={_rep_type} shape={_rep_full.shape}\
-"
-            )
-            traceback.print_exc(file=_sys.stderr)
-            raise
+        if hasattr(_rep, "get") and not isinstance(_rep, np.ndarray):
+            _rep = _rep.get()
+        _rep = np.asarray(_rep, dtype=np.float64)
+        return float(silhouette_score(_rep, _labels))
 
     with timed_substep("Grid search (Leiden)", log=log):
         # ── Three-mode dispatch ──
@@ -423,6 +410,41 @@ def main():
             "DE-gated selection: n_neighbors=%d, resolution=%.2f (%s)", best_n, best_r, reason
         )
     else:
+        # ── Sync GPU→CPU to prevent VRAM/CPU double memory pressure ──
+        # Grid search left adata.X, raw, obsm, obsp on GPU via
+        # rsc.get.anndata_to_GPU(). Enrichment builds CPU neighbor graphs
+        # and runs marker scoring on raw.X. Without this sync, VRAM holds
+        # grid search artifacts while CPU allocates KNN graphs — easily 10+ GB.
+        try:
+            import gc
+
+            import cupy as cp
+
+            # obsm: dense arrays (PCA, UMAP coords) → just .get()
+            for key in list(adata.obsm.keys()):
+                arr = adata.obsm[key]
+                if hasattr(arr, "get"):
+                    adata.obsm[key] = arr.get()
+            # obsp: sparse neighbor graphs → csr_matrix
+            for key in list(adata.obsp.keys()):
+                mat = adata.obsp[key]
+                if hasattr(mat, "get"):
+                    from scipy.sparse import csr_matrix
+
+                    adata.obsp[key] = csr_matrix(mat.get())
+            # adata.X: HVG-filtered dense data → just .get(), NOT csr_matrix
+            # (dense→CSR doubles memory; HVG data is effectively dense)
+            if hasattr(adata.X, "get"):
+                adata.X = adata.X.get()
+            # adata.raw.X: backed sparse dataset, typically not on GPU
+            if adata.raw is not None and hasattr(adata.raw.X, "get"):
+                adata.raw.X = adata.raw.X.get()
+            gc.collect()
+            cp.get_default_memory_pool().free_all_blocks()
+            log.info("GPU arrays synced to CPU — VRAM released before enrichment")
+        except Exception:
+            pass  # cupy not available or sync non-critical
+
         # ── Multi-metric enrichment (for multi_metric selection method) ──
         from core.cluster.evaluation import enrich_grid_results
 
@@ -433,33 +455,6 @@ def main():
             log=log,
             use_rep=use_rep,
         )
-
-        # ── Sync GPU→CPU to prevent VRAM spill into system RAM ──
-        # After grid search + enrichment, AnnData may hold cupy arrays
-        # in obsm, obsp, and X. If VRAM is full, subsequent GPU ops
-        # spill into host memory swap → 60× slowdown + eventual OOM.
-        try:
-            import gc
-
-            import cupy as cp
-            import numpy as np
-            from scipy.sparse import csr_matrix
-
-            for key in list(adata.obsm.keys()):
-                arr = adata.obsm[key]
-                if hasattr(arr, "get"):
-                    adata.obsm[key] = arr.get()
-            for key in list(adata.obsp.keys()):
-                mat = adata.obsp[key]
-                if hasattr(mat, "get"):
-                    adata.obsp[key] = csr_matrix(mat.get())
-            if hasattr(adata.X, "get"):
-                adata.X = csr_matrix(adata.X.get())
-            gc.collect()
-            cp.get_default_memory_pool().free_all_blocks()
-            log.info("GPU arrays synced to CPU — VRAM released")
-        except Exception:
-            pass  # cupy not available or sync non-critical
 
     # This loop is the largest matplotlib cost in step 04 on big datasets
     # (Li2026: 18 plots × 1M cells ≈ 2h). Config clustering.plot_per_combo

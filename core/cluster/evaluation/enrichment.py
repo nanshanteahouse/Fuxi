@@ -6,6 +6,8 @@ Enriches each entry in a grid-search results summary with multi-metric scores
 
 import logging
 
+import numpy as np
+
 from .stability import _compute_cluster_coherence, _compute_splitting_gain, _compute_stability
 
 logger = logging.getLogger(__name__)
@@ -106,8 +108,6 @@ def enrich_grid_results(
                 # Ensure obsm data is CPU-resident (grid search may leave GPU arrays)
                 _rep = adata.obsm[use_rep]
                 if hasattr(_rep, "get"):  # cupy array → numpy
-                    import numpy as np
-
                     adata.obsm[use_rep] = _rep.get()  # cupy requires explicit .get()
                 sc.pp.neighbors(
                     adata,
