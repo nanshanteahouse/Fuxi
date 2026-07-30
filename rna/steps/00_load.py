@@ -37,16 +37,44 @@ def _read_features_with_header_detection(features_path: str, sep=None) -> pd.Dat
     like 'id', 'gene_short_name', 'feature_type'. Headerless files have a gene
     symbol or ID as the first column name (typically starting with uppercase).
     """
-    try:
-        peek = pd.read_csv(features_path, nrows=0, sep=sep)
-        first_col = peek.columns[0]
-        # Lowercase first char → standard header; otherwise → headerless data
-        has_header = bool(first_col) and first_col[0].islower()
-    except (pd.errors.EmptyDataError, IndexError):
-        has_header = False
-    if has_header:
-        return pd.read_csv(features_path, sep=sep)
-    return pd.read_csv(features_path, header=None, names=["gene_symbol"], sep=sep)
+    if sep is not None:
+        try:
+            peek = pd.read_csv(features_path, nrows=0, sep=sep)
+            first_col = peek.columns[0]
+            has_header = bool(first_col) and first_col[0].islower()
+        except (pd.errors.EmptyDataError, IndexError, TypeError):
+            has_header = False
+        if has_header:
+            return pd.read_csv(features_path, sep=sep)
+        return pd.read_csv(features_path, header=None, names=["gene_symbol"], sep=sep)
+
+    import gzip
+
+    opener = gzip.open if features_path.endswith(".gz") else open
+    mode = "rt" if features_path.endswith(".gz") else "r"
+    with opener(features_path, mode) as f:
+        lines = [line.rstrip("\n\r") for line in f if line.rstrip("\n\r")]
+    if not lines:
+        return pd.DataFrame(columns=["gene_symbol"])
+
+    ncols = len(lines[0].split("\t"))
+    if ncols > 1:
+        import io
+
+        buf = io.StringIO("\n".join(lines))
+        try:
+            peek = pd.read_csv(buf, nrows=0, sep="\t")
+            first_col = peek.columns[0]
+            has_header = bool(first_col) and first_col[0].islower()
+        except (pd.errors.EmptyDataError, IndexError):
+            has_header = False
+        buf.seek(0)
+        if has_header:
+            return pd.read_csv(buf, sep="\t")
+        buf.seek(0)
+        return pd.read_csv(buf, header=None, names=["gene_symbol"], sep="\t")
+
+    return pd.DataFrame({"gene_symbol": lines})
 
 
 def _parse_barcodes(adata, cfg, log):

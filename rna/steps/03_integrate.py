@@ -28,6 +28,7 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import scanpy as sc
 import scipy.sparse as sp
 
@@ -161,7 +162,12 @@ def main():
     forced_in_adata = [g for g in forced_set if g in adata.var_names]
     newly_forced = 0
     for g in forced_in_adata:
-        if not adata.var.at[g, "highly_variable"]:
+        val = adata.var.at[g, "highly_variable"]
+        if isinstance(val, pd.Series):
+            if not val.all():
+                newly_forced += (~val).sum()
+                adata.var.loc[g, "highly_variable"] = True
+        elif not val:
             adata.var.at[g, "highly_variable"] = True
             newly_forced += 1
     if newly_forced:
