@@ -19,8 +19,9 @@ execution:
   # use_float32: true                   # Cast to float32
 # ── Doublet Detection (Scrublet) ──────────────────────────────────────────
 # scrublet:
-  #   serial_threshold: 15000  # cells: >threshold → serial, ≤threshold → parallel
-  #   svd_solver: "arpack"     # 'arpack' = exact (default) | 'randomized' = ~20-50% faster, labels ~97-99% consistent
+#   serial_threshold: 15000  # cells: >threshold → serial, ≤threshold → parallel
+#   svd_solver: "arpack"     # 'arpack' = exact (default) | 'randomized' = ~20-50% faster, labels ~97-99% consistent
+#   zscore_float32: false    # float32 halves zscore peak memory but drifts doublet labels ~+9%; default false
 # ── Cell Type Annotation ────────────────────────────────────────────────────
 # marker:
 #   # candidate_pool_expand_steps: [50, 100, 200]  # adaptive scoring expansion tiers → n_genes for DE

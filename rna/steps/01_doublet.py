@@ -38,7 +38,11 @@ _MP_KNN_ORIGINAL = None
 _MP_MEM_BUDGET_BYTES = 0  # 0 = no budget (unlimited)
 
 _ZSCORE_CHUNK_ROWS = 20000
-_ZSCORE_DTYPE = np.float64  # bit-exact parity with scrublet's original sparse_zscore
+# Output dtype of the chunked sparse_zscore. float64 = bit-exact parity with
+# scrublet's original implementation; float32 halves zscore peak memory (~20
+# GiB per 157k-cell group) at the cost of ~+9% doublet-label drift. Set via
+# scrublet.zscore_float32.
+_ZSCORE_DTYPE = np.float64
 
 
 def _sparse_zscore_chunked(e, gene_mean=None, gene_stdev=None):
@@ -103,6 +107,12 @@ def _run_small_parallel(raw_path, small_names, small_idxs, buckets, cfg):
     return Parallel(n_jobs=len(buckets), initializer=_install_zscore_patch)(
         delayed(_run_bucket)(raw_path, small_names, small_idxs, b, cfg) for b in buckets if b
     )
+
+
+def _set_zscore_dtype(cfg):
+    """Pick the chunked zscore output dtype from scrublet.zscore_float32."""
+    global _ZSCORE_DTYPE
+    _ZSCORE_DTYPE = np.float32 if cfg.scrublet.zscore_float32 else np.float64
 
 
 def _install_zscore_patch():
@@ -529,6 +539,7 @@ def main():
     log = setup_logger("01_doublet", os.path.join(cfg.log_dir, "01_doublet.log"))
     log.info("Step 01a: Scrublet doublet detection")
     _install_knn_mp_patch(cfg)
+    _set_zscore_dtype(cfg)
     _install_zscore_patch()
 
     # Use backed mode — only load one sample group into memory at a time.

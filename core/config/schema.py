@@ -125,6 +125,10 @@ class ScrubletSettings(BaseModel):
     # PCA/SVD backend: arpack (exact, default) vs randomized (~20-50% faster,
     # doublet labels ~97-99% consistent with arpack)
     svd_solver: Literal["arpack", "randomized"] = "arpack"
+    # zscore output dtype: float32 halves zscore peak memory (~20 GiB per
+    # 157k-cell group) but drifts doublet labels ~+9%; default float64 keeps
+    # bit-exact parity with scrublet's original implementation
+    zscore_float32: bool = False
 
     on_non_counts: Literal["skip_warn", "skip_silent", "abort"] = (
         "skip_warn"  # policy when expression_type != raw_counts
