@@ -16,6 +16,7 @@ import sys
 import tempfile
 import time
 import warnings
+from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 import numpy as np
@@ -35,6 +36,84 @@ from core.utils import resolve_config, resolve_memory_budget_bytes, setup_logger
 _MP_KNN_NJOBS = 1
 _MP_KNN_ORIGINAL = None
 _MP_MEM_BUDGET_BYTES = 0  # 0 = no budget (unlimited)
+
+_ZSCORE_CHUNK_ROWS = 20000
+_ZSCORE_DTYPE = np.float64  # bit-exact parity with scrublet's original sparse_zscore
+
+
+def _sparse_zscore_chunked(e, gene_mean=None, gene_stdev=None):
+    # Numerically equivalent to scrublet's sparse_zscore, which materializes
+    # (e - gene_mean) as a dense matrix (~20-23 GiB transient per large
+    # group). Computing row-chunked keeps the transient allocation at chunk
+    # size while producing the same dense result.
+    from scrublet.helper_functions import sparse_var
+
+    if gene_mean is None:
+        gene_mean = e.mean(0)
+    if gene_stdev is None:
+        gene_stdev = np.sqrt(sparse_var(e))
+    gm = np.asarray(gene_mean).ravel()
+    gs = np.asarray(gene_stdev).ravel()
+    nrow, ncol = e.shape
+    out = np.empty((nrow, ncol), dtype=_ZSCORE_DTYPE)
+    for i in range(0, nrow, _ZSCORE_CHUNK_ROWS):
+        j = min(i + _ZSCORE_CHUNK_ROWS, nrow)
+        out[i:j] = (e[i:j].toarray() - gm) / gs
+    return out
+
+
+def _greedy_buckets(peaks, n_buckets):
+    """Bin-pack group peaks into n_buckets with a largest-first greedy.",
+    Returns list of bucket -> list of group indices (bucket-internal order
+    is irrelevant for peak estimation: groups run serially inside a bucket)."""
+    order = sorted(range(len(peaks)), key=lambda i: peaks[i], reverse=True)
+    buckets = [[] for _ in range(n_buckets)]
+    acc = [0.0] * n_buckets
+    for gi in order:
+        b = min(range(n_buckets), key=lambda j: acc[j])
+        buckets[b].append(gi)
+        acc[b] += peaks[gi]
+    return buckets
+
+
+def _run_bucket(raw_path, small_names, small_idxs, bucket, cfg):
+    """Run one greedy bucket serially (module-level: pickled by loky).
+    Workers open the backed h5ad themselves — the main process's AnnData
+    holds an h5py handle and cannot be pickled."""
+    import anndata as ad
+
+    adata = ad.read_h5ad(raw_path, backed="r")
+    out = []
+    for gi in bucket:
+        scores, pred = run_scrublet_sample(
+            _extract_subset(adata, small_idxs[gi]), small_names[gi], cfg
+        )
+        out.append((gi, scores, pred))
+    return out
+
+
+def _run_small_parallel(raw_path, small_names, small_idxs, buckets, cfg):
+    """Joblib-backed small-group runner (executed in a background thread so the
+    main process can process large groups serially at the same time).
+
+    Each bucket is one job: groups inside a bucket run serially (peak memory
+    adds up), buckets run in parallel. Buckets are produced by _greedy_buckets
+    so the per-worker peak tracks the *sum* of the bucket's groups instead of
+    the largest single group."""
+    return Parallel(n_jobs=len(buckets), initializer=_install_zscore_patch)(
+        delayed(_run_bucket)(raw_path, small_names, small_idxs, b, cfg) for b in buckets if b
+    )
+
+
+def _install_zscore_patch():
+    """Replace scrublet's dense-materializing sparse_zscore with the chunked
+    version. Also passed as the joblib Parallel initializer so loky worker
+    processes (which re-import scrublet fresh) get the patched version."""
+    import scrublet.helper_functions as _hf
+    import scrublet.scrublet as _scr
+
+    _hf.sparse_zscore = _sparse_zscore_chunked
+    _scr.sparse_zscore = _sparse_zscore_chunked
 
 
 def _annoy_query_block(path, npc, metric, k, i0, i1):
@@ -144,6 +223,38 @@ def _resolve_doublet_rate(cfg, n_cells: int) -> float:
     return min(max(rate, 0.004), 0.15)
 
 
+def _stable_threshold(scrub, expected_rate):
+    """Stable, machine-independent fallback threshold: the quantile that
+    labels ~expected_rate of observed cells (unlike scrublet's fixed-score
+    fallback which can flip entire groups when the score distribution sits
+    around the constant)."""
+    obs = np.asarray(scrub.doublet_scores_obs_).ravel()
+    return float(np.percentile(obs, 100 * (1 - expected_rate)))
+
+
+def _threshold_is_stable(scrub, rel_tol=0.05, max_abs_change=0.05):
+    """Scrublet's auto-threshold (skimage threshold_minimum on the sim
+    histogram) can sit in the densest part of the observed score
+    distribution when there is no clear bimodality. There, tiny input
+    perturbations (BLAS non-determinism) move the threshold and flip whole
+    groups between runs. Check the robustness of the *observed* crossing
+    fraction against a ±rel_tol threshold shift: if the fraction changes by
+    more than max_abs_change (absolute), the auto-threshold is not
+    trustworthy and callers should use _stable_threshold instead. Groups
+    with <1% or >99% crossing are exempt: the threshold sits on a sparse
+    tail, so wobble cannot flip a meaningful number of cells."""
+    obs = np.asarray(scrub.doublet_scores_obs_).ravel()
+    thr = float(scrub.threshold_)
+    base = np.mean(obs > thr)
+    if base <= 0.01 or base >= 0.99:
+        return True  # sparse tail: threshold wobble is harmless
+    for f in (1 - rel_tol, 1 + rel_tol):
+        frac = np.mean(obs > thr * f)
+        if abs(frac - base) > max_abs_change:
+            return False
+    return True
+
+
 def run_scrublet_sample(adata_sub, sample_name, cfg):
     try:
         import scipy.sparse as sp
@@ -172,16 +283,25 @@ def run_scrublet_sample(adata_sub, sample_name, cfg):
             svd_solver=cfg.scrublet.svd_solver,
         )
         if predicted is None:
-            fallback = expected_rate
+            fallback = _stable_threshold(scrub, expected_rate)
             warnings.warn(
                 f"Scrublet auto-threshold failed for {sample_name}, "
-                f"falling back to manual threshold={fallback}"
+                f"falling back to stable threshold={fallback:.4f}"
             )
             predicted = scrub.call_doublets(threshold=fallback)
             if predicted is None:
                 warnings.warn(
                     f"Scrublet threshold fallback failed for {sample_name}, assuming no doublets"
                 )
+                predicted = np.zeros(adata_sub.n_obs, dtype=bool)
+        elif not _threshold_is_stable(scrub):
+            fallback = _stable_threshold(scrub, expected_rate)
+            warnings.warn(
+                f"Auto-threshold unstable for {sample_name} (thr={scrub.threshold_:.4f}), "
+                f"using stable fallback={fallback:.4f}"
+            )
+            predicted = scrub.call_doublets(threshold=fallback)
+            if predicted is None:
                 predicted = np.zeros(adata_sub.n_obs, dtype=bool)
         return scores, predicted
     except Exception as e:
@@ -209,8 +329,8 @@ def _extract_subset(adata, idx):
 
 
 def detect_doublets_parallel(adata, cfg, log):
+    global _MP_KNN_NJOBS
     if not cfg.scrublet.run:
-        log.info("Scrublet disabled, skipping doublet detection.")
         adata.obs["doublet_scores"] = 0.0
         adata.obs["predicted_doublet"] = False
         return adata.obs["doublet_scores"].values, adata.obs["predicted_doublet"].values
@@ -274,46 +394,104 @@ def detect_doublets_parallel(adata, cfg, log):
             small_names.append(name)
             small_idxs.append(idx)
 
-    results = []
+    results = [None] * (len(large_names) + len(small_names))
+    n_cpu = cfg.execution.n_jobs or os.cpu_count() or 1
+    budget = _MP_MEM_BUDGET_BYTES or resolve_memory_budget_bytes(cfg.execution.memory_limit)
 
+    def _extract_bytes(n_cells):
+        # In-memory float32 AnnData for one group (happens in the main process).
+        return int(n_cells * adata.n_vars * 4)
+
+    def _run_peak(n_cells):
+        # Per-worker residency: normalized sparse matrix (~10% density) + zscore
+        # result (~10% of genes survive the variability filter) at _ZSCORE_DTYPE,
+        # plus a fixed 0.8 GiB base.
+        sparse = n_cells * adata.n_vars * 4 * 0.10
+        zscore = n_cells * adata.n_vars * 0.1 * np.dtype(_ZSCORE_DTYPE).itemsize
+        return int(sparse + zscore + int(0.8 * 2**30))
+
+    small_n_jobs = min(n_cpu - 1, len(small_names)) if small_names else 0
+    avail = None
+    if small_n_jobs > 0 and budget > 0:
+        max_large = max(large_idxs, key=len, default=[])
+        max_small = max(small_idxs, key=len, default=[])
+        # Main process: one large extraction + one small extraction happen
+        # concurrently (large in this thread, small in the background thread),
+        # plus the large group's run-time peak (zscore + sparse, no base).
+        main_peak = (
+            _extract_bytes(len(max_large))
+            + _extract_bytes(len(max_small))
+            + (_run_peak(len(max_large)) - int(0.8 * 2**30))
+            + int(0.8 * 2**30)
+        )
+        worker_peak = _run_peak(len(max_small))
+        avail = max(0, int(budget * 0.95) - main_peak)
+        mem_cap = max(1, avail // worker_peak)
+        if mem_cap < small_n_jobs:
+            log.warning(
+                "  Parallel sample workers capped by memory budget: %d -> %d "
+                "(~%.1f GiB/worker, main-process peak ~%.1f GiB). "
+                "Adjust scrublet.serial_threshold or execution.memory_limit if needed.",
+                small_n_jobs,
+                mem_cap,
+                worker_peak / 2**30,
+                main_peak / 2**30,
+            )
+        # Reserve cores for the large groups' kNN fork pool (manifold ≈ 3×
+        # cells: n obs + 2n simulated doublets, ≥25k rows per worker, cap 16
+        # workers). This is machine-independent: derived from the largest
+        # large group and the CPU count, not hard-coded.
+        largest_cells = max((len(i) for i in large_idxs), default=0)
+        knn_reserve = max(1, min(16, math.ceil(largest_cells * 3 / 25000)))
+        small_n_jobs = min(small_n_jobs, mem_cap, max(1, n_cpu - knn_reserve))
+    buckets = None
+    if small_names:
+        # Greedy bin-packing: bucket the small groups by estimated peak so the
+        # per-worker budget tracks the bucket sum, then shrink the bucket count
+        # until every bucket fits the available budget.
+        peaks = [_run_peak(len(i)) for i in small_idxs]
+        while True:
+            buckets = _greedy_buckets(peaks, small_n_jobs)
+            if avail is None or small_n_jobs <= 1:
+                break
+            max_bucket = max((sum(peaks[gi] for gi in b) for b in buckets if b), default=0)
+            if max_bucket <= avail:
+                break
+            small_n_jobs -= 1
+            log.warning(
+                "  Re-bucketing: largest bucket (~%.1f GiB) exceeds budget, "
+                "reducing workers %d -> %d",
+                max_bucket / 2**30,
+                small_n_jobs + 1,
+                small_n_jobs,
+            )
+
+    small_future = None
+    if small_names:
+        # Overlap: small groups run in the background (loky via a helper thread)
+        # while large groups are processed serially in this (main) process, so
+        # the single-threaded PCA/zscore phases of large groups no longer idle
+        # the remaining cores.
+        small_future = ThreadPoolExecutor(max_workers=1).submit(
+            _run_small_parallel, cfg.raw_h5ad, small_names, small_idxs, buckets, cfg
+        )
     if large_names:
         log.info(
-            "  Large groups (%s) — processing serially",
+            "  Large groups (%s) — processing serially, small groups in parallel (n_jobs=%d)",
             ", ".join(f"{n}({len(i)} cells)" for n, i in zip(large_names, large_idxs)),
+            small_n_jobs,
         )
-    for name, idx in zip(large_names, large_idxs):
-        sub = _extract_subset(adata, idx)
-        results.append(run_scrublet_sample(sub, name, cfg))
-        del sub  # release early
-
-    if small_names:
-        n_jobs = min(cfg.execution.n_jobs or os.cpu_count() or 1, len(small_names))
-        budget = _MP_MEM_BUDGET_BYTES or resolve_memory_budget_bytes(cfg.execution.memory_limit)
-        if budget > 0:
-            # Calibrated per-worker peak: ~0.8 GiB base + ~40 MiB per 1k cells
-            # (extracted subset + Scrublet manifold + kNN result matrix).
-            # Keep workers within 70% of the budget so the main process
-            # (backed file handles, result assembly) keeps headroom.
-            n_largest = max(len(i) for i in small_idxs)
-            per_worker = int(0.8 * 2**30 + n_largest * 40 * 2**20 / 1000)
-            mem_cap = max(1, int(budget * 0.7) // per_worker)
-            if mem_cap < n_jobs:
-                log.warning(
-                    "  Parallel sample workers capped by memory budget: %d -> %d ",
-                    "(~%.1f GiB/worker x %d, budget ~%.1f GiB). Adjust ",
-                    "scrublet.serial_threshold or execution.memory_limit if needed.",
-                    n_jobs,
-                    mem_cap,
-                    per_worker / 2**30,
-                    n_jobs,
-                    budget / 2**30,
-                )
-            n_jobs = min(n_jobs, mem_cap)
-        small_results = Parallel(n_jobs=n_jobs)(
-            delayed(run_scrublet_sample)(_extract_subset(adata, idx), name, cfg)
-            for name, idx in zip(small_names, small_idxs)
-        )
-        results.extend(small_results)
+        # Hand remaining cores to the small-group workers; the kNN fork pool is
+        # capped below the CPU count while the background pool is active.
+        _MP_KNN_NJOBS = max(1, min(n_cpu - small_n_jobs, 16))
+        for i, (name, idx) in enumerate(zip(large_names, large_idxs)):
+            sub = _extract_subset(adata, idx)
+            results[i] = run_scrublet_sample(sub, name, cfg)
+            del sub  # release early
+    if small_future is not None:
+        for bucket_res in small_future.result():
+            for gi, scores, pred in bucket_res:
+                results[len(large_names) + gi] = (scores, pred)
     all_scores = np.zeros(adata.n_obs)
     all_pred = np.zeros(adata.n_obs, dtype=bool)
     all_names = large_names + small_names
@@ -351,6 +529,7 @@ def main():
     log = setup_logger("01_doublet", os.path.join(cfg.log_dir, "01_doublet.log"))
     log.info("Step 01a: Scrublet doublet detection")
     _install_knn_mp_patch(cfg)
+    _install_zscore_patch()
 
     # Use backed mode — only load one sample group into memory at a time.
     # The raw_h5ad for large datasets (1M+ cells) occupies ~56 GiB uncompressed;
