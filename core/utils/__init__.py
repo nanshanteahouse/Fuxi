@@ -101,6 +101,7 @@ from core.utils._config import (  # noqa: F401
     _find_dataset_yaml,
     _validate_species,
     resolve_config,
+    resolve_memory_budget_bytes,
 )
 from core.utils._cross_modality import (  # noqa: F401
     find_rna_h5ad,

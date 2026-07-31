@@ -9,8 +9,11 @@ Step 01a: Scrublet 双细胞检测 (per sample, joblib 并行)
 """
 
 import argparse
+import math
+import multiprocessing
 import os
 import sys
+import tempfile
 import time
 import warnings
 
@@ -19,7 +22,113 @@ import numpy as np
 import scanpy as sc
 from joblib import Parallel, delayed
 
-from core.utils import resolve_config, setup_logger
+from core.utils import resolve_config, resolve_memory_budget_bytes, setup_logger
+
+# ── Multiprocess ANN kNN patch (Scrublet approx mode) ──
+# Annoy's get_nns_by_item holds the GIL, so threads cannot parallelize it.
+# We monkey-patch scrublet's get_knn_graph: the main process builds the index
+# once, saves it to a temp file, and fork workers each load a copy to query
+# a row block. Results are identical because index + query params are
+# deterministic. Parallelism only kicks in for large manifolds (>50k rows)
+# and only outside loky workers (no nested fork).
+
+_MP_KNN_NJOBS = 1
+_MP_KNN_ORIGINAL = None
+_MP_MEM_BUDGET_BYTES = 0  # 0 = no budget (unlimited)
+
+
+def _annoy_query_block(path, npc, metric, k, i0, i1):
+    from annoy import AnnoyIndex
+
+    idx = AnnoyIndex(npc, metric=metric)
+    idx.load(path)
+    knn = np.zeros((i1 - i0, k), dtype=np.int32)
+    for i in range(i0, i1):
+        knn[i - i0] = idx.get_nns_by_item(i, k + 1)[1:]
+    return knn
+
+
+def _get_knn_graph_mp(
+    x, k=5, dist_metric="euclidean", approx=False, return_edges=True, random_seed=0
+):
+    if not approx:
+        return _MP_KNN_ORIGINAL(x, k, dist_metric, approx, return_edges, random_seed)
+    if dist_metric == "cosine":
+        dist_metric = "angular"
+    n, npc = x.shape
+    if (
+        _MP_KNN_NJOBS <= 1
+        or n <= 50000
+        or multiprocessing.current_process().name.startswith("SpawnProcess")
+    ):
+        return _MP_KNN_ORIGINAL(x, k, dist_metric, approx, return_edges, random_seed)
+
+    n_jobs = min(_MP_KNN_NJOBS, max(1, math.ceil(n / 25000)))
+    if _MP_MEM_BUDGET_BYTES > 0:
+        # ~25 B/point/tree with 10 trees; + kNN result matrix + 2 GiB headroom
+        index_bytes = n * 10 * 25
+        knn_bytes = n * (k + 1) * 4
+        headroom = 2 * 2**30
+        mem_cap = max(1, (_MP_MEM_BUDGET_BYTES - knn_bytes - headroom) // max(index_bytes, 1))
+        if mem_cap < n_jobs:
+            warnings.warn(
+                f"kNN parallelism capped by memory budget: {n_jobs} -> {mem_cap} workers "
+                f"(index ~{index_bytes / 2**20:.0f} MiB x workers, knn matrix ~{knn_bytes / 2**20:.0f} MiB)"
+            )
+        n_jobs = min(n_jobs, mem_cap)
+    if n_jobs <= 1:
+        return _MP_KNN_ORIGINAL(x, k, dist_metric, approx, return_edges, random_seed)
+
+    fd, tmp_path = tempfile.mkstemp(suffix=".annoy")
+    os.close(fd)
+    try:
+        from annoy import AnnoyIndex
+
+        idx = AnnoyIndex(npc, metric=dist_metric)
+        idx.set_seed(random_seed)
+        for i in range(n):
+            idx.add_item(i, list(x[i]))
+        idx.build(10)
+        idx.save(tmp_path)
+        del idx
+
+        n_jobs = min(_MP_KNN_NJOBS, max(1, math.ceil(n / 25000)))
+        edges = np.linspace(0, n, n_jobs + 1).astype(int)
+        blocks = [
+            (tmp_path, npc, dist_metric, k, int(edges[i]), int(edges[i + 1]))
+            for i in range(n_jobs)
+        ]
+        ctx = multiprocessing.get_context("fork")
+        with ctx.Pool(n_jobs) as pool:
+            parts = pool.starmap(_annoy_query_block, blocks)
+        knn = np.vstack(parts).astype(int)
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+    if return_edges:
+        links = set()
+        for i in range(knn.shape[0]):
+            for j in knn[i]:
+                links.add(tuple(sorted((i, j))))
+        return links, knn
+    return knn
+
+
+def _install_knn_mp_patch(cfg):
+    """Replace scrublet's approx kNN query with the multiprocess version."""
+    global _MP_KNN_NJOBS, _MP_KNN_ORIGINAL, _MP_MEM_BUDGET_BYTES
+    import scrublet.helper_functions as _hf
+    import scrublet.scrublet as _scr
+
+    if _MP_KNN_ORIGINAL is None:
+        _MP_KNN_ORIGINAL = _hf.get_knn_graph
+    _MP_KNN_NJOBS = min(cfg.execution.n_jobs or os.cpu_count() or 1, 16)
+    _MP_MEM_BUDGET_BYTES = resolve_memory_budget_bytes(cfg.execution.memory_limit)
+    _hf.get_knn_graph = _get_knn_graph_mp
+    _scr.get_knn_graph = _get_knn_graph_mp
 
 
 def _resolve_doublet_rate(cfg, n_cells: int) -> float:
@@ -224,6 +333,7 @@ def main():
     cfg = resolve_config(args.config)
     log = setup_logger("01_doublet", os.path.join(cfg.log_dir, "01_doublet.log"))
     log.info("Step 01a: Scrublet doublet detection")
+    _install_knn_mp_patch(cfg)
 
     # Use backed mode — only load one sample group into memory at a time.
     # The raw_h5ad for large datasets (1M+ cells) occupies ~56 GiB uncompressed;
