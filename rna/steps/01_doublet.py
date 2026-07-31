@@ -169,6 +169,7 @@ def run_scrublet_sample(adata_sub, sample_name, cfg):
             min_cells=cfg.scrublet.min_cells,
             min_gene_variability_pctl=cfg.scrublet.min_gene_var_pctl,
             n_prin_comps=cfg.scrublet.n_prin_comps,
+            svd_solver=cfg.scrublet.svd_solver,
         )
         if predicted is None:
             fallback = expected_rate
