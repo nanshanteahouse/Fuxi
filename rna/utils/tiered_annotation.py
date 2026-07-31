@@ -102,6 +102,7 @@ def _build_evidence(
     cluster_genes: set[str],
     kb_lookup: dict[str, Any],
     available_subtypes: list[str],
+    subtype_candidates: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Assemble the evidence metadata dict for the chosen label."""
     entry = kb_lookup.get(type_key, {})
@@ -116,7 +117,29 @@ def _build_evidence(
         "n_sources": n_sources,
         "private_markers_hit": pm_hits,
         "available_subtypes": available_subtypes,
+        "subtype_candidates": subtype_candidates,
     }
+
+
+def format_subtype_candidates(candidates: list[dict[str, Any]]) -> str:
+    """Render near-miss subtype candidates as ``name:score[gates]`` entries.
+
+    Entries are ``; ``-joined with the score rounded to 2dp. Brackets are
+    omitted entirely when ``failed_gates`` is empty (a winning subtype renders
+    e.g. ``RGC_Foxp2:0.58``). An empty input list renders the empty string.
+    """
+    if not candidates:
+        return ""
+    parts: list[str] = []
+    for cand in candidates:
+        name = cand["type"]
+        score = f"{cand['score']:.2f}"
+        gates = cand.get("failed_gates", [])
+        if gates:
+            parts.append(f"{name}:{score}[{','.join(gates)}]")
+        else:
+            parts.append(f"{name}:{score}")
+    return "; ".join(parts)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -169,7 +192,8 @@ def resolve_tiered_label(
     (label, evidence) : tuple
         *label* is an L2 type (always) or an L3 subtype (when resolved).
         *evidence* carries ``tier``, ``subtype_resolution``, ``consensus``,
-        ``n_sources``, ``private_markers_hit``, ``available_subtypes``.
+        ``n_sources``, ``private_markers_hit``, ``available_subtypes``,
+        ``subtype_candidates``.
         Empty *label* signals the caller to mark the cluster Unknown.
     """
     cluster_genes = set(cluster_top_genes)
@@ -196,6 +220,7 @@ def resolve_tiered_label(
             "n_sources": 0,
             "private_markers_hit": 0,
             "available_subtypes": [],
+            "subtype_candidates": [],
         }
 
     # ── 3. Best L2 by score ─────────────────────────────────────────────
@@ -208,36 +233,61 @@ def resolve_tiered_label(
     if not available:
         # L2 has no subtypes in the KB — "na" (no capacity to subdivide).
         return best_l2_key, _build_evidence(
-            best_l2_key, "L2", "na", cluster_genes, kb_lookup, available
+            best_l2_key, "L2", "na", cluster_genes, kb_lookup, available, []
         )
 
     # ── 4. Gate each L3 subtype of best L2 ──────────────────────────────
+    # Each subtype's gates A/B/C are evaluated INDEPENDENTLY and every failed
+    # gate is recorded; an empty ``failed_gates`` list means all three passed.
     best_subtype: str | None = None
     best_subtype_score = -1.0
+    subtype_candidates: list[dict[str, Any]] = []
     for sub_key, sub_sc in l3_scores_by_parent.get(best_l2_key, {}).items():
+        failed_gates: list[str] = []
         # Gate A: score proximity + floor.
-        if sub_sc.score < best_l2_score - subtype_delta:
-            continue
-        if sub_sc.score < min_score:
-            continue
+        if sub_sc.score < best_l2_score - subtype_delta or sub_sc.score < min_score:
+            failed_gates.append("A")
         # Gate B: at least one private marker hit.
-        if not (_private_markers_of(sub_key, kb_lookup) & cluster_genes):
-            continue
+        private_markers = _private_markers_of(sub_key, kb_lookup)
+        pm_hits = len(private_markers & cluster_genes)
+        if not pm_hits:
+            failed_gates.append("B")
         # Gate C: best consensus among hit private markers >= floor.
         pm_consensus = _best_consensus_among_private(sub_key, cluster_genes, kb_lookup)
         if _CONSENSUS_RANK.get(pm_consensus, 0) < floor_rank:
-            continue
+            failed_gates.append("C")
+        subtype_candidates.append(
+            {
+                "type": sub_key,
+                "score": sub_sc.score,
+                "failed_gates": failed_gates,
+                "private_markers_hit": pm_hits,
+            }
+        )
         # All gates passed — pick the highest-scoring qualifying subtype.
-        if sub_sc.score > best_subtype_score:
+        if not failed_gates and sub_sc.score > best_subtype_score:
             best_subtype = sub_key
             best_subtype_score = sub_sc.score
+    subtype_candidates.sort(key=lambda c: c["score"], reverse=True)
 
     # ── 5. Emit decision ────────────────────────────────────────────────
     if best_subtype is not None:
         return best_subtype, _build_evidence(
-            best_subtype, "L3", "resolved", cluster_genes, kb_lookup, available
+            best_subtype,
+            "L3",
+            "resolved",
+            cluster_genes,
+            kb_lookup,
+            available,
+            subtype_candidates,
         )
     # No subtype passed all gates — L2 unresolved.
     return best_l2_key, _build_evidence(
-        best_l2_key, "L2", "unresolved", cluster_genes, kb_lookup, available
+        best_l2_key,
+        "L2",
+        "unresolved",
+        cluster_genes,
+        kb_lookup,
+        available,
+        subtype_candidates,
     )

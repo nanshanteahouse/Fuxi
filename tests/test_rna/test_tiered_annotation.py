@@ -1,7 +1,7 @@
 """Tests for rna/utils/tiered_annotation.py - hierarchical label resolution."""
 
 from core.annotation.scoring import Score
-from rna.utils.tiered_annotation import resolve_tiered_label
+from rna.utils.tiered_annotation import format_subtype_candidates, resolve_tiered_label
 
 
 def _s(score: float) -> Score:
@@ -187,3 +187,119 @@ class TestResolveTieredLabel:
         )
         assert label == "RGC_Foxp2"
         assert ev["subtype_resolution"] == "resolved"
+
+    def test_subtype_candidates_present_on_resolved_winner(self) -> None:
+        """Winner (looked up by type, not [0]) has failed_gates=[]; sorted desc."""
+        scores = {
+            "Broad_Neuron": _s(0.7),
+            "RGC": _s(0.60),
+            "RGC_Foxp2": _s(0.58),  # passes all gates
+            "RGC_Alpha": _s(0.62),  # higher score but _private_markers=[] → gate B fails
+        }
+        label, ev = resolve_tiered_label(scores, HIERARCHY, _kb_lookup(), ["FOXP2", "RBPMS"])
+        assert label == "RGC_Foxp2"
+        cands = ev["subtype_candidates"]
+        # All scored L3s of the best L2 present, sorted by score descending.
+        assert [c["type"] for c in cands] == ["RGC_Alpha", "RGC_Foxp2"]
+        assert [c["score"] for c in cands] == [0.62, 0.58]
+        # Winner entry: failed_gates == [] and private-marker hits recorded.
+        winner = next(c for c in cands if c["type"] == "RGC_Foxp2")
+        assert winner["failed_gates"] == []
+        assert winner["private_markers_hit"] == 1
+        # Higher-scoring gate-failing subtype occupies index 0 and carries its failure.
+        alpha = cands[0]
+        assert alpha["type"] == "RGC_Alpha"
+        assert "B" in alpha["failed_gates"]
+        assert alpha["private_markers_hit"] == 0
+
+    def test_subtype_candidates_gate_a_fail(self) -> None:
+        """Score too far below L2 → gate A recorded as failed."""
+        scores = {
+            "RGC": _s(0.60),
+            "RGC_Foxp2": _s(0.40),  # 0.40 < 0.52 → gate A fails
+        }
+        label, ev = resolve_tiered_label(scores, HIERARCHY, _kb_lookup(), ["FOXP2"])
+        assert label == "RGC"
+        cands = ev["subtype_candidates"]
+        assert len(cands) == 1
+        assert cands[0]["type"] == "RGC_Foxp2"
+        assert cands[0]["failed_gates"] == ["A"]
+
+    def test_subtype_candidates_gate_b_fail(self) -> None:
+        """Private marker absent from cluster genes → gate B recorded as failed."""
+        scores = {
+            "RGC": _s(0.60),
+            "RGC_Foxp2": _s(0.58),
+        }
+        # FOXP2 NOT in cluster genes → gate B fails (and gate C too, no hit markers).
+        label, ev = resolve_tiered_label(scores, HIERARCHY, _kb_lookup(), ["RBPMS"])
+        assert label == "RGC"
+        cands = ev["subtype_candidates"]
+        assert cands[0]["type"] == "RGC_Foxp2"
+        assert "B" in cands[0]["failed_gates"]
+
+    def test_subtype_candidates_gate_c_fail(self) -> None:
+        """Consensus below floor → gate C recorded as failed."""
+        scores = {
+            "RGC": _s(0.60),
+            "RGC_Foxp2": _s(0.58),
+        }
+        kb = _kb_lookup(foxp2_consensus="low")  # FOXP2 low < medium floor
+        label, ev = resolve_tiered_label(scores, HIERARCHY, kb, ["FOXP2"])
+        assert label == "RGC"
+        cands = ev["subtype_candidates"]
+        assert cands[0]["type"] == "RGC_Foxp2"
+        assert cands[0]["failed_gates"] == ["C"]
+
+    def test_subtype_candidates_empty_when_l2_has_no_subtypes(self) -> None:
+        """L2 without KB subtypes → subtype_candidates == [] (na path)."""
+        scores = {
+            "Broad_Neuron": _s(0.7),
+            "Amacrine_Cell": _s(0.6),
+            "RGC": _s(0.5),
+        }
+        label, ev = resolve_tiered_label(scores, HIERARCHY, _kb_lookup(), ["GAD1"])
+        assert label == "Amacrine_Cell"
+        assert ev["subtype_candidates"] == []
+
+    def test_subtype_candidates_empty_when_no_l2_candidate(self) -> None:
+        """No L2 candidate → inline dict path carries empty subtype_candidates."""
+        scores = {
+            "Broad_Neuron": _s(0.7),
+            "RGC_Foxp2": _s(0.58),
+        }
+        label, ev = resolve_tiered_label(scores, HIERARCHY, _kb_lookup(), ["FOXP2"])
+        assert label == ""
+        assert ev["subtype_candidates"] == []
+
+    def test_subtype_candidates_empty_when_none_scored(self) -> None:
+        """L2 subtypes exist in KB but none scored → candidates [] while available non-empty."""
+        scores = {
+            "RGC": _s(0.60),
+            # RGC_Foxp2 / RGC_Alpha not scored
+        }
+        label, ev = resolve_tiered_label(scores, HIERARCHY, _kb_lookup(), ["RBPMS"])
+        assert label == "RGC"
+        assert ev["subtype_resolution"] == "unresolved"
+        assert ev["subtype_candidates"] == []
+        assert len(ev["available_subtypes"]) == 2  # RGC_Foxp2, RGC_Alpha
+
+
+class TestFormatSubtypeCandidates:
+    def test_joins_entries_with_gates(self) -> None:
+        cands = [
+            {"type": "RGC_Foxp2", "score": 0.58, "failed_gates": ["B", "C"]},
+            {"type": "RGC_Alpha", "score": 0.55, "failed_gates": ["C"]},
+        ]
+        assert format_subtype_candidates(cands) == "RGC_Foxp2:0.58[B,C]; RGC_Alpha:0.55[C]"
+
+    def test_winner_omits_brackets(self) -> None:
+        cands = [{"type": "RGC_Foxp2", "score": 0.58, "failed_gates": []}]
+        assert format_subtype_candidates(cands) == "RGC_Foxp2:0.58"
+
+    def test_empty_input(self) -> None:
+        assert format_subtype_candidates([]) == ""
+
+    def test_score_rounded_to_2dp(self) -> None:
+        cands = [{"type": "RGC_Foxp2", "score": 0.577, "failed_gates": []}]
+        assert format_subtype_candidates(cands) == "RGC_Foxp2:0.58"
