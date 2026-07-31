@@ -106,12 +106,22 @@ def auto_writeback(sub, cell_type, main_path, log=None, cfg=None):
     main.obs["cell_subtype"] = main.obs["cell_subtype"].astype(str)
 
     sub_labels = sub.obs["sub_ai_label"].astype(str)
+    # Plan todo 7 / decision D6: NEVER destroy an already-resolved subtype label.
+    # Only overwrite cells whose current cell_subtype is unresolved ("unresolved"/"N/A"),
+    # missing (bootstrapped above as a copy of cell_type), or still equal to the
+    # parent cell_type (unresolved parent-copy). Any other value is a Step-05
+    # resolved label and must be preserved — so a second Step 06 run over an
+    # already-resolved file is a no-op (n_updated=0 → no sentinel, INTENDED).
+    _overridable = {"unresolved", "N/A"}
     n_updated = 0
     for bc, label in sub_labels.items():
         if bc not in main.obs_names:
             continue
         if main.obs.at[bc, "cell_type"] != cell_type:
             continue
+        current = main.obs.at[bc, "cell_subtype"]
+        if current not in _overridable and current != main.obs.at[bc, "cell_type"]:
+            continue  # already a resolved subtype label — preserve it
         main.obs.at[bc, "cell_subtype"] = label
         n_updated += 1
 

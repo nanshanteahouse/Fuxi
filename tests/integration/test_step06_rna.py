@@ -107,6 +107,7 @@ def _create_synthetic_annotated_h5ad(
     n_types: int = 2,
     *,
     include_cell_type: bool = True,
+    cell_subtype: str | None = None,
 ) -> None:
     """Create a minimal AnnData that mimics 05_annotated.h5ad and write to *path*."""
     import numpy as np
@@ -120,6 +121,14 @@ def _create_synthetic_annotated_h5ad(
     )
     if include_cell_type:
         adata.obs["cell_type"] = pd.Categorical([f"Type_{i % n_types}" for i in range(n_cells)])
+
+    if cell_subtype is not None:
+        # Plan todo 7 fixture: a pre-existing cell_subtype column with MIXED
+        # values so per-type writeback sees BOTH classes (resolved labels to
+        # preserve + "unresolved" cells that may be overwritten). Pattern i % 4
+        # yields ~50/50 resolved/unresolved within EVERY cell_type.
+        subtypes = ["RGC_Foxp2" if i % 4 in (1, 2) else "unresolved" for i in range(n_cells)]
+        adata.obs["cell_subtype"] = pd.Categorical(subtypes)
     path.parent.mkdir(parents=True, exist_ok=True)
     adata.write(str(path))
     del adata
@@ -430,9 +439,17 @@ class TestStep06Writeback:
     """Function-level tests for auto_writeback's obs write path (Item 1.3)."""
 
     @staticmethod
-    def _make_main(tmp_path: Path, n_cells: int = 60, n_genes: int = 50):
+    def _make_main(
+        tmp_path: Path, n_cells: int = 60, n_genes: int = 50, cell_subtype: str | None = None
+    ):
         path = tmp_path / "results" / "h5ad" / "05_annotated.h5ad"
-        _create_synthetic_annotated_h5ad(path, n_cells=n_cells, n_genes=n_genes, n_types=2)
+        _create_synthetic_annotated_h5ad(
+            path,
+            n_cells=n_cells,
+            n_genes=n_genes,
+            n_types=2,
+            cell_subtype=cell_subtype,
+        )
         import scanpy as sc
 
         return path, sc.read(str(path))
@@ -535,6 +552,62 @@ class TestStep06Writeback:
         assert n == 0
         mock_inplace.assert_not_called()
         mock_safe.assert_not_called()
+
+    def test_writeback_preserves_resolved_subtype_labels(self, tmp_path: Path) -> None:
+        """Plan todo 7 / decision D6: resolved cell_subtype survives; only unresolved cells overwritten."""
+        mod = _load_step06_module()
+        main_path, before = self._make_main(tmp_path, cell_subtype="mixed")
+        sub = self._make_sub(before)
+
+        # Classify Type_0 barcodes from the pre-writeback column.
+        before_sub = (
+            before.obs.loc[sub.obs_names.astype(str), "cell_subtype"].astype(str).to_dict()
+        )
+        resolved_bcs = [bc for bc, v in before_sub.items() if v not in ("unresolved", "N/A")]
+        unresolved_bcs = [bc for bc, v in before_sub.items() if v == "unresolved"]
+        assert resolved_bcs and unresolved_bcs, "mixed fixture must contain both classes"
+
+        n = mod.auto_writeback(
+            sub, "Type_0", str(main_path), log=None, cfg=_DuckCfg(incremental_io=True)
+        )
+        # n_updated counts ONLY overwritten (unresolved) cells.
+        assert n == len(unresolved_bcs), f"expected {len(unresolved_bcs)} updated, got {n}"
+
+        import scanpy as sc
+
+        after = sc.read(str(main_path))
+        after_sub = after.obs["cell_subtype"].astype(str).to_dict()
+        # (a) resolved cells KEEP their value after writeback.
+        for bc in resolved_bcs:
+            assert after_sub[bc] == before_sub[bc], f"resolved label for {bc} was overwritten"
+        # (b) unresolved cells get the new sub_ai_label.
+        expected = sub.obs["sub_ai_label"].astype(str).to_dict()
+        for bc in unresolved_bcs:
+            assert after_sub[bc] == expected[bc], f"unresolved cell {bc} did not get sub_ai_label"
+
+    def test_writeback_missing_column_bootstraps_and_overwrites(self, tmp_path: Path) -> None:
+        """(c) Missing cell_subtype → bootstrap (copy of cell_type) → parent-copy cells ARE overwritten."""
+        mod = _load_step06_module()
+        main_path, before = self._make_main(tmp_path)  # no cell_subtype column
+        assert "cell_subtype" not in before.obs
+        sub = self._make_sub(before)
+
+        n = mod.auto_writeback(
+            sub, "Type_0", str(main_path), log=None, cfg=_DuckCfg(incremental_io=True)
+        )
+        assert n == sub.n_obs, (
+            f"all bootstrapped (parent-copy) cells should be overwritten, got {n}"
+        )
+        import scanpy as sc
+
+        after = sc.read(str(main_path))
+        got = (
+            after.obs.loc[sub.obs_names.astype(str), "cell_subtype"]
+            .astype(str)
+            .to_numpy()
+            .tolist()
+        )
+        assert got == sub.obs["sub_ai_label"].astype(str).to_numpy().tolist()
 
 
 # ── Test: sentinel contract (Item 1.6) ─────────────────────────────────
