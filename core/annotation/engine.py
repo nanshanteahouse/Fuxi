@@ -635,6 +635,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
 
     # ── Tiered annotation: enforce cell_type=L2, L3→cell_subtype ─────
     tiered_subtypes: dict[str, str] = {}
+    tiered_candidates: dict[str, list] = {}
     if "_hierarchy" in kb and kb.get("_hierarchy", {}).get("categories"):
         from core.annotation.scoring import _build_kb_lookup
         from rna.utils.tiered_annotation import _build_subtype_map, resolve_tiered_label
@@ -647,6 +648,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
             _label, _ev = resolve_tiered_label(
                 _scores, _hierarchy, _kb_lookup, all_top_genes.get(cl_str, [])
             )
+            tiered_candidates[cl_str] = _ev.get("subtype_candidates", [])
             # Force fusion cell_type to its L2 ancestor.
             _ct = decision_map[cl_str].cell_type
             while _ct in _subtype_map:
@@ -700,6 +702,13 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
     adata.obs["annot_reasoning"] = leiden_str.map(
         {k: v.explanation for k, v in decision_map.items()}
     )
+    # ── Persist tiered near-miss subtype candidates (additive, backward compatible) ──
+    # Lazily imported here — a module-top import would create a static
+    # core/ → rna/utils dependency (the JSON/CSV blocks are OUTSIDE the
+    # tiered block where the other tiered helpers are imported).
+    if tiered_candidates:
+        from rna.utils.tiered_annotation import format_subtype_candidates
+
     adata.obs["annot_evidence"] = leiden_str.map(
         {
             k: json.dumps(
@@ -718,6 +727,11 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
                     "subtype_resolution": v.subtype_resolution,
                     "cell_subtype": tiered_subtypes.get(k, "N/A"),
                 }
+                | (
+                    {"subtype_candidates": tiered_candidates.get(k, [])}
+                    if tiered_candidates
+                    else {}
+                )
             )
             for k, v in decision_map.items()
         }
@@ -731,26 +745,29 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
 
     for cl_name in sorted(decision_map.keys(), key=sort_key):
         d = decision_map[cl_name]
-        ann_records.append(
-            {
-                "cluster": cl_name,
-                "cell_type": d.cell_type,
-                "confidence": d.confidence,
-                "method": _clean_method(d),
-                "score": d.score,
-                "n_markers_found": d.n_markers_found,
-                "ai_agreed": d.ai_agreed,
-                "ai_suggested": d.ai_suggested,
-                "reasoning": d.explanation,
-                "diagnostic_category": d.diagnostic.category if d.diagnostic else "",
-                "cell_category": cell_category_map.get(str(cl_name), ""),
-                "cell_subtype": tiered_subtypes.get(str(cl_name), "N/A"),
-                "tier": d.tier,
-                "consensus": d.consensus,
-                "n_sources": d.n_sources,
-                "subtype_resolution": d.subtype_resolution,
-            }
-        )
+        record = {
+            "cluster": cl_name,
+            "cell_type": d.cell_type,
+            "confidence": d.confidence,
+            "method": _clean_method(d),
+            "score": d.score,
+            "n_markers_found": d.n_markers_found,
+            "ai_agreed": d.ai_agreed,
+            "ai_suggested": d.ai_suggested,
+            "reasoning": d.explanation,
+            "diagnostic_category": d.diagnostic.category if d.diagnostic else "",
+            "cell_category": cell_category_map.get(str(cl_name), ""),
+            "cell_subtype": tiered_subtypes.get(str(cl_name), "N/A"),
+            "tier": d.tier,
+            "consensus": d.consensus,
+            "n_sources": d.n_sources,
+            "subtype_resolution": d.subtype_resolution,
+        }
+        if tiered_candidates:
+            record["subtype_candidates"] = format_subtype_candidates(
+                tiered_candidates.get(str(cl_name), [])
+            )
+        ann_records.append(record)
     ann_df = pd.DataFrame(ann_records)
     ann_csv = os.path.join(CFG.table_dir, "cell_type_annotations.csv")
     ann_df.to_csv(ann_csv, index=False)
