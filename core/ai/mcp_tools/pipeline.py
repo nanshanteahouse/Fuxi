@@ -143,6 +143,12 @@ _CHECKPOINTS: dict[str, list[str]] = {
         "05_batch_corrected.h5ad",
     ],
 }
+# Sentinel 完成度标记 — 原地写回 / 无产物步骤（mirrors runner.py 的
+# *_{modality}_SENTINEL_FILES，Keep in sync）。这些步骤的锚定 checkpoint 在
+# 更早步骤就已存在，完成度只看 sentinel 文件。
+_SENTINELS: dict[str, dict[int, str]] = {
+    "rna": {6: "05_annotated.h5ad.step06_done", 8: "05_final.h5ad.step08_done"},
+}
 
 
 def _check_checkpoint(h5ad_dir: str, ckpt: str) -> bool:
@@ -155,6 +161,16 @@ def _check_checkpoint(h5ad_dir: str, ckpt: str) -> bool:
 
         return bool(glob_mod.glob(path))
     return os.path.exists(path) and os.path.getsize(path) > 0
+
+
+def _step_completed(h5ad_dir: str, ckpt: str, sentinel: str = "") -> bool | None:
+    """单步完成判定。sentinel 步骤只看 sentinel（锚定文件不可作为完成标志）；
+    否则按 checkpoint 文件。无任何 marker 时返回 None（= no checkpoint）。"""
+    if sentinel:
+        return _check_checkpoint(h5ad_dir, sentinel)
+    if not ckpt:
+        return None
+    return _check_checkpoint(h5ad_dir, ckpt)
 
 
 def register_pipeline_tools(server: MCPServer) -> None:
@@ -284,14 +300,17 @@ def register_pipeline_tools(server: MCPServer) -> None:
         step_statuses = []
         first_incomplete = None
 
+        mod_sentinels = _SENTINELS.get(actual_modality, {})
         for i, (num, _script, desc) in enumerate(steps):
             ckpt = checkpoints[i] if i < len(checkpoints) else ""
-            completed = _check_checkpoint(h5ad_dir, ckpt) if ckpt else None  # None = no checkpoint
+            sentinel = mod_sentinels.get(i)
+            marker = sentinel or ckpt
+            completed = _step_completed(h5ad_dir, ckpt, sentinel)
             step_statuses.append(
                 {
                     "step": int(num),
                     "description": desc,
-                    "checkpoint": ckpt or None,
+                    "checkpoint": marker or None,
                     "status": "completed"
                     if completed
                     else ("pending" if completed is False else "no_checkpoint"),

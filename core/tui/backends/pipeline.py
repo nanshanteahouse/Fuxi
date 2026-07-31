@@ -194,6 +194,7 @@ def get_checkpoint_status(modality: str, h5ad_dir: str) -> list[bool]:
         mod["steps"],
         mod["checkpoints"],
         mod["write_checkpoints"],
+        sentinels=mod["sentinels"],
     )
     n = len(mod["steps"])
     return [i < first_incomplete for i in range(n)]

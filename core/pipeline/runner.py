@@ -95,6 +95,33 @@ RNA_CHECKPOINT_FILES = [
 
 RNA_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5, 11}
 
+# ── Sentinel 完成度标记 (plan h5ad-incremental-io Item 1.6) ─────────
+# 原地写回 / 可能无产物 的步骤不产出新 checkpoint 文件，其锚定文件（如
+# 05_annotated.h5ad）在更早步骤就已存在，不能作为完成标志。改用独立
+# sentinel 文件标记步骤完成。
+#
+# 命名约定: "<base_checkpoint>.step{NN}_done"，与 base checkpoint 放在
+# 同一 h5ad 目录（如 05_annotated.h5ad.step06_done）。
+#
+# 写入方: 步骤脚本自身。runner 以 subprocess 运行步骤、无法访问步骤内部
+# 状态，因此 sentinel 由步骤脚本在成功路径的最后一步创建（内容必须非空，
+# 建议 JSON 或 "done" 文本；空文件视为未完成）。T5/T6 按此约定在
+# 06_subcluster.py / 08_trajectory.py 中写 sentinel。
+#
+# 读取方: find_first_incomplete() 对 sentinel 步骤只看 sentinel 存在性
+# （替代 checkpoint 检查）。
+# 清理方: --cleanup 删除锚定文件时同步删除其 sentinel（_remove_anchored_sentinels）。
+RNA_SENTINEL_FILES = {
+    # step 06 (06_subcluster.py): 原地写回 05_annotated.h5ad，不产新文件
+    # → 以 sentinel 证明完成。注意：无 --cell-type 且未配置 subcluster_types
+    # 时步骤以 exit 2 跳过、不写 sentinel（resume 会从 step 06 重新开始并
+    # 再次跳过，属预期行为）。
+    6: "05_annotated.h5ad.step06_done",
+    # step 08 (08_trajectory.py): CFG.trajectory.save_final_h5ad=False 时不产
+    # 05_final.h5ad → 以 sentinel 证明完成（PAGA/scVelo 分支都要写）。
+    8: "05_final.h5ad.step08_done",
+}
+
 
 # ═══════════════════════════════════════════════════════════════════════
 #  ATAC step registry
@@ -139,6 +166,9 @@ ATAC_CHECKPOINT_FILES = [
 
 ATAC_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 13}
 
+# Sentinel 完成度标记 — ATAC 暂无原地写回/无产物步骤（后续推广时按 RNA 约定补充）。
+ATAC_SENTINEL_FILES: dict[int, str] = {}
+
 
 # ═══════════════════════════════════════════════════════════════════════
 #  Spatial step registry
@@ -181,6 +211,9 @@ SPATIAL_CHECKPOINT_FILES = [
 
 SPATIAL_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5}
 
+# Sentinel 完成度标记 — Spatial 暂无（后续推广时按 RNA 约定补充）。
+SPATIAL_SENTINEL_FILES: dict[int, str] = {}
+
 # ═══════════════════════════════════════════════════════════════════════
 #  Bulk step registry
 # ═══════════════════════════════════════════════════════════════════════
@@ -204,6 +237,9 @@ BULK_CHECKPOINT_FILES = [
 
 BULK_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 5}
 
+# Sentinel 完成度标记 — Bulk 暂无（后续推广时按 RNA 约定补充）。
+BULK_SENTINEL_FILES: dict[int, str] = {}
+
 # ═══════════════════════════════════════════════════════════════════════
 #  Modality dispatch
 # ═══════════════════════════════════════════════════════════════════════
@@ -212,31 +248,47 @@ MODALITY_MAP = {
         "steps": RNA_STEPS,
         "checkpoints": RNA_CHECKPOINT_FILES,
         "write_checkpoints": RNA_STEPS_WRITE_CHECKPOINT,
+        "sentinels": RNA_SENTINEL_FILES,
         "dir": "rna",
     },
     "atac": {
         "steps": ATAC_STEPS,
         "checkpoints": ATAC_CHECKPOINT_FILES,
         "write_checkpoints": ATAC_STEPS_WRITE_CHECKPOINT,
+        "sentinels": ATAC_SENTINEL_FILES,
         "dir": "atac",
     },
     "spatial": {
         "steps": SPATIAL_STEPS,
         "checkpoints": SPATIAL_CHECKPOINT_FILES,
         "write_checkpoints": SPATIAL_STEPS_WRITE_CHECKPOINT,
+        "sentinels": SPATIAL_SENTINEL_FILES,
         "dir": "spatial",
     },
     "bulk": {
         "steps": BULK_STEPS,
         "checkpoints": BULK_CHECKPOINT_FILES,
         "write_checkpoints": BULK_STEPS_WRITE_CHECKPOINT,
+        "sentinels": BULK_SENTINEL_FILES,
         "dir": "bulk",
     },
 }
 
 
-def find_first_incomplete(h5ad_dir: str, steps, checkpoints, write_checkpoints, cfg=None) -> int:
-    """扫描 checkpoint 目录，找到第一个未完成的步骤。"""
+def find_first_incomplete(
+    h5ad_dir: str,
+    steps,
+    checkpoints,
+    write_checkpoints,
+    sentinels=None,
+    cfg=None,
+) -> int:
+    """扫描 checkpoint 目录，找到第一个未完成的步骤。
+
+    sentinel 步骤（见 ``*_SENTINEL_FILES``，如 RNA 的 step 06/08）的完成度
+    只看 sentinel 文件是否存在且非空——其锚定 checkpoint（如 05_annotated.h5ad）
+    在更早步骤就已存在，不能作为完成标志。其余步骤保持原有 checkpoint 判定。
+    """
     if not h5ad_dir:
         logging.getLogger("run_pipeline").warning(
             "find_first_incomplete: h5ad_dir is empty (%r), falling back to current working directory",
@@ -244,7 +296,14 @@ def find_first_incomplete(h5ad_dir: str, steps, checkpoints, write_checkpoints, 
         )
         h5ad_dir = "."
 
+    sentinels = sentinels or {}
+
     for i in range(len(steps)):
+        if i in sentinels:
+            sent = os.path.join(h5ad_dir, sentinels[i])
+            if not os.path.exists(sent) or os.path.getsize(sent) == 0:
+                return i
+            continue
         if i not in write_checkpoints:
             continue
         ckpt = os.path.join(h5ad_dir, checkpoints[i])
@@ -256,6 +315,35 @@ def find_first_incomplete(h5ad_dir: str, steps, checkpoints, write_checkpoints, 
         elif not os.path.exists(ckpt) or os.path.getsize(ckpt) == 0:
             return i
     return len(steps)
+
+
+def _sentinel_base(sentinel_file: str) -> str:
+    """从 sentinel 文件名还原其锚定的 base checkpoint 文件名。
+
+    命名约定: ``"<base_checkpoint>.step{NN}_done"`` → ``"<base_checkpoint>"``
+    （如 ``05_annotated.h5ad.step06_done`` → ``05_annotated.h5ad``）。
+    """
+    return sentinel_file.rsplit(".step", 1)[0]
+
+
+def _remove_anchored_sentinels(h5ad_dir: str, base_file: str, sentinels) -> None:
+    """删除锚定在 ``base_file`` 上的 sentinel 文件（``--cleanup`` 用）。
+
+    base checkpoint 被清理后其 sentinel 失去意义，必须同步删除，避免
+    ``--resume`` 依据 stale sentinel 误判步骤已完成。
+    """
+    if not sentinels:
+        return
+    for sent_file in sentinels.values():
+        if _sentinel_base(sent_file) != base_file:
+            continue
+        sent_path = os.path.join(h5ad_dir, sent_file)
+        try:
+            if os.path.exists(sent_path):
+                os.remove(sent_path)
+                print(f"[run]   Cleaned up: {sent_file}")
+        except OSError:
+            pass
 
 
 def _get_step_dependency(step: int, steps, checkpoints, modality: str = "rna") -> str:
@@ -468,7 +556,12 @@ def main():
     # ── Parse step range ─────────────────────────────────────────────
     if args.resume:
         start = find_first_incomplete(
-            CFG.h5ad_dir, STEPS, CHECKPOINT_FILES, STEPS_WRITE_CHECKPOINT, cfg=CFG
+            CFG.h5ad_dir,
+            STEPS,
+            CHECKPOINT_FILES,
+            STEPS_WRITE_CHECKPOINT,
+            sentinels=mod["sentinels"],
+            cfg=CFG,
         )
         if start >= len(STEPS):
             print("[run] All steps completed.")
@@ -679,6 +772,9 @@ def main():
                         print(f"[run]   Cleaned up: {dep}")
                     except OSError:
                         pass
+                    # 锚定文件被清理 → 同步删除其 sentinel（如有），
+                    # 避免 stale 完成标记误导 --resume。
+                    _remove_anchored_sentinels(CFG.h5ad_dir, dep, mod["sentinels"])
 
         print(f"[run] Step [{num}] completed (took {elapsed:.1f}s).")
         step_times.append((num, desc, elapsed))
