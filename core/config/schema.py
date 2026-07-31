@@ -673,6 +673,8 @@ class AIConfig(BaseModel):
     interpretation: bool = True
     cache_responses: bool = True
     unconstrained_annotation: bool = False
+    subcluster_kb_constrained: bool = True
+    """Constrain Step 06 AI subcluster naming to KB subtype space when a hierarchy exists."""
 
 
 # ═══════════════════════════════════════════════════════════════════════

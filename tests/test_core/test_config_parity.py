@@ -11,6 +11,7 @@ import pytest
 import yaml
 
 from core.config.schema import Config
+from core.utils._config import resolve_config
 
 # ═══════════════════════════════════════════════════════════════════════
 #  Defaults parity
@@ -475,3 +476,26 @@ class TestConfigEdgeCases:
         """Empty tissue_kb is accepted."""
         cfg = Config(tissue_kb="")
         assert cfg.tissue_kb == ""
+
+
+class TestAIConfigSubclusterKbConstrained:
+    """ai.subcluster_kb_constrained — Step 06 KB-constrained subtype naming flag."""
+
+    def test_absent_defaults_to_true(self) -> None:
+        """Key absent from YAML → default True."""
+        cfg = Config()
+        assert cfg.ai.subcluster_kb_constrained is True
+
+    def test_yaml_false_round_trips(self, tmp_path) -> None:
+        """YAML ai.subcluster_kb_constrained: false parses and round-trips via resolve_config."""
+        cfg_path = tmp_path / "config_t4.yaml"
+        cfg_path.write_text("modality: rna\nai:\n  subcluster_kb_constrained: false\n")
+        cfg = resolve_config(str(cfg_path))
+        assert cfg.ai.subcluster_kb_constrained is False
+
+    def test_yaml_true_round_trips(self, tmp_path) -> None:
+        """Explicit YAML true value survives round-trip."""
+        cfg_path = tmp_path / "config_t4.yaml"
+        cfg_path.write_text("modality: rna\nai:\n  subcluster_kb_constrained: true\n")
+        cfg = resolve_config(str(cfg_path))
+        assert cfg.ai.subcluster_kb_constrained is True
