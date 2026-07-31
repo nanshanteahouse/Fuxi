@@ -41,8 +41,17 @@ def run_scrublet_sample(adata_sub, sample_name, cfg):
         import scrublet as scr
 
         expected_rate = _resolve_doublet_rate(cfg, adata_sub.n_obs)
+        x_mat = adata_sub.X
+        if not isinstance(x_mat, sp.spmatrix):
+            if hasattr(x_mat, "to_memory"):
+                # Backed AnnData (e.g. "all" branch): _CSRDataset is not a scipy
+                # matrix and np.asarray() on it yields an object array, which
+                # crashes sp.csr_matrix() → Scrublet silently returned all zeros.
+                x_mat = x_mat.to_memory()
+            else:
+                x_mat = sp.csr_matrix(x_mat)
         scrub = scr.Scrublet(
-            adata_sub.X if isinstance(adata_sub.X, sp.spmatrix) else sp.csr_matrix(adata_sub.X),
+            x_mat,
             expected_doublet_rate=expected_rate,
             random_state=cfg.execution.random_seed,
         )
