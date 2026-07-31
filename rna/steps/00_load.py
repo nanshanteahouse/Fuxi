@@ -168,7 +168,7 @@ def main():
 
         # 解析 barcode 后缀 → 样本/阶段映射
         if cfg.has_sample_mapping() or cfg.has_stage_mapping():
-            bc_suffix = adata.obs_names.to_series().str.extract(r"-(\d+)$")[0].astype(int)
+            bc_suffix = adata.obs_names.to_series().str.extract(r"-(\d+)$")[0].astype(str)
             if cfg.has_sample_mapping():
                 adata.obs["sample"] = bc_suffix.map(cfg.sample_meta.sample_map).values
             if cfg.has_stage_mapping():
@@ -605,6 +605,32 @@ def main():
     else:
         log.error("Unknown data_format: %s", cfg.data_format)
         sys.exit(1)
+
+    # ── Apply stage_map from 'sample' column (all formats, non-destructive) ──
+    # The 10X MTX branch already creates 'stage' from barcode suffix;
+    # this covers h5ad, csv_matrix, preprocessed, and 10X_h5 where
+    # 'stage' doesn't exist yet but 'sample' column + stage_map are available.
+    if cfg.has_stage_mapping() and "stage" not in adata.obs.columns:
+        if "sample" in adata.obs.columns:
+            adata.obs["stage"] = adata.obs["sample"].astype(str).map(cfg.sample_meta.stage_map)
+            n_mapped = adata.obs["stage"].notna().sum()
+            log.info(
+                "Stage mapping applied: %d/%d cells assigned a stage",
+                n_mapped,
+                adata.n_obs,
+            )
+            if n_mapped == 0:
+                log.warning(
+                    "0 cells matched stage_map — check stage_map keys match 'sample' column values"
+                )
+            if cfg.sample_meta.stage_order:
+                adata.obs["stage"] = pd.Categorical(
+                    adata.obs["stage"],
+                    categories=cfg.sample_meta.stage_order,
+                    ordered=True,
+                )
+        else:
+            log.warning("has_stage_mapping but no 'sample' column in obs; stage not assigned")
 
     # ── 统一稀疏格式: CSR (行优先) ──
     # Handle backed mode before CSR conversion

@@ -94,7 +94,7 @@ def detect_doublets_parallel(adata, cfg, log):
         log.info("Scrublet disabled, skipping doublet detection.")
         adata.obs["doublet_scores"] = 0.0
         adata.obs["predicted_doublet"] = False
-        return
+        return adata.obs["doublet_scores"].values, adata.obs["predicted_doublet"].values
 
     if cfg.expression_type != "raw_counts":
         _policy = cfg.scrublet.on_non_counts
@@ -116,7 +116,7 @@ def detect_doublets_parallel(adata, cfg, log):
         # skip_silent: no log message
         adata.obs["doublet_scores"] = 0.0
         adata.obs["predicted_doublet"] = False
-        return
+        return adata.obs["doublet_scores"].values, adata.obs["predicted_doublet"].values
 
     log.info("Running Scrublet (per sample, parallel)...")
     configured_key = cfg.scrublet.batch_key
@@ -137,7 +137,7 @@ def detect_doublets_parallel(adata, cfg, log):
         log.info(
             "  Predicted doublets: %d / %d (%.1f%%)", pred.sum(), adata.n_obs, 100 * pred.mean()
         )
-        return
+        return scores, pred
 
     sample_groups = adata.obs.groupby(groupby_col, observed=True)
 

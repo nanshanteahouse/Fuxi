@@ -74,8 +74,8 @@ class SampleMetaConfig(BaseModel):
 
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
-    sample_map: Dict[int, str] = Field(default_factory=dict)
-    stage_map: Dict[int, str] = Field(default_factory=dict)
+    sample_map: Dict[int | str, str] = Field(default_factory=dict)
+    stage_map: Dict[int | str, str] = Field(default_factory=dict)
     stage_order: List[str] = Field(default_factory=list)
     meta_columns: Dict[str, str] = Field(default_factory=dict)
     barcode_parse_regex: str = ""
