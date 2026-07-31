@@ -287,11 +287,27 @@ def detect_doublets_parallel(adata, cfg, log):
 
     if small_names:
         n_jobs = min(cfg.execution.n_jobs or os.cpu_count() or 1, len(small_names))
-        log.info(
-            "  Small samples — processing %d groups in parallel (n_jobs=%d)",
-            len(small_names),
-            n_jobs,
-        )
+        budget = _MP_MEM_BUDGET_BYTES or resolve_memory_budget_bytes(cfg.execution.memory_limit)
+        if budget > 0:
+            # Calibrated per-worker peak: ~0.8 GiB base + ~40 MiB per 1k cells
+            # (extracted subset + Scrublet manifold + kNN result matrix).
+            # Keep workers within 70% of the budget so the main process
+            # (backed file handles, result assembly) keeps headroom.
+            n_largest = max(len(i) for i in small_idxs)
+            per_worker = int(0.8 * 2**30 + n_largest * 40 * 2**20 / 1000)
+            mem_cap = max(1, int(budget * 0.7) // per_worker)
+            if mem_cap < n_jobs:
+                log.warning(
+                    "  Parallel sample workers capped by memory budget: %d -> %d ",
+                    "(~%.1f GiB/worker x %d, budget ~%.1f GiB). Adjust ",
+                    "scrublet.serial_threshold or execution.memory_limit if needed.",
+                    n_jobs,
+                    mem_cap,
+                    per_worker / 2**30,
+                    n_jobs,
+                    budget / 2**30,
+                )
+            n_jobs = min(n_jobs, mem_cap)
         small_results = Parallel(n_jobs=n_jobs)(
             delayed(run_scrublet_sample)(_extract_subset(adata, idx), name, cfg)
             for name, idx in zip(small_names, small_idxs)
