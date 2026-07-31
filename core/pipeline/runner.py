@@ -639,7 +639,19 @@ def main():
         step_t0 = time.time()
 
         # ── Profiling setup ─────────────────────────────────────────
+        # The main process only waits on subprocesses, so a profiler here
+        # would record nothing but subprocess.wait. For subprocess steps we
+        # inject `python -m cProfile -o <path>` into the child command so the
+        # step's own code is profiled; the in-process (debug) path keeps an
+        # in-process profiler instead.
+        _prof_path = None
         if args.profile:
+            if args.profile.endswith(".prof"):
+                _prof_path = args.profile
+            else:
+                _prof_path = os.path.join(args.profile, f"step-{num}.prof")
+                os.makedirs(args.profile, exist_ok=True)
+        if args.profile and args.in_process:
             _profiler = cProfile.Profile()
             _profiler.enable()
         if args.in_process:
@@ -665,8 +677,18 @@ def main():
             elapsed = time.time() - step_t0
             result = type("_ProcResult", (), {"returncode": _exit_code})()
         else:
+            _child_cmd = [python_exe, script_path] + extra_args
+            if _prof_path:
+                _child_cmd = [
+                    python_exe,
+                    "-m",
+                    "cProfile",
+                    "-o",
+                    _prof_path,
+                    script_path,
+                ] + extra_args
             step_proc = subprocess.Popen(
-                [python_exe, script_path] + extra_args,
+                _child_cmd,
                 stdout=None,
                 stderr=None,
             )
@@ -692,13 +714,12 @@ def main():
             result = step_proc
 
         # ── Profiling teardown ──────────────────────────────────────
-        if args.profile:
+        if args.profile and args.in_process:
             _profiler.disable()
             if args.profile.endswith(".prof"):
                 _prof_path = args.profile
             else:
                 _prof_path = os.path.join(args.profile, f"step-{num}.prof")
-                os.makedirs(args.profile, exist_ok=True)
             _profiler.dump_stats(_prof_path)
 
         # Determine exit status for perf_report
