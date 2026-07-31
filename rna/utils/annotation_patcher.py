@@ -150,6 +150,14 @@ def _rewrite_annotation_csv(adata, cfg, log):
         adata.obs["leiden"].unique(),
         key=lambda x: int(x) if str(x).isdigit() else str(x),
     )
+
+    # The annotation engine (tiered subtype persistence) writes a
+    # ``subtype_candidates`` column into this CSV.  Carry those values through
+    # the rewrite keyed by ``str(cluster)``; tolerate an old CSV that is missing
+    # or lacks the column (pre-change output) without raising.
+    ann_csv = os.path.join(cfg.table_dir, "cell_type_annotations.csv")
+    old_candidates = _read_old_subtype_candidates(ann_csv)
+
     records = []
     for cl in cluster_ids:
         mask = leiden_str == str(cl)
@@ -172,12 +180,34 @@ def _rewrite_annotation_csv(adata, cfg, log):
                     if "annot_reasoning" in adata.obs
                     else ""
                 ),
+                "subtype_candidates": old_candidates.get(str(cl), ""),
             }
         )
     ann_df = pd.DataFrame(records)
-    ann_csv = os.path.join(cfg.table_dir, "cell_type_annotations.csv")
     ann_df.to_csv(ann_csv, index=False)
     log.info("Annotation table re-written: %s", ann_csv)
+
+
+def _read_old_subtype_candidates(ann_csv):
+    """Read pre-existing ``subtype_candidates`` values from an old annotation CSV.
+
+    Returns ``{str(cluster): str}``.  Empty dict when the old CSV is missing,
+    lacks the column (pre-change outputs), or is unreadable — the rewrite must
+    never fail because of a stale table.
+    """
+    if not os.path.exists(ann_csv):
+        return {}
+    try:
+        old_df = pd.read_csv(ann_csv)
+    except Exception as exc:
+        logger.warning("Could not read old annotation CSV %s: %s", ann_csv, exc)
+        return {}
+    if "subtype_candidates" not in old_df.columns or "cluster" not in old_df.columns:
+        return {}
+    return {
+        str(cluster): ("" if pd.isna(value) else str(value))
+        for cluster, value in zip(old_df["cluster"], old_df["subtype_candidates"])
+    }
 
 
 def _rewrite_quality_report(adata, cfg, log):
