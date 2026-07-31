@@ -8,11 +8,14 @@ T1 (P0-CRITICAL) from cross-batch-critical-fixes plan:
 import importlib.util
 import json
 import os
+import shutil
 import sys
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+import pandas as pd
 import pytest
+import scanpy as sc
 from anndata import AnnData
 
 # ── Ensure repo root is on sys.path (conftest.py also does this) ──────
@@ -185,7 +188,9 @@ def test_T2_pass_rate_gate_passes_when_threshold_met() -> None:
     """
     n = 80
     adata = AnnData(np.zeros((n, 10)))
+    adata.obs["leiden"] = ["0"] * n  # original col (from 04_clustered.h5ad)
     adata.obs["cell_type"] = ["T cell"] * 64 + ["Unknown"] * 16
+    original_cols = {"leiden"}
 
     cfg = MagicMock()
     cfg.marker = MagicMock()
@@ -193,46 +198,133 @@ def test_T2_pass_rate_gate_passes_when_threshold_met() -> None:
     log = MagicMock()
 
     # Should not raise — pass_rate=0.8 >= 0.10
-    _warn_if_low_coverage(adata, cfg, log)
+    _warn_if_low_coverage(adata, cfg, log, original_cols)
 
 
-def test_T2_pass_rate_gate_fires_at_zero_pass_rate() -> None:
-    """Gate aborts when 100% of cells are Unknown.
+def test_T2_pass_rate_gate_fires_at_zero_pass_rate(tmp_path) -> None:
+    """Gate aborts when 100% of cells are Unknown and persists ONLY the new annotation cols.
 
-    Given: 30 cells, all with cell_type='Unknown' (0% pass).
+    Given: adata with an original col (leiden) plus step-05 new cols
+           (cell_type, cell_state), 0% pass rate.
     When:  _warn_if_low_coverage is called.
-    Then:  SystemExit is raised and safe_write is called before exit.
+    Then:  SystemExit is raised and the lightweight writer receives a DataFrame
+           with exactly the step-05 new columns — never the original ones.
     """
     n = 30
     adata = AnnData(np.zeros((n, 10)))
+    adata.obs["leiden"] = ["0"] * n
     adata.obs["cell_type"] = ["Unknown"] * n
+    adata.obs["cell_state"] = ["na"] * n
+    original_cols = {"leiden"}
+
+    annotated = tmp_path / "05_annotated.h5ad"
+    annotated.touch()  # annotated exists → copy2 skipped, only append is exercised
 
     cfg = MagicMock()
     cfg.marker = MagicMock()
     cfg.marker.quality_gate_min_pass_rate = 0.10
-    cfg.annotated_h5ad = "/tmp/test.h5ad"
+    cfg.annotated_h5ad = str(annotated)
+    cfg.cluster_h5ad = str(tmp_path / "04_clustered.h5ad")
     log = MagicMock()
 
-    with patch.object(_mod, "safe_write") as mock_write, pytest.raises(SystemExit):
-        _warn_if_low_coverage(adata, cfg, log)
-    mock_write.assert_called_once_with(adata, "/tmp/test.h5ad", cfg=cfg)
+    with (
+        patch("core.utils.write_obs_columns_lightweight") as mock_write,
+        pytest.raises(SystemExit),
+    ):
+        _warn_if_low_coverage(adata, cfg, log, original_cols)
+
+    obs_df = mock_write.call_args.args[1]
+    assert list(obs_df.columns) == ["cell_type", "cell_state"], (
+        f"abort path must write only step-05 new columns, got {list(obs_df.columns)}"
+    )
+    assert mock_write.call_args.args[0] == str(annotated)
 
 
-def test_T2_score_genes_path_gate_coverage_when_std_none() -> None:
+def test_T2_score_genes_path_gate_coverage_when_std_none(tmp_path) -> None:
     """Gate fires in the score_genes path even when std is None.
 
     Given: score_genes path (std=None), all cells annotated as Unknown.
     When:  _warn_if_low_coverage is called.
-    Then:  SystemExit is raised regardless of standardizer availability.
+    Then:  SystemExit is raised regardless of standardizer availability,
+           and only the new annotation column is passed to the writer.
     """
     adata = AnnData(np.zeros((30, 10)))
+    adata.obs["leiden"] = ["0"] * 30
     adata.obs["cell_type"] = ["Unknown"] * 30
+    original_cols = {"leiden"}
+
+    annotated = tmp_path / "05_annotated.h5ad"
+    annotated.touch()
 
     cfg = MagicMock()
     cfg.marker = MagicMock()
     cfg.marker.quality_gate_min_pass_rate = 0.10
-    cfg.annotated_h5ad = "/tmp/test.h5ad"
+    cfg.annotated_h5ad = str(annotated)
+    cfg.cluster_h5ad = str(tmp_path / "04_clustered.h5ad")
     log = MagicMock()
 
-    with patch.object(_mod, "safe_write"), pytest.raises(SystemExit):
-        _warn_if_low_coverage(adata, cfg, log)
+    with (
+        patch("core.utils.write_obs_columns_lightweight") as mock_write,
+        pytest.raises(SystemExit),
+    ):
+        _warn_if_low_coverage(adata, cfg, log, original_cols)
+
+    obs_df = mock_write.call_args.args[1]
+    assert list(obs_df.columns) == ["cell_type"]
+
+
+def test_append_path_writes_only_new_columns(tmp_path) -> None:
+    """_write_lightweight appends ONLY step-05 new obs cols to the copied 04_clustered.
+
+    Given: real 04_clustered.h5ad with original obs cols (leiden categorical,
+           n_genes int, pct_mito float); 05_annotated already copied from it
+           (copy+append mode); adata loaded from cluster + annotation cols added.
+    When:  _write_lightweight(adata, cfg, log, original_cols) runs.
+    Then:  read-back file has original cols untouched (same values/dtypes) and
+           exactly the new annotation cols appended — no extras, no missing.
+    """
+    rng = np.random.RandomState(7)
+    n = 20
+    src = AnnData(rng.randn(n, 5).astype(np.float32))
+    src.obs["leiden"] = pd.Categorical(["0", "1"] * (n // 2))
+    src.obs["n_genes"] = rng.randint(100, 500, n)
+    src.obs["pct_mito"] = rng.rand(n)
+
+    cluster_path = tmp_path / "04_clustered.h5ad"
+    annotated_path = tmp_path / "05_annotated.h5ad"
+    src.write_h5ad(cluster_path)
+    shutil.copy2(cluster_path, annotated_path)  # 05 starts as copy of 04
+
+    adata = sc.read(cluster_path)
+    original_cols = set(adata.obs.columns)
+    adata.obs["cell_type"] = pd.Categorical(["T cell", "B cell"] * (n // 2))
+    adata.obs["cell_state"] = ["active", "resting"] * (n // 2)
+    adata.obs["annot_confidence"] = rng.rand(n)
+
+    cfg = MagicMock()
+    cfg.annotated_h5ad = str(annotated_path)
+    cfg.cluster_h5ad = str(cluster_path)
+    log = MagicMock()
+    _mod._write_lightweight(adata, cfg, log, original_cols)
+
+    out = sc.read(annotated_path)
+
+    # Exactly the new annotation columns were appended — no extras, no missing
+    expected_cols = original_cols | {"cell_type", "cell_state", "annot_confidence"}
+    assert set(out.obs.columns) == expected_cols, (
+        f"obs columns after append = {list(out.obs.columns)}; "
+        f"expected exactly {sorted(expected_cols)}"
+    )
+    # Original columns preserved — same values, same dtypes (not rewritten)
+    for col in ("leiden", "n_genes", "pct_mito"):
+        assert out.obs[col].equals(src.obs[col]), f"original column {col!r} was altered"
+        assert out.obs[col].dtype == src.obs[col].dtype, (
+            f"original column {col!r} dtype changed: {out.obs[col].dtype} != {src.obs[col].dtype}"
+        )
+    # New columns appended with correct values and dtypes
+    assert list(out.obs["cell_type"]) == list(adata.obs["cell_type"])
+    assert isinstance(out.obs["cell_type"].dtype, pd.CategoricalDtype)
+    assert list(out.obs["cell_state"]) == list(adata.obs["cell_state"])
+    np.testing.assert_allclose(
+        out.obs["annot_confidence"].values, adata.obs["annot_confidence"].values
+    )

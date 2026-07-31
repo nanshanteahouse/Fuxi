@@ -170,6 +170,84 @@ def _plot_umap_from_coords(coords, adata, color, ax, title, cfg, log, legend_fon
     return True
 
 
+# ── Incremental write (copy+append, mode A) ─────────────────────────────────
+# Step 04 owns exactly these h5ad keys; everything else (X, layers, raw,
+# X_pca / X_integrated, 03-era uns like pca variance_ratio / integration
+# results, 03-era obs columns) is preserved by the copy of 03 and never
+# rewritten. Grid-derived keys (leiden_{n}_{r}, funnel_{n}_{r},
+# umap_{n}_{r}) are matched by prefix — the grid is config-driven.
+OWNED_OBSM = {"X_umap"}
+OWNED_OBSP = {"connectivities", "distances"}
+OWNED_UNS = {
+    "neighbors",
+    "umap",
+    "grid_scan_mode",
+    "best_resolution",
+    "best_n_neighbors",
+    "cluster_selection_method",
+    "funnel_lineage",
+    "paga",
+    "leiden_sizes",
+}
+
+
+def _owned_obsm(adata):
+    return {k: adata.obsm[k] for k in adata.obsm if k in OWNED_OBSM or k.startswith("umap_")}
+
+
+def _owned_obsp(adata):
+    return {k: adata.obsp[k] for k in OWNED_OBSP if k in adata.obsp}
+
+
+def _owned_uns(adata):
+    return {
+        k: adata.uns[k]
+        for k in adata.uns
+        if k in OWNED_UNS or k.startswith("leiden_") or k.startswith("funnel_")
+    }
+
+
+def _owned_obs(adata):
+    cols = [
+        c
+        for c in adata.obs.columns
+        if c == "leiden" or c.startswith("leiden_") or c.startswith("funnel_")
+    ]
+    return adata.obs[cols] if cols else None
+
+
+def _write_cluster_h5ad(adata, cfg, log):
+    """Write 04_clustered.h5ad — copy+append (incremental_io) or full safe_write.
+
+    Mode A: the target starts as a copy of 03_integrated.h5ad (X, layers, raw,
+    03-era obs/uns all preserved), then only the keys step 04 owns are
+    appended/overwritten. A failed append deletes the corrupt copy — 03 stays
+    pristine, so re-running the step recovers. ``incremental_io=False`` (old
+    configs default True via getattr) falls back to the full safe_write path.
+    """
+    if getattr(cfg, "incremental_io", True):
+        import shutil
+
+        shutil.copy2(cfg.integrated_h5ad, cfg.cluster_h5ad)
+        try:
+            from core.utils import write_h5ad_incremental
+
+            write_h5ad_incremental(
+                cfg.cluster_h5ad,
+                obsm=_owned_obsm(adata),
+                obsp=_owned_obsp(adata),
+                uns=_owned_uns(adata),
+                obs=_owned_obs(adata),
+                logger=log,
+            )
+        except Exception:
+            if os.path.exists(cfg.cluster_h5ad):
+                os.remove(cfg.cluster_h5ad)
+            raise
+    else:
+        safe_write(adata, cfg.cluster_h5ad, cfg=cfg)
+
+
 def main():
     t0 = time.time()
     args_parser = argparse.ArgumentParser()
@@ -569,7 +647,7 @@ def main():
         if umap_col in adata.obsm:
             adata.obsm["X_umap"] = adata.obsm[umap_col].copy()
         with timed_substep("Save checkpoint (post-selection)", log=log):
-            safe_write(adata, cfg.cluster_h5ad, cfg=cfg)
+            _write_cluster_h5ad(adata, cfg, log)
         log.info("Final checkpoint saved: %s (resolution=%.1f)", cfg.cluster_h5ad, best_r)
     else:
         log.warning(
@@ -639,10 +717,15 @@ def main():
             n_epochs=cfg.clustering.umap_n_epochs,
             random_state=cfg.execution.random_seed,
         )
-        safe_write(adata, cfg.cluster_h5ad, cfg=cfg)
-        log.info("Checkpoint saved with final UMAP: %s", cfg.cluster_h5ad)
     except Exception as e:
+        # UMAP recompute failure is non-fatal (checkpoint was already written
+        # post-selection above) — warn and keep the earlier 04_clustered.h5ad.
         log.warning("Final UMAP rebuild failed: %s", e)
+    else:
+        # Write must NOT be swallowed here: mode A needs the exception to
+        # propagate so _write_cluster_h5ad's corrupt-copy deletion is honored.
+        _write_cluster_h5ad(adata, cfg, log)
+        log.info("Checkpoint saved with final UMAP: %s", cfg.cluster_h5ad)
 
     if sweep_results:
         # Summary CSV

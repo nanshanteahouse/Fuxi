@@ -3,6 +3,10 @@
 import importlib.util
 import logging
 import os
+import sys
+import types
+from pathlib import Path
+from unittest.mock import Mock
 
 import numpy as np
 import pandas as pd
@@ -304,3 +308,209 @@ class TestHeatmapBinning:
         # Since safe_plot catches exceptions internally, the function
         # completes without error regardless of whether the plot succeeds.
         # No crash is the assertion.
+
+
+# ── Test: 05_final.h5ad 写出（PAGA 增量 / save_final_h5ad / sentinel）──────────
+
+
+class TestFinalOutputWrite:
+    """05_final.h5ad output + step-08 sentinel (plan h5ad-incremental-io Item 1.4/1.6)."""
+
+    @staticmethod
+    def _cfg(tmp_path, **overrides) -> Config:
+        data = {"h5ad_dir": str(tmp_path)}
+        data.update(overrides)
+        return Config.model_validate(data)
+
+    @staticmethod
+    def _adata() -> AnnData:
+        """Mock adata carrying the full PAGA branch product set (keys step 08 owns)."""
+        adata = _make_mock_adata()
+        adata.uns["paga"] = {"connectivities": np.ones((adata.n_obs, adata.n_obs))}
+        adata.uns["iroot"] = 0  # compute_dpt sets uns[iroot] before sc.tl.dpt
+        adata.uns["dpt_pseudotime"] = np.array([0.0, 0.5, 1.0])  # written by sc.tl.dpt
+        adata.uns["dpt_changepoints"] = np.array([3])  # written by sc.tl.dpt
+        return adata
+
+    def _assert_sentinel(self, cfg) -> Path:
+        sentinel = Path(f"{cfg.final_h5ad}.step08_done")
+        assert sentinel.exists(), f"sentinel missing: {sentinel}"
+        assert len(sentinel.read_text()) > 0, "sentinel must be non-empty"
+        return sentinel
+
+    def test_paga_incremental_writes_all_paga_products(
+        self,
+        tmp_path,
+        monkeypatch,
+        caplog,
+    ) -> None:
+        """Existing file + incremental_io: append all PAGA-owned keys; sentinel written.
+
+        Item 1.5 override semantics: a rerun with a different root config must
+        overwrite stale dpt/iroot values, so the incremental payload carries every
+        key the PAGA branch owns (obs dpt_pseudotime + uns paga/iroot/dpt_*).
+        """
+        cfg = self._cfg(tmp_path, incremental_io=True)
+        Path(cfg.final_h5ad).write_text("existing")  # simulate a prior run
+        adata = self._adata()
+
+        incr = Mock()
+        monkeypatch.setattr("core.utils.write_h5ad_incremental", incr)
+        full = Mock()
+        monkeypatch.setattr(trajectory, "safe_write", full)
+        caplog.set_level(logging.INFO)
+
+        trajectory._write_final_output(adata, cfg, logging.getLogger("test"))
+
+        incr.assert_called_once()
+        _, kwargs = incr.call_args
+        assert list(kwargs["obs"].columns) == ["dpt_pseudotime"], (
+            f"incremental obs must be only dpt_pseudotime, got {list(kwargs['obs'].columns)}"
+        )
+        assert set(kwargs["uns"].keys()) == {
+            "paga",
+            "iroot",
+            "dpt_pseudotime",
+            "dpt_changepoints",
+        }, f"uns must carry all PAGA products, got {kwargs['uns'].keys()}"
+        assert kwargs["uns"]["paga"] is adata.uns["paga"]
+        assert kwargs["uns"]["iroot"] == adata.uns["iroot"]
+        assert kwargs["uns"]["dpt_pseudotime"] is adata.uns["dpt_pseudotime"]
+        assert kwargs["uns"]["dpt_changepoints"] is adata.uns["dpt_changepoints"]
+        full.assert_not_called()
+        self._assert_sentinel(cfg)
+
+    def test_paga_incremental_absent_keys_are_omitted(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        """PAGA products absent from adata are omitted (engine safely skips)."""
+        cfg = self._cfg(tmp_path, incremental_io=True)
+        Path(cfg.final_h5ad).write_text("existing")
+        adata = _make_mock_adata()  # no iroot/dpt uns keys beyond paga
+        adata.uns["paga"] = {"connectivities": np.ones((adata.n_obs, adata.n_obs))}
+
+        incr = Mock()
+        monkeypatch.setattr("core.utils.write_h5ad_incremental", incr)
+
+        trajectory._write_final_output(adata, cfg, logging.getLogger("test"))
+
+        incr.assert_called_once()
+        _, kwargs = incr.call_args
+        assert list(kwargs["obs"].columns) == ["dpt_pseudotime"], (
+            f"incremental obs must be only dpt_pseudotime, got {list(kwargs['obs'].columns)}"
+        )
+        assert set(kwargs["uns"].keys()) == {"paga"}, (
+            f"uns must carry only present paga, got {kwargs['uns'].keys()}"
+        )
+        assert kwargs["uns"]["paga"] is adata.uns["paga"]
+
+    def test_save_final_h5ad_false_skips_output_but_writes_sentinel(
+        self,
+        tmp_path,
+        monkeypatch,
+        caplog,
+    ) -> None:
+        """save_final_h5ad=False → no output write, but step sentinel still written."""
+        cfg = self._cfg(tmp_path, trajectory={"save_final_h5ad": False})
+        adata = self._adata()
+
+        incr = Mock()
+        monkeypatch.setattr("core.utils.write_h5ad_incremental", incr)
+        full = Mock()
+        monkeypatch.setattr(trajectory, "safe_write", full)
+        caplog.set_level(logging.INFO)
+
+        trajectory._write_final_output(adata, cfg, logging.getLogger("test"))
+
+        incr.assert_not_called()
+        full.assert_not_called()
+        assert not os.path.exists(cfg.final_h5ad)
+        self._assert_sentinel(cfg)
+        assert "save_final_h5ad=False" in caplog.text
+
+    def test_incremental_io_false_falls_back_to_full_write(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        """incremental_io=False → full safe_write even if the file already exists."""
+        cfg = self._cfg(tmp_path, incremental_io=False)
+        Path(cfg.final_h5ad).write_text("existing")
+        adata = self._adata()
+
+        incr = Mock()
+        monkeypatch.setattr("core.utils.write_h5ad_incremental", incr)
+        full = Mock()
+        monkeypatch.setattr(trajectory, "safe_write", full)
+
+        trajectory._write_final_output(adata, cfg, logging.getLogger("test"))
+
+        full.assert_called_once()
+        incr.assert_not_called()
+        self._assert_sentinel(cfg)
+
+    def test_missing_file_falls_back_to_full_write(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        """First run (no file yet) → full safe_write creates the output."""
+        cfg = self._cfg(tmp_path, incremental_io=True)
+        adata = self._adata()
+
+        incr = Mock()
+        monkeypatch.setattr("core.utils.write_h5ad_incremental", incr)
+        full = Mock()
+        monkeypatch.setattr(trajectory, "safe_write", full)
+
+        trajectory._write_final_output(adata, cfg, logging.getLogger("test"))
+
+        full.assert_called_once()
+        incr.assert_not_called()
+        self._assert_sentinel(cfg)
+
+    def test_scvelo_branch_keeps_full_write_and_sentinel(
+        self,
+        tmp_path,
+        monkeypatch,
+    ) -> None:
+        """scVelo branch → full safe_write (layers need it) + sentinel, no incremental."""
+        cfg = self._cfg(
+            tmp_path,
+            trajectory={"method": "scvelo_cellrank"},
+        )
+        adata = self._adata()
+        adata.layers["spliced"] = adata.X.copy()
+        adata.layers["unspliced"] = adata.X.copy()
+
+        fake_scv = types.SimpleNamespace(
+            tl=types.SimpleNamespace(velocity=Mock(), velocity_graph=Mock()),
+        )
+        monkeypatch.setitem(sys.modules, "scvelo", fake_scv)
+        monkeypatch.setattr("core.utils._optional.require_scvelo", Mock())
+        monkeypatch.setattr(trajectory, "resolve_config", Mock(return_value=cfg))
+        monkeypatch.setattr(
+            trajectory,
+            "setup_logger",
+            Mock(return_value=logging.getLogger("test_scvelo")),
+        )
+        monkeypatch.setattr(trajectory.sc, "read", Mock(return_value=adata))
+        monkeypatch.setattr(trajectory, "recompute_neighbors", Mock())
+        full = Mock()
+        monkeypatch.setattr(trajectory, "safe_write", full)
+        incr = Mock()
+        monkeypatch.setattr("core.utils.write_h5ad_incremental", incr)
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            ["08_trajectory.py", "--config", str(tmp_path / "config.yaml")],
+        )
+
+        trajectory.main()
+
+        full.assert_called_once()
+        incr.assert_not_called()
+        fake_scv.tl.velocity.assert_called_once()
+        self._assert_sentinel(cfg)

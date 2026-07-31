@@ -17,6 +17,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -399,4 +400,303 @@ class TestStep06Subprocess:
         assert "Traceback" not in result.stderr, (
             "Step 06 crashed with unhandled exception instead of clean error:\n"
             f"{result.stderr[-2000:]}"
+        )
+
+
+# ── Test: writeback in-place (function-level, Item 1.3) ─────────────────
+
+
+def _load_step06_module():
+    """Load rna/steps/06_subcluster.py as a module (fresh object per call)."""
+    import importlib.util
+
+    step_path = _REPO_ROOT / "rna" / "steps" / "06_subcluster.py"
+    spec = importlib.util.spec_from_file_location("rna.steps._06_subcluster_t", str(step_path))
+    assert spec is not None and spec.loader is not None, "cannot build spec for 06_subcluster.py"
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+class _DuckCfg:
+    """Minimal config duck for auto_writeback (only touches these fields)."""
+
+    def __init__(self, incremental_io: bool = True) -> None:
+        self.incremental_io = incremental_io
+        self.verify_write_integrity = False
+
+
+class TestStep06Writeback:
+    """Function-level tests for auto_writeback's obs write path (Item 1.3)."""
+
+    @staticmethod
+    def _make_main(tmp_path: Path, n_cells: int = 60, n_genes: int = 50):
+        path = tmp_path / "results" / "h5ad" / "05_annotated.h5ad"
+        _create_synthetic_annotated_h5ad(path, n_cells=n_cells, n_genes=n_genes, n_types=2)
+        import scanpy as sc
+
+        return path, sc.read(str(path))
+
+    @staticmethod
+    def _make_sub(main):
+        sub = main[main.obs["cell_type"].astype(str) == "Type_0"].copy()
+        import pandas as pd
+
+        half = sub.n_obs // 2
+        sub.obs["sub_ai_label"] = pd.Categorical(
+            ["Subcluster_0"] * half + ["Subcluster_1"] * (sub.n_obs - half)
+        )
+        return sub
+
+    def test_writeback_inplace_passes_only_cell_subtype(self, tmp_path: Path) -> None:
+        """In-place path passes a DataFrame with exactly the cell_subtype column."""
+        mod = _load_step06_module()
+        main_path, main = self._make_main(tmp_path)
+        sub = self._make_sub(main)
+
+        with (
+            patch("core.utils.write_obs_columns_inplace") as mock_inplace,
+            patch.object(mod, "safe_write") as mock_safe,
+        ):
+            n = mod.auto_writeback(
+                sub, "Type_0", str(main_path), log=None, cfg=_DuckCfg(incremental_io=True)
+            )
+
+        assert n == sub.n_obs, f"expected {sub.n_obs} Type_0 cells written back, got {n}"
+        mock_inplace.assert_called_once()
+        written = mock_inplace.call_args.args[1]
+        assert list(written.columns) == ["cell_subtype"], "only cell_subtype may be written back"
+        assert len(written) == main.n_obs, "obs_df must be full-length (aligned with file n_obs)"
+        mock_safe.assert_not_called()
+
+    def test_writeback_inplace_preserves_main_file(self, tmp_path: Path) -> None:
+        """Real run: X and pre-existing obs columns survive; cell_subtype is the only change."""
+        import numpy as np
+
+        mod = _load_step06_module()
+        main_path, before = self._make_main(tmp_path)
+        sub = self._make_sub(before)
+        x_before = np.asarray(before.X)
+
+        n = mod.auto_writeback(
+            sub, "Type_0", str(main_path), log=None, cfg=_DuckCfg(incremental_io=True)
+        )
+
+        assert n == sub.n_obs
+        import scanpy as sc
+
+        after = sc.read(str(main_path))
+        assert set(after.obs.columns) == set(before.obs.columns) | {"cell_subtype"}
+        assert np.array_equal(np.asarray(after.X), x_before), "X must not change"
+        assert (
+            after.obs["cell_type"].astype(str).to_numpy().tolist()
+            == before.obs["cell_type"].astype(str).to_numpy().tolist()
+        )
+        got = (
+            after.obs.loc[sub.obs_names.astype(str), "cell_subtype"]
+            .astype(str)
+            .to_numpy()
+            .tolist()
+        )
+        assert got == sub.obs["sub_ai_label"].astype(str).to_numpy().tolist()
+
+    def test_writeback_full_fallback_when_incremental_disabled(self, tmp_path: Path) -> None:
+        """incremental_io=False falls back to the full safe_write path."""
+        mod = _load_step06_module()
+        main_path, main = self._make_main(tmp_path)
+        sub = self._make_sub(main)
+
+        with (
+            patch("core.utils.write_obs_columns_inplace") as mock_inplace,
+            patch.object(mod, "safe_write") as mock_safe,
+        ):
+            n = mod.auto_writeback(
+                sub, "Type_0", str(main_path), log=None, cfg=_DuckCfg(incremental_io=False)
+            )
+
+        assert n == sub.n_obs
+        mock_safe.assert_called_once()
+        mock_inplace.assert_not_called()
+
+    def test_writeback_noop_without_ai_label(self, tmp_path: Path) -> None:
+        """No sub_ai_label → auto_writeback is a no-op (no write of any kind)."""
+        mod = _load_step06_module()
+        main_path, main = self._make_main(tmp_path)
+        sub = main[main.obs["cell_type"].astype(str) == "Type_0"].copy()
+
+        with (
+            patch("core.utils.write_obs_columns_inplace") as mock_inplace,
+            patch.object(mod, "safe_write") as mock_safe,
+        ):
+            n = mod.auto_writeback(
+                sub, "Type_0", str(main_path), log=None, cfg=_DuckCfg(incremental_io=True)
+            )
+
+        assert n == 0
+        mock_inplace.assert_not_called()
+        mock_safe.assert_not_called()
+
+
+# ── Test: sentinel contract (Item 1.6) ─────────────────────────────────
+
+
+def _ai_enabled_config(tmp_path: Path) -> dict:
+    """Step-06 config that deterministically reaches a real writeback.
+
+    build_annotation_prompt is called with precomputed_rank=True but the
+    subset never ran rank_genes_groups → KeyError → the step falls back to
+    numeric ``sub_ai_label`` → auto_writeback actually writes. The API endpoint
+    is a closed local port so even a hypothetical live call fails fast.
+    """
+    cfg_dict = _build_minimal_step06_config(tmp_path)
+    cfg_dict["ai"] = {
+        "enabled": True,
+        "subcluster": True,
+        "api_base": "http://127.0.0.1:1",
+        "api_key": "sk-test-invalid",
+        "model": "test-model",
+        "max_tokens": 256,
+        "temperature": 0.1,
+        "timeout": 5,
+        "thinking_enabled": False,
+    }
+    return cfg_dict
+
+
+def _run_step06(config_path: Path, timeout: int = 120) -> subprocess.CompletedProcess:
+    """Run step 06 as a subprocess via the pipeline runner."""
+    return subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "core.run_pipeline",
+            "--modality",
+            "rna",
+            "--step",
+            "6",
+            "--config",
+            str(config_path),
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(_REPO_ROOT),
+        timeout=timeout,
+    )
+
+
+class TestStep06Sentinel:
+    """Item 1.6 sentinel contract: written only after a real writeback."""
+
+    @pytest.mark.skipif(
+        _skip_slow(),
+        reason="Slow integration test skipped via SKIP_SLOW_TESTS",
+    )
+    def test_step06_sentinel_written_after_writeback(self, tmp_path: Path) -> None:
+        """Incremental (default) mode writes a non-empty sentinel after writeback."""
+        import yaml
+
+        h5ad_dir = tmp_path / "results" / "h5ad"
+        _create_synthetic_annotated_h5ad(
+            h5ad_dir / "05_annotated.h5ad", n_cells=120, n_genes=200, n_types=2
+        )
+        cfg_dict = _ai_enabled_config(tmp_path)
+        config_path = tmp_path / "config.yaml"
+        with open(config_path, "w") as f:
+            yaml.dump(cfg_dict, f)
+
+        result = _run_step06(config_path)
+        if result.returncode != 0:
+            print("=== STDOUT ===")
+            print(result.stdout[-3000:])
+            print("=== STDERR ===")
+            print(result.stderr[-3000:])
+        assert result.returncode == 0, f"Step 06 exited {result.returncode}. See output above."
+
+        sentinel = h5ad_dir / "05_annotated.h5ad.step06_done"
+        assert sentinel.exists(), f"sentinel {sentinel} not created"
+        assert sentinel.read_text().strip() == "done", "sentinel must be non-empty ('done')"
+
+        import scanpy as sc
+
+        main = sc.read(str(h5ad_dir / "05_annotated.h5ad"))
+        assert "cell_subtype" in main.obs, "writeback must have created cell_subtype"
+        changed = main.obs["cell_subtype"].astype(str) != main.obs["cell_type"].astype(str)
+        assert changed.any(), "writeback must have changed cell_subtype on subclustered cells"
+        # In-place writeback removes its .bak after success
+        assert not (h5ad_dir / "05_annotated.h5ad.bak").exists()
+
+    @pytest.mark.skipif(
+        _skip_slow(),
+        reason="Slow integration test skipped via SKIP_SLOW_TESTS",
+    )
+    def test_step06_sentinel_full_write_when_incremental_disabled(self, tmp_path: Path) -> None:
+        """incremental_io=False: full safe_write still writes the sentinel, same result."""
+        import yaml
+
+        h5ad_dir = tmp_path / "results" / "h5ad"
+        _create_synthetic_annotated_h5ad(
+            h5ad_dir / "05_annotated.h5ad", n_cells=120, n_genes=200, n_types=2
+        )
+        cfg_dict = _ai_enabled_config(tmp_path)
+        cfg_dict["incremental_io"] = False
+        config_path = tmp_path / "config_full.yaml"
+        with open(config_path, "w") as f:
+            yaml.dump(cfg_dict, f)
+
+        result = _run_step06(config_path)
+        if result.returncode != 0:
+            print("=== STDOUT ===")
+            print(result.stdout[-3000:])
+            print("=== STDERR ===")
+            print(result.stderr[-3000:])
+        assert result.returncode == 0, f"Step 06 exited {result.returncode}. See output above."
+
+        sentinel = h5ad_dir / "05_annotated.h5ad.step06_done"
+        assert sentinel.exists(), f"sentinel {sentinel} not created"
+        assert sentinel.read_text().strip() == "done", "sentinel must be non-empty ('done')"
+
+        import scanpy as sc
+
+        # Results consistent with in-place mode: cell_subtype mirrors sub_ai_label
+        sub_files = sorted(h5ad_dir.glob("05_sub_*.h5ad"))
+        assert sub_files, "no 05_sub_*.h5ad output"
+        sub_adata = sc.read(str(sub_files[0]))
+        labels = dict(
+            zip(sub_adata.obs_names.astype(str), sub_adata.obs["sub_ai_label"].astype(str))
+        )
+        main = sc.read(str(h5ad_dir / "05_annotated.h5ad"))
+        type0 = main.obs["cell_type"].astype(str) == "Type_0"
+        got = main.obs.loc[type0, "cell_subtype"].astype(str)
+        mismatches = [bc for bc, v in got.items() if labels[bc] != v]
+        assert not mismatches, (
+            f"{len(mismatches)} Type_0 cells disagree with sub_ai_label (e.g. {mismatches[:3]})"
+        )
+        # Full write leaves no .bak behind
+        assert not (h5ad_dir / "05_annotated.h5ad.bak").exists()
+
+    @pytest.mark.skipif(
+        _skip_slow(),
+        reason="Slow integration test skipped via SKIP_SLOW_TESTS",
+    )
+    def test_step06_exit2_skip_writes_no_sentinel(self, tmp_path: Path) -> None:
+        """No --cell-type and no subcluster_types → exit 2 skip, NO sentinel."""
+        import yaml
+
+        h5ad_dir = tmp_path / "results" / "h5ad"
+        _create_synthetic_annotated_h5ad(
+            h5ad_dir / "05_annotated.h5ad", n_cells=120, n_genes=200, n_types=2
+        )
+        cfg_dict = _build_minimal_step06_config(tmp_path)
+        cfg_dict["marker"]["subcluster_types"] = []
+        config_path = tmp_path / "config_skip.yaml"
+        with open(config_path, "w") as f:
+            yaml.dump(cfg_dict, f)
+
+        result = _run_step06(config_path, timeout=60)
+        # runner absorbs exit 2 as "skipped" and exits 0 itself
+        assert result.returncode == 0, (
+            f"Step 06 exit-2 skip should be absorbed by the runner, got {result.returncode}"
+        )
+        assert not (h5ad_dir / "05_annotated.h5ad.step06_done").exists(), (
+            "sentinel must NOT be written when subcluster is skipped (exit 2)"
         )

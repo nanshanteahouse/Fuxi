@@ -17,6 +17,7 @@ import argparse
 import os
 import sys
 import time
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 from typing import List, Optional, Tuple
@@ -528,6 +529,48 @@ def gene_trends(adata, cfg, log, table_dir, branch_results: Optional[pd.DataFram
             log.info("Not enough unique pseudotime values (%d) for heatmap binning.", n_bins)
 
 
+def _write_step08_sentinel(cfg, log) -> None:
+    """Mark step 08 done (runner reads <base>.step08_done; content must be non-empty)."""
+    sentinel = Path(f"{cfg.final_h5ad}.step08_done")
+    sentinel.write_text("done")
+    log.info("Step 08 sentinel written: %s", sentinel)
+
+
+def _write_final_output(adata, cfg, log) -> None:
+    """Write 05_final.h5ad (PAGA branch) + step-08 sentinel.
+
+    05_final.h5ad has no downstream consumers (terminal artifact), so
+    save_final_h5ad=False skips the output. Otherwise, when incremental_io
+    is on and the file already exists, only this step's new keys are appended
+    (obs dpt_pseudotime + uns paga/iroot/dpt_pseudotime/dpt_changepoints);
+    X/layers/raw are never touched. First run
+    (no file yet) or incremental_io=False falls back to full safe_write.
+    """
+    if not getattr(cfg.trajectory, "save_final_h5ad", True):
+        log.info("save_final_h5ad=False - skipping 05_final.h5ad output")
+    elif getattr(cfg, "incremental_io", True) and os.path.exists(cfg.final_h5ad):
+        from core.utils import write_h5ad_incremental
+
+        obs = None
+        obs_cols = [c for c in ("dpt_pseudotime", "dpt_pseudotime_bin") if c in adata.obs]
+        if obs_cols:
+            obs = adata.obs[obs_cols]
+
+        # Item 1.5 override semantics: carry every key this step's PAGA branch owns.
+        # A rerun with a different root config must overwrite stale dpt/iroot values;
+        # absent keys are omitted (None-safe) and the engine skips empty mappings.
+        uns = {}
+        for k in ("paga", "iroot", "dpt_pseudotime", "dpt_changepoints"):
+            if k in adata.uns:
+                uns[k] = adata.uns[k]
+        if not uns:
+            uns = None
+        write_h5ad_incremental(cfg.final_h5ad, obs=obs, uns=uns, logger=log)
+    else:
+        safe_write(adata, cfg.final_h5ad, cfg=cfg)
+    _write_step08_sentinel(cfg, log)
+
+
 def main():
     t0 = time.time()
     args_parser = argparse.ArgumentParser()
@@ -612,6 +655,7 @@ def main():
         log.info("scVelo velocity + velocity_graph computed")
 
         safe_write(adata, cfg.final_h5ad, cfg=cfg)
+        _write_step08_sentinel(cfg, log)
         log.info("Step 08 complete (scVelo), took %.1fs", time.time() - t0)
         return
     run_paga(adata, cfg, log)
@@ -627,7 +671,7 @@ def main():
                 sc.pl.umap, adata, color=color, show=False, save=f"final_umap_{color}.pdf", cfg=cfg
             )
 
-    safe_write(adata, cfg.final_h5ad, cfg=cfg)
+    _write_final_output(adata, cfg, log)
     log.info("Step 08 complete, took %.1fs", time.time() - t0)
 
 

@@ -33,7 +33,12 @@ from core.utils import resolve_config, safe_plot, setup_logger
 log: logging.Logger
 
 
-def _warn_if_low_coverage(adata, cfg, log):
+def _new_obs_columns(adata, original_cols):
+    """Return step-05 obs columns: those added since ``original_cols`` was captured."""
+    return [c for c in adata.obs.columns if c not in original_cols]
+
+
+def _warn_if_low_coverage(adata, cfg, log, original_cols):
     """Emit WARNING if >50% of cells are annotated as Unknown; HARD ABORT if pass_rate < threshold."""
     if "cell_type" not in adata.obs:
         return
@@ -61,8 +66,25 @@ def _warn_if_low_coverage(adata, cfg, log):
 
         if not os.path.exists(cfg.annotated_h5ad):
             _shutil.copy2(cfg.cluster_h5ad, cfg.annotated_h5ad)
-        write_obs_columns_lightweight(cfg.annotated_h5ad, adata.obs, logger=log)
+        _new_cols = _new_obs_columns(adata, original_cols)
+        if _new_cols:
+            write_obs_columns_lightweight(cfg.annotated_h5ad, adata.obs[_new_cols], logger=log)
         sys.exit(1)
+
+
+def _write_lightweight(adata, cfg, log, original_cols):
+    """Copy cluster h5ad (once) + append only the obs columns step 05 added."""
+    import shutil
+
+    from core.utils import write_obs_columns_lightweight
+
+    if not os.path.exists(cfg.annotated_h5ad):
+        shutil.copy2(cfg.cluster_h5ad, cfg.annotated_h5ad)
+        log.info("Copied %s → %s", cfg.cluster_h5ad, cfg.annotated_h5ad)
+    _new_cols = _new_obs_columns(adata, original_cols)
+    if _new_cols:
+        write_obs_columns_lightweight(cfg.annotated_h5ad, adata.obs[_new_cols], logger=log)
+        log.info("Lightweight write: %d new columns appended", len(_new_cols))
 
 
 def _update_quality_report_pass_rate(adata, cfg):
@@ -574,20 +596,6 @@ def main():
     )
     _original_cols = set(adata.obs.columns)  # track for lightweight write diff
 
-    def _write_lightweight():
-        """Copy cluster h5ad (once) + append only new obs columns."""
-        import shutil
-
-        from core.utils import write_obs_columns_lightweight
-
-        if not os.path.exists(cfg.annotated_h5ad):
-            shutil.copy2(cfg.cluster_h5ad, cfg.annotated_h5ad)
-            log.info("Copied %s → %s", cfg.cluster_h5ad, cfg.annotated_h5ad)
-        _new_cols = [c for c in adata.obs.columns if c not in _original_cols]
-        if _new_cols:
-            write_obs_columns_lightweight(cfg.annotated_h5ad, adata.obs[_new_cols], logger=log)
-            log.info("Lightweight write: %d new columns appended", len(_new_cols))
-
     # ── 判断 AI 模式/Unified KB 模式是否可用 ────────────────────────────
     ai_enabled = getattr(cfg.ai, "enabled", False)
     ai_annot_on = getattr(cfg.ai, "annotation", False)
@@ -617,8 +625,8 @@ def main():
                     .map(lambda c: validation_map.get(c, "NO_ONTOLOGY"))
                 )
             _update_quality_report_pass_rate(adata, cfg)
-            _warn_if_low_coverage(adata, cfg, log)
-            _write_lightweight()
+            _warn_if_low_coverage(adata, cfg, log, _original_cols)
+            _write_lightweight(adata, cfg, log, _original_cols)
             log.info("Step 05 (Unified mode) complete, took %.1fs", time.time() - t0)
             return
         log.warning("Unified annotation failed, falling back to Score_genes mode")
@@ -646,8 +654,8 @@ def main():
                     .map(lambda c: validation_map.get(c, "NO_ONTOLOGY"))
                 )
             _update_quality_report_pass_rate(adata, cfg)
-            _warn_if_low_coverage(adata, cfg, log)
-            _write_lightweight()
+            _warn_if_low_coverage(adata, cfg, log, _original_cols)
+            _write_lightweight(adata, cfg, log, _original_cols)
             log.info("Step 05 (AI mode) complete, took %.1fs", time.time() - t0)
             return
         log.warning("AI annotation failed, falling back to Score_genes mode")
@@ -672,8 +680,8 @@ def main():
             adata.obs["leiden"].astype(str).map(lambda c: validation_map.get(c, "NO_ONTOLOGY"))
         )
     _update_quality_report_pass_rate(adata, cfg)
-    _warn_if_low_coverage(adata, cfg, log)
-    _write_lightweight()
+    _warn_if_low_coverage(adata, cfg, log, _original_cols)
+    _write_lightweight(adata, cfg, log, _original_cols)
     log.info("Step 05 (score_genes mode) complete, took %.1fs", time.time() - t0)
 
 

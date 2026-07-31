@@ -16,6 +16,7 @@ import argparse
 import os
 import sys
 import time
+from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 import json
@@ -121,7 +122,19 @@ def auto_writeback(sub, cell_type, main_path, log=None, cfg=None):
         return 0
 
     main.obs["cell_subtype"] = main.obs["cell_subtype"].astype("category")
-    safe_write(main, main_path, cfg=cfg)
+    if getattr(cfg, "incremental_io", True):
+        # In-place obs writeback with .bak backup/restore (plan Item 1.2-B/1.3).
+        # write_obs_columns_inplace owns the copy2 → append → verify →
+        # unlink/atomic-restore lifecycle — do NOT add a backup here.
+        from core.utils import write_obs_columns_inplace
+
+        write_obs_columns_inplace(
+            main_path,
+            main.obs[["cell_subtype"]],  # the only column this step mutates
+            logger=log,
+        )
+    else:
+        safe_write(main, main_path, cfg=cfg)  # full-write escape hatch
     log.info("Wrote back %d subcluster labels to %s", n_updated, main_path)
     return n_updated
 
@@ -533,13 +546,20 @@ def main():
     # ``cell_subtype`` column, so downstream steps see a single source
     # of truth. No-op when AI annotation was not actually run.
     main_path = os.path.join(cfg.h5ad_dir, "05_annotated.h5ad")
-    auto_writeback(
+    n_writeback = auto_writeback(
         sub=sub,
         cell_type=args.cell_type,
         main_path=main_path,
         log=log,
         cfg=cfg,
     )
+    # Item 1.6 sentinel contract: only a real writeback marks step 06 done.
+    # Skipped runs (exit 2) and no-op writebacks (AI disabled) must NOT write it
+    # — runner's RNA_SENTINEL_FILES[6] = "05_annotated.h5ad.step06_done".
+    if n_writeback > 0:
+        sentinel_path = Path(main_path + ".step06_done")
+        sentinel_path.write_text("done")
+        log.info("Step 06 sentinel written: %s", sentinel_path.name)
 
     # ── (l) Summary ───────────────────────────────────────────────────
     n_clusters = sub.obs["leiden"].nunique()
