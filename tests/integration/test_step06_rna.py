@@ -17,7 +17,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -608,6 +608,193 @@ class TestStep06Writeback:
             .tolist()
         )
         assert got == sub.obs["sub_ai_label"].astype(str).to_numpy().tolist()
+
+
+# ── Test: KB-constrained AI annotation (plan todo 6) ────────────────────
+
+
+def _make_ai_sub(n_cells: int = 8, n_leiden: int = 2):
+    """Minimal AnnData subset with a 'leiden' column for AI annotation tests."""
+    import numpy as np
+    import scanpy as sc
+
+    sub = sc.AnnData(X=np.zeros((n_cells, 5), dtype=np.float32))
+    sub.obs["leiden"] = np.array([str(i % n_leiden) for i in range(n_cells)])
+    return sub
+
+
+class TestStep06KbConstrainedAnnotation:
+    """Plan todo 6: KB-constrained AI prompt injection + label canonicalization."""
+
+    _CANDIDATES = ["RGC_Foxp2", "RGC_W3"]
+
+    @staticmethod
+    def _cfg(tissue_kb: str = "retina", subcluster_kb_constrained: bool = True):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(
+            tissue_kb=tissue_kb,
+            ai=SimpleNamespace(subcluster_kb_constrained=subcluster_kb_constrained),
+        )
+
+    @staticmethod
+    def _args(cell_type: str = "RGC"):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(cell_type=cell_type)
+
+    def test_prompt_injects_kb_candidates_when_they_exist(self):
+        """kb_candidates receives build_subtype_candidates output when non-empty."""
+        mod = _load_step06_module()
+        sub = _make_ai_sub()
+        cfg = self._cfg()
+        args = self._args()
+        log = Mock()
+        ai_response = (
+            '{"0": {"cell_type": "RGC", "subtype": "Foxp2"}, '
+            '"1": {"cell_type": "RGC", "subtype": "W3"}}'
+        )
+        with (
+            patch("core.kb.load_kb", return_value={"_hierarchy": {}}),
+            patch.object(mod, "build_subtype_candidates", return_value=self._CANDIDATES),
+            patch(
+                "core.ai.prompts.build_annotation_prompt", return_value=("sys", "user")
+            ) as mock_bap,
+            patch("core.ai.caller.ai_query", return_value=ai_response),
+            patch.object(mod, "safe_plot"),
+        ):
+            mod._ai_subcluster_annotation(sub, cfg, args, log)
+
+        mock_bap.assert_called_once()
+        kwargs = mock_bap.call_args.kwargs
+        assert kwargs["kb_candidates"] == self._CANDIDATES
+        # subcluster_kb_constrained defaults True → unconstrained=False.
+        assert kwargs["unconstrained"] is False
+
+    def test_unconstrained_true_when_subcluster_kb_constrained_false(self):
+        """Flag False → unconstrained=True is passed to build_annotation_prompt."""
+        mod = _load_step06_module()
+        sub = _make_ai_sub()
+        cfg = self._cfg(subcluster_kb_constrained=False)
+        args = self._args()
+        log = Mock()
+        with (
+            patch("core.kb.load_kb", return_value={"_hierarchy": {}}),
+            patch.object(mod, "build_subtype_candidates", return_value=self._CANDIDATES),
+            patch(
+                "core.ai.prompts.build_annotation_prompt", return_value=("sys", "user")
+            ) as mock_bap,
+            patch(
+                "core.ai.caller.ai_query",
+                return_value='{"0": {"cell_type": "RGC", "subtype": "Foxp2"}}',
+            ),
+            patch.object(mod, "safe_plot"),
+        ):
+            mod._ai_subcluster_annotation(sub, cfg, args, log)
+
+        mock_bap.assert_called_once()
+        assert mock_bap.call_args.kwargs["kb_candidates"] == self._CANDIDATES
+        assert mock_bap.call_args.kwargs["unconstrained"] is True
+
+    def test_no_kb_candidates_when_candidates_empty(self):
+        """Empty candidates → no kb_candidates, current behavior unchanged."""
+        mod = _load_step06_module()
+        sub = _make_ai_sub()
+        cfg = self._cfg()
+        args = self._args()
+        log = Mock()
+        with (
+            patch("core.kb.load_kb", return_value={"_hierarchy": {}}),
+            patch.object(mod, "build_subtype_candidates", return_value=[]),
+            patch(
+                "core.ai.prompts.build_annotation_prompt", return_value=("sys", "user")
+            ) as mock_bap,
+            patch(
+                "core.ai.caller.ai_query",
+                return_value='{"0": {"cell_type": "RGC", "subtype": "Foxp2"}}',
+            ),
+            patch.object(mod, "safe_plot"),
+        ):
+            mod._ai_subcluster_annotation(sub, cfg, args, log)
+
+        mock_bap.assert_called_once()
+        assert "kb_candidates" not in mock_bap.call_args.kwargs
+        assert "unconstrained" not in mock_bap.call_args.kwargs
+
+    def test_load_kb_failure_falls_back_unconstrained(self):
+        """load_kb raising ValueError → warn, no kb_candidates, AI call still made."""
+        mod = _load_step06_module()
+        sub = _make_ai_sub()
+        cfg = self._cfg(tissue_kb="ghost")
+        args = self._args()
+        log = Mock()
+        with (
+            patch("core.kb.load_kb", side_effect=ValueError("unsupported tissue")),
+            patch(
+                "core.ai.prompts.build_annotation_prompt", return_value=("sys", "user")
+            ) as mock_bap,
+            patch(
+                "core.ai.caller.ai_query",
+                return_value='{"0": {"cell_type": "RGC", "subtype": "Foxp2"}}',
+            ) as mock_aq,
+            patch.object(mod, "safe_plot"),
+        ):
+            mod._ai_subcluster_annotation(sub, cfg, args, log)
+
+        log.warning.assert_any_call("KB load failed — unconstrained subcluster annotation")
+        mock_bap.assert_called_once()
+        assert "kb_candidates" not in mock_bap.call_args.kwargs
+        assert "unconstrained" not in mock_bap.call_args.kwargs
+        mock_aq.assert_called_once()
+
+    # ── Canonicalization of the already-sanitized label ──
+
+    def test_canonicalize_casefold_label_to_candidate(self):
+        mod = _load_step06_module()
+        log = Mock()
+        assert mod.canonicalize_subtype_label("rgc_foxp2", self._CANDIDATES, log) == "RGC_Foxp2"
+        log.info.assert_not_called()
+
+    def test_canonicalize_delimiter_to_underscore(self):
+        mod = _load_step06_module()
+        log = Mock()
+        assert mod.canonicalize_subtype_label("RGC-Foxp2", self._CANDIDATES, log) == "RGC_Foxp2"
+
+    def test_canonicalize_parentheses_stripped(self):
+        mod = _load_step06_module()
+        log = Mock()
+        assert mod.canonicalize_subtype_label("RGC(Foxp2)", self._CANDIDATES, log) == "RGC_Foxp2"
+
+    def test_canonicalize_word_order_reversal_kept_raw_and_logs_novel(self):
+        mod = _load_step06_module()
+        log = Mock()
+        assert mod.canonicalize_subtype_label("Foxp2_RGC", self._CANDIDATES, log) == "Foxp2_RGC"
+        log.info.assert_any_call("NOVEL: %s", "Foxp2_RGC")
+
+    def test_ai_labels_canonicalized_through_parse_loop(self):
+        """The parse loop applies canonicalization to final sanitized labels."""
+        mod = _load_step06_module()
+        sub = _make_ai_sub()
+        cfg = self._cfg()
+        args = self._args()
+        log = Mock()
+        ai_response = (
+            '{"0": {"cell_type": "RGC", "subtype": "foxp2"}, '
+            '"1": {"cell_type": "RGC", "subtype": "Foxp2"}}'
+        )
+        with (
+            patch("core.kb.load_kb", return_value={"_hierarchy": {}}),
+            patch.object(mod, "build_subtype_candidates", return_value=self._CANDIDATES),
+            patch("core.ai.prompts.build_annotation_prompt", return_value=("sys", "user")),
+            patch("core.ai.caller.ai_query", return_value=ai_response),
+            patch.object(mod, "safe_plot"),
+        ):
+            mod._ai_subcluster_annotation(sub, cfg, args, log)
+
+        labels = dict(zip(sub.obs["leiden"], sub.obs["sub_ai_label"]))
+        # "RGC_foxp2" (casefold) and "RGC_Foxp2" (exact) both land on the candidate.
+        assert labels["0"] == "RGC_Foxp2"
+        assert labels["1"] == "RGC_Foxp2"
 
 
 # ── Test: sentinel contract (Item 1.6) ─────────────────────────────────

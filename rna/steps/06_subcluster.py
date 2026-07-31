@@ -212,6 +212,152 @@ def build_subtype_candidates(adata_subset, kb, cell_type):
     return sorted(candidates)
 
 
+def canonicalize_subtype_label(label, candidates, log=None):
+    """Canonicalize an AI-suggested subtype label against KB candidates.
+
+    Applied to the FINAL sanitized label, i.e. AFTER the parse loop's
+    ``replace(" ", "_").replace("/", "_")`` (the pre-steps here re-strip
+    those characters as harmless no-ops). Steps:
+
+      1. strip ``(`` ``)`` and trailing ``+``/``-``;
+      2. replace remaining delimiters ``[" ", "-", "/", "+"]`` with ``_``;
+      3. keep unchanged if already a candidate;
+      4. else ``resolve_cell_type(candidates, label)`` (exact → casefold →
+         difflib, cutoff 0.6);
+      5. if still unmapped (e.g. word-order reversals like ``Foxp2_RGC``),
+         keep the raw label and log ``NOVEL: <label>``.
+    """
+    for ch in ("(", ")"):
+        label = label.replace(ch, "")
+    label = label.rstrip("+-")
+    for delim in (" ", "-", "/", "+"):
+        label = label.replace(delim, "_")
+
+    if label in candidates:
+        return label
+    resolved = resolve_cell_type(candidates, label)
+    if resolved is not None:
+        return resolved
+    if log is not None:
+        log.info("NOVEL: %s", label)
+    return label
+
+
+def _ai_subcluster_annotation(sub, cfg, args, log):
+    """Run the AI subcluster re-annotation, populating ``sub.obs['sub_ai_label']``.
+
+    When ``cfg.tissue_kb`` is set the KB is loaded and the subtype candidate
+    list (``build_subtype_candidates``) is injected into ``build_annotation_prompt``
+    via ``kb_candidates`` — constraining AI naming to the KB subtype space unless
+    ``cfg.ai.subcluster_kb_constrained`` is False (then ``unconstrained=True``).
+    A KB load failure only degrades this step (warn + unconstrained, current
+    behavior); it never aborts the run. AI-returned labels are canonicalized
+    against the candidate list. Any failure falls back to numeric labels in place.
+    """
+    try:
+        from core.ai.caller import ai_query
+        from core.ai.prompts import build_annotation_prompt
+
+        log.info("Running AI subcluster re-annotation...")
+
+        # KB-constrained candidate injection (plan todo 6). load_kb is imported
+        # here so a failing tissue only degrades this step, not the whole run.
+        candidates: list[str] = []
+        if cfg.tissue_kb:
+            try:
+                from core.kb import load_kb
+
+                kb = load_kb(cfg.tissue_kb)
+            except (ValueError, ImportError):
+                kb = None
+                log.warning("KB load failed — unconstrained subcluster annotation")
+            if kb is not None:
+                candidates = build_subtype_candidates(sub, kb, args.cell_type)
+
+        prompt_kwargs: dict = {}
+        if candidates:
+            prompt_kwargs["kb_candidates"] = candidates
+            prompt_kwargs["unconstrained"] = not cfg.ai.subcluster_kb_constrained
+
+        # build_annotation_prompt runs rank_genes_groups internally
+        # and returns (system_prompt, user_prompt)
+        sys_prompt, user_prompt = build_annotation_prompt(
+            sub,
+            tissue=args.cell_type,
+            species="unknown",
+            precomputed_rank=True,
+            **prompt_kwargs,
+        )
+
+        result = ai_query(sys_prompt, user_prompt, cfg.ai)
+
+        if not result:
+            log.warning("AI returned empty response — falling back to numeric labels")
+            sub.obs["sub_ai_label"] = ("Subcluster_" + sub.obs["leiden"].astype(str)).astype(
+                "category"
+            )
+        else:
+            log.info("AI response received (%d chars)", len(result))
+
+            # ── Parse JSON from AI response ──
+            # Strip potential markdown code fences
+            cleaned = extract_json_block(result)
+            parsed = json.loads(cleaned)
+
+            # Build per-cluster labels with cell_type + subtype
+            ai_labels = {}
+            for cluster_id, info in parsed.items():
+                cell_type = info.get("cell_type", "Unknown")
+                subtype = info.get("subtype", "N/A")
+                if subtype and subtype.upper() != "N/A":
+                    label = f"{cell_type}_{subtype}"
+                else:
+                    label = cell_type
+                # Sanitize for categorical use
+                label = label.replace(" ", "_").replace("/", "_")
+                # Canonicalize to the KB subtype space (plan todo 6).
+                if candidates:
+                    label = canonicalize_subtype_label(label, candidates, log)
+                ai_labels[cluster_id] = label
+
+            # Convert to string first to avoid Categorical restrictions
+            # when adding new values via map()
+            sub.obs["leiden"] = sub.obs["leiden"].astype(str)
+
+            # Map to sub.obs as categorical
+            sub.obs["sub_ai_label"] = (sub.obs["leiden"].map(ai_labels)).astype("category")
+            n_ai_types = sub.obs["sub_ai_label"].nunique()
+            log.info("AI annotation: %d subcluster types identified", n_ai_types)
+
+            # Log per-cluster AI mapping
+            for cluster_id in sorted(
+                sub.obs["leiden"].unique(),
+                key=lambda x: (len(x), x) if (x.isascii() and x.isdigit()) else (999, x),
+            ):
+                label = ai_labels.get(str(cluster_id), "Unmapped")
+                count = (sub.obs["leiden"] == cluster_id).sum()
+                log.info("  Subcluster %s → %s (%d cells)", cluster_id, label, count)
+
+            # Save AI-annotated UMAP
+            safe_cell_type = args.cell_type.replace(" ", "_").replace("/", "_")
+            safe_plot(
+                sc.pl.umap,
+                sub,
+                color="sub_ai_label",
+                show=False,
+                save=f"sub_{safe_cell_type}_umap_ai.pdf",
+                title=f"{args.cell_type} — AI subcluster",
+                cfg=cfg,
+            )
+
+    except Exception as e:
+        log.warning("AI subcluster annotation failed: %s", e)
+        log.info("Falling back to numeric subcluster labels.")
+        sub.obs["sub_ai_label"] = ("Subcluster_" + sub.obs["leiden"].astype(str)).astype(
+            "category"
+        )
+
+
 def main():
     t0 = time.time()
 
@@ -521,85 +667,7 @@ def main():
 
     # ── (j) AI-based subcluster annotation ────────────────────────────
     if cfg.ai.enabled and cfg.ai.subcluster:
-        try:
-            from core.ai.caller import ai_query
-            from core.ai.prompts import build_annotation_prompt
-
-            log.info("Running AI subcluster re-annotation...")
-
-            # build_annotation_prompt runs rank_genes_groups internally
-            # and returns (system_prompt, user_prompt)
-            sys_prompt, user_prompt = build_annotation_prompt(
-                sub,
-                tissue=args.cell_type,
-                species="unknown",
-                precomputed_rank=True,
-            )
-
-            result = ai_query(sys_prompt, user_prompt, cfg.ai)
-
-            if not result:
-                log.warning("AI returned empty response — falling back to numeric labels")
-                sub.obs["sub_ai_label"] = ("Subcluster_" + sub.obs["leiden"].astype(str)).astype(
-                    "category"
-                )
-            else:
-                log.info("AI response received (%d chars)", len(result))
-
-                # ── Parse JSON from AI response ──
-                # Strip potential markdown code fences
-                cleaned = extract_json_block(result)
-
-                parsed = json.loads(cleaned)
-
-                # Build per-cluster labels with cell_type + subtype
-                ai_labels = {}
-                for cluster_id, info in parsed.items():
-                    cell_type = info.get("cell_type", "Unknown")
-                    subtype = info.get("subtype", "N/A")
-                    if subtype and subtype.upper() != "N/A":
-                        label = f"{cell_type}_{subtype}"
-                    else:
-                        label = cell_type
-                    # Sanitize for categorical use
-                    label = label.replace(" ", "_").replace("/", "_")
-                    ai_labels[cluster_id] = label
-
-                # Convert to string first to avoid Categorical restrictions
-                # when adding new values via map()
-                sub.obs["leiden"] = sub.obs["leiden"].astype(str)
-
-                # Map to sub.obs as categorical
-                sub.obs["sub_ai_label"] = (sub.obs["leiden"].map(ai_labels)).astype("category")
-                n_ai_types = sub.obs["sub_ai_label"].nunique()
-                log.info("AI annotation: %d subcluster types identified", n_ai_types)
-
-                # Log per-cluster AI mapping
-                for cluster_id in sorted(
-                    sub.obs["leiden"].unique(),
-                    key=lambda x: (len(x), x) if (x.isascii() and x.isdigit()) else (999, x),
-                ):
-                    label = ai_labels.get(str(cluster_id), "Unmapped")
-                    count = (sub.obs["leiden"] == cluster_id).sum()
-                    log.info("  Subcluster %s → %s (%d cells)", cluster_id, label, count)
-
-                # Save AI-annotated UMAP
-                safe_plot(
-                    sc.pl.umap,
-                    sub,
-                    color="sub_ai_label",
-                    show=False,
-                    save=f"sub_{safe_cell_type}_umap_ai.pdf",
-                    title=f"{args.cell_type} — AI subcluster",
-                    cfg=cfg,
-                )
-
-        except Exception as e:
-            log.warning("AI subcluster annotation failed: %s", e)
-            log.info("Falling back to numeric subcluster labels.")
-            sub.obs["sub_ai_label"] = ("Subcluster_" + sub.obs["leiden"].astype(str)).astype(
-                "category"
-            )
+        _ai_subcluster_annotation(sub, cfg, args, log)
     else:
         log.info(
             "AI subcluster annotation disabled (CFG.ai.enabled=%s, CFG.ai.subcluster=%s)",
