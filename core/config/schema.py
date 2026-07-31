@@ -462,6 +462,10 @@ class TrajectorySettings(BaseModel):
     pseudotime_n_branch_de: int = 10
     pseudotime_n_correlated: int = 10
     pseudotime_cor_pval: float = 0.05
+    save_final_h5ad: bool = Field(
+        default=True,
+        description="是否输出 05_final.h5ad。该文件全仓库无下游消费者，允许关闭以减少中间产物占用。",
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -781,6 +785,10 @@ class Config(BaseModel):
     cleanup_intermediates: bool = False
     perf_monitoring: bool = True
     verify_write_integrity: bool = True
+    incremental_io: bool = Field(
+        default=True,
+        description="增量写入开关（默认开）。True → 步骤对 obs/obsm/obsp/uns 走 in-place 追加写；False → 全部回退全量 safe_write。默认开的理由：copy+append 崩溃即删源文件兜底、in-place 写回有 .bak 兜底；逃生口：WSL /mnt 文件系统不稳时置 False 回退全量写入。",
+    )
 
     # ═══════════════════════════════════════════════════════════════════
     # ATAC → RNA 整合 / Spatial RNA 参考

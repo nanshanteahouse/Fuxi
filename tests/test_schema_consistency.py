@@ -22,7 +22,14 @@ import re
 import textwrap
 from typing import Any
 
-from core.config.schema import ClusteringSettings, Config, IntegrationSettings, MarkerSettings
+from core.config.schema import (
+    ClusteringSettings,
+    Config,
+    IntegrationSettings,
+    MarkerSettings,
+    TrajectorySettings,
+)
+from core.utils import resolve_config
 
 # ── Paths ──────────────────────────────────────────────────────────────
 
@@ -645,3 +652,43 @@ class TestSpeciesValidatorExistence:
 def _fmt_field_list(fields: set[str]) -> str:
     """Return a sorted, indented list of field names."""
     return "\n".join(f"    • {f}" for f in sorted(fields))
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Test 8 — h5ad incremental-io fields (incremental_io / save_final_h5ad)
+# ═══════════════════════════════════════════════════════════════════════
+
+
+class TestH5adIncrementalIOFields:
+    """Verify the h5ad incremental-io config fields: defaults, overrides, template."""
+
+    def test_defaults(self) -> None:
+        """incremental_io and trajectory.save_final_h5ad default to True."""
+        assert Config.model_fields["incremental_io"].default is True
+        assert TrajectorySettings.model_fields["save_final_h5ad"].default is True
+        # Direct access path (what T5/T6/T7 consume) must be reachable.
+        cfg = Config()
+        assert cfg.incremental_io is True
+        assert cfg.trajectory.save_final_h5ad is True
+
+    def test_yaml_false_override(self, tmp_path: pathlib.Path) -> None:
+        """resolve_config honours explicit false values in YAML."""
+        cfg_path = tmp_path / "config.yaml"
+        cfg_path.write_text(
+            "modality: rna\nincremental_io: false\ntrajectory:\n  save_final_h5ad: false\n",
+            encoding="utf-8",
+        )
+        cfg = resolve_config(str(cfg_path))
+        assert cfg.incremental_io is False
+        assert cfg.trajectory.save_final_h5ad is False
+
+    def test_rna_template_loads(self, tmp_path: pathlib.Path) -> None:
+        """RNA main template must load via resolve_config (template regression)."""
+        template = _REPO / "templates" / "config_templates" / "config_10X_h5.yaml"
+        assert template.is_file(), f"Template not found: {template}"
+        # Load a copy from tmp so resolve_config's dir creation stays out of the repo.
+        dst = tmp_path / "config_10X_h5.yaml"
+        dst.write_text(template.read_text(encoding="utf-8"), encoding="utf-8")
+        cfg = resolve_config(str(dst))
+        assert cfg.incremental_io is True
+        assert cfg.trajectory.save_final_h5ad is True

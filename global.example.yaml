@@ -145,3 +145,9 @@ plot:
     # batch_gini_ambiguous: "#f39c12"
     # significance_edge: "grey"
     # grn_facecolor: "white"
+
+# ── h5ad 增量写入 ───────────────────────────────────────────────────────
+# incremental_io: true   # 增量写开关（默认开）：obs/obsm/obsp/uns 走 in-place 追加写
+#                        # 关闭(false) → 全部回退全量 safe_write（WSL /mnt 不稳时的逃生口）
+# trajectory:
+#   save_final_h5ad: true   # 输出 05_final.h5ad（默认开；该文件无下游消费者，可关以省空间）

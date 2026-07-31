@@ -2,10 +2,12 @@
 
 import logging
 import os
+import shutil
 from typing import Optional
 
 import anndata
 
+from core.utils._io_incremental import write_h5ad_incremental
 from core.utils._path import is_wsl
 
 
@@ -17,6 +19,8 @@ def safe_write(
     cfg=None,
     compression_override: Optional[str] = None,
     step_alias: str | None = None,
+    *,
+    delta_only: bool = False,
 ) -> None:
     """
     安全写入 h5ad 文件，避免 WSL /mnt 挂载的文件锁定问题。
@@ -33,6 +37,9 @@ def safe_write(
             用于 SnapATAC2 兼容写（compression_override=None 写未压缩文件）。
         step_alias: 步别名（如 "integrated"）— 在 cfg.per_step_h5ad_compression 中查找压缩配置。
             优先级高于 compression_override 和 cfg.h5ad_compression。
+        delta_only: 若为 True 且目标文件已存在（且 adata 是 AnnData），则改走
+            write_h5ad_incremental in-place 追加 obs/obsm/obsp/uns——不重写 X，
+            追加的 key 一律覆盖。目标不存在或 MuData 时回退全量路径。
     """
     # Resolution order: per_step_h5ad_compression > compression_override > cfg.h5ad_compression > default
     if step_alias is not None and cfg is not None:
@@ -49,6 +56,19 @@ def safe_write(
         tmpdir = getattr(cfg, "h5ad_tempdir", tmpdir)
     anndata.settings.allow_write_nullable_strings = True
 
+    # Incremental append path (Item 1.5): append obs/obsm/obsp/uns in place
+    # when the target exists. MuData (.h5mu) is not supported by the engine
+    # → falls through to the full-write path below.
+    if delta_only and os.path.exists(target) and not hasattr(adata, "mod"):
+        write_h5ad_incremental(
+            target,
+            obs=adata.obs,
+            obsm=adata.obsm,
+            obsp=adata.obsp,
+            uns=adata.uns,
+            logger=logging.getLogger(__name__),
+        )
+        return
     # WSL /mnt mounts: prefer writing to a tmp file then atomic rename.
     # If the configured tmpdir is on a different filesystem than target
     # (e.g. tmpfs -> 9p DrvFs), shutil.copy2 corrupts h5 metadata on 4GB+
@@ -129,152 +149,134 @@ def safe_write(
                 )
 
 
+# FICLONE ioctl request (linux/fs.h): clone the src fd's extents into the dst fd.
+FICLONE = 0x40049409
+
+
+def copy_h5ad(src: str, dst: str) -> None:
+    """Copy an h5ad file, opportunistically using a reflink (CoW clone).
+
+    On filesystems that support FICLONE (btrfs, xfs, …) the copy is
+    near-instant and shares the underlying extents: subsequent in-place
+    writes to either side trigger copy-on-write, so the ``.bak`` backup
+    never changes when the live file is mutated later. On filesystems
+    without reflink support (ext4, WSL DrvFs) — or when the ioctl fails
+    for any other reason — this silently falls back to
+    :func:`shutil.copy2`, preserving copy2's metadata/permission
+    semantics. Only a copy2 failure propagates.
+
+    Parameters
+    ----------
+    src, dst : str
+        Source and destination paths. ``dst`` is created/overwritten.
+    """
+    try:
+        import fcntl  # non-POSIX (e.g. Windows) → ImportError → copy2
+    except ImportError:
+        pass
+    else:
+        try:
+            with open(src, "rb") as src_file, open(dst, "wb") as dst_file:
+                fcntl.ioctl(dst_file, FICLONE, src_file.fileno())
+            shutil.copystat(src, dst)  # copy2-equivalent metadata
+            return
+        except Exception:
+            pass  # EINVAL/ENOTTY/EXDEV/EPERM → reflink unsupported → copy2
+    shutil.copy2(src, dst)
+
+
 def write_obs_columns_lightweight(
     h5ad_path: str,
     obs_df,  # pandas DataFrame with only the new columns
     logger=None,
 ):
-    """Append obs columns to an existing h5ad file via h5py (NO X rewrite).
+    """Append obs columns to an existing h5ad file (NO X rewrite).
 
-    Avoids rewriting the full HDF5 file when only obs/ columns change.
-    Saves ~9-11 GB of disk I/O per call on large datasets (1M+ cells).
+    Delegates to :func:`write_h5ad_incremental` (anndata.io.write_elem based)
+    — categorical codes get a minimal dtype by n_categories (fixes int8
+    wraparound at 127 categories) and string columns keep missing values as
+    missing (fixes NaN→"nan" corruption).
+
+    Copy+append mode: the h5ad is derived from an intact source file, so a
+    failed append deletes the corrupt copy — re-running the step regenerates
+    it (commit d80836b's intentional design, kept).
 
     Parameters
     ----------
     h5ad_path : str
-        Path to the existing h5ad file (opened in 'a' mode).
+        Path to the existing h5ad file.
     obs_df : pd.DataFrame
         DataFrame containing ONLY the new columns to write (not all obs).
         Must have the same index as the h5ad's /obs index.
     logger : logging.Logger or None
     """
-    import h5py
-    import numpy as np
-    import pandas as pd
-
     _log = logger.info if logger else (lambda msg, *a: None)
     _log("Lightweight obs write: %d column(s) → %s", len(obs_df.columns), h5ad_path)
-
-    with h5py.File(h5ad_path, "a") as f:
-        obs_group = f.require_group("obs")
-
-        for col_name in obs_df.columns:
-            series = obs_df[col_name]
-
-            # Remove any pre-existing entry (dataset or group)
-            if col_name in obs_group:
-                del obs_group[col_name]
-
-            if isinstance(series.dtype, pd.CategoricalDtype):
-                # AnnData 0.13+: categorical column → /obs/{col}/ as Group
-                col_grp = obs_group.create_group(col_name)
-                codes = series.cat.codes.to_numpy(dtype=np.int8)
-                categories = series.cat.categories.to_numpy(dtype=object)
-
-                ds_codes = col_grp.create_dataset(
-                    "codes",
-                    data=codes,
-                    dtype=np.int8,
-                    compression="gzip",
-                )
-                ds_codes.attrs["encoding-type"] = "array"
-                ds_codes.attrs["encoding-version"] = "0.2.0"
-
-                ds_cat = col_grp.create_dataset(
-                    "categories",
-                    data=categories.astype(h5py.string_dtype()),
-                    dtype=h5py.string_dtype(),
-                )
-                ds_cat.attrs["encoding-type"] = "string-array"
-                ds_cat.attrs["encoding-version"] = "0.2.0"
-
-            elif series.dtype == bool or series.dtype == np.bool_:
-                data = series.to_numpy(dtype=np.bool_)
-                ds = obs_group.create_dataset(
-                    col_name,
-                    data=data,
-                    dtype=np.bool_,
-                    compression="gzip",
-                )
-                ds.attrs["encoding-type"] = "array"
-                ds.attrs["encoding-version"] = "0.2.0"
-
-            elif pd.api.types.is_float_dtype(series):
-                data = series.to_numpy(dtype=np.float32)
-                ds = obs_group.create_dataset(
-                    col_name,
-                    data=data,
-                    dtype=np.float32,
-                    compression="gzip",
-                )
-                ds.attrs["encoding-type"] = "array"
-                ds.attrs["encoding-version"] = "0.2.0"
-
-            elif pd.api.types.is_integer_dtype(series):
-                data = series.to_numpy(dtype=np.int32)
-                ds = obs_group.create_dataset(
-                    col_name,
-                    data=data,
-                    dtype=np.int32,
-                    compression="gzip",
-                )
-                ds.attrs["encoding-type"] = "array"
-                ds.attrs["encoding-version"] = "0.2.0"
-
-            else:
-                # String/object → Group with codes+strings (AnnData 0.13 string format)
-                col_grp = obs_group.create_group(col_name)
-                arr = pd.array(series.astype(str), dtype="string")
-                codes_data = np.arange(len(arr), dtype=np.int8)
-                uniq = sorted(set(arr))
-                cat_map = {v: i for i, v in enumerate(uniq)}
-                codes_data = np.array([cat_map[v] for v in arr], dtype=np.int8)
-
-                ds_c = col_grp.create_dataset(
-                    "codes",
-                    data=codes_data,
-                    dtype=np.int8,
-                    compression="gzip",
-                )
-                ds_c.attrs["encoding-type"] = "array"
-                ds_c.attrs["encoding-version"] = "0.2.0"
-
-                ds_cat = col_grp.create_dataset(
-                    "categories",
-                    data=np.array(uniq).astype(h5py.string_dtype()),
-                    dtype=h5py.string_dtype(),
-                )
-                ds_cat.attrs["encoding-type"] = "string-array"
-                ds_cat.attrs["encoding-version"] = "0.2.0"
-
-            _log("  ↪ %s (%s)", col_name, series.dtype)
-
-        # ── Update column-order metadata (AnnData 0.13+ requires this) ──
-        _existing = list(obs_group.attrs.get("column-order", []))
-        _new_cols = list(obs_df.columns)
-        obs_group.attrs["column-order"] = _existing + [c for c in _new_cols if c not in _existing]
-
-    # ── Integrity check: re-open in backed mode, verify columns exist ──
     try:
-        import scanpy as sc
-
-        _verify = sc.read(h5ad_path, backed="r")
-        _missing = [c for c in obs_df.columns if c not in _verify.obs.columns]
-        if _missing:
-            raise RuntimeError(f"Columns missing after write: {_missing}")
-        _log(
-            "  ↪ integrity check OK (%d obs columns, %d cells)",
-            len(_verify.obs.columns),
-            _verify.n_obs,
-        )
+        write_h5ad_incremental(h5ad_path, obs=obs_df, logger=logger)
     except Exception:
         if logger:
             logger.error(
                 "Lightweight write integrity FAILED — removing corrupt file: %s",
                 h5ad_path,
             )
-        os.remove(h5ad_path)
+        if os.path.exists(h5ad_path):
+            os.remove(h5ad_path)
         raise
+
+
+def write_obs_columns_inplace(
+    h5ad_path: str,
+    obs_df,  # pandas DataFrame with the columns to write back
+    logger=None,
+):
+    """Write obs columns back into a SHARED checkpoint, with .bak backup/restore.
+
+    Unlike copy+append mode (delete-on-failure), this mutates a checkpoint the
+    rest of the pipeline depends on — deleting it would force expensive
+    upstream re-runs (e.g. losing 05_annotated means redoing step 05's AI
+    annotation calls). Strategy:
+
+      1. ``copy_h5ad`` to ``<file>.bak`` (same directory; reflink when possible,
+         CoW guarantees the backup stays pristine across the in-place write);
+      2. append via :func:`write_h5ad_incremental` (which verifies);
+      3. success → ``unlink`` the backup; failure → ``os.replace`` the backup
+         back over the file (atomic same-dir restore) and re-raise.
+
+    Parameters
+    ----------
+    h5ad_path : str
+        Path to the shared checkpoint h5ad file.
+    obs_df : pd.DataFrame
+        DataFrame with the columns to write back.
+    logger : logging.Logger or None
+    """
+    _log = logger.info if logger else (lambda msg, *a: None)
+    if not os.path.exists(h5ad_path):
+        raise FileNotFoundError(f"Cannot write back to non-existent h5ad: {h5ad_path}")
+    bak_path = h5ad_path + ".bak"
+    _log("In-place obs writeback: backup → %s", os.path.basename(bak_path))
+    copy_h5ad(h5ad_path, bak_path)
+    try:
+        write_h5ad_incremental(h5ad_path, obs=obs_df, logger=logger)
+    except Exception:
+        try:
+            os.replace(bak_path, h5ad_path)  # atomic same-dir restore
+        except OSError as restore_err:
+            if logger:
+                logger.critical(
+                    "In-place writeback FAILED and backup restore FAILED: %s",
+                    restore_err,
+                )
+        if logger:
+            logger.error(
+                "In-place writeback FAILED — restored %s from %s",
+                h5ad_path,
+                os.path.basename(bak_path),
+            )
+        raise
+    os.unlink(bak_path)
+    _log("In-place writeback OK — backup removed")
 
 
 def safe_plot(

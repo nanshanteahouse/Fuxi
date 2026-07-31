@@ -144,6 +144,7 @@ trajectory:
   # root_markers: [SOX2, PAX6, NES]
   # n_diffmap_comps: 15
   # n_branchings: 2
+  # save_final_h5ad: true   # 输出 05_final.h5ad（默认开；该文件无下游消费者，可关以省空间）
 
 # ── Differential expression ──
 de:
@@ -216,6 +217,10 @@ cci:
 
 
 # h5ad_compression: gzip
+
+# ── h5ad 增量写入 ──
+# incremental_io: true   # 增量写开关（默认开）：obs/obsm/obsp/uns 走 in-place 追加写
+#                        # 关闭(false) → 全部回退全量 safe_write（WSL /mnt 不稳时的逃生口）
 
 # ── Downsampling (optional) ──
 # downsample:
