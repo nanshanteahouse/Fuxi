@@ -434,6 +434,41 @@ def main():
         log.info("Saved subset (no subclustering performed): %s", output_path)
         return
 
+    # ── (c2) Pre-subcluster UMAP colored by Step-05 cell_subtype ──────
+    # Plan todo 8: visualize the Step-05 subtype labels BEFORE subclustering so
+    # the user can see whether subtypes are actually separable. Uses the parent
+    # X_umap preserved on `sub` (copied from 05_annotated.h5ad; the reprocessing
+    # block below recomputes UMAP on the subset anyway). Guarded: only plot when
+    # the column exists AND ≥2 distinct values outside {"unresolved", "N/A", ""}.
+    safe_cell_type = args.cell_type.replace(" ", "_").replace("/", "_")
+    fig_dir = os.path.join(cfg.figure_dir, "06_subcluster")
+    os.makedirs(fig_dir, exist_ok=True)
+    sc.settings.figdir = fig_dir
+    if "cell_subtype" in sub.obs:
+        distinct = {str(v) for v in sub.obs["cell_subtype"].astype(str)} - {
+            "unresolved",
+            "N/A",
+            "",
+        }
+        if len(distinct) >= 2:
+            if "X_umap" not in sub.obsm:
+                # Synthetic fixtures only — throwaway (reprocessed later anyway).
+                sc.tl.umap(sub, random_state=cfg.execution.random_seed)
+            safe_plot(
+                sc.pl.umap,
+                sub,
+                color="cell_subtype",
+                show=False,
+                save=f"sub_{safe_cell_type}_cell_subtype_umap.pdf",
+                title=f"{args.cell_type} — cell_subtype (step05)",
+                cfg=cfg,
+            )
+            log.info("Saved pre-subcluster cell_subtype UMAP for %s", safe_cell_type)
+        else:
+            log.info("cell_subtype not available — skipping subtype UMAP")
+    else:
+        log.info("cell_subtype not available — skipping subtype UMAP")
+
     # ── (d) Re-process from raw counts on subset ──────────────────────
     # Subsetting changes which genes are informative across the selected
     # cell type.  Re-select HVGs, re-normalize, re-run PCA + Harmony so

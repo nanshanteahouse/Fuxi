@@ -122,12 +122,29 @@ def _create_synthetic_annotated_h5ad(
     if include_cell_type:
         adata.obs["cell_type"] = pd.Categorical([f"Type_{i % n_types}" for i in range(n_cells)])
 
+    # Plan todo 8: parent X_umap so the pre-subcluster subtype UMAP has
+    # coordinates to draw. Values are irrelevant — safe_plot only needs the
+    # embedding to exist, and the step 06 reprocessing block recomputes
+    # X_umap on the subset later anyway.
+    adata.obsm["X_umap"] = rng.randn(n_cells, 2).astype(np.float32)
+
     if cell_subtype is not None:
         # Plan todo 7 fixture: a pre-existing cell_subtype column with MIXED
         # values so per-type writeback sees BOTH classes (resolved labels to
         # preserve + "unresolved" cells that may be overwritten). Pattern i % 4
         # yields ~50/50 resolved/unresolved within EVERY cell_type.
-        subtypes = ["RGC_Foxp2" if i % 4 in (1, 2) else "unresolved" for i in range(n_cells)]
+        if cell_subtype == "mixed2":
+            # Plan todo 8 variant: TWO distinct resolved labels per cell type so
+            # the guarded pre-subcluster subtype UMAP (≥2 distinct values outside
+            # {"unresolved", "N/A", ""}) fires within BOTH Type_0 and Type_1.
+            # Pattern i % 3 gives every cell type exactly {RGC_Foxp2, RGC_W3,
+            # unresolved}.
+            subtypes = [
+                "unresolved" if i % 3 == 0 else "RGC_Foxp2" if i % 3 == 1 else "RGC_W3"
+                for i in range(n_cells)
+            ]
+        else:
+            subtypes = ["RGC_Foxp2" if i % 4 in (1, 2) else "unresolved" for i in range(n_cells)]
         adata.obs["cell_subtype"] = pd.Categorical(subtypes)
     path.parent.mkdir(parents=True, exist_ok=True)
     adata.write(str(path))
@@ -410,6 +427,87 @@ class TestStep06Subprocess:
             "Step 06 crashed with unhandled exception instead of clean error:\n"
             f"{result.stderr[-2000:]}"
         )
+
+    @pytest.mark.skipif(
+        _skip_slow(),
+        reason="Slow integration test skipped via SKIP_SLOW_TESTS",
+    )
+    def test_step06_plots_cell_subtype_umap(self, tmp_path: Path) -> None:
+        """Plan todo 8: pre-subcluster UMAP colored by cell_subtype → PDF produced."""
+        import yaml
+
+        # ── Stage input data WITH cell_subtype + X_umap ────────────────
+        h5ad_dir = tmp_path / "results" / "h5ad"
+        _create_synthetic_annotated_h5ad(
+            h5ad_dir / "05_annotated.h5ad",
+            n_cells=120,
+            n_genes=200,
+            n_types=2,
+            cell_subtype="mixed2",
+        )
+
+        # ── Write config ────────────────────────────────────────────────
+        cfg_dict = _build_minimal_step06_config(tmp_path)
+        config_path = tmp_path / "config_subtype.yaml"
+        with open(config_path, "w") as f:
+            yaml.dump(cfg_dict, f)
+
+        # ── Run step 06 ────────────────────────────────────────────────
+        result = _run_step06(config_path)
+        if result.returncode != 0:
+            print("=== STDOUT ===")
+            print(result.stdout[-3000:])
+            print("=== STDERR ===")
+            print(result.stderr[-3000:])
+        assert result.returncode == 0, (
+            f"Step 06 exited {result.returncode}. See stdout/stderr above."
+        )
+
+        # ── Verify the pre-subcluster subtype UMAP PDF exists ──────────
+        pdf = (
+            tmp_path / "results" / "figures" / "06_subcluster" / "sub_Type_0_cell_subtype_umap.pdf"
+        )
+        assert pdf.exists(), f"expected cell_subtype UMAP PDF at {pdf} — not produced by step 06"
+
+    @pytest.mark.skipif(
+        _skip_slow(),
+        reason="Slow integration test skipped via SKIP_SLOW_TESTS",
+    )
+    def test_step06_skips_subtype_umap_when_column_absent(self, tmp_path: Path) -> None:
+        """Plan todo 8: no cell_subtype column → clean skip, NO subtype UMAP PDF."""
+        import yaml
+
+        # ── Stage input data WITHOUT cell_subtype ───────────────────────
+        h5ad_dir = tmp_path / "results" / "h5ad"
+        _create_synthetic_annotated_h5ad(
+            h5ad_dir / "05_annotated.h5ad",
+            n_cells=120,
+            n_genes=200,
+            n_types=2,
+        )
+
+        # ── Write config ────────────────────────────────────────────────
+        cfg_dict = _build_minimal_step06_config(tmp_path)
+        config_path = tmp_path / "config_nosubtype.yaml"
+        with open(config_path, "w") as f:
+            yaml.dump(cfg_dict, f)
+
+        # ── Run step 06 ────────────────────────────────────────────────
+        result = _run_step06(config_path)
+        if result.returncode != 0:
+            print("=== STDOUT ===")
+            print(result.stdout[-3000:])
+            print("=== STDERR ===")
+            print(result.stderr[-3000:])
+        assert result.returncode == 0, (
+            f"Step 06 exited {result.returncode}. See stdout/stderr above."
+        )
+
+        # ── Verify the skip path produced no subtype UMAP PDF ──────────
+        pdf = (
+            tmp_path / "results" / "figures" / "06_subcluster" / "sub_Type_0_cell_subtype_umap.pdf"
+        )
+        assert not pdf.exists(), f"subtype UMAP PDF must NOT exist without cell_subtype: {pdf}"
 
 
 # ── Test: writeback in-place (function-level, Item 1.3) ─────────────────
