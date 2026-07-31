@@ -149,6 +149,69 @@ def auto_writeback(sub, cell_type, main_path, log=None, cfg=None):
     return n_updated
 
 
+def build_subtype_candidates(adata_subset, kb, cell_type):
+    """Collect candidate L3 subtype names for a subcluster's parent cell type.
+
+    Returns the deduped, sorted union of three independent sources:
+
+      (a) L3 members of ``cell_type`` from the KB hierarchy
+          ``kb["_hierarchy"]["categories"][*]["subtypes"][<L2>]["members"]``
+          (empty when ``kb`` lacks ``_hierarchy`` or the cell type has no
+          defined subtypes — source (a) is independent of marker scoring);
+      (b) distinct non-empty ``cell_subtype`` values in ``adata_subset.obs``
+          that are NOT in {"unresolved", "N/A"} and NOT equal to ``cell_type``
+          (i.e. already-resolved labels from a previous Step 05/06 pass);
+      (c) distinct subtype names from each cell's parsed ``annot_evidence``
+          JSON ``subtype_candidates[*]["type"]`` (near-miss names persisted by
+          the tiered annotation engine — a missing ``annot_evidence`` column
+          and malformed per-cell JSON are tolerated and skipped).
+
+    Never raises for a hierarchy-less ``kb`` or an ``adata_subset`` without an
+    ``annot_evidence`` column.
+
+    Consumed by Step 06 to constrain the AI subcluster-naming prompt.
+    """
+    candidates: set[str] = set()
+
+    # (a) KB hierarchy L3 members of the parent L2 cell type.
+    hierarchy = kb.get("_hierarchy") if isinstance(kb, dict) else None
+    if hierarchy:
+        categories = hierarchy.get("categories") or {}
+        if isinstance(categories, dict):
+            for cat_def in categories.values():
+                if not isinstance(cat_def, dict):
+                    continue
+                subtypes = cat_def.get("subtypes") or {}
+                if not isinstance(subtypes, dict):
+                    continue
+                sub_def = subtypes.get(cell_type)
+                if isinstance(sub_def, dict):
+                    members = sub_def.get("members") or []
+                    candidates.update(str(m) for m in members if m)
+
+    # (b) Distinct already-resolved cell_subtype labels in this subset.
+    if "cell_subtype" in adata_subset.obs:
+        for raw in adata_subset.obs["cell_subtype"]:
+            label = str(raw)
+            if label and label not in {"unresolved", "N/A"} and label != cell_type:
+                candidates.add(label)
+
+    # (c) Near-miss subtype names from per-cell annot_evidence JSON.
+    if "annot_evidence" in adata_subset.obs:
+        for raw in adata_subset.obs["annot_evidence"]:
+            try:
+                parsed = json.loads(raw)
+            except (TypeError, ValueError):
+                continue  # malformed JSON (or non-string) — skip silently
+            if not isinstance(parsed, dict):
+                continue
+            for cand in parsed.get("subtype_candidates", []):
+                if isinstance(cand, dict) and cand.get("type"):
+                    candidates.add(str(cand["type"]))
+
+    return sorted(candidates)
+
+
 def main():
     t0 = time.time()
 
