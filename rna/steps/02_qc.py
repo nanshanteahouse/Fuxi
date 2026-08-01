@@ -26,6 +26,10 @@ import scanpy as sc
 
 from core.utils import resolve_config, setup_logger
 
+try:
+    import hdf5plugin  # zstd 滤镜；写 zstd 压缩文件需要
+except ImportError:
+    hdf5plugin = None
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
@@ -634,15 +638,24 @@ def _write_qc_h5ad(adata, mask_obs, vmask, n_cells_counts, cfg, log):
     vmask_np = np.asarray(vmask)
     block_size = 200_000
 
-    compression = getattr(cfg, "h5ad_compression", "gzip")
-    per_step = getattr(cfg, "per_step_h5ad_compression", {})
-    compression = per_step.get("qc", compression)
+    # 02 专属默认：zstd 全面优于 gzip1（实测 GSE137398：写 11.8→5.9s, 读 3.2→1.6s, 文件 251→217MB）
+    # hdf5plugin 不可用时回退 gzip；FUXI_QC_COMPR 环境变量可覆盖（如 gzip/lzf）
+    compression = os.environ.get("FUXI_QC_COMPR", "")
+    if not compression:
+        compression = getattr(cfg, "h5ad_compression", "gzip")
+        if compression == "gzip":
+            compression = "zstd" if hdf5plugin is not None else "gzip"
     kwargs = {"compression": compression}
     if compression == "gzip":
-        # 实测（GSE137398 76k cells, filter-on-write 对比）:
-        #   gzip level4 写 38.5s/633MB, level1 写 25.8s/703MB, 读 7.0s vs 7.4s
-        #   lzf 写 21.5s 但读 9.9s 且文件 2.36x —— 稀疏 float32 下 gzip level1 最优
         kwargs["compression_opts"] = 1
+    elif compression == "zstd":
+        if hdf5plugin is None:
+            kwargs = {"compression": "gzip", "compression_opts": 1}
+        else:
+            # 实测（GSE137398 76k cells, 335.9M nnz）:
+            #   gzip1 写 11.8s/251MB 读 3.2s, zstd1 写 5.9s/217MB 读 1.6s
+            #   —— zstd 写读均快 ~2x 且文件小 13%，全面胜出
+            kwargs = dict(hdf5plugin.Zstd(clevel=1))
 
     target = os.environ.get("FUXI_QC_OUT", cfg.qc_h5ad)
     target_dir = os.path.dirname(target) or "."

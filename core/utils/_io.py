@@ -5,10 +5,33 @@ import os
 import shutil
 from typing import Optional
 
+try:
+    import hdf5plugin  # 注册第三方 HDF5 滤镜（zstd 等）；读 zstd 文件必须
+
+    # 让不 import core 的子进程/独立脚本也能读 zstd 文件（H5PL 动态插件路径）
+    os.environ.setdefault(
+        "HDF5_PLUGIN_PATH",
+        os.path.join(os.path.dirname(hdf5plugin.__file__), "plugins"),
+    )
+except ImportError:
+    hdf5plugin = None
+
 import anndata
 
 from core.utils._io_incremental import write_h5ad_incremental
 from core.utils._path import is_wsl
+
+
+def _resolve_compression_kwargs(compression: str, compression_opts: Optional[int]):
+    """压缩名 → h5py 写参数；zstd 需 hdf5plugin 滤镜对象（h5py 不识别字符串）。"""
+    if compression == "zstd" and hdf5plugin is not None:
+        return dict(hdf5plugin.Zstd(clevel=1))
+    if compression == "zstd":
+        return {"compression": "gzip"}
+    kwargs = {"compression": compression}
+    if compression_opts is not None:
+        kwargs["compression_opts"] = compression_opts
+    return kwargs
 
 
 def safe_write(
@@ -19,6 +42,7 @@ def safe_write(
     cfg=None,
     compression_override: Optional[str] = None,
     step_alias: str | None = None,
+    compression_opts: Optional[int] = None,
     *,
     delta_only: bool = False,
 ) -> None:
@@ -39,7 +63,10 @@ def safe_write(
             优先级高于 compression_override 和 cfg.h5ad_compression。
         delta_only: 若为 True 且目标文件已存在（且 adata 是 AnnData），则改走
             write_h5ad_incremental in-place 追加 obs/obsm/obsp/uns——不重写 X，
-            追加的 key 一律覆盖。目标不存在或 MuData 时回退全量路径。
+            append 的 key 一律覆盖。目标不存在或 MuData 时回退全量路径。
+        compression_opts: h5py 压缩级别（如 gzip level 1）— 非 None 时透传给
+            adata.write(compression_opts=...)。仅当 compression 为 gzip 系列时生效。
+            None 时回退 cfg.h5ad_compression_opts（与 compression 同源解析）。
     """
     # Resolution order: per_step_h5ad_compression > compression_override > cfg.h5ad_compression > default
     if step_alias is not None and cfg is not None:
@@ -98,7 +125,8 @@ def safe_write(
             tmp_path = os.path.join(tmpdir, os.path.basename(target))
 
         try:
-            adata.write(tmp_path, compression=compression)
+            write_kwargs = _resolve_compression_kwargs(compression, compression_opts)
+            adata.write(tmp_path, **write_kwargs)
             os.replace(tmp_path, target)  # atomic same-fs rename
         except Exception:
             try:
@@ -107,7 +135,8 @@ def safe_write(
                 pass
             raise
     else:
-        adata.write(target, compression=compression)
+        write_kwargs = _resolve_compression_kwargs(compression, compression_opts)
+        adata.write(target, **write_kwargs)
 
     size_mb = os.path.getsize(target) / 1e6
     logger = logging.getLogger(__name__)
