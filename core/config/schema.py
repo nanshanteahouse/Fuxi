@@ -248,6 +248,10 @@ class IntegrationSettings(BaseModel):
     gini_batch_threshold: float = 0.3
     gini_biology_threshold: float = 0.6
     collinearity_guard: bool = True
+    # 流式写 .raw：03 写盘时从 02_qc.h5ad 分块读取 counts → normalize+log1p
+    # → 直写输出文件 raw 组（省内存峰值，避免全基因矩阵常驻）。
+    # 默认 False（保持原行为）；大数据集（>100 万细胞）建议开启。
+    stream_raw: bool = False
     scvi: SCVIConfig = Field(default_factory=SCVIConfig)
 
 
@@ -794,6 +798,10 @@ class Config(BaseModel):
     h5ad_compression: str = "gzip"
     per_step_h5ad_compression: dict[str, str] = Field(
         default_factory=lambda: {"integrated": "gzip"}
+    )
+    h5ad_compression_opts: Optional[int] = Field(
+        default=None,
+        description="h5py 压缩级别（如 gzip level 1=快速、文件略大；level 4=默认平衡；level 9=最小文件、最慢）。None 时用 anndata/h5py 默认。仅对 gzip 压缩生效。大数据集（>100 万细胞）建议 level 1 提速写盘。",
     )
     h5ad_tempdir: str = Field(
         default="/tmp/Fuxi",

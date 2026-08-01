@@ -123,6 +123,7 @@ from core.utils._gpu import (  # noqa: F401
 from core.utils._io import (  # noqa: F401
     safe_plot,
     safe_write,
+    stream_write_raw,
     write_obs_columns_inplace,
     write_obs_columns_lightweight,
 )

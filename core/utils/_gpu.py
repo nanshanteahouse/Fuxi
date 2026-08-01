@@ -24,6 +24,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
 # ── Per-process GPU-availability cache ───────────────────────────────────
@@ -32,6 +34,13 @@ logger = logging.getLogger(__name__)
 # NOT the per-call decision — explicit device=cpu / device=gpu overrides
 # must always be respected regardless of cache state.
 _gpu_available_cache: bool | None = None
+
+
+# ── Per-process log-once cache ─────────────────────────────────────────
+def _fmt_gb(n_bytes: float) -> str:
+    """Format bytes as a GB string with one decimal (e.g. 30.9GB)."""
+    return f"{n_bytes / 1e9:.1f}GB"
+
 
 # ── Per-process log-once cache ─────────────────────────────────────────
 # Prevents redundant dispatch logging during grid searches that call
@@ -211,13 +220,29 @@ def gpu_pca(
     Speed-up is most visible for n_obs > 100k.
     """
     if resolve_device(device, log):
+        # NOTE(2026-08-01): 显存 guard —— rsc.pp.pca 需要 X dense 化进显存
+        # (anndata_to_GPU 把 CSR → dense)。估算 dense 体积 (n_obs × n_vars × dtype)
+        # 超过可用显存时自动降级 CPU，避免 2M 细胞 × 4k 基因 (≈30GB) 直接 OOM 显存。
+        import cupy as cp
         import rapids_singlecell as rsc
 
-        rsc.get.anndata_to_GPU(adata)
-        if log is not None and "pca" not in _dispatched_ops_logged:
-            log.info("[device] sc.pp.pca → rsc.pp.pca (GPU)")
-            _dispatched_ops_logged.add("pca")
-        return rsc.pp.pca(adata, **kwargs)
+        n_obs, n_vars = adata.n_obs, adata.n_vars
+        dtype_size = np.dtype(adata.X.dtype).itemsize if hasattr(adata.X, "dtype") else 4
+        dense_bytes = n_obs * n_vars * dtype_size
+        free_bytes, _ = cp.cuda.runtime.memGetInfo()
+        if dense_bytes > int(free_bytes * 0.9):
+            if log is not None:
+                log.warning(
+                    "[device] PCA dense %s exceeds free VRAM %.1fGB — falling back to CPU (arpack)",
+                    _fmt_gb(dense_bytes),
+                    free_bytes / 1e9,
+                )
+        else:
+            rsc.get.anndata_to_GPU(adata)
+            if log is not None and "pca" not in _dispatched_ops_logged:
+                log.info("[device] sc.pp.pca → rsc.pp.pca (GPU)")
+                _dispatched_ops_logged.add("pca")
+            return rsc.pp.pca(adata, **kwargs)
     import scanpy as sc
 
     return sc.pp.pca(adata, **kwargs)
@@ -250,9 +275,13 @@ def gpu_harmony(
     if resolve_device(device, log):
         import rapids_singlecell as rsc
 
-        rsc.get.anndata_to_GPU(adata)
+        # NOTE(2026-08-01): 不调用 anndata_to_GPU —— harmony 只需 obsm[basis]
+        # (X_pca)，rsc.pp.harmony_integrate 内部自行 cp.array() 搬 GPU 并写回 CPU
+        # (harmony_out.get())。之前无脑 anndata_to_GPU 会把整个 X dense 化搬进
+        # 显存 (2M 细胞 × 4k 基因 ≈ 30GB > 24GB 显存墙)，导致大数据无法走 GPU
+        # harmony。只搬 X_pca (n×100 float32 ≈ 0.7GB) 即可。
         if log is not None and "harmony" not in _dispatched_ops_logged:
-            log.info("[device] harmonypy → rsc.pp.harmony_integrate (GPU)")
+            log.info("[device] harmonypy → rsc.pp.harmony_integrate (GPU, basis=X_pca only)")
             _dispatched_ops_logged.add("harmony")
         # rsc.pp.harmony_integrate writes to adjusted_basis (default X_pca_harmony).
         # Pass through any caller-provided kwargs (random_state, max_iter_harmony, etc.)

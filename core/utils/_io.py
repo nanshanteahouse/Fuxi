@@ -78,7 +78,11 @@ def safe_write(
         compression = compression_override
     elif cfg is not None:
         compression = getattr(cfg, "h5ad_compression", compression)
-    # Respect cfg.h5ad_tempdir (from ATACseq config)
+    # Compression level: explicit arg > cfg.h5ad_compression_opts (gzip only)
+    if compression_opts is None and cfg is not None:
+        compression_opts = getattr(cfg, "h5ad_compression_opts", None)
+    if compression_opts is not None and not compression.startswith("gzip"):
+        compression_opts = None  # opts only valid for gzip family
     if cfg is not None:
         tmpdir = getattr(cfg, "h5ad_tempdir", tmpdir)
     anndata.settings.allow_write_nullable_strings = True
@@ -166,10 +170,22 @@ def safe_write(
                 )
         else:
             try:
+                import gc
+
                 import scanpy as sc
 
                 _verify = sc.read(target, backed="r")
                 logger.info("Integrity check: %s verified OK", os.path.basename(target))
+                # 关键：backed 读持有的 h5py 句柄因循环引用不会立即回收，
+                # 若后续 r+ 打开同一文件（如 stream_write_raw 写 /raw）会冲突：
+                # gzip 时偶发 OSError，zstd 滤镜下触发 C 层 double free (SIGABRT)。
+                # 显式关闭 + gc 确保文件释放。
+                try:
+                    _verify.file.close()
+                except Exception:
+                    pass
+                del _verify
+                gc.collect()
             except Exception as e:
                 logger.error(
                     "Integrity check FAILED for %s: %s — file may be corrupted!",
@@ -366,3 +382,128 @@ def safe_plot(
     except Exception as e:
         logger.warning("Plot failed (skipped): %s", e)
         return None
+
+
+# ── 流式写 .raw ──────────────────────────────────────────────────────
+def stream_write_raw(
+    target: str,
+    source: str,
+    *,
+    target_sum: float = 1e4,
+    compression: str = "gzip",
+    compression_opts: Optional[int] = None,
+    chunk_size: int = 200_000,
+    var_source: str | None = None,
+    var_df=None,
+    transform: bool = True,
+    logger=None,
+) -> int:
+    """Stream-write the .raw (full-gene) group into an existing h5ad file.
+
+    从 source (02_qc.h5ad) 分块读取 counts，逐块 normalize_total + log1p，
+    直写 target 的 /raw 组。nnz 在变换前后严格不变（行缩放零保持零、
+    log1p(0)=0）→ 一次性 create_dataset，零 resize，避免 HDF5 反复扩展。
+
+    参数:
+        target: 已存在的 03 输出 h5ad（r+ 追加 /raw 组）
+        source: 02_qc.h5ad（counts 源）
+        target_sum: normalize_total 的 target_sum
+        chunk_size: 每次分块读取的细胞数
+        var_source: 若提供，则从该文件拷贝 /var 到 /raw/var（否则拷贝 source 的 /var）
+
+    返回:
+        写入的 nnz 总数。
+    """
+    import h5py
+    import numpy as np
+    import scipy.sparse as sp
+
+    log = logger or logging.getLogger(__name__)
+    log.info("Stream-writing .raw (full genes) from %s → %s ...", source, target)
+
+    # 压缩解析与 safe_write 一致：zstd 需 hdf5plugin filter 对象（h5py 不识别字符串）
+    comp_kwargs = _resolve_compression_kwargs(compression, compression_opts)
+
+    src_h5 = h5py.File(source, "r")
+    dst_h5 = h5py.File(target, "r+")
+    try:
+        src_x = src_h5["X"]
+        nnz = src_x["data"].shape[0]
+        shape = tuple(src_x.attrs["shape"])
+        n_obs = shape[0]
+        n_genes = shape[1]
+        var_src = var_source or source
+
+        # ── /raw 组 ──
+        if "raw" in dst_h5:
+            del dst_h5["raw"]
+        rg = dst_h5.create_group("raw")
+
+        # raw/var: var_df 优先（anndata 编码，保留 03 算出的 highly_variable 列）
+        if var_df is not None:
+            import tempfile
+
+            _vtmp = os.path.join(tempfile.gettempdir(), f"fuxi_rawvar_{os.getpid()}.h5ad")
+            try:
+                ad_tmp = anndata.AnnData(var=var_df)
+                # NOTE(2026-08-01): var 仅 ~1-2MB，永远用 gzip 写——
+                # 实测 anndata 写 zstd 临时文件在 GPU 上下文 (cupy) 共存时非确定性触发
+                # C 层堆损坏 (double free / free(): invalid size，~2/3 概率)，gzip 稳定。
+                # 大数组 data/indices/indptr 仍走主压缩 (zstd)，性能不受影响。
+                var_kwargs = {"compression": "gzip"}
+                if isinstance(comp_kwargs.get("compression_opts"), int):
+                    var_kwargs["compression_opts"] = 1
+                ad_tmp.write(_vtmp, **var_kwargs)
+                with h5py.File(_vtmp, "r") as vh:
+                    vh.copy("var", rg, name="var")
+            finally:
+                if os.path.exists(_vtmp):
+                    os.unlink(_vtmp)
+        elif var_src == source:
+            src_h5.copy("var", rg, name="var")
+        else:
+            with h5py.File(var_src, "r") as vh:
+                vh.copy("var", rg, name="var")
+        # raw/X: csr_matrix 编码
+        rg.create_group("X")
+        rg["X"].attrs["encoding-type"] = "csr_matrix"
+        rg["X"].attrs["encoding-version"] = "0.1.0"
+        rg["X"].attrs["shape"] = np.array(shape, dtype=np.int64)
+        d = rg["X"].create_dataset("data", shape=(nnz,), dtype="f4", **comp_kwargs)
+        rg["X"].create_dataset("indices", data=src_x["indices"][...], **comp_kwargs)
+        rg["X"].create_dataset("indptr", data=src_x["indptr"][...], **comp_kwargs)
+
+        # ── 分块变换并写入 data ──
+        indptr = src_x["indptr"][...]
+        pos = 0
+        for i in range(0, n_obs, chunk_size):
+            j = min(i + chunk_size, n_obs)
+            lo, hi = int(indptr[i]), int(indptr[j])
+            if hi <= lo:
+                continue
+            cdata = src_x["data"][lo:hi]
+            cidx = src_x["indices"][lo:hi]
+            cptr = indptr[i : j + 1] - indptr[i]
+            c = sp.csr_matrix((cdata, cidx, cptr), shape=(j - i, n_genes))
+            if transform:
+                # normalize_total (与 scanpy bit 一致):
+                #   counts_per_cell = 每行 float64 求和 → float32 → /target_sum
+                #   X = X / counts_per_cell (除法, 非乘倒数)
+                rs = np.zeros(c.shape[0], dtype=np.float64)
+                for k in range(c.shape[0]):
+                    rs[k] = c.data[c.indptr[k] : c.indptr[k + 1]].sum(dtype=np.float64)
+                cpc = (rs.astype(np.float32) / np.float32(target_sum)).astype(np.float32)
+                c = c.copy()
+                for k in range(c.shape[0]):
+                    lo2, hi2 = c.indptr[k], c.indptr[k + 1]
+                    if hi2 > lo2:
+                        c.data[lo2:hi2] = c.data[lo2:hi2] / cpc[k]
+                # log1p 原地
+                c.data = np.log1p(c.data).astype(np.float32)
+            d[pos : pos + c.nnz] = c.data
+            pos += c.nnz
+        log.info(".raw streamed: %d nnz (%d × %d)", pos, n_obs, n_genes)
+        return pos
+    finally:
+        src_h5.close()
+        dst_h5.close()

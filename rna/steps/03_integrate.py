@@ -41,6 +41,7 @@ from core.utils import (
     resolve_device,
     safe_write,
     setup_logger,
+    stream_write_raw,
     timed_substep,
 )
 
@@ -194,6 +195,7 @@ def main():
 
     # ── 归一化 (HVG 子集) ──
     pearson_mode = cfg.normalization.method == "pearson_residuals"
+    skip_norm = False  # set in non-pearson branch; default False for pearson mode
     if pearson_mode:
         log.info(
             "Using Pearson residuals normalization (n_top_genes=%d)...",
@@ -254,12 +256,21 @@ def main():
     # ── 保存全基因副本到 .raw，尽早释放全基因矩阵 ──
     # 归一化和细胞周期打分后 adata_full 已无其他用途；
     # 提前释放可避免与下游 regress_out / PCA 叠加峰值。
+    # NOTE(2026-08-01): 曾试过延迟 .raw 构造（写盘前重建），实测峰值内存
+    # 反而 +4.5GB（Python RSS 不回落 + 重复读全基因 18GB），已回滚。
     import gc
 
-    adata.raw = adata_full
-    log.info(".raw saved (full genes: %d vars)", adata_full.n_vars)
-    del adata_full
-    gc.collect()
+    if getattr(cfg.integration, "stream_raw", False) is True:
+        # 流式写 .raw：不把全基因矩阵绑定到内存（写盘时从 02_qc 分块重建）
+        log.info("[stream_raw] full-gene reference NOT bound to .raw — will stream-write at save")
+        _raw_var = adata_full.var.copy()
+        del adata_full
+        gc.collect()
+    else:
+        adata.raw = adata_full
+        log.info(".raw saved (full genes: %d vars)", adata_full.n_vars)
+        del adata_full
+        gc.collect()
     log.info("  full-gene reference released early (before regress_out/PCA)")
 
     # ── 回归技术变异 / 细胞周期分数 (HVG 子集, normalize+log1p 后) ──
@@ -471,7 +482,9 @@ def main():
                 log.warning("Harmony correction failed (%s) — continuing with raw PCA", e)
                 adata.obsm["X_integrated"] = adata.obsm["X_pca"].copy()
             # ── Checkpoint before plotting ──
-            safe_write(adata, out_path, cfg=cfg, step_alias="integrated")
+            # NOTE(2026-08-01): 末尾统一 safe_write 已覆盖保存；此处重复写同一文件
+            # 会导致第二次写失败 (integrity check 的 backed read 保持 h5py 句柄,
+            # truncate 已打开文件报错)。双写已移除，仅保留末尾统一写。
 
             # 对比图
             primary_key = bk_list[0]
@@ -535,7 +548,8 @@ def main():
             )
             adata.obsm["X_integrated"] = adata.obsm["X_pca"].copy()
             # ── Checkpoint before plotting ──
-            safe_write(adata, out_path, cfg=cfg, step_alias="integrated")
+            # NOTE(2026-08-01): 同 harmony 分支——末尾统一 safe_write 已覆盖，
+            # 此处重复写会导致 truncate 失败，双写已移除。
 
             # 对比图
             primary_key = bk_list[0]
@@ -682,6 +696,18 @@ def main():
     # ── 保存 ──
     with timed_substep("Save checkpoint", log=log):
         safe_write(adata, out_path, cfg=cfg, step_alias="integrated")
+        if getattr(cfg.integration, "stream_raw", False) is True:
+            # 流式写 .raw：从 02_qc.h5ad 分块读 counts → normalize+log1p → 直写 raw 组
+            # var 用 03 算出的 highly_variable 全基因注释（_raw_var 在早前已保存）
+            stream_write_raw(
+                out_path,
+                cfg.qc_h5ad,
+                target_sum=cfg.normalization.normalize_target_sum,
+                compression=getattr(cfg, "h5ad_compression", "gzip"),
+                compression_opts=getattr(cfg, "h5ad_compression_opts", None),
+                var_df=_raw_var,
+                logger=log,
+            )
     log.info("Step 03 complete, took %.1fs", time.time() - t0)
 
 
