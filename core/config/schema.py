@@ -793,7 +793,7 @@ class Config(BaseModel):
     # ═══════════════════════════════════════════════════════════════════
     h5ad_compression: str = "gzip"
     per_step_h5ad_compression: dict[str, str] = Field(
-        default_factory=lambda: {"integrated": "lzf"}
+        default_factory=lambda: {"integrated": "gzip"}
     )
     h5ad_tempdir: str = Field(
         default="/tmp/Fuxi",
