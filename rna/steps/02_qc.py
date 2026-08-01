@@ -574,23 +574,27 @@ def filter_cells(adata, thresholds, cfg, log):
     n_before = adata.n_obs
 
     # ---- doublet ----
-    f_doublet = adata.obs["predicted_doublet"]
-    n_doublet = f_doublet.sum()
-    log.info(
-        "Doublet filtering: removing %d predicted doublets (%.1f%%)",
-        n_doublet,
-        100 * n_doublet / n_before if n_before else 0,
-    )
-
-    # ── Doublet guard: warn if Scrublet ran but predicted zero doublets ──
-    _n_doublet = f_doublet.sum()
-    if _n_doublet == 0 and getattr(cfg.scrublet, "run", True):
-        log.warning(
-            "Doublet detection enabled but 0 doublets predicted. "
-            "Likely cause: input not raw_counts (Scrublet was skipped) or "
-            "expected_doublet_rate too low. No doublets removed; "
-            "interpret downstream with caution.",
+    if cfg.scrublet.run:
+        f_doublet = adata.obs["predicted_doublet"]
+        n_doublet = f_doublet.sum()
+        log.info(
+            "Doublet filtering: removing %d predicted doublets (%.1f%%)",
+            n_doublet,
+            100 * n_doublet / n_before if n_before else 0,
         )
+
+        # ── Doublet guard: warn if Scrublet ran but predicted zero doublets ──
+        _n_doublet = f_doublet.sum()
+        if _n_doublet == 0:
+            log.warning(
+                "Doublet detection enabled but 0 doublets predicted. "
+                "Likely cause: input not raw_counts (Scrublet was skipped) or "
+                "expected_doublet_rate too low. No doublets removed; "
+                "interpret downstream with caution.",
+            )
+    else:
+        log.info("Doublet filtering: skipped (scrublet disabled).")
+        f_doublet = pd.Series(False, index=adata.obs_names)
 
     # ---- 从 thresholds 读取各指标边界 ----
     gf_lo, gf_hi = thresholds["n_genes_by_counts"]
