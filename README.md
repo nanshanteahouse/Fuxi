@@ -154,6 +154,15 @@ tissue: retina
 data_input:
   mtx_prefix: "GSE12345_Sample1_"
 
+# ── Multi-sample 10X MTX (each sample in its own subdir) ──
+# data_input:
+#   mtx_dir: ""               # parent dir containing the sample subdirs
+#   mtx_dir_pattern: "GSM*/"    # glob matching sample subdirs; Step 00 merges them
+#   mtx_sample_regex: "GSM\d+_(\w+)"   # optional: extract sample name from subdir
+#                                  # (empty → use the subdir basename)
+#   # Identical gene sets → fast sparse vstack; differing → outer-join concat
+#   # mtx_concat_batch: 0        # >0: batched (tree) concat for huge sample sets
+
 # QC thresholds
 qc:
   min_genes: 500

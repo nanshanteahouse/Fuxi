@@ -231,6 +231,7 @@ def generate_config(
 
     # Detect primary file paths
     mtx_dir = ""
+    mtx_dir_pattern = ""
     mtx_prefix = ""
     h5_dir = ""
     matrix_file = ""
@@ -238,17 +239,46 @@ def generate_config(
     features_file = ""
     fragment_file = ""
 
-    # 10X MTX
-    for d, files in classification.get("tenx_mtx_dirs", {}).items():
-        mtx_dir = os.path.relpath(d, gse_dir) if os.path.isabs(d) else d  # noqa: F841
-        basenames = [os.path.basename(f) for f in files]
-        # Find the common prefix before matrix/barcodes/features
-        stripped = [fd.strip_known_suffix(b) for b in basenames]
-        if stripped:
-            prefix = os.path.commonprefix(stripped).rstrip("_.-")
-            if prefix:
-                mtx_prefix = prefix
-        break
+    # 10X MTX — single dir: legacy behavior; multiple dirs: parent + glob
+    mtx_dirs = classification.get("tenx_mtx_dirs", {})
+    if mtx_dirs:
+        dir_paths = sorted(mtx_dirs.keys())
+        if len(dir_paths) == 1:
+            d = dir_paths[0]
+            # mtx_dir intentionally left empty → auto-fills to data_dir (legacy)
+            basenames = [os.path.basename(f) for f in mtx_dirs[d]]
+            # Find the common prefix before matrix/barcodes/features
+            stripped = [fd.strip_known_suffix(b) for b in basenames]
+            if stripped:
+                prefix = os.path.commonprefix(stripped).rstrip("_.-")
+                if prefix:
+                    mtx_prefix = prefix
+        else:
+            # ── Multi-sample: emit shared parent dir + subdir glob pattern ──
+            try:
+                cp = os.path.commonpath(dir_paths)
+            except ValueError:
+                cp = ""
+            parent = os.path.dirname(cp) if cp and cp in dir_paths else cp
+            if not parent or not os.path.isdir(parent):
+                print(
+                    f"  [WARNING] {len(dir_paths)} MTX dirs share no common parent — ",
+                    "set mtx_dir / mtx_dir_pattern manually",
+                )
+                for d in dir_paths:
+                    print(f"    - {d}")
+            else:
+                common = os.path.commonprefix(
+                    [os.path.basename(os.path.normpath(d)) for d in dir_paths]
+                ).rstrip("_.-")
+                mtx_dir = parent  # absolute — avoids project_dir-relative resolution
+                mtx_dir_pattern = (common + "*") if common else "*/"
+                print(
+                    f"  [INFO] {len(dir_paths)} MTX sample dirs → ",
+                    f"mtx_dir='{mtx_dir}', mtx_dir_pattern='{mtx_dir_pattern}'",
+                )
+                for d in dir_paths:
+                    print(f"    - {d}")
 
     # 10X H5
     for d, files in classification.get("tenx_h5_dirs", {}).items():
@@ -282,6 +312,8 @@ def generate_config(
 
     replacements = {
         "MTX_PREFIX": mtx_prefix,
+        "MTX_DIR": mtx_dir,
+        "MTX_DIR_PATTERN": mtx_dir_pattern,
         "MATRIX_FILE": matrix_file,
         "BARCODES_FILE": barcodes_file,
         "FEATURES_FILE": features_file,

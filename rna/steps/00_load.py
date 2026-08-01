@@ -3,7 +3,8 @@
 Step 00: 加载原始 scRNA-seq 数据
 ===================================
 支持五种输入格式:
-  1. 10X MTX (CellRanger 输出): sc.read_10x_mtx()
+  #  1. 10X MTX (CellRanger 输出): sc.read_10x_mtx()
+#     多样本: mtx_dir_pattern 匹配样本子目录 (hstack 快路径 / outer 合并)
   2. CSV 矩阵 + 元数据文件:     mmread() + pandas
   3. 已有 h5ad:                sc.read()
   4. 10X HDF5 (.h5):           sc.read_10x_h5()
@@ -124,6 +125,208 @@ def _run_ambient_correction(adata, cfg, log):
         log.warning("Unknown ambient method: %s — skipping", method)
 
 
+def _detect_mtx_prefix(mtx_dir: str) -> str:
+    """Detect the 10X MTX file prefix inside a sample directory."""
+    for f in sorted(os.listdir(mtx_dir)):
+        if f.endswith(".mtx.gz") or f.endswith(".mtx"):
+            for suffix in ("matrix.mtx.gz", "matrix.mtx", ".mtx.gz", ".mtx"):
+                if f.endswith(suffix):
+                    return f[: -len(suffix)]
+    return ""
+
+
+def _ensure_10x_features(mtx_dir: str, prefix: str, log) -> str:
+    """Return the features file path, converting legacy genes.tsv.gz in place."""
+    features = os.path.join(mtx_dir, prefix + "features.tsv.gz")
+    if os.path.exists(features):
+        return features
+    genes = os.path.join(mtx_dir, prefix + "genes.tsv.gz")
+    if not os.path.exists(genes):
+        raise FileNotFoundError(
+            f"Neither {prefix}features.tsv.gz nor {prefix}genes.tsv.gz in {mtx_dir}"
+        )
+    log.info("  legacy genes.tsv.gz in %s — converting to features.tsv.gz", mtx_dir)
+    with gzip.open(genes, "rt") as f_in, gzip.open(features, "wt") as f_out:
+        for line in f_in:
+            f_out.write(line.rstrip("\n") + "\tGene Expression\n")
+    return features
+
+
+def _read_10x_features(mtx_dir: str, prefix: str) -> pd.DataFrame:
+    for name in ("features.tsv.gz", "features.tsv", "genes.tsv.gz", "genes.tsv"):
+        p = os.path.join(mtx_dir, prefix + name)
+        if os.path.exists(p):
+            return _read_features_with_header_detection(p, sep="\t")
+    raise FileNotFoundError(f"No features/genes file found in {mtx_dir}")
+
+
+def _features_gene_names(features: pd.DataFrame, gene_symbol_column: str = "") -> list:
+    if gene_symbol_column and gene_symbol_column in features.columns:
+        return features[gene_symbol_column].astype(str).tolist()
+    if "gene_short_name" in features.columns:
+        return features["gene_short_name"].astype(str).tolist()
+    if "symbol" in features.columns:
+        return features["symbol"].astype(str).tolist()
+    return features.iloc[:, 0].astype(str).tolist()
+
+
+def _concat_mtx_batched(adatas: list, batch: int, log):
+    """Tree-merge adatas in batches of ``batch`` (bounded peak memory)."""
+    import gc
+
+    while len(adatas) > 1:
+        groups = [adatas[i : i + batch] for i in range(0, len(adatas), batch)]
+        adatas = [sc.concat(g, join="outer", fill_value=0) for g in groups]
+        _ = gc.collect()
+        log.info("  batched concat: %d group(s) remaining", len(adatas))
+    return adatas[0]
+
+
+def _load_multi_sample_10x_mtx(cfg, log):
+    """Load multiple 10X MTX sample dirs matched by ``mtx_dir_pattern``.
+
+    Fast path (identical gene sets) uses sparse hstack — O(nnz), no concat
+    re-alignment.  Otherwise falls back to one-shot ``sc.concat(join="outer",
+    fill_value=0)`` (batched tree merge when ``mtx_concat_batch > 0``).
+
+    Fail-fast: a sample that cannot be loaded aborts with a clear message
+    naming the sample and its files.
+    """
+    import glob as glob_mod
+    import re
+
+    mtx_dir = cfg.data_input.mtx_dir
+    candidates = sorted(glob_mod.glob(os.path.join(mtx_dir, cfg.data_input.mtx_dir_pattern)))
+
+    sample_dirs = []
+    for d in candidates:
+        if not os.path.isdir(d):
+            continue
+        # Any 10X file (matrix/features/barcodes) marks it as a sample dir;
+        # corrupt dirs (e.g. missing matrix) are kept so loading fails loudly.
+        is_10x = any(
+            glob_mod.glob(os.path.join(d, pat))
+            for pat in (
+                "*matrix.mtx*",
+                "*features.tsv*",
+                "*genes.tsv*",
+                "*barcodes.tsv*",
+            )
+        )
+        if is_10x:
+            sample_dirs.append(d)
+
+    if not sample_dirs:
+        log.error(
+            "mtx_dir_pattern=%r matched no 10X MTX directories under %s",
+            cfg.data_input.mtx_dir_pattern,
+            mtx_dir,
+        )
+        sys.exit(1)
+
+    log.info("Multi-sample MTX: %d sample directories", len(sample_dirs))
+
+    sample_names = []
+    prefixes = []
+    for d in sample_dirs:
+        name = os.path.basename(os.path.normpath(d))
+        if cfg.data_input.mtx_sample_regex:
+            m = re.search(cfg.data_input.mtx_sample_regex, name)
+            if m:
+                name = m.group(1) if m.groups() else m.group(0)
+        sample_names.append(name)
+        prefixes.append(_detect_mtx_prefix(d))
+        log.info("  %s → sample '%s' (prefix='%s')", os.path.basename(d), name, prefixes[-1])
+
+    for d, prefix in zip(sample_dirs, prefixes):
+        try:
+            _ensure_10x_features(d, prefix, log)
+        except FileNotFoundError as e:
+            log.error("Sample dir %s: %s", d, e)
+            sys.exit(1)
+
+    gene_sets = []
+    for d, prefix in zip(sample_dirs, prefixes):
+        try:
+            feats = _read_10x_features(d, prefix)
+        except FileNotFoundError as e:
+            log.error("Sample dir %s: %s", d, e)
+            sys.exit(1)
+        gene_sets.append(_features_gene_names(feats, cfg.data_input.gene_symbol_column))
+        del feats
+
+    first_genes = gene_sets[0]
+    identical = all(gs == first_genes for gs in gene_sets[1:])
+    log.info(
+        "Gene sets %s across %d samples",
+        "identical — fast hstack path" if identical else "differ — outer-join concat path",
+        len(sample_dirs),
+    )
+
+    adatas = []
+    for i, d in enumerate(sample_dirs):
+        prefix = prefixes[i]
+        sname = sample_names[i]
+        log.info("  [%d/%d] %s — loading...", i + 1, len(sample_dirs), sname)
+        try:
+            a = sc.read_10x_mtx(
+                d, var_names="gene_symbols", prefix=prefix, cache=False, gex_only=False
+            )
+        except Exception as e:
+            log.error(
+                "Failed to load sample '%s' (dir: %s, matrix: %smatrix.mtx[.gz]): %s",
+                sname,
+                d,
+                prefix,
+                e,
+            )
+            sys.exit(1)
+        a.X = a.X.tocsr()
+        a.obs_names = [f"{bc}-{i}" for bc in a.obs_names]
+        a.obs["sample"] = sname
+        log.info(
+            "  [%d/%d] %s — %d cells × %d genes",
+            i + 1,
+            len(sample_dirs),
+            sname,
+            a.n_obs,
+            a.n_vars,
+        )
+        adatas.append(a)
+
+    if identical:
+        x_stack = sp.vstack([a.X for a in adatas], format="csr")
+        adata = sc.AnnData(
+            X=x_stack, obs=pd.concat([a.obs for a in adatas], axis=0), var=adatas[0].var.copy()
+        )
+        log.info("Merge complete (vstack): %d cells × %d genes", adata.n_obs, adata.n_vars)
+    else:
+        batch = cfg.data_input.mtx_concat_batch
+        if batch and batch > 0:
+            log.info("Batched outer-join concat (batch=%d)...", batch)
+            adata = _concat_mtx_batched(adatas, batch, log)
+        else:
+            adata = sc.concat(adatas, join="outer", fill_value=0)
+        log.info("Merge complete (outer join): %d cells × %d genes", adata.n_obs, adata.n_vars)
+
+    del adatas
+
+    # sample_map 重命名 (目录名/正则提取名 → 自定义名)
+    if cfg.has_sample_mapping() and "sample" in adata.obs:
+        map_str = {str(k): v for k, v in cfg.sample_meta.sample_map.items()}
+        if map_str:
+            mapped = adata.obs["sample"].astype(str).map(map_str)
+            n_mapped = int(mapped.notna().sum())
+            if n_mapped:
+                log.info("sample_map remapped %d/%d cells", n_mapped, len(mapped))
+                adata.obs["sample"] = mapped.fillna(adata.obs["sample"]).astype(str)
+
+    _parse_barcodes(adata, cfg, log)
+    if "gene_ids" in adata.var:
+        adata.var.drop(columns=["gene_ids"], inplace=True)
+    return adata
+
+
 def main():
     t0 = time.time()
     args_parser = argparse.ArgumentParser()
@@ -141,55 +344,61 @@ def main():
 
     # ── 3 种加载方式 ──────────────────────────────────────────────
     if cfg.data_format == "10X_mtx":
-        # Legacy 2-column genes.tsv.gz → 3-column features.tsv.gz
-        genes_path = os.path.join(
-            cfg.data_input.mtx_dir, cfg.data_input.mtx_prefix + "genes.tsv.gz"
-        )
-        features_path = os.path.join(
-            cfg.data_input.mtx_dir, cfg.data_input.mtx_prefix + "features.tsv.gz"
-        )
-        if not os.path.exists(features_path) and os.path.exists(genes_path):
-            log.info("Detected legacy 2-column genes.tsv.gz — converting to features.tsv.gz...")
-            with gzip.open(genes_path, "rt") as f_in:
-                with gzip.open(features_path, "wt") as f_out:
-                    for line in f_in:
-                        f_out.write(line.rstrip("\n") + "\tGene Expression\n")
-            log.info("  features.tsv.gz created")
+        if cfg.data_input.mtx_dir_pattern:
+            # ── 多样本 MTX (mtx_dir_pattern): 每个样本一个子目录 ──
+            adata = _load_multi_sample_10x_mtx(cfg, log)
+        else:
+            # Legacy 2-column genes.tsv.gz → 3-column features.tsv.gz
+            genes_path = os.path.join(
+                cfg.data_input.mtx_dir, cfg.data_input.mtx_prefix + "genes.tsv.gz"
+            )
+            features_path = os.path.join(
+                cfg.data_input.mtx_dir, cfg.data_input.mtx_prefix + "features.tsv.gz"
+            )
+            if not os.path.exists(features_path) and os.path.exists(genes_path):
+                log.info(
+                    "Detected legacy 2-column genes.tsv.gz — converting to features.tsv.gz..."
+                )
+                with gzip.open(genes_path, "rt") as f_in:
+                    with gzip.open(features_path, "wt") as f_out:
+                        for line in f_in:
+                            f_out.write(line.rstrip("\n") + "\tGene Expression\n")
+                log.info("  features.tsv.gz created")
 
-        log.info("Loading from MTX (prefix='%s') ...", cfg.data_input.mtx_prefix)
-        adata = sc.read_10x_mtx(
-            cfg.data_input.mtx_dir,
-            var_names="gene_symbols",
-            prefix=cfg.data_input.mtx_prefix,
-            cache=True,
-            gex_only=False,
-        )
-        log.info("Loading complete: %d cells × %d genes", adata.n_obs, adata.n_vars)
+            log.info("Loading from MTX (prefix='%s') ...", cfg.data_input.mtx_prefix)
+            adata = sc.read_10x_mtx(
+                cfg.data_input.mtx_dir,
+                var_names="gene_symbols",
+                prefix=cfg.data_input.mtx_prefix,
+                cache=True,
+                gex_only=False,
+            )
+            log.info("Loading complete: %d cells × %d genes", adata.n_obs, adata.n_vars)
 
-        # 解析 barcode 后缀 → 样本/阶段映射
-        if cfg.has_sample_mapping() or cfg.has_stage_mapping():
-            bc_suffix = adata.obs_names.to_series().str.extract(r"-(\d+)$")[0].astype(str)
-            if cfg.has_sample_mapping():
-                adata.obs["sample"] = bc_suffix.map(cfg.sample_meta.sample_map).values
-            if cfg.has_stage_mapping():
-                adata.obs["stage"] = bc_suffix.map(cfg.sample_meta.stage_map).values
-                if cfg.sample_meta.stage_order:
-                    adata.obs["stage"] = pd.Categorical(
-                        adata.obs["stage"],
-                        categories=cfg.sample_meta.stage_order,
-                        ordered=True,
-                    )
-            log.info("Sample mapping applied. Sample distribution:")
-            if "sample" in adata.obs:
-                for s, cnt in adata.obs["sample"].value_counts().items():
-                    log.info("  %-20s %5d cells", s, cnt)
+            # 解析 barcode 后缀 → 样本/阶段映射
+            if cfg.has_sample_mapping() or cfg.has_stage_mapping():
+                bc_suffix = adata.obs_names.to_series().str.extract(r"-(\d+)$")[0].astype(str)
+                if cfg.has_sample_mapping():
+                    adata.obs["sample"] = bc_suffix.map(cfg.sample_meta.sample_map).values
+                if cfg.has_stage_mapping():
+                    adata.obs["stage"] = bc_suffix.map(cfg.sample_meta.stage_map).values
+                    if cfg.sample_meta.stage_order:
+                        adata.obs["stage"] = pd.Categorical(
+                            adata.obs["stage"],
+                            categories=cfg.sample_meta.stage_order,
+                            ordered=True,
+                        )
+                log.info("Sample mapping applied. Sample distribution:")
+                if "sample" in adata.obs:
+                    for s, cnt in adata.obs["sample"].value_counts().items():
+                        log.info("  %-20s %5d cells", s, cnt)
 
-        # 可配置 barcode 正则解析
-        _parse_barcodes(adata, cfg, log)
+            # 可配置 barcode 正则解析
+            _parse_barcodes(adata, cfg, log)
 
-        # 清理 gene_ids 列（如果有）
-        if "gene_ids" in adata.var:
-            adata.var.drop(columns=["gene_ids"], inplace=True)
+            # 清理 gene_ids 列（如果有）
+            if "gene_ids" in adata.var:
+                adata.var.drop(columns=["gene_ids"], inplace=True)
 
     elif cfg.data_format == "csv_matrix":
         base = (

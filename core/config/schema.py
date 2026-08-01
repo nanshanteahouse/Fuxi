@@ -49,6 +49,14 @@ class DataInputConfig(BaseModel):
 
     mtx_prefix: str = ""
     mtx_dir: str = ""
+    # Multi-sample 10X MTX: glob under mtx_dir matching sample subdirs.
+    # Empty = legacy single-directory behavior (mtx_prefix applies directly).
+    mtx_dir_pattern: str = ""
+    # Optional regex to extract sample name from matched subdir basename.
+    # Empty = use basename as-is.
+    mtx_sample_regex: str = ""
+    # >0: batch (tree) concat for the slow path; 0 = one-shot concat.
+    mtx_concat_batch: int = 0
     matrix_file: str = ""
     metadata_file: str = ""
     barcodes_file: str = ""

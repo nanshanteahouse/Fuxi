@@ -7,7 +7,12 @@ data_format: 10X_mtx
 # ── Data input ──
 data_input:
   mtx_prefix: "{{MTX_PREFIX}}"
-  # mtx_dir: ""
+  mtx_dir: "{{MTX_DIR}}"
+  # 多样本: glob 匹配 mtx_dir 下的样本子目录 (如 "*/" 或 "GSM*/")。
+  # Step 00 自动合并匹配到的目录; 空 = 传统单目录加载。
+  mtx_dir_pattern: "{{MTX_DIR_PATTERN}}"
+  # 可选: 正则从子目录名提取样本名 (空 = 用目录 basename)
+  # mtx_sample_regex: ""
 
 # ── Dataset metadata ──
 tissue: "{{TISSUE}}"
