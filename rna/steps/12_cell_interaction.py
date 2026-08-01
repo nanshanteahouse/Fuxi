@@ -8,7 +8,8 @@ Method:
   * rank_aggregate — consensus of multiple scoring methods (CellPhoneDB-like,
     logFC, NATMI, SingleCellSignalR, Connectome, CellChat, geometric_mean)
 
-Input:  05_annotated.h5ad (requires cell_type column; uses .raw for counts)
+Input:  05_annotated.h5ad (requires cell_type column; expression via explicit
+        counts layer if present, else .raw full-transcriptome log-normalized)
 Output:
   {table_dir}/12_cell_interaction/cci_interactions.csv         — full interaction scores
   {table_dir}/12_cell_interaction/cci_top_interactions.csv     — top N significant pairs
@@ -278,13 +279,20 @@ def main():
     group_col = "cell_type" if "cell_type" in adata.obs.columns else "leiden"
     log.info("Grouping by: %s (%d groups)", group_col, adata.obs[group_col].nunique())
 
-    use_raw = adata.raw is not None
-    if use_raw:
-        log.info("Using adata.raw for expression (raw counts)")
+    # ── 表达矩阵语义：优先显式 counts layer；否则 .raw（全基因 log-normalized）──
+    # NOTE(2026-08-01): 03 的 .raw 是全基因 normalize+log1p 表达（非 raw counts）；
+    # 若 05_annotated 携带显式 counts layer（如 scVI 分支的 adata.layers['counts']）
+    # 则优先用它，并让 LIANA 走 layer= 通道（语义更准确）。
+    counts_layer = "counts" if "counts" in adata.layers else None
+    use_raw = counts_layer is None and adata.raw is not None
+    if counts_layer:
+        log.info("Using adata.layers['counts'] for expression (explicit counts)")
+    elif use_raw:
+        log.info("Using adata.raw for expression (full transcriptome, log-normalized)")
     else:
         log.warning(
-            "adata.raw is not available — using adata.X; "
-            "ensure it contains raw/normalized counts suitable for LIANA"
+            "Neither counts layer nor adata.raw available — using adata.X; ",
+            "ensure it contains normalized counts suitable for LIANA",
         )
 
     n_jobs = getattr(cfg.execution, "n_jobs", 1) or 1
@@ -344,6 +352,7 @@ def main():
             resource_name=lr_db,
             n_perms=cfg.cci.permutations,
             use_raw=use_raw,
+            layer=counts_layer,
             n_jobs=n_jobs,
             log=log,
         )

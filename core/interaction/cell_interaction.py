@@ -196,6 +196,7 @@ def run_cci_permutation(
     n_perms: int = 1000,
     seed: int = 1337,
     use_raw: bool = True,
+    layer: str | None = None,
     n_jobs: int = 1,  # noqa: ARG001 (deprecated, kept for backward compat)
     log: object = None,
 ) -> pd.DataFrame:
@@ -206,7 +207,7 @@ def run_cci_permutation(
     ----------
     adata : AnnData
         Annotated data object. Must contain `groupby_col` in .obs and,
-        if `use_raw=True`, a .raw attribute with raw counts.
+        if `use_raw=True`, a .raw attribute with full transcriptome expression.
     groupby_col : str
         Column in adata.obs to group by (default 'cell_type').
     resource_name : str
@@ -216,7 +217,14 @@ def run_cci_permutation(
     seed : int
         Random seed for reproducibility.
     use_raw : bool
-        Use adata.raw.X (raw counts) if available.
+        Use adata.raw.X (full transcriptome, log-normalized) if available.
+    layer : str | None
+        Explicit layer key holding raw UMI counts (e.g. 'counts').
+        When set, takes precedence over `use_raw` for LIANA's expression input.
+    n_jobs : int
+        Number of parallel jobs for the permutation test.
+    log : object, optional
+        Logger with .info() method.
     n_jobs : int
         Number of parallel jobs for the permutation test.
     log : object, optional
@@ -245,7 +253,8 @@ def run_cci_permutation(
         resource_name=resource_name,
         n_perms=n_perms,
         seed=seed,
-        use_raw=use_raw,
+        use_raw=use_raw and layer is None,
+        layer=layer,
         inplace=False,
         verbose=False,
     )
