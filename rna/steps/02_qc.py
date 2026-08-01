@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 
-from core.utils import resolve_config, safe_write, setup_logger
+from core.utils import resolve_config, setup_logger
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -534,13 +534,55 @@ def compute_qc_metrics(adata, cfg, log):
         mt_mask = mt_mask | adata.var_names.isin(cfg.qc.mt_gene_list)
     adata.var["mt"] = mt_mask
     adata.var["ribo"] = adata.var_names.str.startswith(("RPS", "RPL"))
-    sc.pp.calculate_qc_metrics(
-        adata,
-        qc_vars=["mt", "ribo"],
-        percent_top=[20],
-        log1p=True,
-        inplace=True,
-    )
+    # ── 流式 QC metrics（复刻 scanpy describe_obs + describe_var 语义）──
+    from scanpy.pp._qc import top_segment_proportions_sparse_csr
+
+    x_mat = adata.X
+    n_cells, n_genes_t = x_mat.shape
+    block_size = 200_000
+    mt_idx = np.where(mt_mask)[0]
+    ribo_idx = np.where(adata.var["ribo"].values)[0]
+    x_dtype = x_mat.dtype
+    # getnnz dtype 跟随磁盘 indptr dtype（全量内存读行为），backed 块读会 downcast int32
+    obs_n_genes = np.empty(n_cells, dtype=x_mat._indptr.dtype)
+    obs_total = np.empty(n_cells, dtype=x_dtype)
+    obs_top20 = np.empty(n_cells, dtype=np.float64)
+    obs_mt = np.empty(n_cells, dtype=x_dtype)
+    obs_ribo = np.empty(n_cells, dtype=x_dtype)
+    var_nnz = np.zeros(n_genes_t, dtype=np.int64)
+    var_sum = np.zeros(n_genes_t, dtype=x_dtype)
+    ns = np.array([20], dtype=np.int64)
+    for i in range(0, n_cells, block_size):
+        xb = x_mat[i : i + block_size]
+        obs_n_genes[i : i + block_size] = xb.getnnz(axis=1)
+        s = np.asarray(xb.sum(axis=1)).ravel()
+        obs_total[i : i + block_size] = s
+        props = top_segment_proportions_sparse_csr(xb.data, xb.indptr, ns)
+        obs_top20[i : i + block_size] = props[:, 0] * 100
+        obs_mt[i : i + block_size] = np.asarray(xb[:, mt_idx].sum(axis=1)).ravel()
+        obs_ribo[i : i + block_size] = np.asarray(xb[:, ribo_idx].sum(axis=1)).ravel()
+        var_nnz += xb.getnnz(axis=0)
+        var_sum += np.asarray(xb.sum(axis=0)).ravel()
+    obs = adata.obs
+    obs["n_genes_by_counts"] = obs_n_genes
+    obs["log1p_n_genes_by_counts"] = np.log1p(obs_n_genes)
+    obs["total_counts"] = obs_total
+    obs["log1p_total_counts"] = np.log1p(obs_total)
+    obs["pct_counts_in_top_20_genes"] = obs_top20
+    obs["total_counts_mt"] = obs_mt
+    obs["log1p_total_counts_mt"] = np.log1p(obs_mt)
+    obs["pct_counts_mt"] = obs_mt / obs_total * 100
+    obs["total_counts_ribo"] = obs_ribo
+    obs["log1p_total_counts_ribo"] = np.log1p(obs_ribo)
+    obs["pct_counts_ribo"] = obs_ribo / obs_total * 100
+    var = adata.var
+    var_mean = var_sum / n_cells
+    var["n_cells_by_counts"] = var_nnz
+    var["mean_counts"] = var_mean
+    var["log1p_mean_counts"] = np.log1p(var_mean)
+    var["pct_dropout_by_counts"] = (1 - var_nnz / n_cells) * 100
+    var["total_counts"] = var_sum
+    var["log1p_total_counts"] = np.log1p(var_sum)
     adata.obs["log_genes_per_umi"] = (
         np.log10(adata.obs["n_genes_by_counts"]) / np.log10(adata.obs["total_counts"])
     ).replace([np.inf, -np.inf], np.nan)
@@ -559,6 +601,129 @@ def compute_qc_metrics(adata, cfg, log):
 # ══════════════════════════════════════════════════════════════════════════════
 
 
+def _nonzero_col_counts(x_mat, mask=None, block_size=500_000):
+    """每基因非零计数（块式，与 scanpy `(X > 0).sum(0)` 语义一致：NaN 不计）。
+    mask 传入时仅在保留行上计数（等价于先过滤行再数）。"""
+    n, m = x_mat.shape
+    counts = np.zeros(m, dtype=np.int64)
+    for i in range(0, n, block_size):
+        xr = x_mat[i : i + block_size]
+        if mask is not None:
+            mm = np.asarray(mask[i : i + block_size])
+            xr = xr[mm]
+        if xr.nnz == 0:
+            continue
+        keep = xr.data > 0
+        counts += np.bincount(xr.indices[keep], minlength=m)
+    return counts
+
+
+def _write_qc_h5ad(adata, mask_obs, vmask, n_cells_counts, cfg, log):
+    """Filter-on-write: 过滤推迟到写入阶段，逐块行+列过滤直接写 h5ad。
+
+    内存峰值 = X 全量（加载必需）+ 单块临时（~O(块)），零矩阵移动。
+    压缩解析与 safe_write 一致（per_step_h5ad_compression > cfg.h5ad_compression > gzip），
+    先写同目录隐藏 tmp 再原子 os.replace。"""
+    import h5py
+    from anndata._io.h5ad import write_elem
+
+    x_mat = adata.X
+    n, m = x_mat.shape
+    n_keep_o = int(mask_obs.sum())
+    n_keep_v = int(vmask.sum())
+    vmask_np = np.asarray(vmask)
+    block_size = 200_000
+
+    compression = getattr(cfg, "h5ad_compression", "gzip")
+    per_step = getattr(cfg, "per_step_h5ad_compression", {})
+    compression = per_step.get("qc", compression)
+    kwargs = {"compression": compression}
+    if compression == "gzip":
+        # 实测（GSE137398 76k cells, filter-on-write 对比）:
+        #   gzip level4 写 38.5s/633MB, level1 写 25.8s/703MB, 读 7.0s vs 7.4s
+        #   lzf 写 21.5s 但读 9.9s 且文件 2.36x —— 稀疏 float32 下 gzip level1 最优
+        kwargs["compression_opts"] = 1
+
+    target = os.environ.get("FUXI_QC_OUT", cfg.qc_h5ad)
+    target_dir = os.path.dirname(target) or "."
+    os.makedirs(target_dir, exist_ok=True)
+    tmp_path = os.path.join(target_dir, f".{os.path.basename(target)}.tmp.{os.getpid()}")
+
+    t0 = time.time()
+    with h5py.File(tmp_path, "w") as f:
+        f.attrs["encoding-type"] = "anndata"
+        f.attrs["encoding-version"] = "0.1.0"
+        for key in ["layers", "obsm", "obsp", "varm", "varp"]:
+            f.create_group(key)
+        f.create_group("uns")
+        obs = adata.obs.loc[mask_obs].copy()
+        var = adata.var.loc[vmask].copy()
+        var["n_cells"] = n_cells_counts[vmask].astype(np.int64)
+        write_elem(f, "obs", obs)
+        write_elem(f, "var", var)
+        xg = f.create_group("X")
+        xg.attrs["encoding-type"] = "csr_matrix"
+        xg.attrs["encoding-version"] = "0.1.0"
+        xg.attrs["shape"] = (n_keep_o, n_keep_v)
+        d_data = xg.create_dataset(
+            "data", (0,), maxshape=(None,), dtype=x_mat.dtype, chunks=(65536,), **kwargs
+        )
+        d_idx = xg.create_dataset(
+            "indices", (0,), maxshape=(None,), dtype=np.int64, chunks=(65536,), **kwargs
+        )
+        d_iptr = xg.create_dataset(
+            "indptr", (0,), maxshape=(None,), dtype=np.int64, chunks=(4096,), **kwargs
+        )
+        from concurrent.futures import ThreadPoolExecutor
+
+        new_indptr = np.zeros(n_keep_o + 1, dtype=np.int64)
+        prefetch = 2
+        starts = list(range(0, n, block_size))
+        pos = 0
+        w = 0
+
+        def _load(st):
+            mi = np.asarray(mask_obs[st : st + block_size])
+            if not mi.any():
+                return st, None
+            xr = x_mat[st : st + block_size][mi][:, vmask_np]
+            if xr.nnz == 0:
+                return st, None
+            return st, xr
+
+        with ThreadPoolExecutor(max_workers=2) as ex:
+            pending = {}
+            for st in starts[:prefetch]:
+                pending[st] = ex.submit(_load, st)
+            for st in starts:
+                nxt = st + prefetch * block_size
+                if nxt < n:
+                    pending[nxt] = ex.submit(_load, nxt)
+                fut = pending.pop(st)
+                _, xr = fut.result()
+                if xr is None:
+                    continue
+                k = xr.shape[0]
+                new_indptr[pos + 1 : pos + k + 1] = new_indptr[pos] + xr.indptr[1:]
+                pos += k
+                n_w = xr.nnz
+                d_data.resize(w + n_w, axis=0)
+                d_idx.resize(w + n_w, axis=0)
+                d_data[w : w + n_w] = xr.data
+                d_idx[w : w + n_w] = xr.indices
+                w += n_w
+                del xr
+        d_iptr.resize(n_keep_o + 1, axis=0)
+        d_iptr[:] = new_indptr
+    os.replace(tmp_path, target)
+    log.info(
+        "  Saved %s (%.1f MB, filter-on-write %.1fs)",
+        os.path.basename(target),
+        os.path.getsize(target) / 1e6,
+        time.time() - t0,
+    )
+
+
 def filter_cells(adata, thresholds, cfg, log):
     """根据阈值字典过滤细胞。
 
@@ -569,7 +734,7 @@ def filter_cells(adata, thresholds, cfg, log):
         log:        logger
 
     返回:
-        AnnData (过滤后)
+        np.ndarray (bool): 保留细胞的布尔 mask（行过滤推迟到写入阶段执行）
     """
     n_before = adata.n_obs
 
@@ -661,12 +826,9 @@ def filter_cells(adata, thresholds, cfg, log):
     log.info("    Total (dedup):        %6d (%.1f%%)", f_any.sum(), 100 * f_any.mean())
 
     mask = ~f_doublet & ~f_any
-    adata = adata[mask].copy()
-    import gc
-
-    gc.collect()
-    log.info("  After QC filtering: %d cells", adata.n_obs)
-    return adata
+    n_after = int(mask.sum())
+    log.info("  After QC filtering: %d cells", n_after)
+    return mask
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -818,7 +980,7 @@ def main():
     log.info("Step 02: QC filtering (doublets already removed in Step 01)")
 
     input_path = os.path.join(cfg.h5ad_dir, "01_doublet.h5ad")
-    adata = sc.read(input_path)
+    adata = sc.read_h5ad(input_path, backed="r")
     log.info("Loaded: %s — %d cells × %d genes", input_path, adata.n_obs, adata.n_vars)
 
     # 1. 计算 QC 指标
@@ -849,11 +1011,14 @@ def main():
     _plot_nfeature_kde(adata, _fig_dir, mode_label, cfg, log)
 
     n_before = adata.n_obs
-    adata = filter_cells(adata, thresholds, cfg, log)
-    sc.pp.filter_genes(adata, min_cells=cfg.qc.min_cells_per_gene)
-    log.info("After gene filtering: %d genes", adata.n_vars)
-    # ── Checkpoint: save before plotting ──
-    safe_write(adata, cfg.qc_h5ad, cfg=cfg)
+    mask_obs = filter_cells(adata, thresholds, cfg, log)
+    min_cells = cfg.qc.min_cells_per_gene
+    n_cells_counts = _nonzero_col_counts(adata.X, mask_obs)
+    vmask = n_cells_counts >= min_cells
+    log.info("After gene filtering: %d genes", int(vmask.sum()))
+    # ── Checkpoint: filter-on-write（过滤与写入融合，零矩阵拷贝）──
+    _write_qc_h5ad(adata, mask_obs, vmask, n_cells_counts, cfg, log)
+    n_after = int(mask_obs.sum())
     # 5. QC SUMMARY — 事后评估过滤率
     n_after = adata.n_obs
     pct_removed = 100 * (n_before - n_after) / n_before if n_before else 0
