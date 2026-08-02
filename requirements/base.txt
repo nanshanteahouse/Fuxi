@@ -3,7 +3,7 @@
 # ═══════════════════════════════════════════════════════════════════════
 #
 # 声明源: pyproject.toml [project] dependencies
-#   16 包: numpy / scipy / pandas / scanpy / anndata / pydantic / openai /
+#   17 包: numpy / scipy / pandas / scanpy / anndata / pydantic / openai / hdf5plugin /
 #          matplotlib / scikit-learn / networkx / psutil / joblib / pyyaml /
 #          openpyxl / python-dotenv / textual
 #

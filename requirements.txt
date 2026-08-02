@@ -3,7 +3,7 @@
 # ═══════════════════════════════════════════════════════════════════════
 #
 # 依赖单一声明源: pyproject.toml
-#   [project] dependencies              → base 运行时 (16 包)
+#   [project] dependencies              → base 运行时 (17 包)
 #   [project.optional-dependencies]     → 模态 / 方法学 / 聚合 extras
 #
 # 本文件是便利别名,等价于:  pip install -e ".[all]"
