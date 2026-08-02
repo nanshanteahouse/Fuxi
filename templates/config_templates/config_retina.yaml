@@ -57,6 +57,9 @@ integration:
   batch_key: age
 
   # -- v4.x+: batch diagnosis (auto-classify batch vs biology columns) --
+  # diagnose: true                        # 全量诊断（大细胞数深拷贝，百万级建议 false）
+  # diagnose_max_cells: 50000            # 诊断子采样上限（默认 5 万，秒级）
+  # stream_raw: true                     # 流式写 .raw（>100 万细胞建议 true，峰值内存 -24%）
 
   # -- scVI (deep generative model, method: scvi) --
   scvi:
@@ -67,12 +70,19 @@ integration:
     batch_key: sample
     use_gpu: true
     train_size: 0.9
-    batch_size: 128
-    early_stopping: false
-    precision: "32"              # "16-mixed" / "bf16-mixed" for GPU speedup
+    batch_size: 1024           # 128→1024: scverse 官方线性加速建议，实测 0.51→0.32 s/epoch
+    early_stopping: true       # ELBO 早停（Lightning patience=3 默认），避免傻跑满 max_epochs
+    precision: "16-mixed"       # 3090 AMP 加速（实测 ~1.5-2x）；CPU 自动降级 "32"
+    # ── WSL2 关键（实测 GPU 饿死根因修复，勿改）──
+    datasplitter_kwargs:
+      num_workers: 0            # WSL2 IPC 阻塞 → GPU 0% 利用率；0 = 主进程加载
+    trainer_kwargs:
+      enable_progress_bar: false  # 去 tqdm 每 batch 管道写（加剧 pipe_write 阻塞）
     # Advanced params: see global.example.yaml → integration.scvi
 
 # ── PCA ──
+# n_pcs_full = PCA 计算量；n_pcs_use = 下游消费维数（04+ 用 min() 兑底）
+# method: scvi 时 n_pcs_use 建议 = 30（scVI latent 维，与 scvi.n_latent 一致）
 pca:
   n_pcs_full: 100
   n_pcs_use: 50
@@ -182,7 +192,8 @@ cci:
 #   cache_responses: true
 
 
-# h5ad_compression: gzip
+# h5ad_compression: zstd        # gzip | zstd | lzf。03 浮点高熵数据：gzip 文件小、zstd 写盘快（-32% 写时，文件 +40%）
+# h5ad_compression_opts: 1      # gzip 压缩级别（默认 4→1：写盘 -44%，文件略大）
 
 # ── Downsampling (optional) ──
 # downsample:

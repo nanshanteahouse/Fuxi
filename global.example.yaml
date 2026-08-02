@@ -68,10 +68,10 @@ integration:
       # n_layers: 2                        # Encoder/Decoder layer count
       # n_hidden: 128                      # Hidden layer width
       # max_epochs: 400                    # Max training epochs (None = heuristic)
-      # batch_size: 128                    # Minibatch size
-      # early_stopping: false              # Stop when validation ELBO plateaus
+      # batch_size: 1024                   # Minibatch size — 实测 batch 512→1024 每 epoch -37%
+      # early_stopping: true               # Stop when validation ELBO plateaus (biggest lever)
       # train_size: 0.9                    # Train fraction (<1.0 needed for early_stopping)
-      # precision: "32"                    # "16-mixed" / "bf16-mixed" for GPU speedup
+      # precision: "16-mixed"              # "16-mixed" / "bf16-mixed" for GPU speedup
       # batch_key: sample                  # obs column for batch correction
       # use_gpu: true                      # Use GPU if available
 
@@ -109,7 +109,7 @@ integration:
 
       # ── Advanced: DataSplitter (DataLoader) ──
       # datasplitter_kwargs:
-      #   num_workers: 0                  # DataLoader parallel workers
+      #   num_workers: 0                  # DataLoader workers — WSL2 下 >0 触发 IPC 阻塞 GPU 饿死（实测 40x 慢），务必 0
       #   drop_last: false                # Drop incomplete final batch
       #   pin_memory: false               # CUDA pinned memory
 
