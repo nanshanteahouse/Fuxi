@@ -211,6 +211,25 @@ ai:
 | `rna/utils/` | RNA-specific: hierarchy builder, evidence fusion, pseudobulk DE, sex detection |
 | `adhoc/` | One-off migration, ortholog processing, dataset-specific analysis |
 
+## Performance
+
+Fuxi is engineered for million-cell datasets on a single workstation (98 GB RAM + RTX 3090).
+Measured on retina datasets at 1.05M and 1.98M cells:
+
+| Optimization | Effect |
+|--------------|--------|
+| Double-write bug fix (Step 03) | write time -50%, total -35% |
+| gzip level 1 (configurable) | write time -12%, total -47% vs original |
+| zstd compression (hdf5plugin) | write -32%, smaller files on dense data |
+| GPU hybrid path (PCA guard + Harmony on X_pca only) | Harmony 560s → 52s (-91%) |
+| `stream_raw` (chunked CSR write from 02_qc) | peak RAM -24% (92 → 71 GiB @ 1.98M) |
+| Batch diagnosis slim-down | 45 min → 30 s (90x), subsample max 50k cells |
+| scVI training defaults (batch 1024, early-stopping, AMP) | up to 40x wall-clock |
+| Unified `execution.memory` config + preflight guard | warn/block on estimated peak before running |
+
+Memory policy: `speed` (default) / `balanced` / `memory`; see `core/utils/_memory.py`.
+
+
 ## Citation
 
 If you use Fuxi in your research, please cite:
