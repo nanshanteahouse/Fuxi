@@ -543,7 +543,7 @@ def compute_qc_metrics(adata, cfg, log):
 
     x_mat = adata.X
     n_cells, n_genes_t = x_mat.shape
-    block_size = 200_000
+    block_size = _resolve_block_size(x_mat, cfg.qc.block_size, prefetch=1)
     mt_idx = np.where(mt_mask)[0]
     ribo_idx = np.where(adata.var["ribo"].values)[0]
     x_dtype = x_mat.dtype
@@ -605,6 +605,29 @@ def compute_qc_metrics(adata, cfg, log):
 # ══════════════════════════════════════════════════════════════════════════════
 
 
+def _resolve_block_size(x_mat, block_size, prefetch=1, default=200_000, avail_bytes=None):
+    """解析流式块大小：int 固定值直接返回；"auto" 按可用内存反推。
+
+    内存模型：峰值 ≈ (prefetch+1) × block × 每行nnz × 12B（float32 data 4B + int64 indices 8B）。
+    时间对块大小不敏感（平台期 100k-500k），故内存约束优先：
+    block = 可用内存 × 0.4 / (密度 × 12 × (prefetch+1))，clamp [50k, 500k]。
+    密度从首 20k 行抽样估算（backed 读 ~0.5s）。avail_bytes 仅供测试注入。"""
+    if isinstance(block_size, int) and block_size > 0:
+        return block_size
+    if not isinstance(block_size, str) or block_size != "auto":
+        return default  # 异常值回退默认
+    n, _ = x_mat.shape
+    sample = x_mat[: min(n, 20_000)]
+    dens = sample.nnz / max(sample.shape[0], 1)
+    bytes_per_row = dens * 12.0 * (prefetch + 1)
+    if avail_bytes is None:
+        import psutil
+
+        avail_bytes = psutil.virtual_memory().available
+    bs = int(avail_bytes * 0.4 / bytes_per_row)
+    return int(min(max(bs, 50_000), 500_000))
+
+
 def _nonzero_col_counts(x_mat, mask=None, block_size=500_000):
     """每基因非零计数（块式，与 scanpy `(X > 0).sum(0)` 语义一致：NaN 不计）。
     mask 传入时仅在保留行上计数（等价于先过滤行再数）。"""
@@ -636,7 +659,7 @@ def _write_qc_h5ad(adata, mask_obs, vmask, n_cells_counts, cfg, log):
     n_keep_o = int(mask_obs.sum())
     n_keep_v = int(vmask.sum())
     vmask_np = np.asarray(vmask)
-    block_size = 200_000
+    block_size = _resolve_block_size(x_mat, cfg.qc.block_size, prefetch=2)
 
     # 02 专属默认：zstd 全面优于 gzip1（实测 GSE137398：写 11.8→5.9s, 读 3.2→1.6s, 文件 251→217MB）
     # hdf5plugin 不可用时回退 gzip；FUXI_QC_COMPR 环境变量可覆盖（如 gzip/lzf）
@@ -1026,7 +1049,9 @@ def main():
     n_before = adata.n_obs
     mask_obs = filter_cells(adata, thresholds, cfg, log)
     min_cells = cfg.qc.min_cells_per_gene
-    n_cells_counts = _nonzero_col_counts(adata.X, mask_obs)
+    n_cells_counts = _nonzero_col_counts(
+        adata.X, mask_obs, block_size=_resolve_block_size(adata.X, cfg.qc.block_size, prefetch=1)
+    )
     vmask = n_cells_counts >= min_cells
     log.info("After gene filtering: %d genes", int(vmask.sum()))
     # ── Checkpoint: filter-on-write（过滤与写入融合，零矩阵拷贝）──

@@ -117,6 +117,9 @@ qc:
   # max_pct_mito: 20.0                  # Max mitochondrial percentage
   # min_cells_per_gene: 3               # Min cells expressing a gene
   # mt_gene_pattern: "MT-"              # Mitochondrial gene prefix
+  # block_size: "auto"                  # 流式块大小：int 固定值（如 200000）或 "auto"
+  #                                     # auto = 可用内存×0.4/(每行nnz×12B×(prefetch+1))，clamp [50k,500k]
+  #                                     # 时间对块大小不敏感（平台期 100k-500k），内存约束优先
 
 # ── Figure / Visualization ─────────────────────────────────────────────────
 plot:

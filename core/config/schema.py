@@ -23,7 +23,7 @@ from typing import Any, Dict, List, Literal, Optional
 # This runs before any data_root() call, so FUXI_DATA_ROOT in .env
 # is available to the pipeline without manual sourcing.
 from dotenv import load_dotenv
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from core.config.global_config import GlobalPlotConfig
 
@@ -111,6 +111,22 @@ class QCSettings(BaseModel):
     min_mad_upper_genes: int = 4000
     min_mad_upper_genes_nuclei: int = 3000
     is_nuclei: bool = False
+    max_pct_mito_nuclei: float = 5.0
+    # 流式块大小：int 固定值（如 200000），或 "auto" 按可用内存 × 0.4 / (每行nnz×12B×(prefetch+1))
+    # 反推并 clamp [50k, 500k]。时间对块大小不敏感（平台期），故内存约束优先。
+    block_size: int | str = "auto"
+
+    @field_validator("block_size")
+    @classmethod
+    def _validate_block_size(cls, v):
+        if isinstance(v, int):
+            if v <= 0:
+                raise ValueError("block_size must be a positive int")
+            return v
+        if v != "auto":
+            raise ValueError('block_size must be a positive int or "auto"')
+        return v
+
     max_pct_mito_nuclei: float = 5.0
 
 
