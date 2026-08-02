@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Classify adata.obs columns as batch/biology via PCA variance decomposition,
-Gini coefficient, cluster purity, Cramer's V collinearity, and permutation tests.
+Gini coefficient, and Cramer's V collinearity.
 
 Exports: ColumnDiagnosis, BatchDiagnosisReport, diagnose_batch_candidates,
 validate_harmony_preservation, plot_diagnosis_report,
 _compute_anova_r2_per_pc, _compute_gini_criterion, _compute_purity_one_shot,
-_compute_cramer_v, _permutation_test.
+_compute_cramer_v.
 """
 
 from __future__ import annotations
@@ -32,11 +32,9 @@ logger = logging.getLogger(__name__)
 class ColumnDiagnosis:
     column: str
     gini_criterion: float
-    purity_score: float
     n_unique: int
     cramer_v: dict[str, float]
     judgment: str  # "batch" | "biology" | "ambiguous" | "skip"
-    permutation_pval: float | None = None
     recommendation: str = ""
 
 
@@ -57,15 +55,19 @@ class BatchDiagnosisReport:
 
 def _categorize(
     gini: float,
-    perm_pval: float | None,
     gini_batch_threshold: float,
     gini_biology_threshold: float,
 ) -> str:
+    """Classify by Gini thresholds only.
+
+    The middle band (batch < gini < biology) is always "ambiguous" —
+    ambiguous columns take part in NO downstream decision (batch_key
+    augmentation, collinearity guard, preservation check), so this is the
+    safe direction after removing the permutation test (2026-08-02).
+    """
     if gini <= gini_batch_threshold:
         return "batch"
     if gini >= gini_biology_threshold:
-        return "biology"
-    if perm_pval is not None and perm_pval < 0.05:
         return "biology"
     return "ambiguous"
 
@@ -197,38 +199,18 @@ def _compute_cramer_v(col_a: pd.Series, col_b: pd.Series) -> float:
     return float(math.sqrt(chi2 / (n * min_dim)))
 
 
-def _permutation_test(
-    pca_matrix: np.ndarray,
-    col_values,
-    real_r2s: np.ndarray,
-    n_perm: int = 100,
-    random_state: int = 42,
-) -> float:
-    """p-value = fraction of permutations where mean R² exceeds real mean."""
-    rng = np.random.RandomState(random_state)
-    real_mean = float(np.mean(real_r2s))
-    count = 0
-    col_arr = np.array(col_values).copy()
-    for _ in range(n_perm):
-        rng.shuffle(col_arr)
-        perm_r2s = _compute_anova_r2_per_pc(pca_matrix, col_arr)
-        if float(np.mean(perm_r2s)) > real_mean:
-            count += 1
-    return count / n_perm
-
-
-# ═══════════════════════════════════════════════════════════
 #  Public API
 # ═══════════════════════════════════════════════════════════
+# ═══════════════════════════════════════════════════════════
 
 
-def _build_rec(judgment: str, col: str, gini: float, purity: float) -> str:
+def _build_rec(judgment: str, col: str, gini: float) -> str:
     if judgment == "batch":
-        return f"Use '{col}' as batch key for Harmony (gini={gini:.3f}, purity={purity:.3f})"
+        return f"Use '{col}' as batch key for Harmony (gini={gini:.3f})"
     elif judgment == "biology":
-        return f"'{col}' appears biological \u2014 do NOT use as batch key (gini={gini:.3f}, purity={purity:.3f})"
+        return f"'{col}' appears biological \u2014 do NOT use as batch key (gini={gini:.3f})"
     elif judgment == "ambiguous":
-        return f"'{col}' ambiguous \u2014 manual review (gini={gini:.3f}, purity={purity:.3f})"
+        return f"'{col}' ambiguous \u2014 manual review (gini={gini:.3f})"
     return f"'{col}' skipped (single value)."
 
 
@@ -238,13 +220,27 @@ def diagnose_batch_candidates(
     random_state: int = 42,
     gini_batch_threshold: float = 0.3,
     gini_biology_threshold: float = 0.6,
-    permute_n: int = 100,
+    max_cells: int | None = None,
 ) -> BatchDiagnosisReport:
-    """Classify every categorical obs column as batch / biology / ambiguous."""
+    """Classify every categorical obs column as batch / biology / ambiguous.
+
+    Statistics are column-level heuristics (ANOVA R², Gini, Cramer's V), so
+    *max_cells* subsampling is safe: only the per-column category-count
+    check (n_unique) uses the full obs to keep rare-category safety.
+    """
     if "X_pca" not in adata.obsm:
         raise ValueError("'X_pca' not found in adata.obsm. Run sc.pp.pca first.")
 
+    n_obs = adata.n_obs
+    keep_idx: np.ndarray | None = None
+    if max_cells is not None and max_cells > 0 and n_obs > max_cells:
+        rng = np.random.default_rng(random_state)
+        keep_idx = rng.choice(n_obs, size=max_cells, replace=False)
+        keep_idx.sort()
+
     pca_mat = adata.obsm["X_pca"][:, : min(n_pcs, adata.obsm["X_pca"].shape[1])]
+    if keep_idx is not None:
+        pca_mat = pca_mat[keep_idx]
 
     cat_cols = [
         col for col in adata.obs.columns if isinstance(adata.obs[col].dtype, pd.CategoricalDtype)
@@ -259,56 +255,46 @@ def diagnose_batch_candidates(
     if not cat_cols:
         return BatchDiagnosisReport(suggested_batch_key=[], warnings=warnings)
 
-    # Pre-compute kNN + Leiden ONCE for all categorical columns — the
-    # expensive part (O(n_obs * n_neighbors) graph build + Leiden) does not
-    # depend on which column we are scoring, only on the embedding.
-    _shared_labels = _precompute_leiden_labels(adata, use_rep="X_pca")
     for col in cat_cols:
+        # Full-obs category count (subsampling must not hide rare categories).
         n_unique = len(adata.obs[col].dropna().unique())
         if n_unique < 2:
             continue
+        if n_unique > 1000:
+            # Seurat-style imports may encode continuous numeric columns
+            # (percent.mt, nCount_RNA) as categorical. Cramer's V on those
+            # would explode to O(n_categories^2) — treat as not-a-column.
+            logger.info("  '%s': %d categories — skipping (continuous column?)", col, n_unique)
+            continue
 
-        col_vals = adata.obs[col].values
+        col_all = adata.obs[col].values
+        col_vals = col_all[keep_idx] if keep_idx is not None else col_all
         r2s = _compute_anova_r2_per_pc(pca_mat, col_vals)
         r2_arr = np.array(r2s)
         gini = _compute_gini_criterion(r2_arr)
-        purity = _compute_purity_one_shot(
-            adata, col, use_rep="X_pca", precomputed_labels=_shared_labels
-        )
 
         cramer_v: dict[str, float] = {}
+        obs_sub = adata.obs.iloc[keep_idx] if keep_idx is not None else adata.obs
         for oc in cat_cols:
             if oc != col:
-                v = _compute_cramer_v(adata.obs[col], adata.obs[oc])
+                v = _compute_cramer_v(obs_sub[col], obs_sub[oc])
                 cramer_v[oc] = v
-                if v >= 1.0:
+                if v is not None and v >= 1.0:
                     warnings.append(
                         f"Column '{col}' is perfectly collinear with '{oc}' "
                         f"(V=1.0) \u2014 redundant column."
                     )
 
-        judgment: str = "ambiguous"
-        perm_pval: float | None = None
-
-        if gini <= gini_batch_threshold:
-            judgment = "batch"
-            perm_pval = None
-        else:
-            perm_pval = _permutation_test(
-                pca_mat, col_vals, r2_arr, n_perm=permute_n, random_state=random_state
-            )
-            judgment = _categorize(gini, perm_pval, gini_batch_threshold, gini_biology_threshold)
+        judgment = _categorize(gini, gini_batch_threshold, gini_biology_threshold)
 
         diagnoses.append(
             ColumnDiagnosis(
                 column=col,
                 gini_criterion=gini,
-                purity_score=purity,
                 n_unique=n_unique,
                 cramer_v=cramer_v,
                 judgment=judgment,
-                permutation_pval=perm_pval,
-                recommendation=_build_rec(judgment, col, gini, purity),
+                recommendation=_build_rec(judgment, col, gini),
             )
         )
 

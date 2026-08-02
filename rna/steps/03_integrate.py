@@ -25,6 +25,8 @@ import os
 import sys
 import time
 
+import anndata
+
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 import matplotlib.pyplot as plt
 import numpy as np
@@ -385,7 +387,11 @@ def main():
     if cfg.integration.diagnose:
         from rna.utils.batch_diagnostics import diagnose_batch_candidates, plot_diagnosis_report
 
-        adata_orig = adata.copy()
+        # 轻量快照（无 X/raw）——preservation 只需 X_pca + obs，避免 .raw 42.5GB 深拷贝 (2026-08-02)
+        adata_orig = anndata.AnnData(
+            obs=adata.obs.copy(),
+            obsm={"X_pca": adata.obsm["X_pca"].copy()},
+        )
         gini_b = cfg.integration.gini_batch_threshold
         gini_ = cfg.integration.gini_biology_threshold
         log.info("Running batch diagnosis ...")
@@ -396,6 +402,7 @@ def main():
                     n_pcs=cfg.pca.n_pcs_use,
                     gini_batch_threshold=gini_b,
                     gini_biology_threshold=gini_,
+                    max_cells=cfg.integration.diagnose_max_cells,
                 )
                 log.info(
                     "[batch-diagnosis] batch_cols=%s, biology_cols=%s, ambiguous=%s",
@@ -599,6 +606,14 @@ def main():
             use_gpu = cfg.integration.scvi.use_gpu and gpu_available_torch()
             if cfg.integration.scvi.use_gpu and not use_gpu:
                 log.warning("GPU requested but not available — falling back to CPU")
+
+            # TF32 mixed-precision matmul (Ampere+): ~2x training speedup on
+            # RTX 3090; scverse-verified safe for integration (2026-08-02).
+            if use_gpu:
+                import torch
+
+                torch.set_float32_matmul_precision("medium")
+                log.info("[scvi] float32_matmul_precision → medium (TF32)")
 
             # Determine batch key: try scvi-specific first, then general, else None
             batch_key = (

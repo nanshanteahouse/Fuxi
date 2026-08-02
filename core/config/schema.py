@@ -258,6 +258,7 @@ class IntegrationSettings(BaseModel):
 
     diagnose: bool = True
     diagnose_report: bool = True
+    diagnose_max_cells: int = 50_000  # batch diagnosis 子采样上限（秒级 vs 全量分钟级）
     diagnose_exclude_patterns: list[str] = Field(
         default_factory=lambda: ["*leiden*", "*cell_type*", "*annotation*", "*annotated*"]
     )
