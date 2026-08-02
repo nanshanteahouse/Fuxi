@@ -2,7 +2,6 @@
 
 import logging
 import os
-import re
 from typing import Optional
 
 import yaml
@@ -306,35 +305,5 @@ def _validate_species(cfg) -> None:
         )
 
 
-_MEM_UNIT_MULT = {"b": 1, "k": 2**10, "m": 2**20, "g": 2**30, "t": 2**40}
-
-
-def resolve_memory_budget_bytes(memory_limit: str = "auto") -> int:
-    # Resolve execution.memory_limit to a byte budget.
-    # auto -> 80% of physical RAM via psutil; explicit values accept
-    # 64GB / 64 GiB / 512MB etc (case-insensitive). Unparsable -> auto;
-    # returns 0 only when even psutil fails (callers treat 0 as no budget).
-    text = str(memory_limit or "").strip().lower()
-    if not text or text in ("auto", "0"):
-        text = "auto"
-    if text == "auto":
-        try:
-            import psutil
-
-            return int(psutil.virtual_memory().total * 0.8)
-        except Exception:
-            return 0
-    m = re.fullmatch(r"(\d+(?:\.\d+)?)\s*([a-z]+)?", text)
-    if not m:
-        return 0
-    value = float(m.group(1))
-    unit = (m.group(2) or "g").lower()
-    if unit == "b":
-        pass
-    elif unit.endswith("ib"):
-        unit = unit[:-2]  # GiB/KiB -> g/k
-    elif unit.endswith("b"):
-        unit = unit[:-1]  # gb/mb/kb/tb -> g/m/k/t
-    if unit in _MEM_UNIT_MULT:
-        return int(value * _MEM_UNIT_MULT[unit])
-    return 0
+# Legacy re-export — moved to core.utils._memory (unified memory settings).
+from core.utils._memory import resolve_memory_budget_bytes  # noqa: F401,E402

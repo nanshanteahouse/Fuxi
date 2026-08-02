@@ -90,7 +90,9 @@ def main():
     log.info("Loaded: %d cells × %d genes", adata.n_obs, adata.n_vars)
 
     # ── Memory policy detection ──
-    mem_policy = getattr(cfg.execution, "memory_policy", "speed")
+    from core.utils import resolve_memory_settings
+
+    mem_policy, _, _ = resolve_memory_settings(cfg)
     log.info("Memory policy: %s", mem_policy)
     # Warn if dense allocation would consume >30% of available RAM
     try:
@@ -101,7 +103,7 @@ def main():
         if est_dense_gb > avail_gb * 0.3:
             log.warning(
                 "Estimated dense memory %.1f GB exceeds 30%% of available %.1f GB — "
-                "consider memory_policy=balanced",
+                "consider execution.memory.policy=balanced",
                 est_dense_gb,
                 avail_gb,
             )

@@ -101,7 +101,6 @@ from core.utils._config import (  # noqa: F401
     _find_dataset_yaml,
     _validate_species,
     resolve_config,
-    resolve_memory_budget_bytes,
 )
 from core.utils._cross_modality import (  # noqa: F401
     find_rna_h5ad,
@@ -129,6 +128,12 @@ from core.utils._io import (  # noqa: F401
 )
 from core.utils._io_incremental import write_h5ad_incremental  # noqa: F401
 from core.utils._logging import setup_logger  # noqa: F401
+from core.utils._memory import (  # noqa: F401
+    check_memory_guard,
+    estimate_step_peak,
+    resolve_memory_budget_bytes,
+    resolve_memory_settings,
+)
 from core.utils._optional import (  # noqa: F401
     gpu_available_nvidia_smi,
     gpu_available_rapids,

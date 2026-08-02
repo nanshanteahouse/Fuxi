@@ -11,9 +11,10 @@
 # ── Execution Environment ──────────────────────────────────────────────────
 execution:
   # random_seed: 42                     # Random seed for reproducibility
-  # memory_policy: "speed"              # 'speed' | 'balance' | 'memory'
-  # n_jobs: 0                           # Parallel workers (0 = auto-detect)
-  # memory_limit: "auto"                # 'auto' = 80% RAM (psutil) | e.g. 64GB; caps kNN workers
+  # memory:
+  #   policy: "speed"              # 'speed' | 'balanced' | 'memory'
+  #   budget: "auto"              # 'auto' = 80% RAM (psutil) | e.g. 64GB; caps kNN workers
+  #   guard: "warn"               # 'warn' | 'block' | 'off' — 01 启动前估算峰值 vs budget
   # limit_blas_threads: true
   # force_csr: true                     # Force CSR matrix format
   # use_float32: true                   # Cast to float32

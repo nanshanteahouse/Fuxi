@@ -23,7 +23,7 @@ import numpy as np
 import scanpy as sc
 from joblib import Parallel, delayed
 
-from core.utils import resolve_config, resolve_memory_budget_bytes, setup_logger
+from core.utils import resolve_config, resolve_memory_settings, setup_logger
 
 # ── Multiprocess ANN kNN patch (Scrublet approx mode) ──
 # Annoy's get_nns_by_item holds the GIL, so threads cannot parallelize it.
@@ -215,7 +215,7 @@ def _install_knn_mp_patch(cfg):
     if _MP_KNN_ORIGINAL is None:
         _MP_KNN_ORIGINAL = _hf.get_knn_graph
     _MP_KNN_NJOBS = min(cfg.execution.n_jobs or os.cpu_count() or 1, 16)
-    _MP_MEM_BUDGET_BYTES = resolve_memory_budget_bytes(cfg.execution.memory_limit)
+    _MP_MEM_BUDGET_BYTES = resolve_memory_settings(cfg)[1]
     _hf.get_knn_graph = _get_knn_graph_mp
     _scr.get_knn_graph = _get_knn_graph_mp
 
@@ -406,7 +406,7 @@ def detect_doublets_parallel(adata, cfg, log):
 
     results = [None] * (len(large_names) + len(small_names))
     n_cpu = cfg.execution.n_jobs or os.cpu_count() or 1
-    budget = _MP_MEM_BUDGET_BYTES or resolve_memory_budget_bytes(cfg.execution.memory_limit)
+    budget = _MP_MEM_BUDGET_BYTES or resolve_memory_settings(cfg)[1]
 
     def _extract_bytes(n_cells):
         # In-memory float32 AnnData for one group (happens in the main process).
@@ -441,7 +441,7 @@ def detect_doublets_parallel(adata, cfg, log):
             log.warning(
                 "  Parallel sample workers capped by memory budget: %d -> %d "
                 "(~%.1f GiB/worker, main-process peak ~%.1f GiB). "
-                "Adjust scrublet.serial_threshold or execution.memory_limit if needed.",
+                "Adjust scrublet.serial_threshold or execution.memory.budget if needed.",
                 small_n_jobs,
                 mem_cap,
                 worker_peak / 2**30,
@@ -549,6 +549,32 @@ def main():
     log.info(
         "Opened in backed mode: %s — %d cells × %d genes", cfg.raw_h5ad, adata.n_obs, adata.n_vars
     )
+
+    # ── Memory guard: estimate step 01/02/03 peaks vs budget before heavy work ──
+    from core.utils import check_memory_guard, estimate_step_peak, resolve_memory_settings
+
+    _mem_policy, _mem_budget, _mem_guard = resolve_memory_settings(cfg)
+    # backed _CSRDataset has no .nnz — read from h5ad X/data directly (zero-copy)
+    _nnz = 0
+    try:
+        import h5py
+
+        with h5py.File(cfg.raw_h5ad, "r") as _h5:
+            _nnz = int(_h5["X/data"].shape[0])
+    except Exception:
+        _nnz = getattr(adata.X, "nnz", 0)
+    _est = {
+        s: estimate_step_peak(
+            s, adata.n_obs, adata.n_vars, _nnz, policy=_mem_policy, budget_bytes=_mem_budget
+        )
+        for s in (1, 2, 3)
+    }
+    if _mem_budget > 0:
+        log.info(
+            "[memory-guard] estimated peaks: "
+            + ", ".join(f"step{s} ~{g:.0f}GB" for s, g in _est.items())
+        )
+    check_memory_guard(_est, _mem_budget, _mem_guard, logger_obj=log)
 
     doublet_scores, doublet_pred = detect_doublets_parallel(adata, cfg, log)
 

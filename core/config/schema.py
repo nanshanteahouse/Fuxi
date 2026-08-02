@@ -653,6 +653,21 @@ class ATACConfig(BaseModel):
 # ═══════════════════════════════════════════════════════════════════════
 # Sub-model 20 — ExecutionConfig
 # ═══════════════════════════════════════════════════════════════════════
+
+
+class MemoryConfig(BaseModel):
+    """Memory budget / policy / guard rail for steps 01-03."""
+
+    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+
+    # speed   = no tradeoffs (dense PCA, full regress_out, fastest)
+    # balanced = avoid dense copies (arpack PCA, skip regress_out)
+    # memory  = maximum savings (arpack + subsample UMAP train)
+    policy: Literal["speed", "balanced", "memory"] = "speed"
+    budget: str = "auto"  # auto = psutil detect (80% phys RAM) | e.g. 64GB | 128GiB | 32000MB
+    guard: Literal["warn", "block", "off"] = "warn"  # pre-run peak estimate vs budget
+
+
 class ExecutionConfig(BaseModel):
     """Execution environment settings."""
 
@@ -669,12 +684,8 @@ class ExecutionConfig(BaseModel):
     # gpu  = force GPU, raise on missing RAPIDS
     # cpu  = force CPU (skip detection entirely)
     device: Literal["auto", "cpu", "gpu"] = "auto"
-    # ── Memory / performance policy ──
-    # speed   = no tradeoffs (dense PCA, full regress_out, fastest)
-    # balanced = avoid dense copies (arpack PCA, skip regress_out)
-    # memory  = maximum savings (arpack + subsample UMAP train)
-    memory_policy: str = "speed"
-    memory_limit: str = "auto"  # auto = psutil detect | e.g. 64GB | 128GB
+    # ── Memory budget / policy / guard (steps 01-03) ──
+    memory: MemoryConfig = Field(default_factory=MemoryConfig)
 
 
 # ═══════════════════════════════════════════════════════════════════════

@@ -69,7 +69,7 @@ class GlobalExecutionConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", validate_assignment=True)
 
     random_seed: int = 42
-    memory_policy: str = "speed"
+    memory: dict = {"policy": "speed", "budget": "auto", "guard": "warn"}
     n_jobs: int = 0  # 0 = auto-detect
     limit_blas_threads: bool = True
     force_csr: bool = True
