@@ -1,0 +1,116 @@
+# Source independence table — per-source evidence provenance metadata
+# (root datasets from the paper registry, injected types from build notes)
+# roots: primary root GSEs; modalities: union across roots (registry);
+# injected_types: cell types whose markers are NOT this paper's own data;
+# validation_datasets: datasets where this source ran empirical validation.
+lambda_negative: 0.5
+sources:
+  chen2023:
+    roots: ['GSE226108']
+    modalities: ['atac', 'rna']
+    injected_types:
+      Microglia: "copied from menon2019+hu2019 gene scores (supplement_verified self-declared)"
+      Blood_Erythrocyte: "general biology injection"
+    validation_datasets: ['GSE118614']
+  dorgau2024:
+    roots: ['GSE234963']
+    modalities: ['rna']
+    injected_types:
+      {}
+    validation_datasets: []
+  hahn2023:
+    roots: ['GSE237202', 'GSE237203', 'GSE237204', 'GSE237205', 'GSE237206', 'GSE237207', 'GSE237208', 'GSE237209', 'GSE237210', 'GSE237211', 'GSE237212', 'GSE237213', 'GSE237214']
+    modalities: ['rna']
+    injected_types:
+      {}
+    validation_datasets: []
+  hoang2023:
+    roots: []
+    modalities: []
+    injected_types:
+      {}
+    validation_datasets: ['GSE118614']
+  hu2019:
+    roots: ['GSE107618']
+    modalities: ['rna']
+    injected_types:
+      {}
+    validation_datasets: ['GSE107618', 'GSE118614']
+  kolsch2021:
+    roots: ['GSE152842']
+    modalities: ['rna']
+    injected_types:
+      {}
+    validation_datasets: []
+  li2026:
+    roots: ['GSE226108', 'GSE247157', 'GSE265774', 'GSE268630', 'GSE281526']
+    modalities: ['atac', 'rna']
+    injected_types:
+      Rod_Photoreceptor: "canonical from build_li2026.py add_canonical_markers() (data gap: no type-marker table in supplement; S8 covers only BC/AC/RGC)"
+      Cone_Photoreceptor: "canonical from build_li2026.py add_canonical_markers() (data gap: no type-marker table)"
+      Horizontal_Cell: "canonical from build_li2026.py add_canonical_markers() (data gap: no type-marker table)"
+      Muller_Glia: "canonical from build_li2026.py add_canonical_markers() (data gap: no type-marker table)"
+      Microglia: "canonical from build_li2026.py add_canonical_markers() (data gap: no type-marker table)"
+      Astrocyte: "canonical from build_li2026.py add_canonical_markers() (data gap: no type-marker table)"
+    validation_datasets: []
+  liu2022:
+    roots: ['GSE160138', 'GSE160140']
+    modalities: ['rna']
+    injected_types:
+      {}
+    validation_datasets: []
+  macosko2015:
+    roots: ['GSE63269', 'GSE63472', 'GSE66693', 'GSE66694', 'GSE70151']
+    modalities: []
+    injected_types:
+      {}
+    validation_datasets: []
+  menon2019:
+    roots: ['GSE137537', 'GSE137846']
+    modalities: ['rna']
+    injected_types:
+      {}
+    validation_datasets: ['GSE118614']
+  peng2019:
+    roots: ['GSE118546', 'GSE118852']
+    modalities: ['rna']
+    injected_types:
+      {}
+    validation_datasets: ['GSE118614']
+  shekhar2016:
+    roots: ['GSE80232', 'GSE81902', 'GSE81903', 'GSE81904']
+    modalities: ['bulk', 'rna']
+    injected_types:
+      {}
+    validation_datasets: []
+  sridhar2020:
+    roots: ['GSE142526']
+    modalities: ['rna']
+    injected_types:
+      {}
+    validation_datasets: []
+  tran2019:
+    roots: ['GSE133382', 'GSE137398', 'GSE137828', 'GSE137863']
+    modalities: ['rna']
+    injected_types:
+      {}
+    validation_datasets: []
+  wang2026:
+    roots: ['GSE289703']
+    modalities: ['atac', 'rna', 'starr']
+    injected_types:
+      {}
+    validation_datasets: []
+  yamagata2021:
+    roots: ['GSE159107']
+    modalities: ['rna']
+    injected_types:
+      {}
+    validation_datasets: []
+  zuo2024:
+    roots: ['GSE226108', 'GSE246169', 'GSE247157', 'GSE265774', 'GSE268630', 'GSE281526']
+    modalities: ['atac', 'rna']
+    injected_types:
+      Microglia: "not in MOESM6 supplement (9 sheets: BC/Cone/Rod/MG/PRPC/NRPC/RGC/AC/HC)"
+      Astrocyte: "not in MOESM6 supplement"
+    validation_datasets: ['GSE118614']

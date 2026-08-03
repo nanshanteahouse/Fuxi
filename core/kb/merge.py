@@ -93,6 +93,112 @@ def load_all_sources(sources_dir: str) -> List[Dict[str, Any]]:
 # ═══════════════════════════════════════════════════════════════════════
 
 
+def load_source_independence(yaml_path: str) -> Optional[Dict[str, Any]]:
+    """Load the source-independence table (``_source_independence.yaml``).
+
+    Per-source entries carry::
+
+        roots: [GSE...]            # primary root datasets (independent votes)
+        modalities: [rna, atac]    # union across roots (method diversity)
+        injected_types: {Type: note}   # markers NOT this paper's own data
+        validation_datasets: [GSE...]  # datasets where validation ran
+
+    Returns ``None`` when the file does not exist (legacy behaviour).
+    """
+    if not os.path.isfile(yaml_path):
+        return None
+    with open(yaml_path, "r", encoding="utf-8") as fh:
+        data = yaml.safe_load(fh) or {}
+    return {
+        "lambda_negative": float(data.get("lambda_negative", 0.5)),
+        "sources": data.get("sources", {}),
+    }
+
+
+def compute_effective_source_count(
+    gene: str,
+    type_key: str,
+    src_set: Set[str],
+    sources: List[Dict[str, Any]],
+    indep: Dict[str, Any],
+) -> float:
+    """Three-dimensional effective source count for one (gene, type).
+
+    Replaces the naive "number of source files" vote with an evidence-
+    independence aware consensus:
+
+    1. **Independent roots** — each source votes via its root datasets;
+       distinct root GSEs count once (shared-root re-publication does not
+       multiply evidence).
+    2. **Method diversity** — a root shared by sources using different
+       modalities (e.g. RNA + ATAC) adds +0.5 (chapter-8 rule).
+    3. **Negative coverage** — subtract ``lambda_negative`` per *independent*
+       validation dataset where this gene was falsified (deduplicated via
+       ``validation_datasets``), so a failure recorded by 6 re-copied
+       sources still counts as 1 independent negative vote.
+
+    Injected types (canonical copies, gene-score copies, absent from the
+    paper's supplement) contribute 0 votes.  Sources without root data are
+    treated as a single private root (conservative 1 vote).
+    """
+    indep_sources = indep.get("sources", {})
+    # ── Dimension 1+2: source votes with shared-root discount ─────────
+    # Vote unit = source paper (one vote per independent source).
+    # A source's root datasets prove independence: unique roots → full
+    # vote; roots fully covered by other sources (pure data re-publication)
+    # → half vote (chapter-8 L1: other's data, own analysis).
+    # Injected types → 0 votes.  No root info → conservative 1 vote.
+    votes: Dict[str, float] = {}
+    root_of: Dict[str, Set[str]] = {}
+    for sid in src_set:
+        info = indep_sources.get(sid, {})
+        if type_key in info.get("injected_types", {}):
+            votes[sid] = 0.0
+            continue
+        roots = set(info.get("roots") or [])
+        if not roots:
+            votes[sid] = 1.0
+        else:
+            votes[sid] = 1.0
+            for r in roots:
+                root_of.setdefault(r, set()).add(sid)
+
+    shared_bonus = 0.0
+    for _root, sharing in root_of.items():
+        if len(sharing) < 2:
+            continue
+        mods: Set[str] = set()
+        for sid in sharing:
+            mods.update(indep_sources.get(sid, {}).get("modalities", []))
+        if len(mods) >= 2:
+            shared_bonus = 0.5
+
+    for sid, roots in [(s, set(indep_sources.get(s, {}).get("roots") or [])) for s in votes]:
+        if not roots or votes[sid] == 0.0:
+            continue
+        others = set(votes) - {sid}
+        others_roots: Set[str] = set()
+        for o in others:
+            others_roots.update(indep_sources.get(o, {}).get("roots") or [])
+        if roots <= others_roots:
+            votes[sid] = 0.5
+
+    positive = sum(votes.values()) + shared_bonus
+
+    # ── Dimension 3: independent negative validation datasets ──────────
+    neg_datasets: Set[str] = set()
+    for src in sources:
+        if src["source_id"] not in src_set:
+            continue
+        audit = (src.get("markers", {}).get(type_key, {}) or {}).get("audit", {})
+        csv = audit.get("cross_species_validated")
+        if isinstance(csv, dict) and csv.get(gene) is False:
+            neg_datasets.update(audit.get("expression_validated") or [])
+
+    lam = float(indep.get("lambda_negative", 0.5))
+    return max(positive - lam * len(neg_datasets), 0.0)
+
+
 def compute_consensus_level(source_count: int) -> str:
     """Map a marker's source-support count to a qualitative label.
 
@@ -486,6 +592,7 @@ def build_final_kb(
     merged_types: Dict[str, Any],
     merged_rules: List[Dict[str, Any]],
     sources: List[Dict[str, Any]],
+    source_independence: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Build the unified KB dict consumable by ``marker_scoring.py``.
 
@@ -570,13 +677,21 @@ def build_final_kb(
 
         # Consensus levels
         consensus_levels: Dict[str, str] = {}
+        consensus_effective: Dict[str, float] = {}
         gene_sources: Dict[str, Set[str]] = {}
         for gene, info in type_data.get("confirm", {}).items():
             gene_sources.setdefault(gene, set()).update(info["source_ids"])
         for gene, info in type_data.get("add", {}).items():
             gene_sources.setdefault(gene, set()).update(info["source_ids"])
         for gene, src_set in gene_sources.items():
-            consensus_levels[gene] = compute_consensus_level(len(src_set))
+            if source_independence is not None:
+                effective = compute_effective_source_count(
+                    gene, type_key, src_set, sources, source_independence
+                )
+                consensus_effective[gene] = round(effective, 2)
+                consensus_levels[gene] = compute_consensus_level(int(round(effective)))
+            else:
+                consensus_levels[gene] = compute_consensus_level(len(src_set))
 
         # Resolve class/order — use most common; fall back to sorted list
         classes_list = sorted(type_data.get("classes", set()))
@@ -606,6 +721,7 @@ def build_final_kb(
             "synonyms": sorted(type_data.get("synonyms", set())),
             "parent": type_data.get("parent", ""),
             "consensus_levels": consensus_levels,
+            "consensus_effective_counts": consensus_effective,
             "class": resolved_class,
             "order": resolved_order,
             "classes": classes_list,
@@ -659,7 +775,14 @@ def build_tissue_kb(
     merged_rules = merge_rules(sources, type_aliases)
     conflicts = detect_conflicts(sources, type_aliases)
     _resolved = resolve_conflicts(conflicts, sources)
-    kb = build_final_kb(merged_types, merged_rules, sources)
+
+    # Evidence-independence aware consensus (optional).
+    # Auto-loads ``_source_independence.yaml`` when present; None = legacy.
+    source_independence = None
+    if os.path.isdir(sources_dir):
+        _indep_path = os.path.join(sources_dir, "_source_independence.yaml")
+        source_independence = load_source_independence(_indep_path)
+    kb = build_final_kb(merged_types, merged_rules, sources, source_independence)
 
     # Optionally build hierarchy
     if hierarchy_yaml_path and os.path.isfile(hierarchy_yaml_path):
