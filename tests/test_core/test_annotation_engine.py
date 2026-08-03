@@ -179,12 +179,18 @@ def _check_zero_scores_and_retry_wrapper(
     target_order,
     tissue_kb,
     logger,
+    cfg=None,
 ):
     """Lazy-import and call _check_zero_scores_and_retry.
 
     Avoids circular-import issues at module level by importing only when called.
     """
     from core.annotation.engine import _check_zero_scores_and_retry
+
+    if cfg is None:
+        # Minimal stub: production reads CFG.marker.candidate_pool_expand_steps
+        # (engine.py:132) to size the case-insensitive retry pass.
+        cfg = SimpleNamespace(marker=SimpleNamespace(candidate_pool_expand_steps=[1]))
 
     return _check_zero_scores_and_retry(
         kb,
@@ -195,6 +201,7 @@ def _check_zero_scores_and_retry_wrapper(
         target_class,
         target_order,
         tissue_kb,
+        cfg,
         logger,
     )
 

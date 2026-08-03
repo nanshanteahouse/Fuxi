@@ -138,7 +138,7 @@ class TestConfigDefaults:
     def test_de_defaults(self) -> None:
         """DE settings defaults."""
         cfg = Config()
-        assert cfg.de.method == "wilcoxon"
+        assert cfg.de.method == "pseudobulk"
         assert cfg.de.n_genes == 50
         assert cfg.de.pval_cutoff == 0.05
         assert cfg.de.logfc_cutoff == 0.25
@@ -374,7 +374,7 @@ execution:
         assert cfg.modality == "rna"
         assert cfg.hvg.n_top_genes == 4000
         assert cfg.qc.min_genes == 500
-        assert cfg.de.method == "wilcoxon"
+        assert cfg.de.method == "pseudobulk"
         assert cfg.clustering.cluster_selection_method == "multi_metric"
         assert cfg.execution.n_jobs == 0
 
@@ -408,11 +408,11 @@ execution:
         # Spot-check the template values match
         assert cfg.data_format == "10X_h5"
         assert cfg.data_input.h5_file_pattern == "*filtered_feature_bc_matrix.h5"
-        assert cfg.qc.min_genes == 500
+        assert cfg.qc.min_genes == 200
         assert cfg.hvg.n_top_genes == 4000
         assert cfg.integration.method == "harmony"
         assert cfg.clustering.cluster_selection_method == "multi_metric"
-        assert cfg.de.method == "wilcoxon"
+        assert cfg.de.method == "pseudobulk"
         assert cfg.execution.n_jobs == 0
 
 
@@ -443,7 +443,7 @@ class TestConfigSerialization:
         assert restored.qc.min_genes == 300
 
         # Unset defaults survive the round-trip
-        assert restored.de.method == "wilcoxon"
+        assert restored.de.method == "pseudobulk"
         assert restored.execution.random_seed == 42
 
     def test_model_dump_json_round_trip(self) -> None:
