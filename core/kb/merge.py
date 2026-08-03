@@ -722,6 +722,9 @@ def build_final_kb(
             "parent": type_data.get("parent", ""),
             "consensus_levels": consensus_levels,
             "consensus_effective_counts": consensus_effective,
+            "single_source_type": all(v <= 1.0 for v in consensus_effective.values())
+            if consensus_effective
+            else False,
             "class": resolved_class,
             "order": resolved_order,
             "classes": classes_list,

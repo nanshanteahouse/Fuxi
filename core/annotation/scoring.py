@@ -502,6 +502,7 @@ def _compute_fisher_consensus(
     n_top_in_bg: int,
     background_size: int,
     consensus_levels: dict[str, str],
+    single_source_type: bool = False,
 ) -> tuple[float, float, int, str]:
     """Compute Fisher's exact (hypergeometric) score with optional consensus weighting.
 
@@ -528,11 +529,14 @@ def _compute_fisher_consensus(
     c = n_top_in_bg - a  # non-type KB markers in top-N
     d = max(background_size - a - b - c, 1)  # remaining KB markers
 
-    # Consensus-weighted variant
+    # Consensus-weighted variant (single-source types capped at 0.5x)
     _a_weighted = 0.0
     for _gene in positive_set & top_in_bg:
         _level = consensus_levels.get(_gene, "low")
-        _a_weighted += _CONSENSUS_WEIGHTS.get(_level, 1.0)
+        _w = _CONSENSUS_WEIGHTS.get(_level, 1.0)
+        if single_source_type:
+            _w *= 0.5
+        _a_weighted += _w
     a_w = int(round(_a_weighted))
 
     fisher_source = "raw"
@@ -787,6 +791,7 @@ def score_cluster_against_kb(
             n_top_in_bg,
             background_size,
             consensus_levels,
+            entry.get("single_source_type", False),
         )
 
         # ── 2. Cosine similarity score ──────────────────────────────

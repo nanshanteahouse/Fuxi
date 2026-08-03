@@ -32,27 +32,28 @@ markers:
     - DAAM1
     refine:
       TRPM3:
-        note: Transient receptor potential channel; highest fraction expressed in RPE (0.997). Novel RPE marker from Wang
-          2026.
+        note: Transient receptor potential channel; highest fraction expressed in
+          RPE (0.997). Novel RPE marker from Wang 2026.
         threshold: mean_log2FC > 3.2
         pmid: '41528844'
       MYRIP:
-        note: Myosin VIIA and Rab interacting protein; involved in melanosome transport in RPE.
+        note: Myosin VIIA and Rab interacting protein; involved in melanosome transport
+          in RPE.
         threshold: mean_log2FC > 2.9
         pmid: '41528844'
       BEST1:
-        note: Bestrophin-1; canonical RPE marker; mutations cause Best vitelliform macular dystrophy. Confirms existing KB
-          consensus (Menon 2019, Hu 2019).
+        note: Bestrophin-1; canonical RPE marker; mutations cause Best vitelliform
+          macular dystrophy. Confirms existing KB consensus (Menon 2019, Hu 2019).
         threshold: mean_log2FC > 2.6
         pmid: '41528844'
       RGR:
-        note: RPE-retinal G protein-coupled receptor; visual cycle component enriched in RPE. Confirms existing KB consensus
-          (Menon 2019).
+        note: RPE-retinal G protein-coupled receptor; visual cycle component enriched
+          in RPE. Confirms existing KB consensus (Menon 2019).
         threshold: mean_log2FC > 2.6
         pmid: '41528844'
       RPE65:
-        note: Visual cycle isomerase; essential for retinoid recycling; RPE-specific. Confirms existing KB consensus (Menon
-          2019).
+        note: Visual cycle isomerase; essential for retinoid recycling; RPE-specific.
+          Confirms existing KB consensus (Menon 2019).
         threshold: mean_log2FC > 2.3
         pmid: '41528844'
     negative_markers: []
@@ -80,12 +81,13 @@ markers:
     - PIK3R3
     refine:
       FLT1:
-        note: VEGFR1; vascular endothelial growth factor receptor 1; top-ranked endothelial marker. Confirms existing KB consensus
-          (Menon 2019).
+        note: VEGFR1; vascular endothelial growth factor receptor 1; top-ranked endothelial
+          marker. Confirms existing KB consensus (Menon 2019).
         threshold: mean_log2FC > 3.2
         pmid: '41528844'
       VWF:
-        note: von Willebrand factor; canonical endothelial marker. Confirms existing KB consensus (Menon 2019).
+        note: von Willebrand factor; canonical endothelial marker. Confirms existing
+          KB consensus (Menon 2019).
         threshold: mean_log2FC > 2.7
         pmid: '41528844'
     negative_markers: []
@@ -149,12 +151,13 @@ markers:
     - DOCK4
     refine:
       F13A1:
-        note: Coagulation factor XIII A chain; top choroidal macrophage marker (log2FC=3.7). Distinguishes choroidal macrophages
-          from retinal microglia.
+        note: Coagulation factor XIII A chain; top choroidal macrophage marker (log2FC=3.7).
+          Distinguishes choroidal macrophages from retinal microglia.
         threshold: mean_log2FC > 3.7
         pmid: '41528844'
       CD163:
-        note: Scavenger receptor; classical macrophage marker. Choroidal macrophage subtype distinct from C1QA+ retinal microglia.
+        note: Scavenger receptor; classical macrophage marker. Choroidal macrophage
+          subtype distinct from C1QA+ retinal microglia.
         threshold: mean_log2FC > 3.0
         pmid: '41528844'
       MRC1:
@@ -186,7 +189,8 @@ markers:
     - PMEL
     refine:
       TYR:
-        note: Tyrosinase; key enzyme in melanin biosynthesis; canonical melanocyte marker.
+        note: Tyrosinase; key enzyme in melanin biosynthesis; canonical melanocyte
+          marker.
         threshold: mean_log2FC > 3.1
         pmid: '41528844'
       ABCB5:
@@ -194,7 +198,8 @@ markers:
         threshold: mean_log2FC > 2.9
         pmid: '41528844'
       PMEL:
-        note: Premelanosome protein; melanocyte lineage marker; structural component of melanosomes.
+        note: Premelanosome protein; melanocyte lineage marker; structural component
+          of melanosomes.
         threshold: mean_log2FC > 2.3
         pmid: '41528844'
     negative_markers: []
@@ -226,7 +231,8 @@ markers:
         threshold: mean_log2FC > 2.6
         pmid: '41528844'
       RBPMS:
-        note: RNA-binding protein with multiple splicing; also known as RGC marker in retina, but found in choroidal pericytes.
+        note: RNA-binding protein with multiple splicing; also known as RGC marker
+          in retina, but found in choroidal pericytes.
         threshold: mean_log2FC > 1.6
         pmid: '41528844'
     negative_markers: []
@@ -242,21 +248,8 @@ markers:
       notes: ''
   Schwann_Cell:
     add:
-    - NRXN1
     - CDH19
-    - SCN7A
-    - ADGRB3
-    - XKR4
-    - SLC35F1
-    - GRIK2
-    - SORCS1
-    - NEGR1
-    - NRXN3
     refine:
-      NRXN1:
-        note: Neurexin-1; top Schwann cell marker (log2FC=4.2). Choroidal nerve fiber-associated glial cell marker.
-        threshold: mean_log2FC > 4.2
-        pmid: '41528844'
       CDH19:
         note: Cadherin-19; Schwann cell specific cadherin; peripheral glial marker.
         threshold: mean_log2FC > 3.1
@@ -271,7 +264,11 @@ markers:
       cross_species_validated: false
       last_audited: null
       flagged: false
-      notes: ''
+      notes: '2026-08-03 validation fix: Schwann_Cell reduced to CDH19 only. ADGRB3/XKR4
+        removed despite being KB-unique - they are pan-neural in GSE246169 fetal (pct
+        0.62-0.94 across clusters), a false-unique artifact of incomplete KB coverage.
+        CDH19 is the only verifiable Schwann-specific gene (pct 0-0.002). Single-source
+        type with 1 marker - cannot drive annotation.'
   B_Cell:
     add:
     - BANK1
@@ -318,11 +315,13 @@ markers:
     - PRKCH
     refine:
       PTPRC:
-        note: CD45; common leukocyte antigen; pan-immune marker. Expressed in T cells and other immune cells.
+        note: CD45; common leukocyte antigen; pan-immune marker. Expressed in T cells
+          and other immune cells.
         threshold: mean_log2FC > 3.1
         pmid: '41528844'
       STAT4:
-        note: Signal transducer and activator of transcription 4; Th1-associated transcription factor.
+        note: Signal transducer and activator of transcription 4; Th1-associated transcription
+          factor.
         threshold: mean_log2FC > 2.8
         pmid: '41528844'
       CD247:
@@ -355,7 +354,8 @@ expert_rules:
       RGR: 0.5
   action: RPE
   source: wang2026
-  notes: BEST1+RPE65 is the canonical RPE signature; RPE65 is the visual cycle isomerase specific to RPE
+  notes: BEST1+RPE65 is the canonical RPE signature; RPE65 is the visual cycle isomerase
+    specific to RPE
 - priority: 9
   condition:
     markers_present:
@@ -364,7 +364,8 @@ expert_rules:
       FLT1: 0.5
   action: Vascular_Endothelial
   source: wang2026
-  notes: VWF+PECAM1 canonical vascular endothelial signature; FLT1 is the top-ranked marker by log2FC in this study
+  notes: VWF+PECAM1 canonical vascular endothelial signature; FLT1 is the top-ranked
+    marker by log2FC in this study
 - priority: 8
   condition:
     markers_present:
@@ -372,7 +373,8 @@ expert_rules:
       CD163: 0.5
   action: Macrophage
   source: wang2026
-  notes: F13A1+CD163 is a choroidal macrophage signature distinct from retinal microglia (C1QA/B+)
+  notes: F13A1+CD163 is a choroidal macrophage signature distinct from retinal microglia
+    (C1QA/B+)
 - priority: 7
   condition:
     markers_present:
