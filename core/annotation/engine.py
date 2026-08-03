@@ -280,6 +280,46 @@ def _classify_broad_category(
     return best_type
 
 
+def _map_cell_state(decision, cell_category: str) -> str:
+    """Map a FusionDecision to a ``cell_state`` (D5 six-class semantics).
+
+    Rows match top-down; the first hit wins:
+
+    ``method == "transition_state"`` → ``transient_transitional``
+    ``method == "ambiguous"`` → ``N/A`` (downgraded; manual review)
+    ``"Proliferating" in cell_type`` → ``cycling``
+    ``cell_category == "Broad_Progenitor"`` → ``committed_precursor``
+    ``confidence in ("high", "medium")`` and ``cell_category in
+    ("Broad_Neuron", "Broad_Glia", "Broad_Non-neural")`` → ``terminal``
+    ``confidence == "low"`` → ``N/A``
+    else (unknown etc.) → ``N/A``
+
+    Here ``terminal`` = terminal node of the annotation hierarchy
+    (non-precursor), NOT biological terminal differentiation — e.g. Müller
+    Glia in developing tissue may retain plasticity, and its proliferating
+    subset is captured by the ``cycling`` row ("Proliferating_MG" contains
+    "Proliferating"). ``differentiating`` stays reserved in the cell_state
+    enum and is not yet emitted; it will be produced once P2.2 KADP supplies
+    potency signals.
+    """
+    if decision.method == "transition_state":
+        return "transient_transitional"
+    if decision.method == "ambiguous":
+        return "N/A"
+    if "Proliferating" in decision.cell_type:
+        return "cycling"
+    if cell_category == "Broad_Progenitor":
+        return "committed_precursor"
+    if decision.confidence in ("high", "medium") and cell_category in (
+        "Broad_Neuron",
+        "Broad_Glia",
+        "Broad_Non-neural",
+    ):
+        return "terminal"
+    # D5 final rows: confidence == "low" and all remaining (unknown etc.) → N/A
+    return "N/A"
+
+
 def run_unified_annotation(adata, CFG, logger):  # noqa: N803
     """
     KB-based unified annotation mode.
@@ -561,6 +601,8 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
         allows_transitions=allows_transitions,
         incompatible_transitions=_incompatible_transitions,
         celltypist_results=celltypist_results,
+        multi_peak_min_types=getattr(CFG.annotation, "multi_peak_min_types", 3),
+        multi_peak_score_floor=getattr(CFG.annotation, "multi_peak_score_floor", 0.9),
     )
     logger.info("Evidence fusion: %d clusters processed", len(decisions))
 
@@ -626,7 +668,9 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
     ai_enabled = getattr(CFG.ai, "enabled", False)
     ai_annot_on = getattr(CFG.ai, "ai_annotation", False)
 
-    low_conf_clusters = [d for d in decisions if d.confidence in ("low", "unknown")]
+    low_conf_clusters = [
+        d for d in decisions if d.confidence in ("low", "unknown") and d.method != "ambiguous"
+    ]
     ai_results = {}
 
     if low_conf_clusters and ai_enabled and ai_annot_on:
@@ -690,6 +734,8 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
                     allows_transitions=allows_transitions,
                     incompatible_transitions=_incompatible_transitions,
                     celltypist_results=celltypist_results,
+                    multi_peak_min_types=getattr(CFG.annotation, "multi_peak_min_types", 3),
+                    multi_peak_score_floor=getattr(CFG.annotation, "multi_peak_score_floor", 0.9),
                 )
                 decision_map = dict(zip(decision_clusters, decisions))
         except Exception as exc:
@@ -769,7 +815,9 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
     adata.obs["cell_type"] = leiden_str.map(
         {k: v.cell_type for k, v in decision_map.items()}
     ).astype("category")
-    adata.obs["cell_state"] = leiden_str.map({k: "N/A" for k in decision_map})
+    adata.obs["cell_state"] = leiden_str.map(
+        {k: _map_cell_state(v, cell_category_map.get(k, "")) for k, v in decision_map.items()}
+    )
     adata.obs["cell_subtype"] = leiden_str.map(
         {k: tiered_subtypes.get(k, "N/A") for k in decision_map}
     )
@@ -783,6 +831,8 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
             return "expert_rule"
         if d.method == "unknown":
             return "unknown"
+        if d.method == "ambiguous":
+            return "ambiguous"
         if d.method == "transition_state":
             return "transition_state"
         if d.ai_agreed or d.ai_suggested:
@@ -937,7 +987,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
 
     # ── k. Annotation quality report ────────────────────────────────────────
     _write_quality_report(
-        adata, ann_records, fusion_quality, cell_category_map, decision_map, CFG, logger
+        adata, ann_records, fusion_quality, cell_category_map, decision_map, CFG, logger, kb=kb
     )
 
     # ── l. Interactive review (--interactive flag) ──────────────────────────
@@ -955,6 +1005,7 @@ def _write_quality_report(
     decision_map,
     CFG,  # noqa: N803
     logger,
+    kb: dict | None = None,
 ):
     """Write 05_annotation_quality.json summarising annotation health."""
     pass_cells = (
@@ -967,6 +1018,25 @@ def _write_quality_report(
         reasoning = rec.get("reasoning", "")
         if "also matched rules:" in reasoning:
             ambiguity_clusters.append(rec["cluster"])
+
+    # D8 — KB coverage: annotated types vs KB fine types vs ghost transition endpoints
+    annotated_types = {d.cell_type for d in decision_map.values()}
+    transition_pairs = {
+        tuple(d.cell_type[len("transitional: ") :].split("/"))
+        for d in decision_map.values()
+        if d.method == "transition_state"
+    }
+    ghost_endpoints = {t for p in transition_pairs for t in p} - annotated_types
+    kb_fine_types = (
+        {
+            k
+            for k in kb
+            if not k.startswith("_") and k != "expert_rules" and not k.startswith("Broad_")
+        }
+        if kb
+        else set()
+    )
+    kb_types_unannotated = kb_fine_types - annotated_types
 
     quality = {
         "pass_rate": round(pass_rate, 4),
@@ -984,9 +1054,27 @@ def _write_quality_report(
             "relaxed" if pass_rate < 0.1 else "deep" if pass_rate < 0.3 else "default"
         ),
         "categories_found": len(set(c for c in cell_category_map.values() if c)),
-        "transition_clusters": sum(
-            1 for d in decision_map.values() if d.method == "transition_state"
-        ),
+        "transition_clusters": [
+            {"cluster": cl, "pair": d.cell_type[len("transitional: ") :]}
+            for cl, d in decision_map.items()
+            if d.method == "transition_state"
+        ],
+        "review_queue": [
+            {
+                "cluster": cl,
+                "n_tied_types": len(d.diagnostic.top_competitors) if d.diagnostic else 0,
+                "top_types": [c["cell_type"] for c in d.diagnostic.top_competitors]
+                if d.diagnostic
+                else [],
+            }
+            for cl, d in decision_map.items()
+            if d.method == "ambiguous"
+        ],
+        "kb_coverage": {
+            "annotated_types": sorted(annotated_types),
+            "kb_types_unannotated": sorted(kb_types_unannotated),
+            "ghost_endpoints": sorted(ghost_endpoints),
+        },
         "category_distribution": {
             cat: count for cat, count in Counter(cell_category_map.values()).items() if cat
         },

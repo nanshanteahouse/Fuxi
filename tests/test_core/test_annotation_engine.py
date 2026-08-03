@@ -6,9 +6,12 @@ T1 (P0-CRITICAL) from cross-batch-critical-fixes plan:
 """
 
 import copy as _copy_mod
+import json
 import logging
 import os
 import sys
+import tempfile
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
@@ -16,7 +19,9 @@ import pandas as pd
 import scanpy as sc
 from anndata import AnnData
 
+from core.annotation.engine import _map_cell_state, _write_quality_report
 from core.annotation.scoring import Score
+from rna.utils.evidence_fusion import DiagnosticInfo
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _REPO_ROOT not in sys.path:
@@ -346,3 +351,300 @@ def test_T4_kb_dict_not_mutated() -> None:
     assert "rho" in kb["CT"]["markers"]["confirm"], (
         "KB marker key 'rho' became uppercase — original KB mutated"
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+
+#  T9 — transition-annotation-p0: cell_state map (D5) + quality report
+
+#        new fields (D6 review_queue / D7 transition_clusters / D8 kb_coverage)
+
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _make_decision(
+    method="marker_scoring", cell_type="Rod Photoreceptor", confidence="high", diagnostic=None
+):
+    """Minimal decision stub.
+
+
+
+    ``_map_cell_state`` only reads method/cell_type/confidence;
+
+    ``_write_quality_report`` additionally reads ``.diagnostic`` for the
+
+    ambiguous review_queue row.  SimpleNamespace suffices — the functions
+
+    never touch the other FusionDecision fields.
+
+    """
+
+    return SimpleNamespace(
+        method=method, cell_type=cell_type, confidence=confidence, diagnostic=diagnostic
+    )
+
+
+def test_T9_map_cell_state_transition_state() -> None:
+    """D5 row 1: method == 'transition_state' → 'transient_transitional'."""
+
+    d = _make_decision(method="transition_state", cell_type="transitional: RGC/Amacrine")
+
+    assert _map_cell_state(d, "Broad_Neuron") == "transient_transitional"
+
+
+def test_T9_map_cell_state_ambiguous() -> None:
+    """D5 row 2: method == 'ambiguous' → 'N/A' (downgraded, awaiting review)."""
+
+    d = _make_decision(method="ambiguous", confidence="unknown")
+
+    assert _map_cell_state(d, "Broad_Neuron") == "N/A"
+
+
+def test_T9_map_cell_state_cycling() -> None:
+    """D5 row 3: cell_type contains 'Proliferating' → 'cycling'."""
+
+    d = _make_decision(cell_type="Proliferating_RPC")
+
+    assert _map_cell_state(d, "Broad_Progenitor") == "cycling"
+
+
+def test_T9_map_cell_state_committed_precursor() -> None:
+    """D5 row 4: cell_category == 'Broad_Progenitor' (non-proliferating) → 'committed_precursor'."""
+
+    d = _make_decision(cell_type="RPC")
+
+    assert _map_cell_state(d, "Broad_Progenitor") == "committed_precursor"
+
+
+def test_T9_map_cell_state_terminal_high_neuron() -> None:
+    """D5 row 5a: confidence high + Broad_Neuron → 'terminal'."""
+
+    d = _make_decision(confidence="high", cell_type="RGC")
+
+    assert _map_cell_state(d, "Broad_Neuron") == "terminal"
+
+
+def test_T9_map_cell_state_terminal_medium_glia() -> None:
+    """D5 row 5b: confidence medium + Broad_Glia → 'terminal'."""
+
+    d = _make_decision(confidence="medium", cell_type="Müller Glia")
+
+    assert _map_cell_state(d, "Broad_Glia") == "terminal"
+
+
+def test_T9_map_cell_state_terminal_high_non_neural() -> None:
+    """D5 row 5c: confidence high + Broad_Non-neural → 'terminal'."""
+
+    d = _make_decision(confidence="high", cell_type="Endothelial")
+
+    assert _map_cell_state(d, "Broad_Non-neural") == "terminal"
+
+
+def test_T9_map_cell_state_low_na() -> None:
+    """D5 row 6: confidence 'low' → 'N/A' even under a terminal broad category."""
+
+    d = _make_decision(confidence="low", cell_type="RGC")
+
+    assert _map_cell_state(d, "Broad_Neuron") == "N/A"
+
+
+def test_T9_map_cell_state_unknown_na() -> None:
+    """D5 fallback row: unknown/other confidence → 'N/A'."""
+
+    d = _make_decision(confidence="unknown", cell_type="RGC")
+
+    assert _map_cell_state(d, "Broad_Neuron") == "N/A"
+
+
+def test_T9_map_cell_state_proliferating_precedes_progenitor() -> None:
+    """D5 order sensitivity: Proliferating row wins before Broad_Progenitor row."""
+
+    d = _make_decision(cell_type="Proliferating_MG")
+
+    assert _map_cell_state(d, "Broad_Progenitor") == "cycling"
+
+
+def _make_kb() -> dict:
+    """Minimal retina-like KB: 4 fine types + hierarchy/expert/Broad_* containers."""
+
+    return {
+        "RGC": {
+            "markers": {"confirm": {"RBPMS": ["PMID1"]}},
+            "negative_markers": [],
+            "species": ["human"],
+            "synonyms": [],
+        },
+        "Amacrine": {
+            "markers": {"confirm": {"TFAP2A": ["PMID2"]}},
+            "negative_markers": [],
+            "species": ["human"],
+            "synonyms": [],
+        },
+        "Rod Photoreceptor": {
+            "markers": {"confirm": {"RHO": ["PMID3"]}},
+            "negative_markers": [],
+            "species": ["human"],
+            "synonyms": [],
+        },
+        "Müller Glia": {
+            "markers": {"confirm": {"RLBP1": ["PMID4"]}},
+            "negative_markers": [],
+            "species": ["human"],
+            "synonyms": [],
+        },
+        "_hierarchy": {"categories": ["Progenitor", "Neuron", "Glia", "Non-neural"]},
+        "expert_rules": {},
+        "Broad_Neuron": {},
+    }
+
+
+def test_T9_quality_report_new_fields() -> None:
+    """D6/D7/D8: review_queue + transition_clusters detail + kb_coverage in the JSON.
+
+
+
+    Given: decision_map with one transition_state decision
+
+           (cell_type='transitional: RGC/Amacrine') and one ambiguous decision
+
+           (DiagnosticInfo category='ambiguous' with full top_competitors).
+
+    When:  _write_quality_report writes 05_annotation_quality.json.
+
+    Then:  transition_clusters lists {cluster, pair}; review_queue carries the
+
+           ambiguous cluster with n_tied_types/top_types; kb_coverage carries
+
+           annotated_types/kb_types_unannotated/ghost_endpoints.
+
+    """
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        # Production calls _write_quality_report BEFORE marker_validation is set
+
+        # (05_annotate_major.py:627), so the column is absent → pass_cells is a
+
+        # pure Python int (0) and the JSON stays numpy-scalar-free.
+
+        adata = SimpleNamespace(
+            obs={},  # no marker_validation column — mirrors production timing
+            n_obs=10,
+        )
+
+        ann_records = [
+            {"cluster": "0", "reasoning": "best match", "ai_agreed": True},
+            {"cluster": "1", "reasoning": "also matched rules: X", "ai_agreed": False},
+            {"cluster": "2", "reasoning": "best match", "ai_agreed": True},
+        ]
+
+        fusion_quality = {"annotated_by_rule": 0, "annotated_by_scoring": 2, "unknown": 1}
+
+        cell_category_map = {"0": "Broad_Neuron", "1": "", "2": "Broad_Neuron"}
+
+        decision_map = {
+            "0": _make_decision(
+                method="transition_state",
+                cell_type="transitional: RGC/Amacrine",
+                confidence="transition",
+            ),
+            "1": _make_decision(
+                method="ambiguous",
+                cell_type="Unknown",
+                confidence="unknown",
+                diagnostic=DiagnosticInfo(
+                    category="ambiguous",
+                    top_competitors=[
+                        {"cell_type": "RGC", "score": 1.0},
+                        {"cell_type": "Amacrine", "score": 0.98},
+                        {"cell_type": "Cone", "score": 0.95},
+                    ],
+                    detail="Multi-peak tie: 3 types >= 0.9 (top: RGC=1.000, Amacrine=0.980, Cone=0.950)",
+                ),
+            ),
+            "2": _make_decision(method="marker_scoring", cell_type="RGC", confidence="high"),
+        }
+
+        cfg = SimpleNamespace(table_dir=tmp_dir)
+
+        logger = _make_logger()
+
+        _write_quality_report(
+            adata,
+            ann_records,
+            fusion_quality,
+            cell_category_map,
+            decision_map,
+            cfg,
+            logger,
+            kb=_make_kb(),
+        )
+
+        quality_path = os.path.join(tmp_dir, "05_annotation_quality.json")
+
+        assert os.path.exists(quality_path)
+
+        with open(quality_path) as f:
+            quality = json.load(f)
+
+        # D7 — transition_clusters is a {cluster, pair} detail list
+
+        assert quality["transition_clusters"] == [{"cluster": "0", "pair": "RGC/Amacrine"}]
+
+        # D6 — review_queue carries the ambiguous cluster with tie detail
+
+        assert [q["cluster"] for q in quality["review_queue"]] == ["1"]
+
+        entry = quality["review_queue"][0]
+
+        assert entry["n_tied_types"] == 3
+
+        assert entry["top_types"] == ["RGC", "Amacrine", "Cone"]
+
+        # D8 — kb_coverage has the three keys
+
+        cov = quality["kb_coverage"]
+
+        assert set(cov) == {"annotated_types", "kb_types_unannotated", "ghost_endpoints"}
+
+        assert cov["annotated_types"] == sorted({"transitional: RGC/Amacrine", "Unknown", "RGC"})
+
+        # RGC is annotated as cluster '2', so only Amacrine is a ghost endpoint
+
+        assert cov["ghost_endpoints"] == ["Amacrine"]
+
+        assert cov["kb_types_unannotated"] == sorted(
+            {"Amacrine", "Rod Photoreceptor", "Müller Glia"}
+        )
+
+
+def test_T9_quality_report_kb_none_backward_compat() -> None:
+    """D8: kb=None must not raise and yields empty kb_types_unannotated."""
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        adata = SimpleNamespace(
+            obs={},  # no marker_validation column — mirrors production timing
+            n_obs=10,
+        )
+
+        decision_map = {
+            "0": _make_decision(
+                method="transition_state",
+                cell_type="transitional: RGC/Amacrine",
+                confidence="transition",
+            )
+        }
+
+        cfg = SimpleNamespace(table_dir=tmp_dir)
+
+        logger = _make_logger()
+
+        # must not raise when kb is omitted
+
+        _write_quality_report(adata, [], {}, {}, decision_map, cfg, logger)
+
+        with open(os.path.join(tmp_dir, "05_annotation_quality.json")) as f:
+            quality = json.load(f)
+
+        assert quality["kb_coverage"]["kb_types_unannotated"] == []
+
+        assert quality["kb_coverage"]["ghost_endpoints"] == ["Amacrine", "RGC"]

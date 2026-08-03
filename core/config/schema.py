@@ -805,6 +805,12 @@ class AnnotationSettings(BaseModel):
 
     method: Literal["kb_unified", "celltypist", "ai", "score_genes"] = "kb_unified"
     celltypist: CellTypistConfig = Field(default_factory=CellTypistConfig)
+    multi_peak_min_types: int = 3
+    """多峰歧义降级阈值:过渡路径上 ≥N 个类型 score≥floor 即降级 ambiguous。
+    (D1) min_types=3 而非 4:3 型并列与 4 型并列同属 Top-2 任意截断失败模式,
+    第 3 名会被 _is_transition_state 静默丢弃。"""
+    multi_peak_score_floor: float = 0.9
+    """多峰歧义降级分数下限:score≥floor 的类型计入并列集合。"""
 
 
 # ═══════════════════════════════════════════════════════════════════════

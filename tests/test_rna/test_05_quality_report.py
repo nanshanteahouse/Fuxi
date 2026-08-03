@@ -257,3 +257,70 @@ def test_failure_filename_correctness() -> None:
 
         assert os.path.exists(correct_path), "Correct file 05_annotation_quality.json should exist"
         assert not os.path.exists(wrong_path), "Wrong file _step05.json should NOT be created"
+
+
+def test_new_engine_fields_survive_pass_rate_update() -> None:
+    """Engine-added fields (review_queue/transition_clusters/kb_coverage) survive pass_rate rewrite.
+
+
+
+    Given: a quality report already written by ``engine._write_quality_report``
+
+           carrying the D6/D7/D8 fields (review_queue list, transition_clusters
+
+           detail list, kb_coverage dict) and ``pass_rate=0``.
+
+    When:  ``_update_quality_report_pass_rate`` rewrites the pass-rate keys.
+
+    Then:  the engine fields are still present, unchanged — the pass-rate
+
+           update must not clobber them.
+
+    """
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        adata = _make_synthetic_adata()
+
+        cfg = _make_cfg(tmp_dir)
+
+        quality_path = os.path.join(tmp_dir, "05_annotation_quality.json")
+
+        initial = {
+            "pass_rate": 0,
+            "source": "unified_kb",
+            "review_queue": [
+                {"cluster": "3", "n_tied_types": 4, "top_types": ["RGC", "Cone", "Rod", "NRPC"]}
+            ],
+            "transition_clusters": [{"cluster": "0", "pair": "RGC/Amacrine"}],
+            "kb_coverage": {
+                "annotated_types": ["RGC", "Unknown"],
+                "kb_types_unannotated": ["Cone", "Rod"],
+                "ghost_endpoints": ["Amacrine"],
+            },
+        }
+
+        with open(quality_path, "w") as f:
+            json.dump(initial, f)
+
+        _update_quality_report_pass_rate(adata, cfg)
+
+        with open(quality_path) as f:
+            result = json.load(f)
+
+        # pass-rate keys were still updated on top of the engine fields
+
+        assert result["pass_rate"] == pytest.approx(0.6667)
+
+        assert result["strict_pass_rate"] == pytest.approx(0.6667)
+
+        # D6/D7/D8 fields preserved unchanged
+
+        assert result["review_queue"] == initial["review_queue"]
+
+        assert result["transition_clusters"] == initial["transition_clusters"]
+
+        assert result["kb_coverage"] == initial["kb_coverage"]
+
+        # and the original source key too
+
+        assert result["source"] == "unified_kb"

@@ -227,6 +227,12 @@ class TestConfigDefaults:
         assert cfg.ai.cache_responses is True
         assert cfg.ai.unconstrained_annotation is False
 
+    def test_annotation_multi_peak_defaults(self) -> None:
+        """AnnotationSettings 多峰歧义降级阈值默认值 (D1)."""
+        cfg = Config()
+        assert cfg.annotation.multi_peak_min_types == 3
+        assert cfg.annotation.multi_peak_score_floor == 0.9
+
     def test_downsample_defaults(self) -> None:
         """Downsample defaults."""
         cfg = Config()
