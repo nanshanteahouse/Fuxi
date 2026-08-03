@@ -28,6 +28,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import time
 from enum import Enum
 from typing import Any, Optional
 
@@ -294,6 +295,13 @@ class PaperDatasetLink(BaseModel):
     paper_id: str
     dataset_id: str
     role: LinkRole = LinkRole.PRIMARY
+    # ── 溯源字段（2026-08-03 新增，修复 links 无出处问题）──
+    # source: 链接来源通道（soft=GEO SOFT 官方元数据 / manual=人工标注 / geo_page）
+    # evidence: 具体出处描述（如 "GEO SOFT Series_pubmed_id"）
+    # timestamp: 链接创建时间（ISO 格式），便于追踪
+    source: str = "manual"
+    evidence: str = ""
+    timestamp: str = ""
 
 
 # ═══════════════════════════════════════════════════════
@@ -609,7 +617,14 @@ def _serialize_sections(reg: MasterRegistry) -> tuple[list, dict, list]:
         for ds_id, ds in reg.datasets.items()
     }
     links = [
-        ln.model_dump(exclude_none=True, exclude_defaults=True, mode="json") for ln in reg.links
+        {
+            **ln.model_dump(exclude_none=True, exclude_defaults=True, mode="json"),
+            # role 默认值（PRIMARY）会被 exclude_defaults 排除，导致文件中
+            # primary 链接缺失 role 字段（直接读 yaml 的工具口径混乱）。
+            # 强制显式写出 role。
+            "role": ln.role.value,
+        }
+        for ln in reg.links
     ]
     return papers, datasets, links
 
@@ -1216,6 +1231,62 @@ def _cmd_add_paper(
     )
 
 
+# ── Modality inference from GEO SOFT ─────────────────────────────
+
+
+def _infer_modalities_from_soft(meta: dict) -> dict[str, ModalityInfo]:
+    """从 GEO SOFT 元数据推断 modalities。
+
+    - 多行 Series_type（multiome 系列）逐行映射：Expression→rna，Genome binding→atac
+    - 单行 Other / 无类型 → title+summary+design 关键词启发式
+      （starr / spatial transcriptomics / visium / bulk rna / phospho-seq / multiome）
+    - 保守原则：无把握返回空 dict（留给人工复查），绝不臆测
+    """
+    types = meta.get("series_types") or ([meta["series_type"]] if meta.get("series_type") else [])
+    mods: list[str] = []
+    for t in types:
+        t_l = str(t).lower()
+        if "expression profiling" in t_l:
+            mods.append("rna")
+        elif "genome binding" in t_l or "chromatin" in t_l:
+            mods.append("atac")
+        # methylation / ChIP 等其他 assay 不映射，留空待人工
+
+    # 关键词启发式（GEO 常把 STARR/spatial/bulk 标成单行 Other 或 Expression）
+    hay = " ".join(
+        [
+            str(meta.get("title") or ""),
+            str(meta.get("summary") or ""),
+            str(meta.get("overall_design") or ""),
+        ]
+    ).lower()
+    for kw, mod in (
+        ("starr", "starr"),
+        ("spatial transcriptomic", "spatial"),
+        ("spatial gene expression", "spatial"),
+        ("visium", "spatial"),
+        ("slide-seq", "spatial"),
+        ("stereo-seq", "spatial"),
+        ("bulk rna", "bulk"),
+        ("phospho-seq", "rna"),
+    ):
+        if kw in hay and mod not in mods:
+            mods.append(mod)
+
+    # multiome / multimodal（GEO 常只标 Other 单行，如 10x Multiome）
+    if any(kw in hay for kw in ("multiome", "multi-omics", "multimodal")):
+        for m in ("rna", "atac"):
+            if m not in mods:
+                mods.append(m)
+
+    # 纯空间转录组（Visium 等）：assay 行是 Expression profiling，spatial 命中时
+    # 若只有 rna+spatial 两模态则去掉冗余 rna（与人工复查口径一致）
+    if "spatial" in mods and "rna" in mods and len(mods) == 2:
+        mods = ["spatial"]
+
+    return {m: ModalityInfo() for m in dict.fromkeys(mods)}
+
+
 def _dataset_entry_from_soft(
     gse_id: str,
     meta: dict,
@@ -1236,6 +1307,11 @@ def _dataset_entry_from_soft(
     n_samples = meta.get("n_samples") or None
     title = (meta.get("title") or "").strip()
     series_type = (meta.get("series_type") or "").strip()
+
+    # multiome 多行 Series_type → 用完整 join 作 assay_type（单值最后一行会丢信息）
+    st_list = meta.get("series_types") or []
+    if st_list:
+        series_type = " | ".join(str(s).strip() for s in st_list)
     platform = (meta.get("platform_title") or "").strip()
     summary = (meta.get("summary") or "").strip()
     # Truncate long descriptions to keep datasets.yaml readable
@@ -1258,6 +1334,7 @@ def _dataset_entry_from_soft(
         data_format=platform,
         description=summary,
         paper_pmids=pmid_list,
+        modalities=_infer_modalities_from_soft(meta),
     )
 
 
@@ -1682,7 +1759,8 @@ def _cmd_backfill_metadata(
         new_entry.parent_series = ds.parent_series
         new_entry.n_cells = ds.n_cells
         new_entry.sample_info = ds.sample_info
-        new_entry.modalities = ds.modalities
+        # 现有 modalities 优先（人工复查结论不被覆盖）；空则从 SOFT 推断
+        new_entry.modalities = ds.modalities or _infer_modalities_from_soft(meta)
         new_entry.paper_pmids = ds.paper_pmids or meta.get("pmid", []) or []
         # When not --force, keep any user-set title/species/n_samples.
         if not force:
@@ -1694,6 +1772,43 @@ def _cmd_backfill_metadata(
                 new_entry.n_samples = ds.n_samples
 
         registry.datasets[gse_id] = new_entry
+        registry.datasets[gse_id] = new_entry
+
+        # ── Create/refresh primary links from SOFT PMIDs (2026-08-03) ──
+        # GEO SOFT Series_pubmed_id 是"数据集由该论文产生"的官方声明。
+        # 旧数据全标 related 且无溯源字段；这里把匹配到已注册论文的链接
+        # 新建（primary, soft）或将旧 related/manual 链接升级为 primary, soft。
+        for pmid in meta.get("pmid", []):
+            paper = registry.get_paper(pmid)
+            if paper is None:
+                continue
+            existing = [
+                ln
+                for ln in registry.links
+                if ln.paper_id == paper.paper_id and ln.dataset_id == gse_id
+            ]
+            if existing:
+                ln = existing[0]
+                if ln.role != LinkRole.PRIMARY or ln.source != "soft":
+                    ln.role = LinkRole.PRIMARY
+                    ln.source = "soft"
+                    ln.evidence = "GEO SOFT Series_pubmed_id"
+                    ln.timestamp = time.strftime("%Y-%m-%dT%H:%M:%S")
+                    print(
+                        f"{prefix} \U0001f517 upgrade: {paper.paper_id} ↔ {gse_id} → primary (soft)"
+                    )
+                continue
+            registry.links.append(
+                PaperDatasetLink(
+                    paper_id=paper.paper_id,
+                    dataset_id=gse_id,
+                    role=LinkRole.PRIMARY,
+                    source="soft",
+                    evidence="GEO SOFT Series_pubmed_id",
+                    timestamp=time.strftime("%Y-%m-%dT%H:%M:%S"),
+                )
+            )
+            print(f"{prefix} \U0001f517 link: {paper.paper_id} ↔ {gse_id} (primary, soft)")
         sp = new_entry.species or "?"
         ns = new_entry.n_samples if new_entry.n_samples is not None else "?"
         print(f"{prefix} \u2705 species={sp}, n_samples={ns}")

@@ -269,6 +269,7 @@ def _parse_soft_metadata(text: str) -> dict:
         "sample_list": [],
         "is_superseries": False,
         "subseries_ids": [],
+        "series_types": [],
     }
 
     lines = text.split("\n")
@@ -302,7 +303,12 @@ def _parse_soft_metadata(text: str) -> dict:
         key = key.strip()
         value = value.strip()
 
-        if key in _SOFT_FIELD_MAP:
+        if key == "Series_type":
+            # multiome 系列有多个 !Series_type 行：全部保留（series_types），
+            # 同时保持单值 series_type=最后一行（向后兼容 assay_type）
+            meta["series_type"] = value
+            meta["series_types"].append(value)
+        elif key in _SOFT_FIELD_MAP:
             meta[_SOFT_FIELD_MAP[key]] = value
         elif key in _SOFT_LIST_FIELDS:
             if _SOFT_FIELD_MAP.get(key):
@@ -825,15 +831,30 @@ def enrich_dataset_from_soft(
                     paper_id=paper.paper_id,
                     dataset_id=gse_id,
                     role=LinkRole.PRIMARY,
+                    source="soft",
+                    evidence="GEO SOFT Series_pubmed_id",
+                    timestamp=time.strftime("%Y-%m-%dT%H:%M:%S"),
                 )
             )
-            log.info("  link: %s ↔ %s", paper.paper_id, gse_id)
+            log.info("  link: %s ↔ %s (primary, soft)", paper.paper_id, gse_id)
             # Auto-heal: if paper was marked no_geo, update to generated
             if paper.insights and paper.insights.status == InsightStatus.NO_GEO:
                 paper.insights.status = InsightStatus.GENERATED
                 log.info("  insights.status: no_geo → generated")
             changed = True
 
+    # ── Fill modalities (empty → infer from SOFT Series_type) ────
+    if not ds.modalities:
+        try:
+            from core.paper.registry import _infer_modalities_from_soft
+
+            inferred = _infer_modalities_from_soft(soft_meta)
+        except ImportError:
+            inferred = {}
+        if inferred:
+            ds.modalities = inferred
+            log.info("  modalities: {} → %s", ",".join(inferred))
+            changed = True
     # ── Append summary excerpt to notes (if notes empty) ────────
     if not ds.notes and soft_meta.get("summary"):
         excerpt = soft_meta["summary"][:200].strip()
