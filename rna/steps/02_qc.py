@@ -23,6 +23,7 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import scanpy as sc
+import scipy.sparse as sparse
 
 from core.utils import resolve_config, setup_logger
 
@@ -542,13 +543,20 @@ def compute_qc_metrics(adata, cfg, log):
     from scanpy.pp._qc import top_segment_proportions_sparse_csr
 
     x_mat = adata.X
+    if not sparse.issparse(x_mat) and not hasattr(x_mat, "_indptr"):
+        # Dense X lacks CSR block-loop primitives (getnnz/data/indptr below);
+        # convert once so the streaming QC path works for any input type.
+        x_mat = sparse.csr_matrix(x_mat)
     n_cells, n_genes_t = x_mat.shape
     block_size = _resolve_block_size(x_mat, cfg.qc.block_size, prefetch=1)
     mt_idx = np.where(mt_mask)[0]
     ribo_idx = np.where(adata.var["ribo"].values)[0]
     x_dtype = x_mat.dtype
     # getnnz dtype 跟随磁盘 indptr dtype（全量内存读行为），backed 块读会 downcast int32
-    obs_n_genes = np.empty(n_cells, dtype=x_mat._indptr.dtype)
+    indptr = (
+        x_mat.indptr if hasattr(x_mat, "indptr") else x_mat._indptr
+    )  # public .indptr (scipy>=1.14); backed _CSRDataset only has _indptr
+    obs_n_genes = np.empty(n_cells, dtype=indptr.dtype)
     obs_total = np.empty(n_cells, dtype=x_dtype)
     obs_top20 = np.empty(n_cells, dtype=np.float64)
     obs_mt = np.empty(n_cells, dtype=x_dtype)
@@ -575,10 +583,11 @@ def compute_qc_metrics(adata, cfg, log):
     obs["pct_counts_in_top_20_genes"] = obs_top20
     obs["total_counts_mt"] = obs_mt
     obs["log1p_total_counts_mt"] = np.log1p(obs_mt)
-    obs["pct_counts_mt"] = obs_mt / obs_total * 100
-    obs["total_counts_ribo"] = obs_ribo
-    obs["log1p_total_counts_ribo"] = np.log1p(obs_ribo)
-    obs["pct_counts_ribo"] = obs_ribo / obs_total * 100
+    # 0-total-count cells (empty droplets) legitimately yield NaN for these
+    # ratios; silence the numpy divide warning so it does not surface as noise.
+    with np.errstate(divide="ignore", invalid="ignore"):
+        obs["pct_counts_mt"] = obs_mt / obs_total * 100
+        obs["pct_counts_ribo"] = obs_ribo / obs_total * 100
     var = adata.var
     var_mean = var_sum / n_cells
     var["n_cells_by_counts"] = var_nnz
@@ -587,9 +596,10 @@ def compute_qc_metrics(adata, cfg, log):
     var["pct_dropout_by_counts"] = (1 - var_nnz / n_cells) * 100
     var["total_counts"] = var_sum
     var["log1p_total_counts"] = np.log1p(var_sum)
-    adata.obs["log_genes_per_umi"] = (
-        np.log10(adata.obs["n_genes_by_counts"]) / np.log10(adata.obs["total_counts"])
-    ).replace([np.inf, -np.inf], np.nan)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        adata.obs["log_genes_per_umi"] = (
+            np.log10(adata.obs["n_genes_by_counts"]) / np.log10(adata.obs["total_counts"])
+        ).replace([np.inf, -np.inf], np.nan)
     log.info("  Median genes/cell: %.0f", adata.obs["n_genes_by_counts"].median())
     log.info("  Median UMIs/cell: %.0f", adata.obs["total_counts"].median())
     log.info("  Median mito%%:    %.2f%%", adata.obs["pct_counts_mt"].median())
