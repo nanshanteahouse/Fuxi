@@ -18,6 +18,53 @@ import scanpy as sc
 from core.utils import safe_plot
 
 
+def _ribo_fallback_pct_scores(adata, kb, cl_str, logger):
+    """Re-score a ribo-dominated cluster via raw expression fractions (pct).
+
+    Fisher scores saturate to 1.0 once ribosomal genes are filtered, so the
+    hypergeometric rank cannot separate cell types.  This helper instead
+    scores every KB cell type by the mean fraction of its positive markers
+    expressed in the cluster (same discriminant used in external portability evaluation),
+    and returns ``(top_type, top_score, top1_top2_gap)`` when the top type
+    is decisive (score >= 0.25 and gap > 0.1), else ``None``.
+    """
+    if adata.raw is None:
+        return None
+    raw_vars = list(adata.raw.var_names)
+    ridx = {g: i for i, g in enumerate(raw_vars)}
+    mask = (adata.obs["leiden"].astype(str) == str(cl_str)).values
+    if not mask.any():
+        return None
+    x_mat = adata.raw.X
+    if hasattr(x_mat, "toarray"):
+        x_mat = x_mat.toarray()
+    sub = x_mat[mask]
+
+    best: list[tuple[str, float]] = []
+    for tkey, tdata in kb.items():
+        if tkey == "expert_rules" or tkey.startswith(("_", "Broad_")):
+            continue
+        markers = tdata.get("markers", {}) if isinstance(tdata, dict) else {}
+        genes = []
+        for tier in ("confirm", "add"):
+            tm = markers.get(tier, {})
+            genes += list(tm.keys()) if isinstance(tm, dict) else (tm or [])
+        genes = [g for g in genes if g in ridx]
+        if not genes:
+            continue
+        pcts = (sub[:, [ridx[g] for g in genes]] > 0).mean(axis=0)
+        best.append((tkey, float(pcts.mean())))
+
+    if len(best) < 2:
+        return None
+    best.sort(key=lambda kv: kv[1], reverse=True)
+    top1, top2 = best[0], best[1]
+    gap = top1[1] - top2[1]
+    if top1[1] >= 0.25 and gap > 0.1:
+        return (top1[0], top1[1], gap)
+    return None
+
+
 def _check_zero_scores_and_retry(
     kb,
     all_scores,
@@ -384,6 +431,55 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
             adaptive_top_n=True,
             expand_steps=CFG.marker.candidate_pool_expand_steps,
         )
+
+        # ribo_high fallback: scoring already filters RPL/RPS/MT- genes, so a
+        # cluster flagged ribo-dominated may still carry a strong, unambiguous
+        # cell-type signal once the ribosomal noise is removed.  Fisher scores
+        # saturate to 1.0 when the filtered top markers overlap the KB heavily,
+        # so when Fisher cannot separate top1/top2 we re-score with raw
+        # expression fractions (pct of positive markers expressed), which is
+        # the same discriminant used in external portability evaluation.  If the top
+        # scored type is clearly separated from the runner-up, release the
+        # low-quality hold so evidence fusion can annotate it (typically as a
+        # low-confidence call) instead of forcing Unknown.  mito_high stays
+        # conservative — mitochondrial dominance usually means dead cells.
+        if is_lq and lq_reason.startswith("ribo_high"):
+            _cl_scores = all_scores[cl_str]
+            _ranked = sorted(_cl_scores.values(), key=lambda s: s.score, reverse=True)
+            _fisher_separated = (
+                len(_ranked) >= 2
+                and _ranked[0].score >= 0.25
+                and (_ranked[0].score - _ranked[1].score) > 0.1
+            )
+            _pct_pick: tuple[str, float, float] | None = None
+            if not _fisher_separated:
+                # Re-score via raw expression fractions (pct of markers).
+                _pct_pick = _ribo_fallback_pct_scores(adata, kb, cl_str, logger)
+                if _pct_pick is not None and _pct_pick[1] >= 0.25:
+                    _fisher_separated = True
+            if _fisher_separated:
+                low_quality_clusters.pop(cl_str, None)
+                if _pct_pick is not None:
+                    logger.info(
+                        "Cluster %s: %s but pct re-score decisive "
+                        "(top1=%s %.3f, top1-top2=%.3f) — annotating",
+                        cl_str,
+                        lq_reason,
+                        _pct_pick[0],
+                        _pct_pick[1],
+                        _pct_pick[2],
+                    )
+                else:
+                    _top_key = max(_cl_scores, key=lambda k: _cl_scores[k].score)
+                    logger.info(
+                        "Cluster %s: %s but filtered Fisher decisive "
+                        "(top1=%s %.3f, top1-top2=%.3f) — annotating",
+                        cl_str,
+                        lq_reason,
+                        _top_key,
+                        _ranked[0].score,
+                        _ranked[0].score - _ranked[1].score,
+                    )
         all_top_genes[cl_str] = cl_data["names"].head(20).tolist()
         all_rules[cl_str] = apply_expert_rules(
             kb, cl_data, top_n=rule_top_n, pval_cutoff=rule_pval
