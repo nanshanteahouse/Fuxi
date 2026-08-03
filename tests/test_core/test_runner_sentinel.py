@@ -13,6 +13,8 @@ sentinel steps), ``find_first_incomplete`` behaves exactly as before.
 
 from pathlib import Path
 
+import pytest
+
 from core.pipeline.runner import (
     RNA_CHECKPOINT_FILES,
     RNA_SENTINEL_FILES,
@@ -21,6 +23,21 @@ from core.pipeline.runner import (
     _remove_anchored_sentinels,
     _sentinel_base,
     find_first_incomplete,
+)
+
+# ── Optional dependency guard (mcp) ───────────────────────────────────
+
+_MCP_AVAILABLE: bool = False
+try:
+    import mcp  # noqa: F401
+
+    _MCP_AVAILABLE = True
+except ImportError:
+    pass
+
+skipif_no_mcp = pytest.mark.skipif(
+    not _MCP_AVAILABLE,
+    reason="mcp not installed (pip install 'mcp==2.0.0b2' for MCP server tests)",
 )
 
 
@@ -176,6 +193,7 @@ def test_remove_anchored_sentinels_noop_without_sentinels(tmp_path):
 # ── MCP consistency (core/ai/mcp_tools/pipeline.py) ─────────────────────
 
 
+@skipif_no_mcp
 def test_mcp_sentinel_mirror_in_sync():
     """mcp_tools 的 _SENTINELS 镜像与 runner 的 RNA_SENTINEL_FILES 一致。"""
     from core.ai.mcp_tools.pipeline import _SENTINELS
@@ -185,6 +203,7 @@ def test_mcp_sentinel_mirror_in_sync():
     assert _SENTINELS.get("atac", {}) == {}
 
 
+@skipif_no_mcp
 def test_mcp_step_completed_uses_sentinel_for_sentinel_steps(tmp_path):
     """MCP 判定：sentinel 步骤只看 sentinel；普通步骤仍按 checkpoint。"""
     from core.ai.mcp_tools.pipeline import _step_completed
