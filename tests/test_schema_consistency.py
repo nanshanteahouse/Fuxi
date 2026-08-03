@@ -325,11 +325,11 @@ class TestClusteringSchemaConsistency:
 
     # Pairs: (field_name, file_relpath, line_no)
     _KNOWN_FALLBACK_PAIRS: list[tuple[str, str, int]] = [
-        ("multi_metric_coverage_ratio_threshold", "core/cluster/evaluation/enrichment.py", 75),
-        ("stability_n_seeds", "core/cluster/evaluation/enrichment.py", 74),
+        ("multi_metric_coverage_ratio_threshold", "core/cluster/evaluation/enrichment.py", 77),
+        ("stability_n_seeds", "core/cluster/evaluation/enrichment.py", 76),
         ("stability_leiden_n_iterations", "core/cluster/evaluation/stability.py", 52),
-        ("leiden_flavor", "core/cluster/evaluation/enrichment.py", 76),
-        ("umap_selection_metric", "rna/steps/04_cluster_umap.py", 567),
+        ("leiden_flavor", "core/cluster/evaluation/enrichment.py", 78),
+        ("umap_selection_metric", "rna/steps/04_cluster_umap.py", 964),
     ]
 
     def test_clustering_defaults_match_code_fallbacks(self) -> None:

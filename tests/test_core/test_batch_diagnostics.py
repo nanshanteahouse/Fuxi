@@ -285,8 +285,8 @@ def test_single_unique_value_skipped() -> None:
     assert "constant" not in col_names, "Single-value column should be skipped"
 
 
-def test_permutation_test_ambiguous() -> None:
-    """Column with moderate signal triggers permutation-based judgment."""
+def test_moderate_signal_ambiguous() -> None:
+    """Column with moderate structured signal → Gini middle band → 'ambiguous'."""
     np.random.seed(123)
     n_cells, n_genes = 200, 15
     x = np.random.randn(n_cells, n_genes).astype(np.float32)
@@ -294,7 +294,7 @@ def test_permutation_test_ambiguous() -> None:
     # Create a column with moderate structured signal (less than biology)
     labels = np.array(["G1"] * (n_cells // 2) + ["G2"] * (n_cells - n_cells // 2))
     np.random.shuffle(labels)
-    x[labels == "G1", :3] += 0.5  # moderate offset (biology used 2.0)
+    x[labels == "G1", :3] += 0.3  # moderate offset → Gini lands in the ambiguous band
 
     adata = AnnData(
         X=csr_matrix(x),
@@ -305,14 +305,15 @@ def test_permutation_test_ambiguous() -> None:
     pca = PCA(n_components=5, random_state=123)
     adata.obsm["X_pca"] = pca.fit_transform(x)
 
-    report = diagnose_batch_candidates(adata, permute_n=100)
+    report = diagnose_batch_candidates(adata)
     assert len(report.column_diagnoses) == 1
     diag = report.column_diagnoses[0]
-    # Permutation p-value should be populated (not None)
-    assert diag.permutation_pval is not None, "Ambiguous column should have a permutation p-value"
-    assert 0.0 <= diag.permutation_pval <= 1.0, (
-        f"Permutation p-value out of range: {diag.permutation_pval}"
-    )
+    # The permutation test was removed (a358bfc) — classification is now
+    # Gini-threshold only. Moderate signal → ambiguous middle band.
+    assert diag.judgment == "ambiguous"
+    assert report.ambiguous_cols == ["moderate"]
+    # Ambiguous columns take no part in the suggested batch key
+    assert report.suggested_batch_key == []
 
 
 # ═════════════════════════════════════════════════════════════════════════════

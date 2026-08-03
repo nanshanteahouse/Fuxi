@@ -156,7 +156,8 @@ class TestGridSearchClustering:
             mock_adata, param_grid, clusterer=failing_clusterer, random_seed=42
         )
         assert len(results) == 1
-        assert results[0]["error"] == "clusterer failed"
+        assert results[0]["error"].startswith("clusterer failed")
+        assert "boom" in results[0]["error"], "error should preserve the exception detail"
 
     def test_neighbor_failure_skips_group(self, mock_adata: AnnData) -> None:
         """When neighbor_fn raises, the entire group is skipped."""
