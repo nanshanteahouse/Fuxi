@@ -101,3 +101,4 @@ package-lock.json
 global.yaml
 projects/**/config_*_resolved.yaml
 results/config_*_resolved.yaml
+manuscript/
