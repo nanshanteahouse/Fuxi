@@ -5,6 +5,7 @@ Enriches each entry in a grid-search results summary with multi-metric scores
 """
 
 import logging
+from typing import Optional
 
 import numpy as np
 
@@ -28,6 +29,7 @@ def enrich_grid_results(
     compute_per_cell_scores_fn=None,
     log=None,
     use_rep=None,
+    stability_top_k: Optional[int] = None,
 ):
     """Enrich *results_summary* entries with multi-metric scores.
 
@@ -164,20 +166,33 @@ def enrich_grid_results(
             has_markers = False
 
         # --- Compute stability + marker coverage for each entry ---
+        # stability 5-seed Leiden is the dominant Step 04 cost (50-77% wall).
+        # Top-K pruning: only the silhouette top-K entries per group get the
+        # expensive stability scan; the rest get None (multi_metric treats
+        # missing stability as 0, so they cannot win). Keeps selection quality
+        # (n_neighbors is nearly flat; silhouette rank correlates with composite).
+        if stability_top_k is not None and stability_top_k > 0:
+            _sorted = sorted(group, key=lambda e: e.get("silhouette_score") or -1.0, reverse=True)
+            _stab_candidates = {id(r) for r in _sorted[:stability_top_k]}
+        else:
+            _stab_candidates = None
         for entry in group:
             try:
                 resolution = entry["resolution"]
                 ck = entry["cluster_key"]
 
-                entry["stability_score"] = _compute_stability(
-                    adata,
-                    resolution=resolution,
-                    leiden_flavor=leiden_flavor,
-                    n_seeds=n_stab_seeds,
-                    device=device,
-                    cfg=cfg,
-                )
-
+                if _stab_candidates is None or id(entry) in _stab_candidates:
+                    entry["stability_score"] = _compute_stability(
+                        adata,
+                        resolution=resolution,
+                        leiden_flavor=leiden_flavor,
+                        n_seeds=n_stab_seeds,
+                        device=device,
+                        cfg=cfg,
+                    )
+                else:
+                    # pruned: skip the 5-seed leiden re-run
+                    entry["stability_score"] = None
                 if per_cell_scores:
                     entry["cluster_coherence"] = _compute_cluster_coherence(
                         adata,

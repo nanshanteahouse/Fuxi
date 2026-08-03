@@ -50,6 +50,19 @@ def _compute_stability(
     # Resolve n_iterations from config when available
     if cfg is not None:
         n_iterations = getattr(cfg.clustering, "stability_leiden_n_iterations", n_iterations)
+    # 中小数据集 GPU 建图/搬运开销 > 计算收益（实测 5-20k GPU 慢 1.5-3x）
+    # → n_obs 低于阈值时降级 CPU igraph，即使 cfg.execution.device 指向 GPU
+    if device != "cpu":
+        gpu_min = (
+            getattr(cfg.clustering, "leiden_gpu_min_cells", 20_000) if cfg is not None else 20_000
+        )
+        if adata.n_obs < gpu_min:
+            logger.debug(
+                "stability: n_obs=%d < leiden_gpu_min_cells=%d → CPU igraph leiden",
+                adata.n_obs,
+                gpu_min,
+            )
+            device = "cpu"
 
     if n_seeds <= 1:
         return float("nan")

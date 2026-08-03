@@ -268,6 +268,21 @@ def main():
 
     # ── 参数网格 ──
     n_neighbors_grid = getattr(cfg.clustering, "param_grid_n_neighbors", [15, 20, 30])
+    # Adaptive n_neighbors by cohort size (param_grid_n_neighbors_adaptive=True):
+    # n_neighbors is nearly flat for quality (measured silhouette range 7x smaller than
+    # resolution) — a single scale-appropriate value replaces the 3-way grid sweep.
+    # Calibrated to Multiome Academy guidance + our 15-dataset grid analysis.
+    if getattr(cfg.clustering, "param_grid_n_neighbors_adaptive", False):
+        _n = adata.n_obs
+        if _n < 5000:
+            n_neighbors_grid = [10]
+        elif _n < 50000:
+            n_neighbors_grid = [15]
+        elif _n < 500000:
+            n_neighbors_grid = [20]
+        else:
+            n_neighbors_grid = [30]
+        log.info("Adaptive n_neighbors (n_obs=%d): %s", _n, n_neighbors_grid)
     resolutions_grid = getattr(
         cfg.clustering, "param_grid_resolutions", [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
     )
@@ -347,7 +362,12 @@ def main():
         gpu_leiden(
             adata,
             log=log,
-            device=cfg.execution.device,
+            device=(
+                _leiden_device := cfg.execution.device
+                if cfg.execution.device == "cpu"
+                or adata.n_obs >= getattr(cfg.clustering, "leiden_gpu_min_cells", 20_000)
+                else "cpu"
+            ),
             resolution=resolution,
             key_added=leiden_key,
             random_state=cfg.execution.random_seed,
@@ -532,6 +552,7 @@ def main():
             cfg,
             log=log,
             use_rep=use_rep,
+            stability_top_k=getattr(cfg.clustering, "multi_metric_stability_top_k", None),
         )
 
     # This loop is the largest matplotlib cost in step 04 on big datasets

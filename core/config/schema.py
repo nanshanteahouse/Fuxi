@@ -327,9 +327,17 @@ class ClusteringSettings(BaseModel):
         default=12,
         description="Number of random seeds for stability evaluation in multi-metric clustering.",
     )
+    multi_metric_stability_top_k: int = Field(
+        default=4,
+        description="Only the top-K entries (by silhouette) per n_neighbors group get the expensive 5-seed stability scan; the rest get stability_score=None (treated as 0 in multi-metric). Measured: stability is 50-77% of Step 04 wall time; n_neighbors is nearly flat vs resolution.",
+    )
     stability_leiden_n_iterations: int = Field(
         default=-1,
         description="Leiden n_iterations for the stability sub-path in multi-metric selection. -1 = full convergence for accurate ARI.",
+    )
+    leiden_gpu_min_cells: int = Field(
+        default=20_000,
+        description="Below this n_obs, Leiden runs on CPU (igraph) even when a GPU is present. cuGraph's graph-build + anndata_to_GPU copy overhead dominates small datasets (measured: 5-20k cells GPU is 1.5-3x slower than CPU).",
     )
     multi_metric_adaptive_resolution: bool = True
     multi_metric_coverage_ratio_threshold: float = 2.5
