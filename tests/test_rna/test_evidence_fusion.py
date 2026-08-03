@@ -125,17 +125,99 @@ class TestIsTransitionState:
     # ── Happy path ───────────────────────────────────────────────────
 
     def test_transition_normal(self) -> None:
-        """delta < threshold, same parent, top score >= 0.25 → (top1, top2)."""
+        """delta < threshold, same parent, top score >= 0.25 → (top1, top2).
+
+        Both types carry shared type-specific markers (SNCG) so the P0.4
+        private-marker gate passes.
+        """
         scores = {"RGC": 0.45, "Amacrine_Cell": 0.35}
         kb = {
-            "RGC": {"parent": "Broad_Neuron"},
-            "Amacrine_Cell": {"parent": "Broad_Neuron"},
+            "RGC": {
+                "parent": "Broad_Neuron",
+                "markers": {
+                    "confirm": {"RBPMS": ["src"], "SNCG": ["src"]},
+                    "add": {},
+                },
+            },
+            "Amacrine_Cell": {
+                "parent": "Broad_Neuron",
+                "markers": {
+                    "confirm": {"TFAP2A": ["src"], "SNCG": ["src"]},
+                    "add": {},
+                },
+            },
         }
         result = _is_transition_state(scores, kb)
         assert result is not None
         # Sorted descending: RGC (0.45) first, Amacrine_Cell (0.35) second
         assert result[0] == "RGC"
         assert result[1] == "Amacrine_Cell"
+
+    # ── P0.4 private-marker gate ──────────────────────────────────────
+
+    def test_transition_markers_wrapped_by_parent_no_private(self) -> None:
+        """P0.4: both types' markers fully covered by parent confirm and no
+        shared ``_private_markers`` → None (the gate must not be skipped).
+        """
+        scores = {"NRPC_Cone_BC_fate": 0.45, "NRPC_RGC_fate": 0.35}
+        kb = {
+            "Broad_Progenitor": {
+                "markers": {
+                    "confirm": {"VSX2": ["src"], "SOX2": ["src"], "HES1": ["src"]},
+                    "add": {},
+                },
+            },
+            "NRPC_Cone_BC_fate": {
+                "parent": "Broad_Progenitor",
+                "markers": {
+                    "confirm": {"VSX2": ["src"], "SOX2": ["src"]},
+                    "add": {},
+                },
+            },
+            "NRPC_RGC_fate": {
+                "parent": "Broad_Progenitor",
+                "markers": {
+                    "confirm": {"HES1": ["src"]},
+                    "add": {},
+                },
+            },
+        }
+        result = _is_transition_state(scores, kb)
+        assert result is None
+
+    def test_transition_markers_wrapped_by_parent_shared_private(self) -> None:
+        """P0.4: markers covered by parent but both types share a KB
+        ``_private_markers`` entry → transition accepted (tuple returned).
+        """
+        scores = {"NRPC_Cone_BC_fate": 0.45, "NRPC_RGC_fate": 0.35}
+        kb = {
+            "Broad_Progenitor": {
+                "markers": {
+                    "confirm": {"VSX2": ["src"], "SOX2": ["src"], "HES1": ["src"]},
+                    "add": {},
+                },
+            },
+            "NRPC_Cone_BC_fate": {
+                "parent": "Broad_Progenitor",
+                "markers": {
+                    "confirm": {"VSX2": ["src"], "SOX2": ["src"]},
+                    "add": {},
+                },
+                "_private_markers": ["PRDM1"],
+            },
+            "NRPC_RGC_fate": {
+                "parent": "Broad_Progenitor",
+                "markers": {
+                    "confirm": {"HES1": ["src"]},
+                    "add": {},
+                },
+                "_private_markers": ["PRDM1"],
+            },
+        }
+        result = _is_transition_state(scores, kb)
+        assert result is not None
+        assert result[0] == "NRPC_Cone_BC_fate"
+        assert result[1] == "NRPC_RGC_fate"
 
     # ── Delta threshold ──────────────────────────────────────────────
 

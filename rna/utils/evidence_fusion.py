@@ -140,11 +140,15 @@ def _is_transition_state(
     each forbidden pair is checked order-insensitively against the
     candidate (top1, top2). Any match returns None.
 
-    **Private marker overlap gate:** When both types share the same
+    **Private marker overlap gate (P0.4):** When both types share the same
     Broad_* parent, the parent\'s markers are subtracted from each type\'s
     marker set. If the remaining (type-specific) markers share no overlap,
     the Fisher proximity is attributed to shared Broad_* markers alone
-    and the transition is rejected.
+    and the transition is rejected. When neither type has any marker
+    beyond the parent\'s set, the gate falls back to the KB
+    ``_private_markers`` of each type: the transition is accepted only
+    when the two types share at least one private marker (both missing
+    or disjoint → rejected).
     """
     if len(marker_scores) < 2:
         return None
@@ -181,12 +185,18 @@ def _is_transition_state(
         t2_add = set(kb.get(top2_key, {}).get("markers", {}).get("add", {}).keys())
         t1_specific = (t1_confirm | t1_add) - parent_markers
         t2_specific = (t2_confirm | t2_add) - parent_markers
-        # Only reject if at least one type has type-specific markers defined
-        # AND they don't overlap. If neither has type-specific markers, we
-        # lack the information to apply this gate.
         if t1_specific or t2_specific:
             specific_overlap = t1_specific & t2_specific
             if not specific_overlap:
+                return None
+        else:
+            # P0.4: neither type has markers beyond the shared parent's set.
+            # The Fisher proximity is then attributable to shared Broad_*
+            # markers alone — fall back to each type's KB `_private_markers`
+            # and reject unless the two types share at least one.
+            private1 = set(kb.get(top1_key, {}).get("_private_markers", []))
+            private2 = set(kb.get(top2_key, {}).get("_private_markers", []))
+            if not (private1 & private2):
                 return None
 
     return (top1_key, top2_key)
