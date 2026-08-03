@@ -434,6 +434,8 @@ def fuse_evidence(
     unconstrained: bool = False,
     allows_transitions: bool = False,
     incompatible_transitions: Optional[list] = None,
+    multi_peak_min_types: int = 3,
+    multi_peak_score_floor: float = 0.9,
 ) -> "FusionDecision":
     """Combine marker scores, expert rules, and AI into one decision.
 
@@ -463,6 +465,12 @@ def fuse_evidence(
         List of [type_a, type_b] pairs explicitly forbidden as
         developmental transitions.  Passed through to
         :func:`_is_transition_state`.
+    multi_peak_min_types : int
+        Minimum number of types with score >= *multi_peak_score_floor*
+        before the transition path downgrades to ``ambiguous`` (default 3).
+    multi_peak_score_floor : float
+        Score floor for counting a tied type in the multi-peak check
+        (default 0.9).
 
     Returns
     -------
@@ -579,6 +587,48 @@ def fuse_evidence(
         )
         if transition is not None:
             t1, t2 = transition
+            # Multi-peak downgrade (D3): applies only to confirmed transition
+            # candidates — whole-dataset Fisher saturation must not degrade
+            # correctly annotated clusters (rerun: 14/14 clusters ≥4 types ≥0.9,
+            # 9 degraded incl. former MG/RGC). Non-candidates keep their
+            # marker-scoring labels; → METC for root-cause.
+            ranked = sorted(
+                marker_scores.items(),
+                key=lambda kv: _resolve_score(marker_scores, kv[0])[0],
+                reverse=True,
+            )
+            floor = multi_peak_score_floor
+            tied = [
+                (k, _resolve_score(marker_scores, k)[0])
+                for k, _ in ranked
+                if _resolve_score(marker_scores, k)[0] >= floor
+            ]
+            if len(tied) >= multi_peak_min_types:
+                top3 = ", ".join(f"{k}={s:.3f}" for k, s in tied[:3])
+                return FusionDecision(
+                    cell_type="Unknown",
+                    confidence="unknown",
+                    score=best_score,
+                    method="ambiguous",
+                    n_markers_found=n_markers,
+                    ai_agreed=False,
+                    ai_suggested=ai_suggestion or "",
+                    explanation=_explain(
+                        "Unknown",
+                        "ambiguous",
+                        best_score,
+                        n_markers,
+                        best_type,
+                        ai_suggestion,
+                        False,
+                    ),
+                    alternative_rules=[],
+                    diagnostic=DiagnosticInfo(
+                        category="ambiguous",
+                        top_competitors=[{"cell_type": k, "score": s} for k, s in tied],
+                        detail=f"Multi-peak tie: {len(tied)} types >= {floor} (top: {top3})",
+                    ),
+                )
             delta = abs(
                 _resolve_score(marker_scores, t1)[0] - _resolve_score(marker_scores, t2)[0]
             )
@@ -693,6 +743,8 @@ def fuse_all_clusters(
     allows_transitions: bool = False,
     incompatible_transitions: Optional[list] = None,
     celltypist_results: Optional[dict] = None,
+    multi_peak_min_types: int = 3,
+    multi_peak_score_floor: float = 0.9,
 ) -> list | tuple[list, dict]:
     """Process all clusters and return a list of :class:`FusionDecision`.
 
@@ -722,6 +774,10 @@ def fuse_all_clusters(
         List of [type_a, type_b] pairs explicitly forbidden as
         developmental transitions.  Passed through to each
         :func:`fuse_evidence` call.
+    multi_peak_min_types : int
+        Passed through to :func:`fuse_evidence` (default 3).
+    multi_peak_score_floor : float
+        Passed through to :func:`fuse_evidence` (default 0.9).
 
     Returns
     -------
@@ -763,6 +819,8 @@ def fuse_all_clusters(
             unconstrained=unconstrained,
             allows_transitions=allows_transitions,
             incompatible_transitions=incompatible_transitions,
+            multi_peak_min_types=multi_peak_min_types,
+            multi_peak_score_floor=multi_peak_score_floor,
         )
         decisions.append(decision)
 

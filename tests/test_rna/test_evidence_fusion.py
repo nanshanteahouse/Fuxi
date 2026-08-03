@@ -115,6 +115,155 @@ class TestFuseAllClusters:
         assert quality["annotated_by_scoring"] == 2
         assert quality["annotated_by_rule"] == 0
 
+    # ── Multi-peak downgrade (P0.6) ───────────────────────────────────
+
+    def test_multi_peak_three_tied_types_ambiguous(self) -> None:
+        """>= 3 types with score >= 0.9 on a confirmed transition candidate
+        (same parent + shared marker) → Unknown/ambiguous with full
+        top_competitors (every tied type, not just top-3).
+        """
+        all_scores = {
+            "0": {"RGC": 1.0, "Amacrine": 1.0, "Bipolar": 1.0, "HC": 0.8},
+        }
+        all_rules = {"0": None}
+        # Top-2 (RGC/Amacrine) share Broad_Neuron + SNCG → confirmed
+        # transition candidate, so the multi-peak check applies.
+        kb = {
+            "RGC": {
+                "parent": "Broad_Neuron",
+                "markers": {"confirm": {"RBPMS": ["src"], "SNCG": ["src"]}, "add": {}},
+            },
+            "Amacrine": {
+                "parent": "Broad_Neuron",
+                "markers": {"confirm": {"TFAP2A": ["src"], "SNCG": ["src"]}, "add": {}},
+            },
+            "Bipolar": {
+                "parent": "Broad_Neuron",
+                "markers": {"confirm": {"VSX2": ["src"], "SNCG": ["src"]}, "add": {}},
+            },
+        }
+        decisions = fuse_all_clusters(
+            all_scores,
+            all_rules,
+            kb=kb,
+            allows_transitions=True,
+        )
+
+        assert len(decisions) == 1
+        d = decisions[0]
+        assert d.cell_type == "Unknown"
+        assert d.confidence == "unknown"
+        assert d.method == "ambiguous"
+        assert d.score == pytest.approx(1.0)
+        assert d.diagnostic is not None
+        assert d.diagnostic.category == "ambiguous"
+        competitors = {c["cell_type"] for c in d.diagnostic.top_competitors}
+        assert competitors == {"RGC", "Amacrine", "Bipolar"}
+        assert all(c["score"] >= 0.9 for c in d.diagnostic.top_competitors)
+
+    def test_multi_peak_two_tied_types_still_transition(self) -> None:
+        """Only 2 types tied (below multi_peak_min_types=3) → the transition
+        path still runs. Exercises fuse_all_clusters → fuse_evidence
+        pass-through of the multi-peak parameters.
+        """
+        all_scores = {
+            "0": {"RGC": 0.95, "Amacrine": 0.93},
+        }
+        all_rules = {"0": None}
+        kb = {
+            "RGC": {
+                "parent": "Broad_Neuron",
+                "markers": {
+                    "confirm": {"RBPMS": ["src"], "SNCG": ["src"]},
+                    "add": {},
+                },
+            },
+            "Amacrine": {
+                "parent": "Broad_Neuron",
+                "markers": {
+                    "confirm": {"TFAP2A": ["src"], "SNCG": ["src"]},
+                    "add": {},
+                },
+            },
+        }
+        decisions = fuse_all_clusters(
+            all_scores,
+            all_rules,
+            kb=kb,
+            allows_transitions=True,
+        )
+
+        d = decisions[0]
+        assert d.method == "transition_state"
+        assert d.cell_type == "transitional: RGC/Amacrine"
+
+    def test_multi_peak_high_min_types_no_downgrade(self) -> None:
+        """multi_peak_min_types=6 with only 3 tied types → no downgrade;
+        normal logic applies (transition_state here).
+        """
+        all_scores = {
+            "0": {"RGC": 1.0, "Amacrine": 1.0, "Bipolar": 1.0, "HC": 0.8},
+        }
+        all_rules = {"0": None}
+        kb = {
+            "RGC": {
+                "parent": "Broad_Neuron",
+                "markers": {"confirm": {"RBPMS": ["src"], "SNCG": ["src"]}, "add": {}},
+            },
+            "Amacrine": {
+                "parent": "Broad_Neuron",
+                "markers": {"confirm": {"TFAP2A": ["src"], "SNCG": ["src"]}, "add": {}},
+            },
+            "Bipolar": {
+                "parent": "Broad_Neuron",
+                "markers": {"confirm": {"VSX2": ["src"], "SNCG": ["src"]}, "add": {}},
+            },
+        }
+        decisions = fuse_all_clusters(
+            all_scores,
+            all_rules,
+            kb=kb,
+            allows_transitions=True,
+            multi_peak_min_types=6,
+        )
+
+        d = decisions[0]
+        assert d.method == "transition_state"
+        assert d.cell_type == "transitional: RGC/Amacrine"
+
+    def test_multi_peak_non_candidate_not_degraded(self) -> None:
+        """Multi-peak saturation on a NON-transition candidate (top-2 have
+        different parents) must NOT downgrade — the cluster keeps its
+        marker-scoring label. Pins the scope-narrowing semantics.
+        """
+        all_scores = {
+            "0": {
+                "Muller_Glia": 1.0,
+                "Proliferating_RPC": 1.0,
+                "NRPC": 1.0,
+                "RPC": 0.95,
+            },
+        }
+        all_rules = {"0": None}
+        kb = {
+            "Muller_Glia": {"parent": "Broad_Glia"},
+            "Proliferating_RPC": {"parent": "Broad_Progenitor"},
+            "NRPC": {"parent": "Broad_Progenitor"},
+            "RPC": {"parent": "Broad_Progenitor"},
+        }
+        decisions = fuse_all_clusters(
+            all_scores,
+            all_rules,
+            kb=kb,
+            allows_transitions=True,
+        )
+
+        d = decisions[0]
+        assert d.method != "ambiguous"
+        assert d.method == "marker_scoring_high"
+        assert d.cell_type == "Muller_Glia"
+        assert d.confidence == "high"
+
 
 # ── Private helper: _is_transition_state ──────────────────────────────
 
