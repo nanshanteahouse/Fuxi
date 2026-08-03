@@ -30,38 +30,57 @@ from core.utils import safe_write
 # ══════════════════════════════════════════════════════════════════════════
 
 
-def test_safe_write_wsl():
-    """W1-01: tmp+copy2+unlink strategy on /mnt/ paths (WSL fix).
+def test_safe_write_wsl(tmp_path, monkeypatch) -> None:
+    """W1-01: tmp-write + atomic os.replace strategy on /mnt/ paths (WSL fix).
 
-    Verifies that when target starts with /mnt/, the function:
-      1. Creates tmpdir
-      2. Writes to tmp path
-      3. Copies tmp file to target (copy2, not move)
-      4. Unlinks tmp file
+    Verifies that when target starts with /mnt/ on WSL, the function:
+      1. Creates the tmp dir
+      2. Writes to the tmp path
+      3. Atomically renames the tmp file onto the target (os.replace,
+         same-fs atomic — no copy2+unlink, which corrupts 4GB+ files
+         across filesystems)
+
+    Portable: ``is_wsl`` is patched to True (no real /mnt mount required)
+    and the tmp dir is a pytest ``tmp_path`` — so this runs identically on
+    WSL and non-WSL hosts.
     """
+    import numpy as np
+    import scanpy as sc
+
     mock_adata = MagicMock()
+    tmpdir = tmp_path / "fuxi_tmp"
+    monkeypatch.setattr("core.utils._io.is_wsl", lambda: True)
 
-    with patch("core.utils._io.os.makedirs") as mock_makedirs:
-        with patch("core.utils._io.shutil.copy2") as mock_copy2:
-            with patch("core.utils._io.os.unlink") as mock_unlink:
-                with patch("core.utils._io.os.path.getsize", return_value=1_000_000):
-                    safe_write(mock_adata, "/mnt/data/test.h5ad")
+    # ── WSL /mnt branch: write to tmp, then atomic os.replace ──
+    with (
+        patch("core.utils._io.os.makedirs") as mock_makedirs,
+        patch("core.utils._io.os.replace") as mock_replace,
+        patch("core.utils._io.os.path.getsize", return_value=1_000_000),
+    ):
+        safe_write(mock_adata, "/mnt/data/test.h5ad", tmpdir=str(tmpdir))
 
-                    # tmpdir created
-                    mock_makedirs.assert_any_call("/tmp/Fuxi", exist_ok=True)
+        # tmp dir created under the configured tmpdir
+        mock_makedirs.assert_any_call(str(tmpdir), exist_ok=True)
 
-                    # adata.write called with tmp path (not target)
-                    mock_adata.write.assert_called_once_with(
-                        "/tmp/Fuxi/test.h5ad", compression="gzip"
-                    )
+        # adata written to the tmp path (never the target directly)
+        mock_adata.write.assert_called_once_with(str(tmpdir / "test.h5ad"), compression="gzip")
 
-                    # shutil.copy2 called with tmp -> target
-                    mock_copy2.assert_called_once_with(
-                        "/tmp/Fuxi/test.h5ad", "/mnt/data/test.h5ad"
-                    )
+        # atomic same-fs rename tmp -> target (not shutil.copy2 + unlink)
+        mock_replace.assert_called_once_with(str(tmpdir / "test.h5ad"), "/mnt/data/test.h5ad")
 
-                    # os.unlink called for tmp cleanup
-                    mock_unlink.assert_called_once_with("/tmp/Fuxi/test.h5ad")
+    # ── Real write: target readable, no partial/tmp artifacts, sane perms ──
+    adata = sc.AnnData(
+        X=np.random.RandomState(0).poisson(lam=2.0, size=(50, 20)).astype(np.float32)
+    )
+    target = tmp_path / "results" / "test.h5ad"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    safe_write(adata, str(target), tmpdir=str(tmpdir))
+    assert target.exists(), "safe_write did not produce the target file"
+    assert sc.read(str(target)).shape == adata.shape, "written file does not read back"
+    leftovers = sorted(str(p) for p in tmpdir.rglob("*") if p.is_file())
+    assert leftovers == [], f"temp files left behind after safe_write: {leftovers}"
+    mode = target.stat().st_mode & 0o777
+    assert mode & 0o400, f"target not readable by owner (mode {mode:o})"
 
 
 # ══════════════════════════════════════════════════════════════════════════
