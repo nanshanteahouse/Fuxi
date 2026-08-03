@@ -32,12 +32,20 @@ import scipy.sparse as sp
 __all__ = ["write_h5ad_incremental", "verify_incremental_write"]
 
 
+_ZSTD_FILTER_ID = 32015  # HDF5 registered filter id for Zstandard (hdf5plugin)
+
+
 def _detect_x_compression(h5ad_path: str) -> Optional[str]:
     """Return the compression of the target file's ``X`` dataset.
 
     ``None`` means the file is uncompressed (ATAC writes with
     ``compression_override=None``). Any probe failure falls back to
     uncompressed appends.
+
+    h5py only knows gzip/lzf/szip by name — third-party filters (zstd
+    #32015) surface as the placeholder ``"unknown"``. Probe the dataset's
+    create plist for the registered filter id so zstd files append with
+    the same compression instead of crashing on ``compression="unknown"``.
     """
     import h5py
 
@@ -49,15 +57,43 @@ def _detect_x_compression(h5ad_path: str) -> Optional[str]:
             # Sparse X is stored as a Group (csr_matrix encoding); only
             # Dataset objects expose .compression.
             if isinstance(x, h5py.Dataset):
-                return x.compression
+                comp = x.compression
+                if comp in ("gzip", "lzf"):
+                    return comp
+                if comp == "unknown":
+                    # Third-party filter: read the filter id from the plist.
+                    try:
+                        plist = x.id.get_create_plist()
+                        code, _flags, _values = plist.get_filter(0)
+                        if code == _ZSTD_FILTER_ID:
+                            return "zstd"
+                    except Exception:
+                        pass
+                return None
             return None
     except (OSError, AttributeError):
         return None
 
 
 def _write_kwargs(compression: Optional[str]) -> dict:
-    """dataset_kwargs for write_elem — only pass compression when set."""
-    return {"compression": compression} if compression else {}
+    """dataset_kwargs for write_elem — only pass compression when set.
+
+    zstd is not a h5py string name: pass the filter the same way
+    ``core.utils._io._resolve_compression_kwargs`` does (dict() yields
+    ``compression=32015`` + opts, which h5py accepts once hdf5plugin has
+    registered the filter). Any registration failure falls back to
+    uncompressed appends (safe).
+    """
+    if not compression:
+        return {}
+    if compression == "zstd":
+        try:
+            import hdf5plugin  # registers filter #32015 with the HDF5 lib
+
+            return dict(hdf5plugin.Zstd(clevel=1))
+        except Exception:
+            return {}
+    return {"compression": compression}
 
 
 def _to_write_elem(series: pd.Series):
