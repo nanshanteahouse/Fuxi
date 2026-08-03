@@ -43,6 +43,14 @@ clustering:
   # umap_spread: 1.0
   # umap_maxiter: null                  # Max UMAP iterations (null = auto/unlimited). 200-500 on 1M+ cells bounds convergence.
   # umap_n_epochs: null                  # UMAP training epochs (null = auto). Lower (e.g., 500) trades slight quality for speed.
+  # umap_plot_max_cells: 50000            # Hard ceiling for UMAP scatter subsample.
+  # Stratified scatter caps (step 04 figures): label sizes <= cap_small are
+  # kept in full (rare populations stay visible); 500-50k labels capped at
+  # cap_medium; > umap_plot_stratum_large capped at cap_large.
+  # umap_plot_cap_small: 500
+  # umap_plot_cap_medium: 500
+  # umap_plot_cap_large: 1000
+  # umap_plot_stratum_large: 50000
 
 # ── Integration / Batch Correction ─────────────────────────────────────────
 integration:

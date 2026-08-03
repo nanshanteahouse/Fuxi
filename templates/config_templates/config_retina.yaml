@@ -94,6 +94,14 @@ clustering:
   best_n_neighbors: 0
   umap_color_by_batch: false
   # batch_key_override: null  # optionally override integration.batch_key
+  # Stratified scatter caps (step 04 figures): label sizes <= cap_small kept
+  # in full (rare populations stay visible); 500-50k capped at cap_medium;
+  # > umap_plot_stratum_large capped at cap_large. Hard ceiling:
+  # umap_plot_max_cells.
+  # umap_plot_cap_small: 500
+  # umap_plot_cap_medium: 500
+  # umap_plot_cap_large: 1000
+  # umap_plot_stratum_large: 50000
 
 # ── Known retina cell type markers ──
   # umap_maxiter: null                    # max UMAP iterations (null=auto). 200-500 for 1M+ cells.

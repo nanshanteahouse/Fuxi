@@ -30,11 +30,255 @@ from core.utils import (
     gpu_neighbors,
     gpu_umap,
     resolve_config,
-    safe_plot,
     safe_write,
     setup_logger,
     timed_substep,
 )
+
+# Plot-capped stratum sizes for UMAP scatter subsampling.
+# Rare clusters (<= cap_small cells) are kept in full; medium clusters are
+# capped at cap_medium; very large clusters at cap_large — the visual keeps
+# rare populations visible instead of diluting them under big clusters.
+# Configurable via cfg.clustering.umap_plot_cap_{small,medium,large} and
+# umap_plot_stratum_large.
+_PLOT_CAP_SMALL = 500
+_PLOT_CAP_MEDIUM = 500
+_PLOT_CAP_LARGE = 1000
+_PLOT_STRATUM_LARGE = 50_000
+
+
+def _plot_caps(cfg):
+    c = cfg.clustering
+    return (
+        getattr(c, "umap_plot_cap_small", _PLOT_CAP_SMALL),
+        getattr(c, "umap_plot_cap_medium", _PLOT_CAP_MEDIUM),
+        getattr(c, "umap_plot_cap_large", _PLOT_CAP_LARGE),
+        getattr(c, "umap_plot_stratum_large", _PLOT_STRATUM_LARGE),
+    )
+
+
+def _plot_subsample_idx(labels, max_cells, rng, caps=None):
+    """Stratified subsample index for UMAP scatter plots.
+
+    Tiers: label size <= cap_small kept in full; cap_small-50k capped at
+    cap_medium; > stratum_large capped at cap_large. Then truncated to
+    ``max_cells`` as a hard ceiling. ``caps`` is the tuple from
+    ``_plot_caps(cfg)``; defaults to module constants when None.
+    """
+    cap_small, cap_medium, cap_large, stratum_large = caps or (
+        _PLOT_CAP_SMALL,
+        _PLOT_CAP_MEDIUM,
+        _PLOT_CAP_LARGE,
+        _PLOT_STRATUM_LARGE,
+    )
+    codes = pd.Categorical(labels).codes
+    parts = []
+    for code in np.unique(codes):
+        sel = np.where(codes == code)[0]
+        n = len(sel)
+        if n <= cap_small:
+            parts.append(sel)
+        else:
+            cap = cap_medium if n <= stratum_large else cap_large
+            parts.append(rng.choice(sel, min(cap, n), replace=False))
+    idx = np.concatenate(parts)
+    if len(idx) > max_cells:
+        idx = rng.choice(idx, max_cells, replace=False)
+    return idx
+
+
+def plot_step04_figures(h5ad_path: str, cfg, log):
+    """Re-render Step 04 summary figures from a saved checkpoint (plot-only).
+
+    Deterministic renderer of ``04_clustered.h5ad`` -> ``figures/04_cluster/``:
+    parameter-grid summary, per-n_neighbors multi-resolution panels, and batch
+    diagnostics. Uses a light AnnData (``X_umap`` + obs columns only) so memory
+    stays ~100MB even for 1M+ cell datasets. Safe to re-run any time (after a
+    plotting failure, or a dpi/colour/subsample change) without recomputing
+    clustering.
+    """
+    import anndata
+    from scipy import sparse as _sp
+
+    fig_dir = os.path.join(cfg.figure_dir, "04_cluster")
+    os.makedirs(fig_dir, exist_ok=True)
+    backed = sc.read_h5ad(h5ad_path, backed="r")
+    try:
+        light = anndata.AnnData(
+            X=_sp.csr_matrix((backed.n_obs, 1), dtype="float32"),
+            obs=backed.obs,
+            obsm={
+                k: backed.obsm[k]
+                for k in backed.obsm.keys()
+                if k.startswith("X_umap") or k.startswith("umap_")
+            },
+        )
+    finally:
+        backed.file.close()
+
+    # Recover the (n_neighbors, resolution) grid from obs leiden_* columns.
+    pairs: list[tuple[int, float]] = []
+    for c in light.obs.columns:
+        parts = c.split("_")
+        if len(parts) == 3 and parts[0] == "leiden":
+            try:
+                pairs.append((int(parts[1]), float(parts[2])))
+            except ValueError:
+                pass
+    n_grid = sorted({n for n, _ in pairs})
+    r_grid = sorted({r for _, r in pairs})
+    if not n_grid:
+        log.warning("plot_step04_figures: no leiden_* columns in checkpoint, nothing to draw")
+        return
+
+    # 1) Parameter grid summary: n_neighbors x resolution UMAP panels
+    try:
+        n_cols = len(r_grid)
+        n_rows = len(n_grid)
+        fig, axes = plt.subplots(
+            n_rows, n_cols, figsize=(5 * n_cols + 2, 4 * n_rows + 1), squeeze=False
+        )
+        for i, n in enumerate(n_grid):
+            for j, r in enumerate(r_grid):
+                ax = axes[i, j]
+                umap_key = f"umap_{n}_{r}"
+                leiden_key = f"leiden_{n}_{r}"
+                if umap_key in light.obsm and leiden_key in light.obs:
+                    saved = light.obsm["X_umap"]
+                    light.obsm["X_umap"] = light.obsm[umap_key]
+                    try:
+                        _smart_plot_umap(
+                            light,
+                            color=leiden_key,
+                            ax=ax,
+                            title=f"n={n}, r={r}",
+                            cfg=cfg,
+                            log=log,
+                            legend_fontsize=5,
+                        )
+                    finally:
+                        light.obsm["X_umap"] = saved
+                else:
+                    ax.text(0.5, 0.5, "N/A", ha="center", va="center", transform=ax.transAxes)
+                    ax.set_title(f"n={n}, r={r}")
+        fig.tight_layout()
+        fig.savefig(
+            os.path.join(fig_dir, "param_grid_summary.png"),
+            dpi=cfg.plot.figure_dpi,
+            bbox_inches="tight",
+        )
+        plt.close(fig)
+        log.info("plot-only: Parameter grid summary saved")
+    except Exception as e:
+        log.warning("plot-only: Grid summary plot failed: %s", e)
+
+    # 2) Multi-resolution panels per n_neighbors (final X_umap)
+    for n in n_grid:
+        keys = [f"leiden_{n}_{r}" for r in r_grid if f"leiden_{n}_{r}" in light.obs]
+        if not keys:
+            continue
+        try:
+            n_cols = min(3, len(keys))
+            n_rows = int(np.ceil(len(keys) / n_cols))
+            fig, axes = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 5 * n_rows))
+            axes = axes.ravel() if len(keys) > 1 else [axes]
+            for i, key in enumerate(keys):
+                _smart_plot_umap(
+                    light, color=key, ax=axes[i], title=key, cfg=cfg, log=log, legend_fontsize=8
+                )
+            for j in range(len(keys), len(axes)):
+                axes[j].axis("off")
+            fig.tight_layout()
+            fig.savefig(
+                os.path.join(fig_dir, f"leiden_multires_n{n}.png"),
+                dpi=cfg.plot.figure_dpi,
+                bbox_inches="tight",
+            )
+            plt.close(fig)
+            log.info("plot-only: Multi-resolution Leiden plot (n=%d) saved", n)
+        except Exception as e:
+            log.warning("plot-only: Multi-resolution plot (n=%d) failed: %s", n, e)
+
+    # 3) Batch diagnostics
+    if getattr(cfg.clustering, "umap_color_by_batch", False):
+        batch_key = (
+            getattr(cfg.clustering, "batch_key_override", None) or cfg.integration.batch_key
+        )
+        if batch_key in light.obs:
+            batches = light.obs[batch_key].unique()
+            n_batches = len(batches)
+            if n_batches < 2:
+                log.info("plot-only: n_batches=%d < 2, skipping batch UMAP", n_batches)
+            else:
+                try:
+                    fig_b, ax_b = plt.subplots(figsize=(6, 5))
+                    if _smart_plot_umap(
+                        light, batch_key, ax_b, f"UMAP colored by {batch_key}", cfg, log
+                    ):
+                        fig_b.savefig(
+                            os.path.join(fig_dir, "batch_colored_umap.png"),
+                            dpi=cfg.plot.figure_dpi,
+                            bbox_inches="tight",
+                        )
+                    plt.close(fig_b)
+                    log.info("plot-only: Batch-colored UMAP saved")
+                except Exception as e:
+                    log.warning("plot-only: Batch-colored UMAP failed: %s", e)
+                if n_batches <= 12:
+                    try:
+                        n_cols = min(4, n_batches)
+                        n_rows = int(np.ceil(n_batches / n_cols))
+                        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
+                        axes = axes.ravel() if n_batches > 1 else [axes]
+                        rng = np.random.RandomState(getattr(cfg.execution, "random_seed", 42))
+                        bg_cap = min(50000, light.n_obs)
+                        bg_idx = rng.choice(light.n_obs, bg_cap, replace=False)
+                        for i, bv in enumerate(batches):
+                            ax = axes[i]
+                            mask = light.obs[batch_key] == bv
+                            ax.scatter(
+                                light.obsm["X_umap"][bg_idx, 0],
+                                light.obsm["X_umap"][bg_idx, 1],
+                                c="lightgray",
+                                s=1,
+                                alpha=0.3,
+                                rasterized=True,
+                            )
+                            fg_all = np.where(mask)[0]
+                            fg_sub = fg_all[
+                                _plot_subsample_idx(
+                                    light.obs.loc[mask, "leiden"].values,
+                                    50000,
+                                    rng,
+                                    _plot_caps(cfg),
+                                )
+                            ]
+                            ax.scatter(
+                                light.obsm["X_umap"][fg_sub, 0],
+                                light.obsm["X_umap"][fg_sub, 1],
+                                c=light.obs.loc[fg_sub, "leiden"].astype("category").cat.codes,
+                                cmap=cfg.plot.palette.categorical,
+                                s=3,
+                                alpha=0.8,
+                                rasterized=True,
+                            )
+                            ax.set_title(f"{batch_key}={bv} ({mask.sum()} cells)", fontsize=9)
+                            ax.set_xticks([])
+                            ax.set_yticks([])
+                        for j in range(n_batches, len(axes)):
+                            axes[j].axis("off")
+                        fig.tight_layout()
+                        fig.savefig(
+                            os.path.join(fig_dir, "batch_faceted_umap.png"),
+                            dpi=cfg.plot.figure_dpi,
+                            bbox_inches="tight",
+                        )
+                        plt.close(fig)
+                        log.info("plot-only: Split-by-batch faceted UMAP saved")
+                    except Exception as e:
+                        log.warning("plot-only: Faceted UMAP failed: %s", e)
+
+    log.info("plot_step04_figures: done")
 
 
 def _smart_plot_umap(adata, color, ax, title, cfg, log, legend_fontsize=8):
@@ -69,7 +313,7 @@ def _smart_plot_umap(adata, color, ax, title, cfg, log, legend_fontsize=8):
 
     if mode == "subsample" and adata.n_obs > max_cells:
         rng = np.random.RandomState(getattr(cfg.execution, "random_seed", 42))
-        idx = rng.choice(adata.n_obs, max_cells, replace=False)
+        idx = _plot_subsample_idx(adata.obs[color], max_cells, rng, _plot_caps(cfg))
         coords = adata.obsm["X_umap"][idx]
         # Map categorical labels to integer codes for scatter coloring.
         cat = pd.Categorical(adata.obs[color])
@@ -86,7 +330,7 @@ def _smart_plot_umap(adata, color, ax, title, cfg, log, legend_fontsize=8):
         ax.set_title(title, fontsize=9)
         ax.set_xticks([])
         ax.set_yticks([])
-        log.info("    [plot] subsample mode: %d/%d cells drawn", max_cells, adata.n_obs)
+        log.info("    [plot] stratified subsample: %d/%d cells drawn", len(idx), adata.n_obs)
         return True
 
     # 'full' (or 'subsample' with n_obs <= max_cells)
@@ -134,7 +378,7 @@ def _plot_umap_from_coords(coords, adata, color, ax, title, cfg, log, legend_fon
         return False
     if mode == "subsample" and adata.n_obs > max_cells:
         rng = np.random.RandomState(getattr(cfg.execution, "random_seed", 42))
-        idx = rng.choice(adata.n_obs, max_cells, replace=False)
+        idx = _plot_subsample_idx(adata.obs[color], max_cells, rng, _plot_caps(cfg))
         sub_coords = coords[idx]
         cat = pd.Categorical(adata.obs[color])
         codes = cat.codes[idx]
@@ -150,7 +394,7 @@ def _plot_umap_from_coords(coords, adata, color, ax, title, cfg, log, legend_fon
         ax.set_title(title, fontsize=9)
         ax.set_xticks([])
         ax.set_yticks([])
-        log.info("[plot] %s: subsample %d/%d cells", title, max_cells, adata.n_obs)
+        log.info("[plot] %s: stratified subsample %d/%d cells", title, len(idx), adata.n_obs)
         return True
     # full mode
     cat = pd.Categorical(adata.obs[color])
@@ -252,9 +496,19 @@ def main():
     t0 = time.time()
     args_parser = argparse.ArgumentParser()
     args_parser.add_argument("--config", default="../config.py")
+    args_parser.add_argument(
+        "--plot-only",
+        action="store_true",
+        help="Re-render Step 04 summary figures from the saved 04_clustered.h5ad checkpoint (no clustering).",
+    )
     args = args_parser.parse_args()
     cfg = resolve_config(args.config)
     log = setup_logger("04_cluster", os.path.join(cfg.log_dir, "04_cluster_umap.log"))
+
+    if args.plot_only:
+        log.info("Step 04: plot-only mode (re-render figures from checkpoint)")
+        plot_step04_figures(cfg.cluster_h5ad, cfg, log)
+        return
     log.info("Step 04: Neighbors + UMAP + multi-param grid Leiden clustering")
 
     # ── 输入 ──
@@ -831,25 +1085,20 @@ def main():
                     n_batches,
                 )
             else:
-                # 1) Colored UMAP — check safe_plot return to avoid silent garbage
+                # 1) Colored UMAP — subsample-aware (stratified) renderer
                 try:
-                    result = safe_plot(
-                        sc.pl.umap,
-                        adata,
-                        color=batch_key,
-                        show=False,
-                        title=f"UMAP colored by {batch_key}",
+                    fig_b, ax_b = plt.subplots(figsize=(6, 5))
+                    drawn = _smart_plot_umap(
+                        adata, batch_key, ax_b, f"UMAP colored by {batch_key}", cfg, log
                     )
-                    if result is not None:
+                    if drawn:
                         plt.savefig(
                             os.path.join(fig_dir, "batch_colored_umap.png"),
                             dpi=cfg.plot.figure_dpi,
                             bbox_inches="tight",
                         )
-                        plt.close()
                         log.info("  Batch-colored UMAP saved")
-                    else:
-                        log.warning("  Batch-colored UMAP failed (safe_plot returned None)")
+                    plt.close(fig_b)
                 except Exception as e:
                     log.warning("  Batch-colored UMAP failed: %s", e)
                 # 2) Split-by-batch faceted UMAP (degrade if >12 batches)
@@ -862,18 +1111,30 @@ def main():
                         for i, batch_val in enumerate(batches):
                             ax = axes_flat[i]
                             mask = adata.obs[batch_key] == batch_val
+                            rng = np.random.RandomState(getattr(cfg.execution, "random_seed", 42))
+                            bg_cap = min(50000, adata.n_obs)
+                            bg_idx = rng.choice(adata.n_obs, bg_cap, replace=False)
                             ax.scatter(
-                                adata.obsm["X_umap"][:, 0],
-                                adata.obsm["X_umap"][:, 1],
+                                adata.obsm["X_umap"][bg_idx, 0],
+                                adata.obsm["X_umap"][bg_idx, 1],
                                 c="lightgray",
                                 s=1,
                                 alpha=0.3,
                                 rasterized=True,
                             )
+                            fg_all = np.where(mask)[0]
+                            fg_sub = fg_all[
+                                _plot_subsample_idx(
+                                    adata.obs.loc[mask, "leiden"].values,
+                                    50000,
+                                    rng,
+                                    _plot_caps(cfg),
+                                )
+                            ]
                             ax.scatter(
-                                adata.obsm["X_umap"][mask, 0],
-                                adata.obsm["X_umap"][mask, 1],
-                                c=adata.obs.loc[mask, "leiden"].astype("category").cat.codes,
+                                adata.obsm["X_umap"][fg_sub, 0],
+                                adata.obsm["X_umap"][fg_sub, 1],
+                                c=adata.obs.loc[fg_sub, "leiden"].astype("category").cat.codes,
                                 cmap=cfg.plot.palette.categorical,
                                 s=3,
                                 alpha=0.8,

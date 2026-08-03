@@ -375,6 +375,14 @@ class ClusteringSettings(BaseModel):
     # datasets actually finish. 'skip' disables plotting entirely.
     umap_plot_mode: Literal["auto", "full", "subsample", "skip"] = "auto"
     umap_plot_max_cells: int = 50000
+    # Stratified scatter subsample caps (step 04 figures): label sizes <=
+    # cap_small are kept in full (rare populations stay visible); 500-50k
+    # labels capped at cap_medium; > umap_plot_stratum_large at cap_large.
+    # The hard ceiling remains umap_plot_max_cells.
+    umap_plot_cap_small: int = 500
+    umap_plot_cap_medium: int = 500
+    umap_plot_cap_large: int = 1000
+    umap_plot_stratum_large: int = 50000
     # plot_per_combo: skip per-(n_neighbors, resolution) UMAP subplot loop.
     # When False, skips the per-combo individual UMAP scatter plots (the dominant
     # matplotlib cost at scale — Li2026 1M cells: ~2h for this loop alone).

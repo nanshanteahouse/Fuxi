@@ -470,6 +470,12 @@ def main():
         "--cell-type", type=str, help="(RNA only) Cell type to subcluster (Step 07)"
     )
     parser.add_argument(
+        "--plot-only",
+        action="store_true",
+        default=False,
+        help="(Step 04 only) Re-render summary figures from the saved checkpoint without re-clustering",
+    )
+    parser.add_argument(
         "--annotate-method",
         type=str,
         choices=["auto", "unified"],
@@ -635,6 +641,8 @@ def main():
         extra_args = [f"--config={config_path}"]
         if args.modality == "rna" and i == 6 and args.cell_type:
             extra_args.extend(["--cell-type", args.cell_type])
+        if getattr(args, "plot_only", False) and num == "04":
+            extra_args.append("--plot-only")
 
         step_t0 = time.time()
 
