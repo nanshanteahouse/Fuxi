@@ -868,6 +868,15 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
         use_gap_criterion=getattr(CFG.annotation, "use_gap_criterion", False),
     )
 
+    # ── Label harmonization resources (todo 8) ────────────────────────
+    # CellTypist and AI labels are resolved to canonical KB names through
+    # the SHARED harmonize_label chain (parallel A/B evaluation, ambiguous
+    # labels abstain).  Synonyms mirror into BOTH fuse_all_clusters calls.
+    from core.kb import load_synonyms
+    from rna.utils.evidence_fusion import harmonize_label
+
+    synonyms = load_synonyms(CFG.tissue_kb)
+
     decisions, fusion_quality = fuse_all_clusters(
         fine_scores,
         all_rules,
@@ -882,6 +891,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
         multi_peak_min_types=getattr(CFG.annotation, "multi_peak_min_types", 3),
         multi_peak_score_floor=getattr(CFG.annotation, "multi_peak_score_floor", 0.9),
         kadp_cfg=kadp_cfg,
+        synonyms=synonyms,
     )
     logger.info("Evidence fusion: %d clusters processed", len(decisions))
 
@@ -1017,6 +1027,17 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
                     if isinstance(ann, dict) and "cell_type" in ann:
                         ai_results[str(cid)] = ann["cell_type"]
                 logger.info("AI fallback: %d cluster suggestions received", len(ai_results))
+                # AI labels share the SAME harmonization chain as CellTypist
+                # (Oracle r2 MAJOR 1): each suggestion is pre-resolved to a
+                # canonical KB name; a cluster whose label cannot be aligned
+                # abstains (ai_suggestion blank — never inflates METC distinct).
+                if ai_results:
+                    _resolved_ai: dict = {}
+                    for _cid, _label in ai_results.items():
+                        _canon = harmonize_label(_label, kb, synonyms)
+                        if _canon is not None:
+                            _resolved_ai[_cid] = _canon
+                    ai_results = _resolved_ai
                 # Re-run fusion with AI context
                 decisions = fuse_all_clusters(
                     fine_scores,
@@ -1032,6 +1053,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
                     multi_peak_min_types=getattr(CFG.annotation, "multi_peak_min_types", 3),
                     multi_peak_score_floor=getattr(CFG.annotation, "multi_peak_score_floor", 0.9),
                     kadp_cfg=kadp_cfg,
+                    synonyms=synonyms,
                 )
                 decision_map = dict(zip(decision_clusters, decisions))
         except Exception as exc:

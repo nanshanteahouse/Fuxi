@@ -314,6 +314,111 @@ def _labels_match(a: Optional[str], b: Optional[str]) -> bool:
     return _normalise_label(a) == _normalise_label(b)
 
 
+def _kb_marker_count(kb: Optional[dict], type_key: str) -> int:
+    """Count the KB marker genes recorded for *type_key*."""
+    if not kb or type_key not in kb or not isinstance(kb[type_key], dict):
+        return 0
+    markers = kb[type_key].get("markers", {})
+    if not isinstance(markers, dict):
+        return 0
+    return sum(len(v) for v in markers.values() if isinstance(v, dict))
+
+
+def harmonize_label(
+    label: Optional[str],
+    kb: Optional[dict],
+    synonyms: Optional[dict],
+) -> Optional[str]:
+    """Resolve an external cell-type label to a canonical KB type key.
+
+    Shared parsing chain for CellTypist and AI suggestions (todo 8).  The
+    two independent paths are evaluated **in parallel** — never sequentially
+    — so a label that is both a KB type key and a synonym of another type
+    (e.g. ``"RPC"`` = KB key *and* Broad_Progenitor synonym) surfaces as
+    an ambiguity instead of short-circuiting on the first match (Oracle
+    r3 MAJOR 3):
+
+    1. ``_normalise_label`` canonicalisation (case / punctuation / accents).
+    2. Path A: exact KB type-key match on the normalised label.
+    3. Path B: reverse synonym lookup — every canonical key whose synonym
+       list contains the normalised label.
+    4. Both paths hit with *different* candidate sets → ``None`` (abstain).
+    5. Only one path hits → its resolved candidate.
+    6. Multiple candidates within one path → KB marker-count tie-break;
+       a marker-count tie still resolves to ``None``.
+    7. No path hits → ``None``.
+
+    Parameters
+    ----------
+    label : str or None
+        Raw external label (CellTypist prediction or AI suggestion).
+    kb : dict or None
+        Knowledge base whose keys are canonical cell-type names (the same
+        dict passed to :func:`fuse_all_clusters`).
+    synonyms : dict or None
+        ``{canonical_key: {"display_name": str, "synonyms": list[str]}}``
+        (``core.kb.load_synonyms`` output).
+
+    Returns
+    -------
+    str or None
+        Canonical KB type key, or ``None`` when the label cannot be
+        unambiguously aligned (unknown / conflicting / tied).
+    """
+    norm = _normalise_label(label)
+    if not norm:
+        return None
+
+    # Path A: KB type-key exact match on the normalised label.
+    cand_a: set = set()
+    if kb:
+        for key in kb:
+            if key == "expert_rules" or key.startswith("_"):
+                continue
+            if _normalise_label(key) == norm:
+                cand_a.add(key)
+
+    # Path B: reverse synonym lookup.
+    cand_b: set = set()
+    if synonyms:
+        for canonical, syn_info in synonyms.items():
+            syn_list = syn_info.get("synonyms", []) if isinstance(syn_info, dict) else []
+            if any(_normalise_label(syn) == norm for syn in syn_list):
+                cand_b.add(canonical)
+
+    def _resolve(cands: set) -> Optional[str]:
+        """Resolve a candidate set: single hit wins; multiple candidates
+        fall back to KB marker-count tie-break, a tie being None."""
+        if not cands:
+            return None
+        if len(cands) == 1:
+            return next(iter(cands))
+        best: Optional[str] = None
+        best_count = -1
+        tied = False
+        for cand in sorted(cands):
+            count = _kb_marker_count(kb, cand)
+            if count > best_count:
+                best, best_count, tied = cand, count, False
+            elif count == best_count:
+                tied = True
+        return None if tied else best
+
+    # Parallel evaluation: compare BOTH paths before deciding (never
+    # short-circuit path A into path B — that would mask the ambiguity).
+    res_a = _resolve(cand_a)
+    res_b = _resolve(cand_b)
+    if cand_a and cand_b:
+        if cand_a == cand_b:
+            return res_a
+        return None  # A/B conflict → abstain
+    if cand_a:
+        return res_a
+    if cand_b:
+        return res_b
+    return None
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  Internal helpers
 # ═══════════════════════════════════════════════════════════════════════
@@ -1047,6 +1152,7 @@ def fuse_all_clusters(
     multi_peak_min_types: int = 3,
     multi_peak_score_floor: float = 0.9,
     kadp_cfg: Optional[KADPConfig] = None,
+    synonyms: Optional[dict] = None,
 ) -> list | tuple[list, dict]:
     """Process all clusters and return a list of :class:`FusionDecision`.
 
@@ -1084,6 +1190,12 @@ def fuse_all_clusters(
         Layer-3 KADP developmental-potency config, mirrored into every
         :func:`fuse_evidence` call.  Default ``None`` keeps baseline
         behavior (KADP never fires).
+    synonyms : dict or None
+        ``{canonical_key: {"display_name": str, "synonyms": list[str]}}``
+        (``core.kb.load_synonyms`` output) used to harmonize CellTypist
+        labels through :func:`harmonize_label` before forwarding each as
+        ``celltypist_suggestion``.  Default ``None`` leaves every cluster's
+        celltypist vote abstaining.
 
     Returns
     -------
@@ -1094,6 +1206,17 @@ def fuse_all_clusters(
     if ai_results is None:
         ai_results = {}
     if low_quality_clusters is None:
+        low_quality_clusters = {}
+
+    # Harmonize raw CellTypist labels ONCE against the shared chain; the
+    # result feeds both the per-cluster celltypist_suggestion (a cluster
+    # whose label cannot be aligned abstains) and the harmonization_rate.
+    harmonized_celltypist: dict = {}
+    if celltypist_results:
+        for _cl, _label in celltypist_results.items():
+            _resolved = harmonize_label(_label, kb, synonyms)
+            if _resolved is not None:
+                harmonized_celltypist[_cl] = _resolved
         low_quality_clusters = {}
 
     decisions: list = []
@@ -1128,6 +1251,7 @@ def fuse_all_clusters(
             multi_peak_min_types=multi_peak_min_types,
             multi_peak_score_floor=multi_peak_score_floor,
             kadp_cfg=kadp_cfg,
+            celltypist_suggestion=harmonized_celltypist.get(cl),
         )
         decisions.append(decision)
 
@@ -1143,6 +1267,11 @@ def fuse_all_clusters(
             "total": len(decisions),
             "diagnostic_summary": _build_diagnostic_summary(decisions),
             "celltypist": bool(celltypist_results) if celltypist_results else False,
+            "harmonization_rate": (
+                len(harmonized_celltypist) / len(celltypist_results)
+                if celltypist_results
+                else None
+            ),
         }
         return decisions, quality
     return decisions

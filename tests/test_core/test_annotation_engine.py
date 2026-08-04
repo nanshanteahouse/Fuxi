@@ -1171,7 +1171,7 @@ def test_ai_fallback_gate_includes_ambiguous_decision(tmp_path) -> None:
     """
     ai_response = json.dumps(
         {
-            "0": {"cell_type": "Amacrine"},
+            "0": {"cell_type": "Amacrine Cell"},
             "1": {"cell_type": "RGC"},
         }
     )
@@ -1184,7 +1184,8 @@ def test_ai_fallback_gate_includes_ambiguous_decision(tmp_path) -> None:
     assert result is not None
     assert ai_mock.called, "ambiguous candidate must be gated into the AI fallback"
     assert len(fuse_calls) == 2, "second-pass fusion with ai_results must run"
-    assert captured_ai.get("0") == "Amacrine", captured_ai
+    assert captured_ai.get("0") == "Amacrine_Cell", captured_ai
+    assert captured_ai.get("1") == "RGC", captured_ai
     assert captured_ai.get("1") == "RGC", captured_ai
 
     # ── disabled (baseline parity) ──
@@ -1205,7 +1206,7 @@ def test_ai_fallback_gate_includes_transition_state_decision(tmp_path) -> None:
     """
     ai_response = json.dumps(
         {
-            "0": {"cell_type": "Amacrine"},
+            "0": {"cell_type": "Amacrine Cell"},
             "1": {"cell_type": "RGC"},
         }
     )
@@ -1219,7 +1220,7 @@ def test_ai_fallback_gate_includes_transition_state_decision(tmp_path) -> None:
     assert ai_mock.called, "transition_state candidate must be gated into the AI fallback"
     assert len(fuse_calls) == 2
     assert captured_ai.get("1") == "RGC", captured_ai
-    assert captured_ai.get("0") == "Amacrine", captured_ai
+    assert captured_ai.get("0") == "Amacrine_Cell", captured_ai
 
     # ── disabled (baseline parity) ──
     cfg_off = _make_ai_gate_cfg(tmp_path / "off")
@@ -1230,6 +1231,34 @@ def test_ai_fallback_gate_includes_transition_state_decision(tmp_path) -> None:
     assert not ai_mock_off.called, "baseline: transition_state must stay out of low_conf_clusters"
     assert captured_ai_off == {}
     assert len(fuse_calls_off) == 1
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Todo 8 — AI labels share the harmonization chain before the 2nd fuse.
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def test_ai_labels_harmonized_before_second_fuse(tmp_path) -> None:
+    """AI labels pass through harmonize_label (same chain as CellTypist).
+
+    Resolvable labels are replaced by their canonical KB name; unresolvable
+    ones are dropped so that cluster's ai_suggestion abstains (Oracle r2
+    MAJOR 1 — an unparseable AI vote must not inflate METC distinct)."""
+    ai_response = json.dumps(
+        {
+            "0": {"cell_type": "Retinal Ganglion Cell"},  # → RGC (synonym hit)
+            "1": {"cell_type": "NotARealCellType"},  # → dropped (abstain)
+        }
+    )
+    cfg = _make_ai_gate_cfg(tmp_path / "ai_harm", metc_enabled=True)
+    result, captured_ai, fuse_calls, ai_mock = _run_ai_gate_engine(
+        _make_ai_gate_adata(), cfg, ai_response
+    )
+    assert result is not None
+    assert ai_mock.called
+    assert len(fuse_calls) == 2, "second-pass fusion must receive harmonized ai_results"
+    assert captured_ai.get("0") == "RGC", captured_ai
+    assert "1" not in captured_ai, "unresolvable AI label must be dropped (source abstains)"
 
 
 # ═══════════════════════════════════════════════════════════════════════

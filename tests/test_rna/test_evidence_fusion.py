@@ -11,6 +11,7 @@ from rna.utils.evidence_fusion import (
     _is_transition_state,
     fuse_all_clusters,
     fuse_evidence,
+    harmonize_label,
 )
 
 # ── Public API ────────────────────────────────────────────────────────
@@ -1013,3 +1014,246 @@ class TestKADPNameBranch:
         assert d.cell_type == "transitional: NRPC/Proliferating_RPC"
         assert d.potency is None
         assert d.review_reason == ""
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Todo 8 — shared label harmonization (parallel A/B evaluation)
+#  harmonize_label + fuse_all_clusters celltypist forwarding + rate
+# ═══════════════════════════════════════════════════════════════════════
+
+
+_HARMONIZE_KB = {
+    "RGC": {
+        "markers": {"confirm": {"RBPMS": ["s"], "SNCG": ["s"]}, "add": {}},
+        "negative_markers": [],
+    },
+    "Muller_Glia": {
+        "markers": {"confirm": {"RLBP1": ["s"]}, "add": {}},
+        "negative_markers": [],
+    },
+    "Rod_Photoreceptor": {
+        "markers": {"confirm": {"RHO": ["s"]}, "add": {}},
+        "negative_markers": [],
+    },
+    "Amacrine_Cell": {
+        "markers": {"confirm": {"TFAP2A": ["s"]}, "add": {}},
+        "negative_markers": [],
+    },
+    "Amacrine_Precursor": {
+        "markers": {"confirm": {"BARHL2": ["s"]}, "add": {}},
+        "negative_markers": [],
+    },
+    "expert_rules": {},
+    "_hierarchy": {},
+}
+
+
+_HARMONIZE_SYNONYMS = {
+    "RGC": {
+        "display_name": "Retinal Ganglion Cell",
+        "synonyms": ["Retinal Ganglion Cell", "RGC", "rgc", "ganglion cell"],
+    },
+    "Muller_Glia": {
+        "display_name": "Müller Glia",
+        "synonyms": ["Muller Glia", "Müller Glia"],
+    },
+    "Rod_Photoreceptor": {
+        "display_name": "Rod Photoreceptor",
+        "synonyms": ["Rod Photoreceptor", "rod photoreceptor"],
+    },
+    "Amacrine_Cell": {
+        "display_name": "Amacrine Cell",
+        "synonyms": ["Amacrine Cell", "Amacrine", "AC"],
+    },
+    "Amacrine_Precursor": {
+        "display_name": "Amacrine Precursor",
+        "synonyms": ["AC", "amacrine precursor"],
+    },
+}
+
+
+class TestHarmonizeLabel:
+    """todo 8: shared harmonize_label chain — parallel A/B evaluation.
+
+    Path A = KB type-key exact match (normalized); Path B = synonyms reverse
+    lookup.  Both are evaluated independently; a conflict between the two
+    (different candidate sets) abstains with ``None`` (Oracle r3 MAJOR 3 —
+    sequential evaluation would let 'RPC' short-circuit on the KB key and
+    never reach the synonyms path).
+    """
+
+    # ── Single-path hits ──────────────────────────────────────────
+
+    def test_synonym_hit_resolves_canonical(self) -> None:
+        """Path B only: 'Retinal Ganglion Cell' is an RGC synonym."""
+        assert (
+            harmonize_label("Retinal Ganglion Cell", _HARMONIZE_KB, _HARMONIZE_SYNONYMS) == "RGC"
+        )
+
+    def test_normalization_hit_resolves_kb_key(self) -> None:
+        """Path A: 'Müller Glia' normalises (NFKD) to the KB key and both
+        paths agree on 'Muller_Glia'."""
+        assert harmonize_label("Müller Glia", _HARMONIZE_KB, _HARMONIZE_SYNONYMS) == "Muller_Glia"
+        # punctuation/case-insensitive path-A match, paths agree
+        assert (
+            harmonize_label("Rod-Photoreceptor", _HARMONIZE_KB, _HARMONIZE_SYNONYMS)
+            == "Rod_Photoreceptor"
+        )
+
+    def test_unresolvable_label_discarded(self) -> None:
+        """No KB key and no synonym list contains the label → None."""
+        assert harmonize_label("Foobar Cell", _HARMONIZE_KB, _HARMONIZE_SYNONYMS) is None
+
+    # ── Abstain paths ─────────────────────────────────────────────
+
+    def test_ambiguity_synonym_tie_abstains(self) -> None:
+        """Path B alone: 'AC' is a synonym of both Amacrine_Cell and
+        Amacrine_Precursor, and their KB marker counts tie (1 each) → None.
+        """
+        assert harmonize_label("AC", _HARMONIZE_KB, _HARMONIZE_SYNONYMS) is None
+
+    def test_a_b_conflict_abstains(self) -> None:
+        """'RPC' is BOTH a KB type key and a Broad_Progenitor synonym.
+
+        Sequential evaluation would hit the KB key first and never reach the
+        synonyms path — parallel evaluation sees A={RPC} vs B={RPC,
+        Broad_Progenitor} and abstains (Oracle r3 MAJOR 3).
+        """
+        kb = {
+            "RPC": {"markers": {"confirm": {"A": ["s"], "B": ["s"]}, "add": {}}},
+            "NRPC": {"markers": {"confirm": {"C": ["s"]}, "add": {}}},
+            "expert_rules": {},
+        }
+        synonyms = {
+            "RPC": {
+                "display_name": "Retinal Progenitor Cell",
+                "synonyms": ["RPC", "rpc", "retinal progenitor cell"],
+            },
+            "Broad_Progenitor": {
+                "display_name": "Progenitor",
+                "synonyms": ["Progenitor", "RPC"],
+            },
+        }
+        assert harmonize_label("RPC", kb, synonyms) is None
+
+    def test_empty_or_none_label_returns_none(self) -> None:
+        """Empty/None labels never resolve."""
+        assert harmonize_label("", _HARMONIZE_KB, _HARMONIZE_SYNONYMS) is None
+        assert harmonize_label(None, _HARMONIZE_KB, _HARMONIZE_SYNONYMS) is None
+
+    def test_missing_kb_or_synonyms_tolerated(self) -> None:
+        """None kb / None synonyms must not crash — the synonym path still
+        resolves without a kb and path A still resolves without synonyms."""
+        # 'AC' needs the KB for the marker-count tie-break → None, no crash
+        assert harmonize_label("AC", None, _HARMONIZE_SYNONYMS) is None
+        assert harmonize_label("Rod_Photoreceptor", _HARMONIZE_KB, None) == "Rod_Photoreceptor"
+
+    # ── Real retina data (the mandated ambiguity pair) ────────────
+
+    def test_real_retina_rpc_abstains_and_aliases_resolve(self) -> None:
+        """Real retina KB + synonyms: 'RPC' (KB key + Broad_Progenitor
+        synonym, synonyms.yaml L608-618) abstains; well-known aliases resolve.
+        """
+        from core.kb import load_kb, load_synonyms
+
+        kb = load_kb("retina")
+        synonyms = load_synonyms("retina")
+        assert harmonize_label("RPC", kb, synonyms) is None
+        assert harmonize_label("Retinal Ganglion Cell", kb, synonyms) == "RGC"
+        assert harmonize_label("Rod Photoreceptor", kb, synonyms) == "Rod_Photoreceptor"
+        assert harmonize_label("Müller Glia", kb, synonyms) == "Muller_Glia"
+        assert harmonize_label("definitely-not-a-cell", kb, synonyms) is None
+
+
+class TestFuseAllClustersHarmonization:
+    """todo 8: celltypist labels are harmonized per cluster, forwarded as
+    ``celltypist_suggestion``, and contribute ``harmonization_rate`` to the
+    quality dict (None when no raw labels exist — zero-division guard).
+    """
+
+    _ALL_SCORES = {
+        "0": {"RGC": 0.85},
+        "1": {"Amacrine_Cell": 0.60},
+        "2": {"Muller_Glia": 0.90},
+    }
+    _ALL_RULES = {"0": None, "1": None, "2": None}
+
+    def test_celltypist_harmonized_and_forwarded(self) -> None:
+        """Resolvable CellTypist labels are forwarded as the canonical
+        celltypist_suggestion; unresolvable ones abstain (None)."""
+        from unittest.mock import patch
+
+        celltypist_results = {
+            "0": "Retinal Ganglion Cell",  # → RGC (synonym hit)
+            "1": "Amacrine",  # → Amacrine_Cell (synonym hit)
+            "2": "Complete nonsense",  # → None (abstain)
+        }
+        captured: list = []
+        real = fuse_evidence
+
+        def _spy(*args, **kwargs):
+            captured.append(kwargs.get("celltypist_suggestion"))
+            return real(*args, **kwargs)
+
+        with patch("rna.utils.evidence_fusion.fuse_evidence", side_effect=_spy):
+            decisions, quality = fuse_all_clusters(
+                dict(self._ALL_SCORES),
+                dict(self._ALL_RULES),
+                kb=_HARMONIZE_KB,
+                celltypist_results=dict(celltypist_results),
+                synonyms=_HARMONIZE_SYNONYMS,
+                return_quality=True,
+            )
+        assert len(decisions) == 3
+        assert captured == ["RGC", "Amacrine_Cell", None], captured
+        assert quality["celltypist"] is True
+        assert quality["harmonization_rate"] == pytest.approx(2 / 3)
+
+    def test_harmonization_rate_none_when_no_raw_labels(self) -> None:
+        """Empty/None celltypist_results → harmonization_rate None (never
+        a division by zero), and quality['celltypist'] stays False."""
+        _, q_empty = fuse_all_clusters(
+            dict(self._ALL_SCORES),
+            dict(self._ALL_RULES),
+            kb=_HARMONIZE_KB,
+            celltypist_results={},
+            synonyms=_HARMONIZE_SYNONYMS,
+            return_quality=True,
+        )
+        assert q_empty["harmonization_rate"] is None
+        assert q_empty["celltypist"] is False
+
+        _, q_none = fuse_all_clusters(
+            dict(self._ALL_SCORES),
+            dict(self._ALL_RULES),
+            kb=_HARMONIZE_KB,
+            celltypist_results=None,
+            synonyms=_HARMONIZE_SYNONYMS,
+            return_quality=True,
+        )
+        assert q_none["harmonization_rate"] is None
+
+    def test_celltypist_all_unresolvable_rate_zero(self) -> None:
+        """Raw labels exist but none align to the KB → rate 0.0 (not None),
+        and every cluster's celltypist_suggestion abstains."""
+        from unittest.mock import patch
+
+        captured: list = []
+        real = fuse_evidence
+
+        def _spy(*args, **kwargs):
+            captured.append(kwargs.get("celltypist_suggestion"))
+            return real(*args, **kwargs)
+
+        with patch("rna.utils.evidence_fusion.fuse_evidence", side_effect=_spy):
+            _, quality = fuse_all_clusters(
+                dict(self._ALL_SCORES),
+                dict(self._ALL_RULES),
+                kb=_HARMONIZE_KB,
+                celltypist_results={"0": "zzz", "1": "yyy"},
+                synonyms=_HARMONIZE_SYNONYMS,
+                return_quality=True,
+            )
+        assert quality["harmonization_rate"] == 0.0
+        # one fuse_evidence call per cluster (3) — every cluster abstains
+        assert captured == [None, None, None]
