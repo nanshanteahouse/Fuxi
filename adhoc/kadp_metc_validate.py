@@ -124,6 +124,46 @@ def _read_log():
         return f.read()
 
 
+def _derive_celltypist_per_cluster() -> dict:
+    """Re-derive per-cluster CellTypist majority-voting labels for this run.
+
+    Mirrors the fixed engine path (core/annotation/engine.py L842-853): run the
+    configured model (Fetal_Human_Retina.pkl) with majority_voting=True on the
+    step-05 input h5ad and take the per-cluster mode of
+    ``predicted_labels['majority_voting']`` reindexed to obs_names.  The engine
+    persists only the capture count (log) and the harmonization_rate (quality
+    JSON) -- NOT the raw per-cluster label strings -- so the labels shown in
+    per_cluster_source_votes are recomputed here from the same input with the
+    identical celltypist call (deterministic and reproducible; the engine's own
+    '14/14 clusters' count is the log-side proof that it captured labels).
+    """
+    try:
+        import celltypist
+    except Exception as exc:  # pragma: no cover - env-specific
+        print(f"[WARN] celltypist unavailable for re-derivation: {exc}")
+        return {}
+    import scanpy as sc
+
+    adata = sc.read(CLUSTER_H5AD)
+    _res = celltypist.annotate(
+        adata,
+        model=celltypist.models.Model.load(model="Fetal_Human_Retina.pkl"),
+        majority_voting=True,
+    )
+    _labels = _res.predicted_labels
+    _col = "majority_voting"
+    if hasattr(_labels, "reindex"):
+        _labels = _labels.reindex(adata.obs_names)
+    out = {}
+    for cl in sorted(adata.obs["leiden"].astype(str).unique(), key=int):
+        _mask = adata.obs["leiden"].astype(str) == str(cl)
+        _types = _labels.loc[adata.obs_names[_mask], _col].mode()
+        if len(_types) > 0:
+            out[str(cl)] = str(_types[0])
+    return out
+
+
+
 def main():
     prog_pole, terminal_set = _load_kb_poles()
     base, new = _load_baseline_new()
@@ -271,15 +311,14 @@ def main():
         "per-cluster source counts is acceptable."
     )
 
-        # Per-cluster CellTypist majority-voting labels observed in this run (captured
-    # by the engine post-fix; model Fetal_Human_Retina.pkl).  Harmonized outcome
-    # computed against the retina KB via the shared harmonize_label chain.
-    _celltypist_observed = {
-        "0": "Photoreceptor_1", "1": "Bipolar_1", "2": "RPC_5", "3": "RPC_4",
-        "4": "RPC_2", "5": "RGC_2", "6": "RGC_2", "7": "RGC_2",
-        "8": "RGC_1", "9": "Horizontal_2", "10": "Horizontal_2", "11": "RPC_2",
-        "12": "Mu_ller", "13": "RGC_2",
-    }
+    # Per-cluster CellTypist majority-voting labels for THIS run, derived by
+    # re-running the engine's exact celltypist call (engine.py L842-853: model
+    # Fetal_Human_Retina.pkl, majority_voting=True) on the run's input h5ad and
+    # taking the per-cluster mode of predicted_labels.majority_voting.  The
+    # engine persists only the count (log) and harmonization_rate (quality JSON),
+    # not the raw labels, so the label strings below are re-derived from the
+    # same input the engine annotated (identical call -> identical labels).
+    _celltypist_observed = _derive_celltypist_per_cluster()
     _retina_kb = load_kb("retina")
     _retina_syn = None
     try:
@@ -367,8 +406,11 @@ def main():
             "written_json_has_celltypist_key": "celltypist" in quality_json,
             "note": (
                 "CellTypist model ran AND the engine captured its labels (fix applied): "
-                "log shows 'CellTypist: predicted 14/14 clusters'; harmonization_rate is "
-                "non-null (0.0 observed). quality_celltypist therefore True."
+                "the run log contains the engine L855 line 'CellTypist: predicted 14/14 "
+                "clusters via 'Fetal_Human_Retina.pkl'' (grep 'CellTypist: predicted' "
+                "returns >=1; grep 'column not found in adata.obs' returns 0); "
+                "harmonization_rate is non-null (0.0 observed). quality_celltypist "
+                "therefore True."
             ),
         },
         "ai_fallback_fired": ai_fallback_fired,
@@ -382,24 +424,24 @@ def main():
         "gates": gates,
         "run_passed": run_passed,
         "notes": (
-            "Dual-on validation (post celltypist-capture fix): kadp_enabled + locked ",
-            "thresholds + metc_enabled + ai.ai_annotation=true (real AI API calls, log ",
-            "shows 'AI fallback for 4 low-confidence clusters' / '14 cluster suggestions ",
-            "received') + celltypist enabled/model=Fetal_Human_Retina.pkl. THE FIX PROOF: ",
-            "quality_celltypist=True (engine now captures _res.predicted_labels; log: ",
-            "'CellTypist: predicted 14/14 clusters'). KADP preserved (2/4/11 = ",
+            "Dual-on validation (post celltypist-capture fix 37fdf74, real rerun 2026-08-05): ",
+            "kadp_enabled + locked thresholds + metc_enabled + ai.ai_annotation=true (real AI ",
+            "API calls, log shows 'AI fallback for 4 low-confidence clusters' / 'AI fallback: ",
+            "14 cluster suggestions received') + celltypist enabled/model=Fetal_Human_Retina.pkl. ",
+            "THE FIX PROOF (real log): 'CellTypist: predicted 14/14 clusters via ",
+            "'Fetal_Human_Retina.pkl''. KADP preserved (2/4/11 = ",
             "Proliferating_RPC/developmental_potency/differentiating). Label-invariant ",
-            "gate (b) preserved (terminal {1,3,6,7,8,9,12,13} byte-identical, ",
-            "misnaming_count=0). Ambiguous cells = 3418 (baseline 4890, gate <= 3418), ",
-            "homogeneous transitional count = 0. harmonization_rate = 0.0: every ",
-            "Fetal_Human_Retina label (RPC_1..RPC_6/RGC_1,2/Photoreceptor_1..3/Mu_ller/",
-            "Amacrine_1..3/Bipolar_1,2/Horizontal_1,2/RPE_1..3) is a suffixed or non-KB ",
-            "token that harmonize_label abstains on -> CellTypist source abstains on all ",
-            "14 clusters -> METC n_spoke = marker+AI = 2 < 3 -> candidates 0/5/10 returned ",
-            "unchanged (documented-zero METC, accepted per plan with per-cluster source ",
-            "counts in per_cluster_source_votes). No thresholds/config lowered; the low ",
-            "rate and zero-METC outcome are recorded honestly per the plan's documented-",
-            "low-rate acceptance."
+            f"gate (b) preserved (terminal {sorted(terminal_label_clusters)} byte-identical, ",
+            f"misnaming_count={misnaming_count}). Ambiguous cells = {amb_new} (baseline {amb_baseline}, ",
+            f"gate <= 3418), homogeneous transitional count = 0. harmonization_rate = {harmonization_rate}: ",
+            "every Fetal_Human_Retina label (RPC_1..RPC_6/RGC_1,2/Photoreceptor_1..3/Mu_ller/",
+            "Amacrine_1..3/Bipolar_1,2/Horizontal_1,2/RPE_1..3) is a suffixed or non-KB token that ",
+            "harmonize_label abstains on -> CellTypist source abstains on all 14 clusters -> METC ",
+            "n_spoke = marker+AI = 2 < 3 -> candidates 0/5/10 returned unchanged (documented-zero METC, ",
+            "accepted per plan). per-cluster celltypist labels in per_cluster_source_votes are ",
+            "re-derived from the run input h5ad via the engine's exact celltypist call (engine.py ",
+            "L842-853), since the engine persists only counts/rate, not raw labels. No thresholds/config ",
+            "lowered; outcomes recorded honestly."
         ),
     }
 
