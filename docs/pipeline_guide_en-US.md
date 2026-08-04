@@ -303,6 +303,80 @@ Supports multiple LLM backends: OpenAI API, DeepSeek, vLLM, Ollama, etc. (config
 If neither KB nor AI is available, the pipeline falls back to classic marker gene scoring — you only need to provide `CFG.marker_dict` (manually curated marker gene lists per cell type).
 
 > 💡 **Annotation output includes**: `cell_type` (primary label), `cell_subtype` (subtype), `cell_state` (state), `annot_confidence` (confidence level), and `annot_reasoning` (rationale).
+#### Advanced: KADP developmental-potency axis + METC multi-source arbitration (off by default)
+
+For ambiguous/transitional clusters in **developing tissue** (`CFG.tissue_maturity = "developing"` or `CFG.marker.developmental_mode = True`), two optional layers sit above KB mode: **Layer 3 — the KADP developmental-potency axis** (KADP Developmental Potency, names transitional precursors from precursor/terminal expression potency) and **Layer 4 — METC multi-source arbitration** (Multi-Evidence Transition Consensus, votes on candidates from multiple evidence sources). Both are **off by default**; when disabled, the fusion engine behaves bit-for-bit identically to baseline.
+
+##### Layer 3: KADP developmental-potency KB axis
+
+When a cluster is flagged as a candidate by transitional-state detection and demoted to `ambiguous` by multimodal ties (≥ `multi_peak_min_types` types with score ≥ `multi_peak_score_floor`), KADP checks whether its marker scoring is dominated by the **progenitor (Progenitor) pole**:
+
+1. **Two-pole derivation**: derive two poles from `kb["_hierarchy"]["categories"]` — progenitor pole = members of the `Progenitor` category; terminal pole = members of `Neuron` ∪ `Glia` ∪ `Non-neural`. Without `_hierarchy`, both poles are empty (KADP auto-disables).
+2. **score>0 filtering**: keep only pole members with marker score strictly > 0 — ghost members and zero-score entries cannot inflate either pole.
+3. **Three potency variants** (thresholds all configurable, see §9.3):
+   | Variant | Formula | Default threshold | Description |
+   |---------|---------|-------------------|-------------|
+   | `ratio` | `max_prog / max(max_term, epsilon)` | `2.0` | precursor/terminal score ratio |
+   | `abs` | `max_prog` (requires `max_prog > max_term`) | `0.6` | precursor absolute score, with **saturation guard**: precursor must strictly exceed terminal, preventing globally saturated data from being misjudged |
+   | `gap` | `max_prog - max_term` | `0.1` | precursor minus terminal score |
+4. **pass combination** (`evaluate_passes`, single source of truth): `passes_ratio OR (use_gap_criterion AND passes_gap) OR passes_abs`. The `gap` variant does not participate by default (`use_gap_criterion=False`).
+5. **Naming condition**: `max_prog > 0`; the argmax type of the progenitor pole becomes the candidate name (ties broken by lexicographically larger type name, for determinism).
+
+On successful naming, the output is:
+- `method = "developmental_potency"`, `cell_state` mapped to `differentiating`
+- `review_reason = "kadp_precursor"` (enters review_queue)
+- `potency` **three-value dict**: `{"ratio": ..., "abs": ..., "gap": ...}` — always all three values; `None` if any step misses, never just a single float.
+
+##### Layer 4: METC multi-source arbitration
+
+`ambiguous` / `transition_state` candidates not named by KADP go to METC voting:
+
+1. **4 evidence sources**: KB marker scoring (`marker`), expert rules (`expert`), AI suggestions (`ai`), CellTypist predictions (`celltypist`).
+2. **Voting semantics**: a vote = non-empty **and** KB-resolvable label; abstention (`None`) **is not a vote**. AI and CellTypist labels first pass through the shared **`harmonize_label` resolution chain** to normalize into canonical KB keys — path A (exact KB key match) and path B (synonym reverse lookup) are evaluated **in parallel**; if the two paths hit different candidate sets (e.g. `"RPC"` is both a KB key and a synonym of `Broad_Progenitor`) → conflict → **abstain**.
+3. **Branch rules** (by number of speaking sources `n_spoke` and number of distinct labels `distinct`):
+   - `n_spoke < metc_min_sources` (default 3) → no arbitration, candidate returned unchanged
+   - `distinct == 1` → `metc_consensus`: all sources agree, rescued as the single consensus label
+   - `distinct == 2` → `metc_2way`: two-way deadlock, stays `Unknown`/ambiguous
+   - `distinct >= 3` → `metc_divergent`: outputs `transitional: T1/T2` (ordered by vote count, source priority breaks ties)
+4. Every arbitration generates a fresh `source_votes` dict (`{"marker", "expert", "ai", "celltypist": label or null}`), persisted with the decision.
+
+> ⚠️ **Live-run note**: the `expert` source is **structurally always None** inside `fuse_evidence` (Tier-0 already consumes or yields to expert rules), so the real pipeline runs on marker + AI + CellTypist **three sources**; `expert` is only voted explicitly in `_metc_arbitrate`'s unit tests.
+
+##### Trigger conditions & candidate exit semantics
+
+- Both layers activate only inside the upper-level `allows_transitions` context: `allows_transitions = bool(transition_context) or _dev_mode` — `transition_context` is mapped from `CFG.tissue_maturity` (`"developing"` → `"developmental"`, `"tumor"` → `"tumor"`); `_dev_mode = CFG.marker.developmental_mode`.
+- KADP names only candidates with `method == "ambiguous"`; METC arbitrates the remaining `ambiguous` / `transition_state` candidates.
+- **Candidate exit semantics**: when KADP misses or METC does not arbitrate (`n_spoke < metc_min_sources`), the candidate (`ambiguous` / `transition`) is **returned unchanged** — it never falls into the tier loop below; only non-ambiguous/non-transitional candidates go through tiers 1-4. With everything off by default, fusion results are bit-for-bit identical to baseline.
+
+##### Calibration harness
+
+`adhoc/kadp_metc_calibration.py` (one-off, read-only script, not part of the pipeline):
+
+```bash
+set -a && source .env && set +a
+python adhoc/kadp_metc_calibration.py --gse GSE246169 --subproject fetal \
+    --output adhoc/output/kadp_calibration.json
+```
+
+Recomputes KADP decisions over a ratio/abs/gap threshold grid (96 combinations) and enforces the **F5 label invariant gate**: gate (a) the developing target family must be named; gate (b) clusters with baseline terminal labels must **not** be renamed to progenitor-pole members by KADP (misnaming count = 0). **No silent threshold lowering**: if no grid point satisfies F5, the harness records `recommended_lock = null` and explicitly reports failure — it never auto-lowers thresholds to make the gate pass.
+
+##### CellTypist model selection
+
+- Requires the extra: `pip install "fuxi[celltypist]"` (`celltypist>=1.6`).
+- `Fetal_Human_Retina.pkl` is empirically validated on human fetal neuroretina/RPE data (GSE246169 fetal: predictions for all 14/14 clusters).
+- ⚠️ This model's vocabulary carries **digit suffixes** (e.g. `RPC_1`, `RGC_2`, `Photoreceptor_3`); on exact-match against KB keys, `harmonize_label` **abstains** on every label → `harmonization_rate` may be 0 and METC degrades to three-source operation — this is a **documented acceptable path** (`harmonization_documented_ok`).
+- `05_annotation_quality.json` contains the `harmonization_rate` key (`null` when there are no raw CellTypist labels, not 0).
+
+##### Quality output & review_queue
+
+`05_annotation_quality.json` is captured from the fusion quality dict of the **second pass (post-AI-enhancement)** (if AI fallback triggers); `review_queue` gains new reasons:
+
+| reason | meaning |
+|--------|---------|
+| `kadp_precursor` | transitional precursor named by KADP |
+| `metc_divergent` | METC divergence → transitional T1/T2 |
+| `metc_2way` | METC two-source deadlock (Unknown) |
+| `metc_consensus` | METC all-source agreement rescue |
 
 ### Step 06: Subclustering (optional)
 
@@ -1030,6 +1104,19 @@ CFG.ai.ai_annotation = True
 CFG.ai.model = "deepseek-chat"              # Model name
 CFG.ai.api_base = "https://api.deepseek.com/v1"
 ```
+
+**KADP / METC supplementary fields** (`annotation:` namespace, v4.x+, all off by default):
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `annotation.kadp_enabled` | bool | `False` | Enables Layer 3 KADP developmental-potency axis: names progenitor-dominated ambiguous multimodal clusters as differentiating precursors |
+| `annotation.kadp_ratio_threshold` | float | `2.0` | ratio variant pass threshold: `max_prog / max(max_term, epsilon)` |
+| `annotation.kadp_abs_threshold` | float | `0.6` | abs variant pass threshold: `max_prog` (requires `max_prog > max_term` saturation guard) |
+| `annotation.kadp_gap_threshold` | float | `0.1` | gap variant pass threshold: `max_prog - max_term` |
+| `annotation.use_gap_criterion` | bool | `False` | When True, the gap variant joins the pass combination (default ratio/abs only) |
+| `annotation.metc_enabled` | bool | `False` | Enables Layer 4 METC multi-source arbitration (marker/expert/AI/CellTypist) |
+| `annotation.metc_min_sources` | int | `3` | Minimum speaking sources to trigger arbitration (abstentions don't count) |
+| `annotation.metc_min_distinct_transition` | int | `3` | Distinct vote count ≥ this outputs transitional T1/T2 (otherwise 2-way deadlock) |
 
 ### 9.4 Quality control
 
