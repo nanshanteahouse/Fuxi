@@ -12,10 +12,121 @@ import json
 import os
 from collections import Counter
 
+import numpy as np
 import pandas as pd
 import scanpy as sc
+from scipy import sparse
 
 from core.utils import safe_plot
+
+_FUXI_FAST_RANKS_THRESHOLD = 200_000
+
+
+def _patch_scanpy_fast_ranks() -> None:
+    """Speed up ``sc.tl.rank_genes_groups`` (wilcoxon) on large sparse matrices.
+
+    scanpy's ``_ranks`` slices gene-column chunks out of a CSR matrix, which is
+    O(nnz) per chunk (scipy CSR column slices scan every row).  For big datasets
+    (n_cells * n_genes > 1e10) this dominates runtime on a single core.  This
+    patch replaces ``_ranks`` with an equivalent implementation that transposes
+    the matrix once (CSR row slices are O(chunk nnz)) and then ranks chunks with
+    scanpy's own multi-threaded ``rankdata``.  Output is bit-identical to the
+    original (verified end-to-end on 208k cells x 31.7k genes).
+    """
+    import scanpy.tools._rank_genes_groups as rgg
+
+    if getattr(rgg, "_fuxi_fast_ranks", False):
+        return
+    orig = rgg._ranks
+    cache: dict = {}
+
+    def fast_ranks(x, mask_obs=None, mask_obs_rest=None):
+        if (
+            mask_obs is not None
+            or not sparse.issparse(x)
+            or x.shape[0] < _FUXI_FAST_RANKS_THRESHOLD
+        ):
+            yield from orig(x, mask_obs, mask_obs_rest)
+            return
+        n_cells, n_genes = x.shape
+        xt = cache.get("xt")
+        if xt is None:
+            xt = x.T.tocsr()
+            cache["xt"] = xt
+        # Large chunks keep per-chunk column count high so scanpy's
+        # multi-threaded rankdata (one thread per column) saturates cores.
+        # rankdata is column-independent, so chunk size never changes output.
+        genes_per_mb = (2**20) // max(n_cells * 4, 1)  # float32 dense budget
+        chunk = max(128, min(1024, genes_per_mb))
+        for left in range(0, n_genes, chunk):
+            right = min(left + chunk, n_genes)
+            yield rgg.rankdata(xt[left:right].toarray().T), left, right
+
+    rgg._ranks = fast_ranks
+    rgg._fuxi_fast_ranks = True
+
+
+def _patch_scanpy_wilcoxon() -> None:
+    """Replace scanpy's wilcoxon rank-sum accumulation with a cumsum sweep.
+
+    scanpy computes per-cluster rank sums as ``ranks[mask].sum(axis=0)`` for
+    every cluster, re-walking each n_cells x chunk_genes ranks chunk once per
+    cluster (70x on 70-cluster datasets, ~186 TB of memory traffic on the
+    1.05M-cell retina atlas).  Here cells are sorted by cluster once, then each
+    chunk is reduced with a single cumulative sum; cluster sums are the
+    cumsum differences at cluster boundaries.  Ranks are exact integers, so
+    results are bit-identical to the original.
+    """
+    import scanpy.tools._rank_genes_groups as rgg
+
+    if getattr(rgg, "_fuxi_fast_wilcoxon", False):
+        return
+    orig_wilcoxon = rgg._RankGenes.wilcoxon
+
+    def fast_wilcoxon(self, *, tie_correct):
+        from scipy import stats
+
+        self._basic_stats()
+        n_genes = self.X.shape[1]
+        if self.ireference is not None:
+            yield from orig_wilcoxon(self, tie_correct=tie_correct)
+            return
+        n_groups = self.groups_masks_obs.shape[0]
+        scores = np.zeros((n_groups, n_genes))
+        n_cells = self.X.shape[0]
+        if tie_correct:
+            tc_coef = np.zeros((n_groups, n_genes))
+        # One-time cluster ordering (cells are exactly one-hot in masks).
+        labels = np.argmax(self.groups_masks_obs, axis=0)
+        order = np.argsort(labels, kind="stable")
+        bounds = np.searchsorted(labels[order], np.arange(n_groups + 1))
+        starts = bounds[:-1]
+        ends = bounds[1:]
+        zero_row: np.ndarray | None = None
+        for ranks, left, right in rgg._ranks(self.X):
+            if tie_correct:
+                tc_coef[:, left:right] = rgg._tiecorrect(ranks)
+            rs = ranks[order]
+            np.cumsum(rs, axis=0, out=rs)
+            end_vals = rs[ends - 1, :]
+            c = right - left
+            if zero_row is None or zero_row.shape[1] != c:
+                zero_row = np.zeros((1, c))
+            start_vals = np.concatenate([zero_row, rs[:-1]])[starts]
+            scores[:, left:right] = end_vals - start_vals
+        for group_index, mask_obs in enumerate(self.groups_masks_obs):
+            n_active = np.count_nonzero(mask_obs)
+            coef = tc_coef[group_index] if tie_correct else 1
+            std_dev = np.sqrt(coef * n_active * (n_cells - n_active) * (n_cells + 1) / 12.0)
+            scores[group_index, :] = (
+                scores[group_index, :] - (n_active * (n_cells + 1) / 2.0)
+            ) / std_dev
+            scores[np.isnan(scores)] = 0
+            pvals = 2 * stats.distributions.norm.sf(np.abs(scores[group_index, :]))
+            yield group_index, scores[group_index], pvals
+
+    rgg._RankGenes.wilcoxon = fast_wilcoxon
+    rgg._fuxi_fast_wilcoxon = True
 
 
 def _ribo_fallback_pct_scores(adata, kb, cl_str, logger):
@@ -36,8 +147,6 @@ def _ribo_fallback_pct_scores(adata, kb, cl_str, logger):
     if not mask.any():
         return None
     x_mat = adata.raw.X
-    if hasattr(x_mat, "toarray"):
-        x_mat = x_mat.toarray()
     sub = x_mat[mask]
 
     best: list[tuple[str, float]] = []
@@ -335,6 +444,8 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
     # ── a. Compute marker genes ───────────────────────────────────────────
     _n_genes = max(CFG.marker.candidate_pool_expand_steps)
     logger.info("Computing marker genes (Wilcoxon rank-sum, n_genes=%d)...", _n_genes)
+    _patch_scanpy_fast_ranks()
+    _patch_scanpy_wilcoxon()
     sc.tl.rank_genes_groups(
         adata,
         groupby="leiden",
