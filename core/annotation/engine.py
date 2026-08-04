@@ -926,9 +926,25 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
     ai_enabled = getattr(CFG.ai, "enabled", False)
     ai_annot_on = getattr(CFG.ai, "ai_annotation", False)
 
-    low_conf_clusters = [
-        d for d in decisions if d.confidence in ("low", "unknown") and d.method != "ambiguous"
-    ]
+    # Two-segment selection: `_l1` is byte-identical to the baseline filter;
+    # `_l2` additionally pulls ambiguous / transition_state candidates (incl.
+    # confidence="transition") into the AI fallback when KADP or METC is
+    # enabled.  With both flags off `_l2` is empty and the selection is
+    # exactly the baseline.
+    kadp_enabled = getattr(CFG.annotation, "kadp_enabled", False)
+    metc_enabled = getattr(CFG.annotation, "metc_enabled", False)
+    _l1 = [d for d in decisions if d.confidence in ("low", "unknown") and d.method != "ambiguous"]
+    _l2 = (
+        []
+        if not (kadp_enabled or metc_enabled)
+        else [
+            d
+            for d in decisions
+            if d.confidence in ("low", "unknown", "transition")
+            and d.method in ("ambiguous", "transition_state")
+        ]
+    )
+    low_conf_clusters = _l1 + [d for d in _l2 if d not in _l1]
     ai_results = {}
 
     if low_conf_clusters and ai_enabled and ai_annot_on:

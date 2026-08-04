@@ -12,7 +12,7 @@ import os
 import sys
 import tempfile
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
@@ -26,6 +26,7 @@ from core.annotation.engine import (
     _map_cell_state,
     _top_consensus_markers,
     _write_quality_report,
+    run_unified_annotation,
 )
 from core.annotation.scoring import Score
 from rna.utils.evidence_fusion import DiagnosticInfo, FusionDecision
@@ -949,3 +950,262 @@ def test_T10_review_queue_reason_passthrough() -> None:
             # non-multi-peak: no tie detail
             assert entry["n_tied_types"] == 0
             assert entry["top_types"] == []
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  F1 — AI-fallback gate: ambiguous + transition_state inclusion
+#  (annotation-kadp-metc todo 2).  The two-segment ``low_conf_clusters``
+#  selection must pull ambiguous / transition_state candidates (incl.
+#  confidence="transition") into the AI fallback only when kadp/metc are
+#  enabled; with both off it stays byte-identical to the baseline
+#  ``confidence in ("low","unknown") and method != "ambiguous"`` rule.
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _make_ai_gate_adata() -> AnnData:
+    """3 leiden clusters with cluster-distinct expression (real rank_genes_groups)."""
+    rng = np.random.RandomState(0)
+    var_names = ["RBPMS", "POU4F1", "ONECUT1", "GENE_01", "GENE_02", "GENE_03"]
+    n_cells = 90
+    x = rng.poisson(lam=1.0, size=(n_cells, len(var_names))).astype(np.float32)
+    adata = AnnData(x)
+    adata.var_names = var_names
+    adata.obs["leiden"] = np.repeat(["0", "1", "2"], 30)
+    c0 = adata.obs["leiden"] == "0"
+    c1 = adata.obs["leiden"] == "1"
+    adata.X[c0, 0] = adata.X[c0, 0] + rng.poisson(lam=20.0, size=int(c0.sum())).astype(np.float32)
+    adata.X[c0, 1] = adata.X[c0, 1] + rng.poisson(lam=20.0, size=int(c0.sum())).astype(np.float32)
+    adata.X[c1, 2] = adata.X[c1, 2] + rng.poisson(lam=20.0, size=int(c1.sum())).astype(np.float32)
+    adata.obsm["X_umap"] = rng.randn(n_cells, 2).astype(np.float32)
+    return adata
+
+
+def _make_ai_gate_cfg(
+    tmp_path, kadp_enabled: bool = False, metc_enabled: bool = False
+) -> SimpleNamespace:
+    """Plain-value config: AI on, celltypist off, optional kadp/metc flags."""
+    table_dir = tmp_path / "results" / "tables"
+    figure_dir = tmp_path / "figures"
+    table_dir.mkdir(parents=True, exist_ok=True)
+    figure_dir.mkdir(parents=True, exist_ok=True)
+    return SimpleNamespace(
+        tissue_kb="retina",
+        tissue="retina",
+        species="human",
+        target_class="",
+        target_order="",
+        tissue_maturity="",
+        table_dir=str(table_dir),
+        figure_dir=str(figure_dir),
+        interactive=False,
+        marker=SimpleNamespace(
+            candidate_pool_expand_steps=[5],
+            expert_rule_top_n=0,
+            expert_rule_pval_cutoff=0.0,
+            expert_rule_strictness="default",
+            developmental_mode=False,
+        ),
+        annotation=SimpleNamespace(
+            method="kb_unified",
+            celltypist=SimpleNamespace(enabled=False, model="", majority_voting=False),
+            kadp_enabled=kadp_enabled,
+            metc_enabled=metc_enabled,
+        ),
+        ai=SimpleNamespace(enabled=True, ai_annotation=True, unconstrained_annotation=False),
+        plot=SimpleNamespace(figure_dpi=150, figure_format="pdf", figure_transparent=True),
+        execution=SimpleNamespace(random_seed=42),
+    )
+
+
+def _make_ai_gate_kb() -> dict:
+    """Minimal retina-like KB without ``_hierarchy`` (skips the tiered block)."""
+    return {
+        "RGC": {
+            "markers": {"confirm": {"RBPMS": ["PMID1"]}},
+            "negative_markers": [],
+            "species": ["human"],
+            "synonyms": [],
+        },
+        "Amacrine": {
+            "markers": {"confirm": {"TFAP2A": ["PMID2"]}},
+            "negative_markers": [],
+            "species": ["human"],
+            "synonyms": [],
+        },
+        "expert_rules": {},
+        "Broad_Neuron": {},
+    }
+
+
+def _ai_gate_canned_scores() -> dict:
+    """Non-zero canned scores: retry path never fires, deterministic fusion input."""
+    return {
+        "RGC": Score(
+            score=0.60,
+            p_value=0.05,
+            method="test",
+            n_markers_found=2,
+            negative_penalty=False,
+            tier="L2",
+            private_markers_hit=0,
+            consensus="high",
+            n_sources=1,
+        ),
+        "Amacrine": Score(
+            score=0.55,
+            p_value=0.05,
+            method="test",
+            n_markers_found=1,
+            negative_penalty=False,
+            tier="L2",
+            private_markers_hit=0,
+            consensus="",
+            n_sources=1,
+        ),
+    }
+
+
+def _ai_gate_decisions() -> list:
+    """Canned fusion output for clusters 0/1/2: ambiguous, transition_state, high."""
+    ambiguous = FusionDecision(
+        cell_type="Unknown",
+        confidence="low",
+        score=0.0,
+        method="ambiguous",
+        n_markers_found=0,
+        ai_agreed=False,
+        ai_suggested="",
+        explanation="Multi-peak tie (RGC/Amacrine 0.9).",
+        alternative_rules=[],
+        diagnostic=DiagnosticInfo(
+            category="ambiguous",
+            top_competitors=[
+                {"cell_type": "RGC", "score": 0.9},
+                {"cell_type": "Amacrine", "score": 0.9},
+            ],
+            detail="multi-peak",
+        ),
+    )
+    transition = FusionDecision(
+        cell_type="transitional: RGC/Amacrine",
+        confidence="transition",
+        score=0.5,
+        method="transition_state",
+        n_markers_found=2,
+        ai_agreed=False,
+        ai_suggested="",
+        explanation="Top-2 same lineage, delta below threshold.",
+        alternative_rules=[],
+    )
+    high = FusionDecision(
+        cell_type="RGC",
+        confidence="high",
+        score=0.9,
+        method="marker_scoring_high",
+        n_markers_found=3,
+        ai_agreed=False,
+        ai_suggested="",
+        explanation="Strong RBPMS/POU4F1.",
+        alternative_rules=[],
+        cell_category="Broad_Neuron",
+        tier="L2",
+    )
+    return [ambiguous, transition, high]
+
+
+def _run_ai_gate_engine(adata, cfg, ai_response: str):
+    """Drive the real ``run_unified_annotation`` with canned fusion + AI."""
+    decisions = _ai_gate_decisions()
+    captured_ai: dict = {}
+    fuse_calls: list = []
+
+    def _fake_fuse_all(*args, **kwargs):
+        fuse_calls.append(kwargs)
+        if "ai_results" in kwargs:
+            captured_ai.update(kwargs["ai_results"])
+        if len(fuse_calls) == 1:
+            return list(decisions), {}
+        return list(decisions)
+
+    logger = MagicMock()
+    with (
+        patch("core.kb.load_kb", return_value=_make_ai_gate_kb()),
+        patch(
+            "core.annotation.scoring.score_cluster_against_kb",
+            side_effect=lambda *a, **k: dict(_ai_gate_canned_scores()),
+        ),
+        patch("rna.utils.evidence_fusion.fuse_all_clusters", side_effect=_fake_fuse_all),
+        patch("core.ai.caller.ai_query", return_value=ai_response) as ai_mock,
+        patch("core.annotation.engine.safe_plot"),
+    ):
+        result = run_unified_annotation(adata, cfg, logger)
+    return result, captured_ai, fuse_calls, ai_mock
+
+
+def test_ai_fallback_gate_includes_ambiguous_decision(tmp_path) -> None:
+    """F1: ``method='ambiguous'`` enters low_conf_clusters when kadp is on.
+
+    Enabled → AI fallback fires and the ambiguous cluster receives an
+    ``ai_results`` entry; disabled → baseline parity (excluded, no AI call).
+    """
+    ai_response = json.dumps(
+        {
+            "0": {"cell_type": "Amacrine"},
+            "1": {"cell_type": "RGC"},
+        }
+    )
+
+    # ── enabled (kadp_enabled=True) ──
+    cfg_on = _make_ai_gate_cfg(tmp_path / "on", kadp_enabled=True)
+    result, captured_ai, fuse_calls, ai_mock = _run_ai_gate_engine(
+        _make_ai_gate_adata(), cfg_on, ai_response
+    )
+    assert result is not None
+    assert ai_mock.called, "ambiguous candidate must be gated into the AI fallback"
+    assert len(fuse_calls) == 2, "second-pass fusion with ai_results must run"
+    assert captured_ai.get("0") == "Amacrine", captured_ai
+    assert captured_ai.get("1") == "RGC", captured_ai
+
+    # ── disabled (baseline parity) ──
+    cfg_off = _make_ai_gate_cfg(tmp_path / "off")
+    result_off, captured_ai_off, fuse_calls_off, ai_mock_off = _run_ai_gate_engine(
+        _make_ai_gate_adata(), cfg_off, ai_response
+    )
+    assert result_off is not None
+    assert not ai_mock_off.called, "baseline: ambiguous must stay out of low_conf_clusters"
+    assert captured_ai_off == {}
+    assert len(fuse_calls_off) == 1, "no second-pass fusion when fallback is skipped"
+
+
+def test_ai_fallback_gate_includes_transition_state_decision(tmp_path) -> None:
+    """F1: ``method='transition_state'`` (confidence='transition') enters the
+    AI fallback when metc is on — the confidence value the baseline filter
+    never matched.  Disabled → baseline parity (excluded, no AI call).
+    """
+    ai_response = json.dumps(
+        {
+            "0": {"cell_type": "Amacrine"},
+            "1": {"cell_type": "RGC"},
+        }
+    )
+
+    # ── enabled (metc_enabled=True) ──
+    cfg_on = _make_ai_gate_cfg(tmp_path / "on", metc_enabled=True)
+    result, captured_ai, fuse_calls, ai_mock = _run_ai_gate_engine(
+        _make_ai_gate_adata(), cfg_on, ai_response
+    )
+    assert result is not None
+    assert ai_mock.called, "transition_state candidate must be gated into the AI fallback"
+    assert len(fuse_calls) == 2
+    assert captured_ai.get("1") == "RGC", captured_ai
+    assert captured_ai.get("0") == "Amacrine", captured_ai
+
+    # ── disabled (baseline parity) ──
+    cfg_off = _make_ai_gate_cfg(tmp_path / "off")
+    result_off, captured_ai_off, fuse_calls_off, ai_mock_off = _run_ai_gate_engine(
+        _make_ai_gate_adata(), cfg_off, ai_response
+    )
+    assert result_off is not None
+    assert not ai_mock_off.called, "baseline: transition_state must stay out of low_conf_clusters"
+    assert captured_ai_off == {}
+    assert len(fuse_calls_off) == 1
