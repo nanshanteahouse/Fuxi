@@ -229,7 +229,9 @@ expert_rules:
   condition:
     markers_present:
       RBPMS: 1.0
-      SLC17A6: 0.5
+    corroborators:
+    - NEFL
+    - SNCG
   action: RGC
   source: tran2019
   notes: RBPMS is the gold-standard pan-RGC marker (100% of RGCs, including ipRGCs)
@@ -251,6 +253,11 @@ expert_rules:
   condition:
     markers_present:
       SPP1: 1.0
+    corroborators:
+    - RBPMS
+    - POU4F1
+    - NEFH
+    - SMI-32
   action: RGC_Alpha
   source: tran2019
   notes: SPP1 (osteopontin) labels αRGCs (also M2 ipRGCs)

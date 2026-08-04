@@ -105,9 +105,18 @@ def apply_expert_rules(
             "condition": {
                 "markers_present": {"GENE": min_logFC, ...},
                 "markers_absent": ["GENE", ...],   # optional
+                "corroborators": ["GENE", ...],    # optional (any-of)
             },
             "action": "CellTypeKey",
         }
+
+    A rule whose ``markers_present`` all pass may optionally demand
+    corroboration: when ``condition.corroborators`` is non-empty, at least
+    one of those genes must also appear in the *same* top-N, pval-filtered
+    ``de_subset`` used for the primary marker check (identical subset,
+    including the silent pval skip when ``pvals_adj`` is absent), otherwise
+    the match is recorded as "uncorroborated".  Rules without
+    ``corroborators`` are always treated as corroborated (legacy behavior).
 
     Parameters
     ----------
@@ -130,7 +139,11 @@ def apply_expert_rules(
         *matched_action* — The winning rule's ``"action"`` key, or ``None``
         if no rule fired.
         *all_matched_rules* — Every rule that passed, in priority order
-        (highest first).  Empty list when nothing matched.
+        (highest first).  Each entry is a copy of the KB rule dict carrying
+        two extra metadata keys: ``"corroborated"`` (bool) and
+        ``"corroborators_hit"`` (list of corroborating genes found in the
+        same ``de_subset``; empty for rules without corroborators).  Empty
+        list when nothing matched.
     """
     rules = kb.get("expert_rules", [])
     if not rules:
@@ -164,6 +177,7 @@ def apply_expert_rules(
         condition = rule.get("condition", {})
         markers_present: Dict[str, float] = condition.get("markers_present", {})
         markers_absent: List[str] = condition.get("markers_absent", [])
+        corroborators: List[str] = condition.get("corroborators", [])
 
         # All required markers must be in cluster markers at sufficient logFC.
         passed = True
@@ -181,8 +195,19 @@ def apply_expert_rules(
                 passed = False
                 break
 
-        if passed:
-            all_matched.append(rule)
+        if not passed:
+            continue
+
+        # Any-of corroboration against the *same* de_subset used for the
+        # primary marker check.  Rules without corroborators are trivially
+        # corroborated (legacy behavior preserved).
+        corroborators_hit = [g for g in corroborators if g in cluster_genes]
+        corroborated = not corroborators or bool(corroborators_hit)
+
+        matched_rule = dict(rule)
+        matched_rule["corroborated"] = corroborated
+        matched_rule["corroborators_hit"] = corroborators_hit
+        all_matched.append(matched_rule)
 
     if not all_matched:
         return None, []
