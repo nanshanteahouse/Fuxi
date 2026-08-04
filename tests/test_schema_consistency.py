@@ -329,7 +329,9 @@ class TestClusteringSchemaConsistency:
         ("stability_n_seeds", "core/cluster/evaluation/enrichment.py", 76),
         ("stability_leiden_n_iterations", "core/cluster/evaluation/stability.py", 52),
         ("leiden_flavor", "core/cluster/evaluation/enrichment.py", 78),
-        ("umap_selection_metric", "rna/steps/04_cluster_umap.py", 964),
+        # Line number drifts with rna/steps/04_cluster_umap.py; moved 964→977
+        # by commit 084021f (2026-08-04).
+        ("umap_selection_metric", "rna/steps/04_cluster_umap.py", 977),
     ]
 
     def test_clustering_defaults_match_code_fallbacks(self) -> None:
