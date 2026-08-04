@@ -304,6 +304,82 @@ CFG.ai.ai_annotation = True
 
 > 💡 **注释结果包含**：`cell_type`（主类型）、`cell_subtype`（亚型）、`cell_state`（状态）、`annot_confidence`（置信度）、`annot_reasoning`（推理过程）。
 
+#### 进阶机制：发育状态 KADP 轴 + METC 多源仲裁（默认关闭）
+
+针对**发育中组织**（`CFG.tissue_maturity = "developing"` 或 `CFG.marker.developmental_mode = True`）的歧义/过渡态聚类，KB 模式之上还有两个可选的补充层：**层 3 KADP 发育状态轴**（KADP Developmental Potency，用前体/终末表达势命名过渡前体）与**层 4 METC 多源仲裁**（Multi-Evidence Transition Consensus，用多个证据源投票裁决候选）。两者默认**全部关闭**，关闭时融合引擎行为与基线逐位一致。
+
+##### 层 3：KADP 发育状态 KB 轴
+
+当一个聚类被过渡态检测判定为候选，且多峰并列（≥ `multi_peak_min_types` 个类型 score ≥ `multi_peak_score_floor`）降级为 `ambiguous` 后，KADP 检查其 marker 打分是否由**前体（Progenitor）极**主导：
+
+1. **两极派生**：从 `kb["_hierarchy"]["categories"]` 派生两个极——前体极 = `Progenitor` 类成员；终末极 = `Neuron` ∪ `Glia` ∪ `Non-neural` 三类成员。无 `_hierarchy` 时两极均为空（KADP 自动失效）。
+2. **score>0 过滤**：只保留 marker 打分严格 > 0 的极成员——幽灵成员与零分条目不会抬高任一极。
+3. **三变体 potency**（阈值均可配置，见 9.3）：
+   | 变体 | 公式 | 默认阈值 | 说明 |
+   |------|------|---------|------|
+   | `ratio` | `max_prog / max(max_term, epsilon)` | `2.0` | 前体/终末得分比值 |
+   | `abs` | `max_prog`（要求 `max_prog > max_term`） | `0.6` | 前体绝对得分，带**饱和守卫**：前体必须严格高于终末，防止整体饱和数据误判 |
+   | `gap` | `max_prog - max_term` | `0.1` | 前体与终末得分之差 |
+4. **pass 组合**（`evaluate_passes`，单一真源）：`passes_ratio OR (use_gap_criterion AND passes_gap) OR passes_abs`。`gap` 变体默认不参与（`use_gap_criterion=False`）。
+5. **命名条件**：`max_prog > 0`；取前体极 argmax 类型为候选名（同分时按类型名字典序取大者，保证确定性）。
+
+命名成功后输出：
+- `method = "developmental_potency"`，`cell_state` 映射为 `differentiating`
+- `review_reason = "kadp_precursor"`（进入 review_queue）
+- `potency` **三值 dict**：`{"ratio": ..., "abs": ..., "gap": ...}`——永远全三值；任一环节未命中则为 `None`，绝不只留单个浮点。
+
+##### 层 4：METC 多源仲裁
+
+KADP 未命名的 `ambiguous` / `transition_state` 候选进入 METC 投票：
+
+1. **4 个证据源**：KB marker 打分（`marker`）、专家规则（`expert`）、AI 建议（`ai`）、CellTypist 预测（`celltypist`）。
+2. **投票语义**：一票 = 非空**且**能被 KB 解析的标签；弃权（abstention / `None`）**不算票**。AI 与 CellTypist 标签先经共享的 **`harmonize_label` 解析链**归一化为规范 KB key——路径 A（KB key 精确匹配）与路径 B（synonyms 反查）**并行**评估，两路命中不同候选集（如 `"RPC"` 既是 KB key 又是 `Broad_Progenitor` 的同义词）→ 冲突 → **弃权**。
+3. **分支规则**（按发言源数 `n_spoke` 与不同标签数 `distinct`）：
+   - `n_spoke < metc_min_sources`（默认 3）→ 不仲裁，候选原样返回
+   - `distinct == 1` → `metc_consensus`：全源一致，救回为唯一共识标签
+   - `distinct == 2` → `metc_2way`：双雄僵局，保持 `Unknown`/ambiguous
+   - `distinct >= 3` → `metc_divergent`：输出 `transitional: T1/T2`（按票数排序，源优先级打破平票）
+4. 每次仲裁都生成新的 `source_votes` dict（`{"marker","expert","ai","celltypist": 标签或 null}`），随决策落盘。
+
+> ⚠️ **实际运行注记**：`expert` 源在 `fuse_evidence` 内**结构性恒为 None**（Tier-0 已消费或让位专家规则），因此真实管线以 marker + AI + CellTypist **三源**运行；`expert` 源仅在 `_metc_arbitrate` 的单元测试中被显式投票。
+
+##### 触发条件与候选出口语义
+
+- 两层都只在上层 `allows_transitions` 上下文内激活：`allows_transitions = bool(transition_context) or _dev_mode`——`transition_context` 由 `CFG.tissue_maturity` 映射（`"developing"` → `"developmental"`，`"tumor"` → `"tumor"`）；`_dev_mode = CFG.marker.developmental_mode`。
+- KADP 只对 `method == "ambiguous"` 的候选命名；METC 对剩余 `ambiguous` / `transition_state` 候选仲裁。
+- **候选出口语义**：KADP 未命中或 METC 未仲裁（`n_spoke < metc_min_sources`）时，候选（`ambiguous` / `transition`）**原样返回**——绝不落入下面的 tier 循环；只有非歧义/非过渡候选才走 tier 1-4。默认全部关闭时，融合结果与基线逐位一致。
+
+##### 校准 harness
+
+`adhoc/kadp_metc_calibration.py`（一次性脚本，只读，不参与管线）：
+
+```bash
+set -a && source .env && set +a
+python adhoc/kadp_metc_calibration.py --gse GSE246169 --subproject fetal \
+    --output adhoc/output/kadp_calibration.json
+```
+
+在 ratio/abs/gap 阈值网格（96 个组合）上重算 KADP 决策，并施加 **F5 标签不变量门**：gate (a) 发育目标家族必须被命名；gate (b) 基线终端标签的聚类**不得**被 KADP 改名为前体极成员（misnaming 数 = 0）。**禁止静默降门槛**：若没有任何网格点能同时满足 F5，harness 记录 `recommended_lock = null` 并显式报告失败，绝不自动降低阈值让门通过。
+
+##### CellTypist 模型选择
+
+- 需要安装 extra：`pip install "fuxi[celltypist]"`（`celltypist>=1.6`）。
+- `Fetal_Human_Retina.pkl` 已实证可用于人胎儿神经视网膜/RPE 数据（GSE246169 fetal：14/14 聚类全部给出预测）。
+- ⚠️ 该模型的词汇表带**数字后缀**（如 `RPC_1`、`RGC_2`、`Photoreceptor_3`），与 KB key 精确匹配时 `harmonize_label` 会对每个标签**弃权** → `harmonization_rate` 可能为 0，METC 退化为三源运行——这是**文档化的可接受路径**（`harmonization_documented_ok`）。
+- `05_annotation_quality.json` 含 `harmonization_rate` 键（没有任何原始 CellTypist 标签时为 `null`，不是 0）。
+
+##### quality 输出与 review_queue
+
+`05_annotation_quality.json` 由**第二趟（AI 增强后）**融合的质量 dict 捕获（若 AI 兜底触发），`review_queue` 新增 reason：
+
+| reason | 含义 |
+|--------|------|
+| `kadp_precursor` | KADP 命名的过渡前体 |
+| `metc_divergent` | METC 分歧 → transitional T1/T2 |
+| `metc_2way` | METC 双源僵局（Unknown） |
+| `metc_consensus` | METC 全源一致救回 |
+
+
 ### Step 06：子聚类分析（可选）
 
 **输入**：`05_annotated.h5ad` | **输出**：`05_sub_{细胞类型}.h5ad`
@@ -1026,6 +1102,20 @@ CFG.ai.ai_annotation = True
 CFG.ai.model = "deepseek-chat"              # 模型名称
 CFG.ai.api_base = "https://api.deepseek.com/v1"
 ```
+
+**KADP / METC 补充字段**（`annotation:` 命名空间，v4.x+，默认全部关闭）：
+
+| 配置项 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `annotation.kadp_enabled` | bool | `False` | 启用层 3 KADP 发育状态轴：前体极主导的歧义多峰聚类命名为分化前体 |
+| `annotation.kadp_ratio_threshold` | float | `2.0` | ratio 变体通过阈值：`max_prog / max(max_term, epsilon)` |
+| `annotation.kadp_abs_threshold` | float | `0.6` | abs 变体通过阈值：`max_prog`（要求 `max_prog > max_term` 饱和守卫） |
+| `annotation.kadp_gap_threshold` | float | `0.1` | gap 变体通过阈值：`max_prog - max_term` |
+| `annotation.use_gap_criterion` | bool | `False` | 为 True 时 gap 变体加入 pass 组合（默认仅 ratio/abs） |
+| `annotation.metc_enabled` | bool | `False` | 启用层 4 METC 多源仲裁（marker/expert/AI/CellTypist） |
+| `annotation.metc_min_sources` | int | `3` | 触发仲裁的最少发言源数（弃权不算发言） |
+| `annotation.metc_min_distinct_transition` | int | `3` | 不同票数 ≥ 此值输出 transitional T1/T2（否则 2-way 僵局） |
+
 
 ### 9.4 质量控制
 

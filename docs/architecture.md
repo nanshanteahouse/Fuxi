@@ -151,6 +151,56 @@ decisions, quality = fuse_all_clusters(
 # }
 ```
 
+#### Layer 3/4 — KADP developmental potency + METC multi-source arbitration
+
+Two supplementary mechanisms layer onto the tiered engine for
+**developing-tissue / transition contexts** (``allows_transitions=True``,
+driven engine-side by ``tissue_maturity == "developing"`` or
+``CFG.marker.developmental_mode``).  Both are **opt-in**: with their
+configs absent/default-off the transition block returns the candidate
+unchanged — byte-identical to baseline.
+
+**Layer 3 — KADP potency axis** (``core/annotation/potency.py``, pure
+functions, no rna imports).  Pole derivation reads
+``kb["_hierarchy"]["categories"]``: the progenitor pole is the
+``Progenitor`` category; the terminal pole is ``Neuron ∪ Glia ∪ Non-neural``.
+``compute_potency`` filters pole members to ``score > 0`` and computes three
+variants — ``ratio`` (``max_prog / max(max_term, epsilon)``), ``abs`` (with
+a ``max_prog > max_term`` saturation guard), ``gap`` (``max_prog - max_term``)
+— and ``evaluate_passes`` combines them as
+``ratio OR (use_gap_criterion AND gap) OR abs``.  A passing ``ambiguous``
+candidate is named as its argmax progenitor type via ``candidate._replace(...)``
+with ``method="developmental_potency"`` and a **three-value** ``potency`` dict
+``{"ratio", "abs", "gap"}`` (never a bare float).
+
+**Layer 4 — METC multi-source arbitration**
+(``rna/utils/evidence_fusion.py``).  ``harmonize_label`` is the **shared
+parsing chain** for AI and CellTypist labels: Path A (exact KB type-key
+match) and Path B (reverse synonym lookup) are evaluated **in parallel**; a
+label that resolves differently on the two paths (e.g. ``"RPC"`` — a KB key
+*and* a ``Broad_Progenitor`` synonym) abstains.  ``_metc_arbitrate`` returns
+a dict of **replacement fields** — never a fresh ``FusionDecision`` — applied
+via ``candidate._replace(**fields)``: fewer than ``min_sources`` speaking
+sources → ``None`` (candidate returned unchanged); ``distinct == 1`` →
+consensus rescue (``metc_consensus``); ``== 2`` → ambiguous 2-way split
+(``metc_2way``); ``>= 3`` → transitional ``T1/T2`` (``metc_divergent``).
+Every arbitration emits a fresh ``source_votes`` dict.  Note: the ``expert``
+source is structurally always ``None`` inside ``fuse_evidence`` (Tier 0
+consumed it), so live runs arbitrate marker + AI + CellTypist (three
+sources).
+
+**``FusionDecision`` tail fields** (append-only, ``Optional[dict] = None``):
+``potency`` (KADP three-value payload) and ``source_votes`` (METC vote
+payload).  The default keeps the legacy **9-positional fallback** intact —
+``FusionDecision("Unknown","unknown",0.0,"unknown",0,False,"","Fallback: no tier matched.",[])``
+constructs with both fields ``None``.  Config dataclasses: ``KADPConfig``
+lives in ``core/annotation/potency.py``; ``METCConfig`` lives in
+``rna/utils/evidence_fusion.py`` (``enabled=False``, ``min_sources=3``,
+``min_distinct_transition=3``).  Engine-side wiring mirrors one instance of
+each into **both** ``fuse_all_clusters`` calls (first pass + AI second
+pass), gated on ``annotation.kadp_enabled`` / ``annotation.metc_enabled``.
+
+
 ### Design principles
 
 1. **Strict priority** — higher layers never override lower ones; they
