@@ -13,6 +13,7 @@ Decision priority (hard-coded tiers):
     5. All else                 →  Unknown
 """
 
+from dataclasses import dataclass
 from typing import NamedTuple, Optional
 
 import pandas as pd
@@ -82,6 +83,15 @@ class FusionDecision(NamedTuple):
         review queue.  Currently set to ``"single_marker_rule"`` by the D5
         arbitration for uncorroborated single-marker expert-rule hits that
         carried no strong marker-scoring competitor.
+    potency : Optional[dict] or None
+        KADP developmental-potency payload (layer 3), set when this cluster
+        was named by the developmental-potency path.  Always a three-value
+        dict {'ratio': float, 'abs': float, 'gap': float} — never a bare
+        float.  None for every non-KADP decision.
+    source_votes : Optional[dict] or None
+        Layer-4 METC multi-source vote payload (marker/expert/ai/celltypist
+        votes), set when METC arbitrated this cluster.  METC assignments
+        always carry a fresh dict; None otherwise.
     """
 
     cell_type: str
@@ -100,6 +110,25 @@ class FusionDecision(NamedTuple):
     n_sources: int = 0
     subtype_resolution: str = ""
     review_reason: str = ""
+    # -- Append-only tail fields (plan todo 1a).  Optional[dict] = None is
+    #    deliberate: never a shared mutable default, and the potency payload
+    #    must keep all three values (ratio/abs/gap) intact — no bare float.
+    potency: Optional[dict] = None
+    source_votes: Optional[dict] = None
+
+
+@dataclass
+class METCConfig:
+    """Layer-4 multi-evidence transition consensus (METC) config (todo 1c).
+
+    Controls the METC arbitration branch in :func:`fuse_evidence`.  Every
+    field defaults to *disabled* so existing callers keep byte-identical
+    behavior unless METC is explicitly enabled.
+    """
+
+    enabled: bool = False
+    min_sources: int = 3
+    min_distinct_transition: int = 3
 
 
 def _is_transition_state(

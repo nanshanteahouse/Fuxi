@@ -42,6 +42,8 @@ class TestEvidenceFusionImport:
             "n_sources",
             "subtype_resolution",
             "review_reason",
+            "potency",
+            "source_votes",
         }
         missing = expected - fields
         extra = fields - expected
