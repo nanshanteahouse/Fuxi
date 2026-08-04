@@ -729,6 +729,7 @@ class AIConfig(BaseModel):
     qc_review: bool = False
     param_suggest: bool = False
     annotation: bool = True
+    ai_annotation: bool = False  # AI fallback for low-confidence clusters (Unified KB mode only)
     subcluster: bool = True
     deg_design: bool = False
     interpretation: bool = True
