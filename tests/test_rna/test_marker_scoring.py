@@ -299,3 +299,154 @@ class TestPhylogeneticWeighting:
         bird_score = result["Bird_Cell"].score
         # Bird_Cell markers are in the top-20, so score should be > 0
         assert bird_score > 0, f"Bird_Cell score should be > 0 without filtering, got {bird_score}"
+
+
+class TestEvidenceType:
+    """Joint ``evidence_type`` classification (plan D1) via score_cluster_against_kb.
+
+    One test per row of the D1 joint table, plus the pre-expansion snapshot
+    invariant and the legacy positional constructor compatibility.
+    """
+
+    @staticmethod
+    def _kb_entry(positive: list[str], consensus_levels: dict | None = None) -> dict:
+        """Build a pre-built-lookup entry (same shape as ``KB_LOOKUP`` above)."""
+        return {
+            "positive": positive,
+            "negative": [],
+            "species": ["human"],
+            "synonyms": [],
+            "parent": "TestCell",
+            "marker_weights": {},
+            "consensus_levels": consensus_levels or {},
+        }
+
+    @staticmethod
+    def _cluster_df(rank_to_gene: dict[int, str], n_rows: int = 220) -> pd.DataFrame:
+        """Build a DE DataFrame with *rank_to_gene* placed at 1-based ranks.
+
+        Fillers use ``F{idx}`` names that survive the noise filter (no MT- /
+        RPL/RPS / lncRNA prefix).  Row order is the caller-provided rank order.
+        """
+        genes: list[str] = []
+        marker_genes = set(rank_to_gene.values())
+        filler = 1
+        for rank in range(1, n_rows + 1):
+            if rank in rank_to_gene:
+                genes.append(rank_to_gene[rank])
+                continue
+            gene = f"F{filler}"
+            while gene in marker_genes:
+                filler += 1
+                gene = f"F{filler}"
+            genes.append(gene)
+            filler += 1
+        return pd.DataFrame(
+            {
+                "names": genes,
+                "logfoldchanges": [3.0 - i * 0.01 for i in range(n_rows)],
+                "pvals_adj": [1e-10] * n_rows,
+            }
+        )
+
+    def test_evidence_type_multi_marker_gold_high(self) -> None:
+        """≥2 top-20 hits with consensus gold/high → ``multi_marker``."""
+        kb = {
+            "Type_A": self._kb_entry(["M1", "M2", "M3"], {"M1": "gold", "M2": "high", "M3": "low"})
+        }
+        sc = score_cluster_against_kb(kb, self._cluster_df({1: "M1", 2: "M2", 3: "M3"}))["Type_A"]
+        assert sc.n_markers_found_top20 == 3
+        assert sc.window_size == 20
+        assert sc.evidence_type == "multi_marker"
+
+    def test_evidence_type_weak_multi_medium_low(self) -> None:
+        """≥2 top-20 hits with consensus medium/low → ``weak_multi`` (not multi_marker)."""
+        kb = {"Type_B": self._kb_entry(["M1", "M2"], {"M1": "medium", "M2": "low"})}
+        sc = score_cluster_against_kb(kb, self._cluster_df({1: "M1", 2: "M2"}))["Type_B"]
+        assert sc.n_markers_found_top20 == 2
+        assert sc.evidence_type == "weak_multi"
+
+    def test_evidence_type_single_marker(self) -> None:
+        """Exactly 1 top-20 hit (window ≤20) → ``single_marker``."""
+        kb = {"Type_C": self._kb_entry(["S1"], {"S1": "gold"})}
+        sc = score_cluster_against_kb(kb, self._cluster_df({1: "S1"}))["Type_C"]
+        assert sc.n_markers_found_top20 == 1
+        assert sc.window_size == 20
+        assert sc.evidence_type == "single_marker"
+
+    def test_evidence_type_zero_evidence_is_weak_not_multi(self) -> None:
+        """0 top-20 hits at window 20 → ``zero_evidence``, never ``multi_marker``."""
+        kb = {"Type_D": self._kb_entry(["Z1", "Z2"])}
+        sc = score_cluster_against_kb(kb, self._cluster_df({}))["Type_D"]
+        assert sc.n_markers_found_top20 == 0
+        assert sc.n_markers_found == 0
+        assert sc.window_size == 20
+        assert sc.evidence_type == "zero_evidence"
+        assert sc.evidence_type != "multi_marker"
+
+    @pytest.mark.parametrize(("marker_rank", "expected_window"), [(26, 50), (55, 100), (105, 200)])
+    def test_evidence_type_window_padding_expansion(
+        self, marker_rank: int, expected_window: int
+    ) -> None:
+        """<2 top-20 hits + adaptive expansion to 50/100/200 → ``window_padding``."""
+        kb = {"Type_E": self._kb_entry(["D1", "D2"])}
+        sc = score_cluster_against_kb(
+            kb, self._cluster_df({marker_rank: "D1"}), adaptive_top_n=True
+        )["Type_E"]
+        assert sc.n_markers_found_top20 == 0
+        assert sc.window_size == expected_window
+        assert sc.evidence_type == "window_padding"
+
+    def test_evidence_type_window_padding_precedes_zero_evidence(self) -> None:
+        """n_top20==0 but window>20 (hit only after expansion) → ``window_padding``.
+
+        D1 table rows ``<2 & >20 → window_padding`` and ``==0 → zero_evidence``
+        overlap at n==0 && window>20; the implementation checks window_padding
+        first (scoring.py L746), so a padded-window type must never be labeled
+        ``zero_evidence``.
+        """
+        kb = {"Type_F": self._kb_entry(["P1"])}
+        sc = score_cluster_against_kb(kb, self._cluster_df({26: "P1"}), adaptive_top_n=True)[
+            "Type_F"
+        ]
+        assert sc.n_markers_found_top20 == 0
+        assert sc.window_size == 50
+        assert sc.evidence_type == "window_padding"
+        assert sc.evidence_type != "zero_evidence"
+
+    def test_evidence_type_empty_consensus_falls_back_to_multi_marker(self) -> None:
+        """≥2 hits with an empty consensus mapping → ``multi_marker`` (not weak_multi)."""
+        # Empty consensus_levels → _best_consensus_among_hits returns "" → D1
+        # fallback multi_marker (weak_multi requires an explicit medium/low entry).
+        kb = {"Type_G": self._kb_entry(["M1", "M2"])}
+        sc = score_cluster_against_kb(kb, self._cluster_df({1: "M1", 2: "M2"}))["Type_G"]
+        assert sc.n_markers_found_top20 == 2
+        assert sc.evidence_type == "multi_marker"
+        assert sc.evidence_type != "weak_multi"
+
+    def test_evidence_type_expansion_snapshot_captured_pre_expansion(self) -> None:
+        """Markers at ranks 26-28 prove the top-20 snapshot survives expansion.
+
+        The adaptive loop replaces ``top_gene_set`` in place (scoring.py L852
+        snapshot is captured *before* that), so the per-type pre-expansion count
+        must stay 0 even though the final window hits all 3 markers.
+        """
+        kb = {"Type_H": self._kb_entry(["D1", "D2", "D3"])}
+        sc = score_cluster_against_kb(
+            kb, self._cluster_df({26: "D1", 27: "D2", 28: "D3"}), adaptive_top_n=True
+        )["Type_H"]
+        assert sc.n_markers_found_top20 == 0
+        assert sc.n_markers_found == 3
+        assert sc.window_size == 50
+        assert sc.evidence_type == "window_padding"
+
+    def test_evidence_type_legacy_positional_construction_defaults(self) -> None:
+        """Score(0.0, 1.0, "none", 0, False) keeps the legacy positional API.
+
+        New evidence fields carry defaults (plan D1 implementation constraint):
+        evidence_type="" (not zero_evidence), window_size=20, n_markers_found_top20=0.
+        """
+        sc = Score(0.0, 1.0, "none", 0, False)
+        assert sc.evidence_type == ""
+        assert sc.window_size == 20
+        assert sc.n_markers_found_top20 == 0

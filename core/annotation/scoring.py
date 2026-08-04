@@ -133,9 +133,27 @@ class Score:
         Which scoring method contributed the max value:
         ``"hypergeometric"``, ``"cosine"``, or ``"none"``.
     n_markers_found : int
-        Number of KB positive markers found in the cluster's top-20.
+        Number of KB positive markers found in the cluster's **final**
+        top-N window (i.e. the post-expansion window when adaptive top-N
+        expanded it; equals the top-20 count when ``adaptive_top_n`` is
+        off).  ``n_markers_found_top20`` records the pre-expansion top-20
+        snapshot.
     negative_penalty : bool
         Whether a negative-marker penalty was applied.
+    evidence_type : str
+        Machine-checkable evidence-strength label derived at the tail of
+        :func:`score_cluster_against_kb` from the plan D1 joint
+        classification table: ``"multi_marker"`` | ``"weak_multi"`` |
+        ``"single_marker"`` | ``"zero_evidence"`` | ``"window_padding"``.
+        Empty when unset (e.g. the no-positive-markers short-circuit).
+    window_size : int
+        Final top-N window size actually used for scoring (20 before
+        adaptive expansion; the expanded value when ``adaptive_top_n``
+        expanded the window).  Default 20.
+    n_markers_found_top20 : int
+        Number of this type's KB positive markers found in the top-20
+        window **before** any adaptive expansion - the pre-expansion
+        snapshot.  ``n_markers_found`` reflects the post-expansion window.
     tier : str
         Hierarchy tier of this type: ``"L1"`` (Broad_*), ``"L2"`` (major
         type), or ``"L3"`` (subtype). Populated by
@@ -155,6 +173,10 @@ class Score:
     method: str
     n_markers_found: int
     negative_penalty: bool
+    # -- Evidence-strength accounting (populated by score_cluster_against_kb) --
+    evidence_type: str = ""
+    window_size: int = 20
+    n_markers_found_top20: int = 0
     # -- Tiered-annotation fields (populated by resolve_tiered_label) --
     tier: str = ""
     private_markers_hit: int = 0
@@ -670,6 +692,62 @@ def _merge_evidence_scores(
     return base_score * conf_mult, base_method
 
 
+def _best_consensus_among_hits(consensus_levels: Dict[str, str], hit_genes: set[str]) -> str:
+    """Best consensus level among *hit_genes* that carry a consensus entry.
+
+    Mirrors ``rna/utils/tiered_annotation._consensus_of_hits`` for the
+    scoring path: only genes with an explicit gold/high/medium/low entry
+    count - an empty mapping yields ``""`` (unknown, not ``"low"``) so
+    the D1 classification falls through to ``multi_marker`` rather than
+    mislabeling a type with no consensus data as weak.
+    """
+    hit_levels = [lv for g in hit_genes if (lv := consensus_levels.get(g)) in _CONSENSUS_WEIGHTS]
+    if not hit_levels:
+        return ""
+    return max(hit_levels, key=lambda lv: _CONSENSUS_WEIGHTS[lv])
+
+
+def _derive_evidence_type(n_found_top20: int, window_size: int, consensus: str) -> str:
+    """Map evidence-strength accounting to a machine-checkable label (plan D1).
+
+    Joint classification table over ``(n_found_top20, window_size,``
+    ``consensus)`` (plan D1).  The ``window_padding`` row is checked
+    *before* ``zero_evidence`` so a type whose hits exist only because the
+    window was padded (> 20) is not mislabeled as having zero evidence:
+
+    ================  ========  ============  =================
+
+    n_found_top20    window    consensus     evidence_type
+
+    ================  ========  ============  =================
+
+    < 2               > 20      any           ``window_padding``
+
+    0                 <= 20     any           ``zero_evidence``
+
+    1                 <= 20     any           ``single_marker``
+
+    >= 2              any       gold/high     ``multi_marker``
+
+    >= 2              any       medium/low    ``weak_multi``
+
+    (fallback)                                ``multi_marker``
+
+    ================  ========  ============  =================
+    """
+    if n_found_top20 < 2 and window_size > 20:
+        return "window_padding"
+    if n_found_top20 == 0:
+        return "zero_evidence"
+    if n_found_top20 == 1:
+        return "single_marker"
+    if n_found_top20 >= 2 and consensus in ("gold", "high"):
+        return "multi_marker"
+    if n_found_top20 >= 2 and consensus in ("medium", "low"):
+        return "weak_multi"
+    return "multi_marker"
+
+
 def score_cluster_against_kb(
     kb: Dict[str, Any],
     cluster_markers: pd.DataFrame,
@@ -757,6 +835,13 @@ def score_cluster_against_kb(
     top_gene_set = set(_normalize_gene_name(g) for g in top_markers["names"].tolist())
     top_in_bg = top_gene_set & all_type_markers
 
+    # Pre-expansion snapshot (plan D1): the adaptive loop below replaces
+    # top_in_bg/top_gene_set in place when it adopts a wider window, which
+    # would otherwise destroy the top-20 hit information used for
+    # evidence-strength accounting.  Capture the top-20 gene set before
+    # that happens - per-type pre-expansion hit counts (and the
+    # cluster-wide ``len(top_in_bg)`` count) are both derivable from it.
+    top20_gene_set = set(top_gene_set)
     if adaptive_top_n:
         _steps = expand_steps if expand_steps is not None else [50, 100, 200]
         for _candidate_n in _steps:
@@ -831,12 +916,22 @@ def score_cluster_against_kb(
         if neg_penalty:
             final_score *= 0.5
 
+        # ── 6. Evidence-strength accounting (plan D1) ───────────────
+        # Pre-expansion snapshot per type: how many of THIS type's markers
+        # were in the top-20 before adaptive expansion replaced it.
+        n_found_top20 = len(positive_set & top20_gene_set)
+        best_consensus = _best_consensus_among_hits(consensus_levels, positive_set & top_gene_set)
+
         results[type_key] = Score(
             score=final_score,
             p_value=float(raw_p),
             method=base_method,
             n_markers_found=a,
             negative_penalty=neg_penalty,
+            evidence_type=_derive_evidence_type(n_found_top20, top_n, best_consensus),
+            window_size=top_n,
+            n_markers_found_top20=n_found_top20,
+            consensus=best_consensus,
         )
 
     return results
