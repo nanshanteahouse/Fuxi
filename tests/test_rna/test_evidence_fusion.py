@@ -8,7 +8,9 @@ from core.annotation.scoring import Score
 from rna.utils.evidence_fusion import (
     DiagnosticInfo,
     FusionDecision,
+    METCConfig,
     _is_transition_state,
+    _metc_arbitrate,
     fuse_all_clusters,
     fuse_evidence,
     harmonize_label,
@@ -1257,3 +1259,333 @@ class TestFuseAllClustersHarmonization:
         assert quality["harmonization_rate"] == 0.0
         # one fuse_evidence call per cluster (3) — every cluster abstains
         assert captured == [None, None, None]
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Todo 9 — METC multi-source arbitration (plan todo 9)
+#  _metc_arbitrate + fuse_evidence integration.  Synthetic 4-source votes
+#  drive every branch: consensus rescue (distinct==1), 2-way split
+#  (distinct==2), divergent transition (distinct>=3), n_spoke<3 exit,
+#  KADP priority, AI-failure robustness and fresh source_votes per decision.
+# ═══════════════════════════════════════════════════════════════════════
+
+METC_CFG = METCConfig(enabled=True)
+
+# The KADP KB (with _hierarchy + parent/marker entries) doubles as the METC
+# integration KB: _KADP_HIT_SCORES yields a multi-peak ambiguous candidate
+# (marker vote = NRPC) whose top-2 (NRPC/Proliferating_RPC) share a parent.
+
+
+class TestMetcArbitrateUnit:
+    """Direct _metc_arbitrate rule coverage (F20 all branches).
+
+    Votes are KB-canonical label strings or None (abstain).  n_spoke is the
+    count of non-None votes; distinct is the number of distinct labels.
+    """
+
+    def test_n_spoke_below_min_returns_none(self) -> None:
+        """Fewer than min_sources votes -> None (no arbitration)."""
+        assert _metc_arbitrate(None, None, None, None, METC_CFG) is None
+        assert _metc_arbitrate("NRPC", None, None, None, METC_CFG) is None
+        assert _metc_arbitrate("NRPC", None, "Amacrine_Cell", None, METC_CFG) is None
+
+    def test_min_sources_custom(self) -> None:
+        """min_sources is config-driven: 2 votes arbitrate with min_sources=2.
+        Two distinct labels → the 2-way ambiguous branch (not None)."""
+        cfg = METCConfig(enabled=True, min_sources=2)
+        fields = _metc_arbitrate("NRPC", None, "RGC", None, cfg)
+        assert fields is not None
+        assert fields["method"] == "ambiguous"
+        assert fields["review_reason"] == "metc_2way"
+
+    def test_consensus_fields(self) -> None:
+        """distinct==1 -> the single agreed label, confidence medium,
+        review_reason metc_consensus, method tag from the contributing source."""
+        fields = _metc_arbitrate("NRPC", "NRPC", "NRPC", "NRPC", METC_CFG)
+        assert fields["cell_type"] == "NRPC"
+        assert fields["confidence"] == "medium"
+        assert fields["review_reason"] == "metc_consensus"
+        assert fields["method"] == "marker_scoring"  # marker votes first
+        assert fields["diagnostic"].category == "metc_consensus"
+        assert fields["source_votes"] == {
+            "marker": "NRPC",
+            "expert": "NRPC",
+            "ai": "NRPC",
+            "celltypist": "NRPC",
+        }
+
+    def test_consensus_method_tag_source_priority(self) -> None:
+        """Method tag follows source priority marker > expert > ai > celltypist."""
+        assert _metc_arbitrate(None, "NRPC", "NRPC", "NRPC", METC_CFG)["method"] == "expert_rule"
+        cfg2 = METCConfig(enabled=True, min_sources=2)
+        assert _metc_arbitrate(None, None, "NRPC", "NRPC", cfg2)["method"] == "ai"
+        cfg1 = METCConfig(enabled=True, min_sources=1)
+        assert _metc_arbitrate(None, None, None, "NRPC", cfg1)["method"] == "celltypist"
+
+    def test_two_way_fields(self) -> None:
+        """distinct==2 -> Unknown/ambiguous, review_reason metc_2way, the two
+        camps as {'cell_type','score'} competitor dicts."""
+        fields = _metc_arbitrate("NRPC", None, "Proliferating_RPC", "Proliferating_RPC", METC_CFG)
+        assert fields["cell_type"] == "Unknown"
+        assert fields["method"] == "ambiguous"
+        assert fields["confidence"] == "low"
+        assert fields["review_reason"] == "metc_2way"
+        assert fields["diagnostic"].category == "metc_2way"
+        comps = fields["diagnostic"].top_competitors
+        assert comps == [
+            {"cell_type": "Proliferating_RPC", "score": 2},
+            {"cell_type": "NRPC", "score": 1},
+        ]
+        assert all({"cell_type", "score"} <= set(c) for c in comps)
+
+    def test_transitional_top2_and_tiebreak(self) -> None:
+        """distinct>=3 -> transitional: T1/T2 by vote count; on tie the order
+        follows source priority marker > expert > ai > celltypist."""
+        # all-count tie -> source-priority order
+        fields = _metc_arbitrate("NRPC", "RGC", "Amacrine_Cell", "Muller_Glia", METC_CFG)
+        assert fields["method"] == "transition_state"
+        assert fields["confidence"] == "transition"
+        assert fields["cell_type"] == "transitional: NRPC/RGC"
+        assert fields["review_reason"] == "metc_divergent"
+        assert fields["diagnostic"].category == "metc_divergent"
+        # count majority beats source priority
+        fields2 = _metc_arbitrate("NRPC", "RGC", "RGC", "Amacrine_Cell", METC_CFG)
+        assert fields2["cell_type"] == "transitional: RGC/NRPC"
+
+    def test_transitional_source_votes_in_detail(self) -> None:
+        """The diagnostic detail JSON embeds the full source_votes dict."""
+        fields = _metc_arbitrate("NRPC", None, "Amacrine_Cell", "RGC", METC_CFG)
+        import json
+
+        assert json.loads(fields["diagnostic"].detail.split(": ", 1)[1]) == {
+            "marker": "NRPC",
+            "expert": None,
+            "ai": "Amacrine_Cell",
+            "celltypist": "RGC",
+        }
+
+    def test_source_votes_is_fresh_dict_per_call(self) -> None:
+        """Every call returns its own source_votes dict — mutating one never
+        affects another."""
+        f1 = _metc_arbitrate("NRPC", None, "NRPC", "NRPC", METC_CFG)
+        f2 = _metc_arbitrate("NRPC", None, "NRPC", "NRPC", METC_CFG)
+        assert f1["source_votes"] is not f2["source_votes"]
+        f1["source_votes"]["marker"] = "MUTATED"
+        assert f2["source_votes"]["marker"] == "NRPC"
+
+
+class TestMETCArbitration:
+    """Synthetic 4-source integration tests driving fuse_evidence (todo 9).
+
+    The multi-peak ambiguous candidate built from _KADP_HIT_SCORES has marker
+    vote NRPC; the expert source structurally abstains at this point (a rule
+    hit returns at Tier 0), so integration branches use marker + ai +
+    celltypist as the 3 sources.
+    """
+
+    def _fuse(self, *, ai_suggestion=None, celltypist_suggestion=None, **kw):
+        return fuse_evidence(
+            marker_scores=dict(_KADP_HIT_SCORES),
+            expert_rule_result=None,
+            kb=_KADP_KB,
+            allows_transitions=True,
+            ai_suggestion=ai_suggestion,
+            celltypist_suggestion=celltypist_suggestion,
+            metc_cfg=kw.pop("metc_cfg", METC_CFG),
+            **kw,
+        )
+
+    # ── distinct == 1: consensus rescue ──────────────────────────────
+
+    def test_consensus_rescue_ambiguous(self) -> None:
+        """All 3 sources agree -> rescue from ambiguous: the agreed label with
+        method marker_scoring, confidence medium, review_reason metc_consensus."""
+        d = self._fuse(ai_suggestion="NRPC", celltypist_suggestion="NRPC")
+        assert d.cell_type == "NRPC"
+        assert d.method == "marker_scoring"
+        assert d.confidence == "medium"
+        assert d.review_reason == "metc_consensus"
+        assert d.diagnostic is not None
+        assert d.diagnostic.category == "metc_consensus"
+        assert d.source_votes == {
+            "marker": "NRPC",
+            "expert": None,
+            "ai": "NRPC",
+            "celltypist": "NRPC",
+        }
+        assert d.potency is None
+
+    def test_consensus_rescue_suppresses_transition_state(self) -> None:
+        """A genuine transition_state candidate (2 tied types) is also rescued:
+        the single agreed label replaces 'transitional: ...' — suppressing the
+        _is_transition_state false positive."""
+        scores = {"NRPC": 0.95, "Proliferating_RPC": 0.93, "Rod_Photoreceptor": 0.10}
+        d = fuse_evidence(
+            marker_scores=scores,
+            expert_rule_result=None,
+            kb=_KADP_KB,
+            allows_transitions=True,
+            ai_suggestion="NRPC",
+            celltypist_suggestion="NRPC",
+            metc_cfg=METC_CFG,
+        )
+        assert d.method == "marker_scoring"
+        assert d.cell_type == "NRPC"
+        assert d.confidence == "medium"
+        assert d.review_reason == "metc_consensus"
+        assert d.diagnostic is not None
+        assert d.diagnostic.category == "metc_consensus"
+
+    # ── distinct == 2: metc_2way ─────────────────────────────────────
+
+    def test_two_way_ambiguous(self) -> None:
+        """2 camps -> Unknown/ambiguous with review_reason metc_2way and the
+        two camps as dict competitors."""
+        d = self._fuse(
+            ai_suggestion="Proliferating_RPC", celltypist_suggestion="Proliferating_RPC"
+        )
+        assert d.cell_type == "Unknown"
+        assert d.method == "ambiguous"
+        assert d.confidence == "low"
+        assert d.review_reason == "metc_2way"
+        assert d.diagnostic is not None
+        assert d.diagnostic.category == "metc_2way"
+        comps = d.diagnostic.top_competitors
+        assert comps == [
+            {"cell_type": "Proliferating_RPC", "score": 2},
+            {"cell_type": "NRPC", "score": 1},
+        ]
+        assert d.potency is None
+
+    # ── distinct >= 3: transitional ──────────────────────────────────
+
+    def test_transitional_divergent(self) -> None:
+        """3 distinct labels -> transitional: T1/T2 (source-priority tiebreak),
+        confidence transition, review_reason metc_divergent."""
+        d = self._fuse(ai_suggestion="Amacrine_Cell", celltypist_suggestion="RGC")
+        assert d.method == "transition_state"
+        assert d.confidence == "transition"
+        assert d.cell_type == "transitional: NRPC/Amacrine_Cell"
+        assert d.review_reason == "metc_divergent"
+        assert d.diagnostic is not None
+        assert d.diagnostic.category == "metc_divergent"
+        comps = {c["cell_type"]: c["score"] for c in d.diagnostic.top_competitors}
+        assert comps == {"NRPC": 1, "Amacrine_Cell": 1, "RGC": 1}
+        assert "NRPC" in d.explanation and "Amacrine_Cell" in d.explanation
+        assert d.potency is None
+
+    # ── n_spoke < 3: exit semantics (Momus r2 MAJOR-1) ───────────────
+
+    def test_n_spoke_below_min_returns_candidate_byte_identical(self) -> None:
+        """metc_cfg enabled but < min_sources votes (marker + celltypist only)
+        -> the candidate is returned byte-identical to the disabled baseline
+        (never falls into the tier loop)."""
+        disabled = self._fuse(
+            ai_suggestion=None,
+            celltypist_suggestion="RGC",
+            metc_cfg=None,
+        )
+        enabled = self._fuse(ai_suggestion=None, celltypist_suggestion="RGC")
+        assert enabled == disabled
+        assert enabled.method == "ambiguous"
+        assert enabled.cell_type == "Unknown"
+        assert enabled.source_votes is None
+        assert enabled.potency is None
+
+    def test_n_spoke_below_min_never_reaches_tier_loop(self) -> None:
+        """No marker_scoring label leaks in for a <3-source candidate."""
+        d = self._fuse(ai_suggestion=None, celltypist_suggestion="RGC")
+        assert d.method == "ambiguous"
+        assert not d.method.startswith("marker_scoring")
+
+    # ── KADP priority ────────────────────────────────────────────────
+
+    def test_kadp_naming_wins_over_metc(self) -> None:
+        """A KADP-named candidate never enters METC: even with divergent
+        ai/celltypist votes the decision stays developmental_potency."""
+        d = self._fuse(
+            ai_suggestion="Amacrine_Cell",
+            celltypist_suggestion="RGC",
+            metc_cfg=METC_CFG,
+            kadp_cfg=_KADP_CFG,
+        )
+        assert d.method == "developmental_potency"
+        assert d.cell_type == "NRPC"
+        assert d.review_reason == "kadp_precursor"
+        assert d.source_votes is None
+
+    # ── cfg None / disabled: baseline parity ─────────────────────────
+
+    def test_metc_cfg_none_and_disabled_baseline_parity(self) -> None:
+        """metc_cfg=None or enabled=False behave exactly like the default
+        baseline: the ambiguous candidate stays untouched."""
+        baseline = fuse_evidence(
+            marker_scores=dict(_KADP_HIT_SCORES),
+            expert_rule_result=None,
+            kb=_KADP_KB,
+            allows_transitions=True,
+            ai_suggestion="NRPC",
+            celltypist_suggestion="NRPC",
+        )
+        for cfg in (None, METCConfig(enabled=False)):
+            d = self._fuse(
+                ai_suggestion="NRPC",
+                celltypist_suggestion="NRPC",
+                metc_cfg=cfg,
+            )
+            assert d == baseline
+            assert d.method == "ambiguous"
+            assert d.source_votes is None
+            assert d.potency is None
+
+    # ── AI failure mode ──────────────────────────────────────────────
+
+    def test_ai_failure_three_sources_no_exception(self) -> None:
+        """ai_query raising (engine-side AI down) leaves ai_suggestion None:
+        the remaining sources still arbitrate at the _metc_arbitrate level and
+        fuse_evidence never raises."""
+        from unittest.mock import patch
+
+        with patch("core.ai.caller.ai_query", side_effect=Exception("LLM down")):
+            # unit level: ai abstains, the other 3 sources still arbitrate
+            fields = _metc_arbitrate("NRPC", "RGC", None, "Amacrine_Cell", METC_CFG)
+            assert fields is not None
+            assert fields["method"] == "transition_state"
+            assert fields["cell_type"] == "transitional: NRPC/RGC"
+            # fuse_evidence level: ai_suggestion None (the engine-side outcome
+            # of the failure) → marker + celltypist only → <3 sources → exit
+            d = self._fuse(ai_suggestion=None, celltypist_suggestion="RGC")
+            assert d.method == "ambiguous"
+            assert d.source_votes is None
+
+    def test_ai_label_unresolvable_abstains(self) -> None:
+        """An unresolvable AI label is blanked engine-side → abstain: it must
+        NOT inflate distinct nor produce a consensus rescue."""
+        # blank ai + celltypist=NRPC → marker+celltypist = 2 sources (< 3).
+        # If '' were counted as a vote, all would 'agree' → wrong rescue.
+        d = self._fuse(ai_suggestion="", celltypist_suggestion="NRPC")
+        assert d.method == "ambiguous"
+        assert d.cell_type == "Unknown"
+        assert d.source_votes is None
+
+    # ── source_votes freshness + potency across decisions ────────────
+
+    def test_source_votes_fresh_per_decision(self) -> None:
+        """Two fused decisions carry independent source_votes dicts."""
+        d1 = self._fuse(ai_suggestion="NRPC", celltypist_suggestion="NRPC")
+        d2 = self._fuse(ai_suggestion="NRPC", celltypist_suggestion="NRPC")
+        assert d1.source_votes is not d2.source_votes
+        d1.source_votes["marker"] = "MUTATED"
+        assert d2.source_votes["marker"] == "NRPC"
+
+    def test_potency_none_on_all_metc_decisions(self) -> None:
+        """No METC branch ever sets potency (KADP-only field)."""
+        for ai, ct, celltypist in (
+            ("NRPC", "marker_scoring", "NRPC"),
+            ("Proliferating_RPC", "ambiguous", "Proliferating_RPC"),
+            ("Amacrine_Cell", "transition_state", "RGC"),
+        ):
+            d = self._fuse(ai_suggestion=ai, celltypist_suggestion=celltypist)
+            assert d.method == ct, (ai, celltypist)
+            assert d.potency is None
+            assert d.source_votes is not None

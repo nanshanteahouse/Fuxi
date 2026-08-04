@@ -692,6 +692,173 @@ def _kadp_name_candidate(
     )
 
 
+# ═══════════════════════════════════════════════════════════════════════
+#  Layer-4 METC multi-source arbitration (plan todo 9)
+# ═══════════════════════════════════════════════════════════════════════
+
+_METC_SOURCE_ORDER = ("marker", "expert", "ai", "celltypist")
+
+_METC_SOURCE_METHOD_TAG = {
+    "marker": "marker_scoring",
+    "expert": "expert_rule",
+    "ai": "ai",
+    "celltypist": "celltypist",
+}
+
+
+def _fmt_metc_vote(vote: Optional[str]) -> str:
+    """Render a single vote for explanations — abstentions as a dash."""
+    return vote if vote else "—"
+
+
+def _metc_vote_counts(votes: dict) -> dict:
+    """{label: number_of_sources} over the non-None votes."""
+    counts: dict = {}
+    for vote in votes.values():
+        if vote is not None:
+            counts[vote] = counts.get(vote, 0) + 1
+    return counts
+
+
+def _metc_source_priority(votes: dict, label: str) -> int:
+    """Index of the highest-priority source that voted *label*."""
+    for idx, src in enumerate(_METC_SOURCE_ORDER):
+        if votes.get(src) == label:
+            return idx
+    return len(_METC_SOURCE_ORDER)
+
+
+def _metc_ranked_labels(votes: dict) -> list:
+    """Distinct voted labels ordered by (vote count desc, source priority).
+
+    Ties resolve deterministically by source priority marker > expert > ai >
+    celltypist — never by set iteration order."""
+    counts = _metc_vote_counts(votes)
+    return sorted(
+        counts,
+        key=lambda lab: (-counts[lab], _metc_source_priority(votes, lab)),
+    )
+
+
+def _metc_arbitrate(
+    marker_vote: Optional[str],
+    expert_vote: Optional[str],
+    ai_vote: Optional[str],
+    celltypist_vote: Optional[str],
+    metc_cfg: METCConfig,
+) -> Optional[dict]:
+    """Arbitrate the four METC evidence sources (plan todo 9).
+
+    Returns a dict of :class:`FusionDecision` replacement fields to be applied
+    via ``candidate._replace`` when the sources converge on a decision, or
+    ``None`` when fewer than ``min_sources`` sources spoke — the caller then
+    returns the candidate unchanged (exit semantics: an un-arbitrated
+    candidate never falls into the tier loop).
+
+    Voting semantics are uniform across all four sources (F7/F17): a vote is
+    a non-empty, KB-resolvable label; abstention (``None``) is not a vote.
+    n_spoke = number of non-None votes; distinct = number of distinct labels.
+
+    Decision rules (F20):
+      * n_spoke < min_sources      -> None (no arbitration)
+      * distinct >= 3              -> transitional: T1/T2 (top-2 by vote
+                                      count, source-priority tie-break)
+      * distinct == 2              -> ambiguous 2-way split (metc_2way)
+      * distinct == 1              -> consensus rescue (single agreed label)
+    """
+    votes = {
+        "marker": marker_vote,
+        "expert": expert_vote,
+        "ai": ai_vote,
+        "celltypist": celltypist_vote,
+    }
+    spoke = [v for v in votes.values() if v]
+    if len(spoke) < metc_cfg.min_sources:
+        return None
+
+    ranked = _metc_ranked_labels(votes)
+    n_distinct = len(ranked)
+    counts = _metc_vote_counts(votes)
+    votes_json = json.dumps(votes)
+
+    if n_distinct >= metc_cfg.min_distinct_transition:
+        t1, t2 = ranked[0], ranked[1]
+        return {
+            "cell_type": f"transitional: {t1}/{t2}",
+            "confidence": "transition",
+            "method": "transition_state",
+            "explanation": (
+                f"METC divergent: {len(spoke)} sources split across "
+                f"{n_distinct} labels (marker={_fmt_metc_vote(marker_vote)}, "
+                f"expert={_fmt_metc_vote(expert_vote)}, "
+                f"ai={_fmt_metc_vote(ai_vote)}, "
+                f"celltypist={_fmt_metc_vote(celltypist_vote)}) — "
+                f"transitional between '{t1}' and '{t2}'."
+            ),
+            "diagnostic": DiagnosticInfo(
+                category="metc_divergent",
+                top_competitors=[{"cell_type": lab, "score": counts[lab]} for lab in ranked],
+                detail=f"METC divergent votes: {votes_json}",
+            ),
+            "review_reason": "metc_divergent",
+            "potency": None,
+            "source_votes": dict(votes),
+        }
+
+    if n_distinct == 2:
+        c1, c2 = ranked[0], ranked[1]
+        return {
+            "cell_type": "Unknown",
+            "confidence": "low",
+            "method": "ambiguous",
+            "explanation": (
+                f"METC 2-way split: '{c1}' ({counts[c1]} vote(s)) vs "
+                f"'{c2}' ({counts[c2]} vote(s)) — left ambiguous."
+            ),
+            "diagnostic": DiagnosticInfo(
+                category="metc_2way",
+                top_competitors=[
+                    {"cell_type": c1, "score": counts[c1]},
+                    {"cell_type": c2, "score": counts[c2]},
+                ],
+                detail=f"METC 2-way votes: {votes_json}",
+            ),
+            "review_reason": "metc_2way",
+            "potency": None,
+            "source_votes": dict(votes),
+        }
+
+    # n_distinct == 1 — every speaking source agrees.  Consensus rescue:
+    # the single agreed label wins, suppressing any _is_transition_state /
+    # multi-peak ambiguity false positive from the single-axis Fisher path.
+    label = ranked[0]
+    method = _METC_SOURCE_METHOD_TAG.get(
+        _METC_SOURCE_ORDER[_metc_source_priority(votes, label)],
+        "marker_scoring",
+    )
+    return {
+        "cell_type": label,
+        "confidence": "medium",
+        "method": method,
+        "explanation": (
+            f"METC consensus: all {len(spoke)} sources agree on '{label}' "
+            f"(marker={_fmt_metc_vote(marker_vote)}, "
+            f"expert={_fmt_metc_vote(expert_vote)}, "
+            f"ai={_fmt_metc_vote(ai_vote)}, "
+            f"celltypist={_fmt_metc_vote(celltypist_vote)}) — "
+            f"rescued from the ambiguous/transitional candidate."
+        ),
+        "diagnostic": DiagnosticInfo(
+            category="metc_consensus",
+            top_competitors=[],
+            detail=f"METC consensus votes: {votes_json}",
+        ),
+        "review_reason": "metc_consensus",
+        "potency": None,
+        "source_votes": dict(votes),
+    }
+
+
 #  Public API
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -1038,9 +1205,24 @@ def fuse_evidence(
                     )
                     if named is not None:
                         return named
-                # METC arbitration lands in todo 9; until then (and for any
-                # non-arbitrated candidate incl. n_spoke < 3) the candidate is
-                # returned unchanged — never falls into the tier loop.
+                # ── Layer-4 METC multi-source arbitration (plan todo 9) ──
+                # KADP-named candidates already returned above; only still-
+                # ambiguous / transition_state candidates reach here.  When
+                # metc_cfg is enabled the four source votes are collected and
+                # arbitrated; an un-arbitrated candidate (n_spoke < min_sources)
+                # is returned unchanged — never falls into the tier loop.
+                if metc_cfg and metc_cfg.enabled:
+                    _best_vote_type, _best_vote_score, _ = _find_best_type(marker_scores)
+                    marker_vote = _best_vote_type if _best_vote_score >= 0.25 else None
+                    fields = _metc_arbitrate(
+                        marker_vote=marker_vote,
+                        expert_vote=expert_rule_result,  # structurally None here
+                        ai_vote=ai_suggestion or None,
+                        celltypist_vote=celltypist_suggestion or None,
+                        metc_cfg=metc_cfg,
+                    )
+                    if fields is not None:
+                        return candidate._replace(**fields)
                 return candidate
             return candidate
 
