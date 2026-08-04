@@ -232,6 +232,7 @@ expert_rules:
     corroborators:
     - NEFL
     - SNCG
+    - SLC17A6
   action: RGC
   source: tran2019
   notes: RBPMS is the gold-standard pan-RGC marker (100% of RGCs, including ipRGCs)
