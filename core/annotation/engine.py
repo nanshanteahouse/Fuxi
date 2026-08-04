@@ -833,13 +833,22 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
 
                 _model = celltypist.models.Model.load(model=_model_name)
                 _mv = CFG.annotation.celltypist.majority_voting
-                _ = celltypist.annotate(adata, model=_model, majority_voting=_mv)  # noqa: SLF001
+                # celltypist >= 1.6 returns an AnnotationResult WITHOUT mutating
+                # adata.obs: capture it and read per-cell labels from
+                # ``_res.predicted_labels`` (a DataFrame whose column is
+                # "majority_voting" when majority_voting=True else
+                # "predicted_labels", index aligned with adata.obs_names;
+                # reindex to obs_names defensively).
+                _res = celltypist.annotate(adata, model=_model, majority_voting=_mv)
                 _label_col = "majority_voting" if _mv else "predicted_labels"
-                if _label_col in adata.obs:
+                _labels = _res.predicted_labels
+                if hasattr(_labels, "reindex"):
+                    _labels = _labels.reindex(adata.obs_names)
+                if _label_col in _labels.columns:
                     for cl in clusters:
                         cl_str = str(cl)
                         _mask = adata.obs["leiden"].astype(str) == cl_str
-                        _types = adata.obs.loc[_mask, _label_col].mode()
+                        _types = _labels.loc[adata.obs_names[_mask], _label_col].mode()
                         if len(_types) > 0:
                             celltypist_results[cl_str] = str(_types[0])
                     logger.info(
@@ -850,7 +859,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
                     )
                 else:
                     logger.warning(
-                        "CellTypist: '%s' column not found in adata.obs — skipping",
+                        "CellTypist: '%s' column not found in AnnotationResult.predicted_labels — skipping",
                         _label_col,
                     )
             except Exception as exc:

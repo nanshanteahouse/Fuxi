@@ -11,6 +11,7 @@ import logging
 import os
 import sys
 import tempfile
+import types as _types_mod
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -19,6 +20,7 @@ import pandas as pd
 import scanpy as sc
 from anndata import AnnData
 
+import rna.utils.evidence_fusion as _ef
 from core.annotation.engine import (
     _apply_canonical_expression_fallback,
     _cluster_marker_pcts,
@@ -1786,3 +1788,250 @@ def test_metc_quality_harmonization_rate_none_guard(tmp_path) -> None:
     with open(quality_path, encoding="utf-8") as f:
         quality = json.load(f)
     assert quality["harmonization_rate"] is None, quality
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Todo 11 — CellTypist AnnotationResult label capture (engine fix).
+#
+#  celltypist >= 1.6 returns an AnnotationResult WITHOUT mutating adata.obs.
+#  The engine must capture ``_res = celltypist.annotate(...)`` and read per-
+#  cell labels from ``_res.predicted_labels`` (a DataFrame whose column is
+#  "majority_voting" when majority_voting=True else "predicted_labels", index
+#  aligned with adata.obs_names).  Pre-fix the result was discarded and the
+#  ``_label_col in adata.obs`` guard was ALWAYS False -> celltypist_results
+#  stayed {} -> the CellTypist METC source abstained (n_spoke=2<3).
+#
+#  The engine imports celltypist LAZILY inside run_unified_annotation, and
+#  importing the real package under pytest's filterwarnings=error raises on
+#  scanpy's ``__version__`` FutureWarning.  These tests therefore inject a
+#  FAKE ``celltypist`` module tree into ``sys.modules`` so the lazy import
+#  resolves to the mock without ever touching the installed package.
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _make_celltypist_cfg(tmp_path, *, majority_voting: bool = True) -> SimpleNamespace:
+    """AI-on, celltypist-ON config (defaults kadp/metc off)."""
+    cfg = _make_ai_gate_cfg(tmp_path)
+    cfg.annotation.celltypist = SimpleNamespace(
+        enabled=True,
+        model="Fetal_Human_Retina.pkl",
+        majority_voting=majority_voting,
+    )
+    return cfg
+
+
+def _celltypist_canned_scores() -> dict:
+    """Low non-zero scores: real fusion yields confidence 'low' so the AI
+    fallback fires and the SECOND-pass quality (with harmonization_rate) is
+    the written one."""
+    return {
+        "RGC": Score(
+            score=0.30,
+            p_value=0.05,
+            method="test",
+            n_markers_found=1,
+            negative_penalty=False,
+            tier="L3",
+            private_markers_hit=0,
+            consensus="low",
+            n_sources=1,
+        ),
+        "Amacrine": Score(
+            score=0.25,
+            p_value=0.05,
+            method="test",
+            n_markers_found=1,
+            negative_penalty=False,
+            tier="L3",
+            private_markers_hit=0,
+            consensus="low",
+            n_sources=1,
+        ),
+    }
+
+
+class _FakeCelltypistResult:
+    """Minimal stand-in for celltypist.AnnotationResult (>= 1.6)."""
+
+    def __init__(self, predicted_labels):
+        self.predicted_labels = predicted_labels
+
+
+def _celltypist_labels_df(adata, column: str, per_cluster: dict) -> pd.DataFrame:
+    """Build a predicted_labels DataFrame aligned with adata.obs_names.
+
+    ``per_cluster`` maps cluster string -> label; the label is repeated for
+    every cell of that cluster so the engine's per-cluster mode() returns
+    exactly that label."""
+    labels = []
+    for cl in adata.obs["leiden"].astype(str):
+        labels.append(per_cluster[cl])
+    return pd.DataFrame({column: labels}, index=adata.obs_names)
+
+
+def _importlib_util_spec(name: str):
+    """A minimal ModuleSpec so importlib.util.find_spec does not raise."""
+    import importlib.machinery as _machinery
+
+    return _machinery.ModuleSpec(name, loader=None)
+
+
+def _inject_fake_celltypist(annotate_mock):
+    """Register a fake ``celltypist`` package tree in sys.modules.
+
+    The engine lazily does ``import celltypist`` then
+    ``celltypist.models.Model.load(model=...)`` and
+    ``celltypist.annotate(...)``.  Provide a ModuleType-based fake so nothing
+    from the real package is ever imported (avoiding the scanpy FutureWarning
+    that pytest's filterwarnings=error turns into an exception).  A
+    ``__spec__`` is set on the fake modules so ``importlib.util.find_spec``
+    (called by ``require_celltypist``) does not raise.
+    """
+    fake_root = _types_mod.ModuleType("celltypist")
+    fake_models = _types_mod.ModuleType("celltypist.models")
+    fake_root.__spec__ = _importlib_util_spec("celltypist")
+    fake_models.__spec__ = _importlib_util_spec("celltypist.models")
+    fake_model_cls = MagicMock(name="Model")
+    fake_model_cls.load = MagicMock(return_value=MagicMock(name="loaded_model"))
+    fake_models.Model = fake_model_cls
+    fake_root.models = fake_models
+    fake_root.annotate = annotate_mock
+    return {
+        "celltypist": fake_root,
+        "celltypist.models": fake_models,
+    }
+
+
+def _run_celltypist_capture_engine(
+    adata,
+    cfg,
+    fake_result=None,
+    ai_response: str = "{}",
+    annotate_mock=None,
+):
+    """Drive the REAL run_unified_annotation with celltypist enabled.
+
+    ``celltypist.annotate`` is mocked via an injected fake package tree (see
+    ``_inject_fake_celltypist``) — pass either ``fake_result`` (returned by
+    the mock) or a pre-built ``annotate_mock`` (e.g. raising).
+    fuse_all_clusters is a spy that captures the ``celltypist_results`` kwarg
+    AND delegates to the real function so the quality dict (celltypist /
+    harmonization_rate) is computed by the frozen t8/t9 code."""
+    fuse_calls = []
+    qualities = []
+    real_fuse = _ef.fuse_all_clusters
+
+    def _spy_fuse(*args, **kwargs):
+        fuse_calls.append(kwargs)
+        out = real_fuse(*args, **kwargs)
+        if isinstance(out, tuple) and len(out) == 2:
+            qualities.append(out[1])
+        return out
+
+    if annotate_mock is None:
+        annotate_mock = MagicMock(return_value=fake_result)
+    fake_modules = _inject_fake_celltypist(annotate_mock)
+
+    logger = MagicMock()
+    with (
+        patch.dict(sys.modules, fake_modules),
+        patch("core.kb.load_kb", return_value=_make_ai_gate_kb()),
+        patch("core.kb.load_synonyms", return_value={}),
+        patch(
+            "core.annotation.scoring.score_cluster_against_kb",
+            side_effect=lambda *a, **k: dict(_celltypist_canned_scores()),
+        ),
+        patch("rna.utils.evidence_fusion.fuse_all_clusters", side_effect=_spy_fuse),
+        patch("core.ai.caller.ai_query", return_value=ai_response),
+        patch("core.annotation.engine.safe_plot"),
+    ):
+        result = run_unified_annotation(adata, cfg, logger)
+    return result, fuse_calls, qualities
+
+
+def test_celltypist_capture_majority_voting_column(tmp_path) -> None:
+    """todo 11 fix: with majority_voting=True the engine must read
+    ``_res.predicted_labels['majority_voting']`` and fill celltypist_results
+    with the per-cluster mode label.  Pre-fix this stayed {} because the
+    result was discarded and `_label_col in adata.obs` was always False."""
+    cfg = _make_celltypist_cfg(tmp_path / "ct_mv", majority_voting=True)
+    adata = _make_ai_gate_adata()
+    fake = _FakeCelltypistResult(
+        _celltypist_labels_df(adata, "majority_voting", {"0": "RGC", "1": "Amacrine", "2": "RGC"})
+    )
+    ai_response = json.dumps(
+        {
+            "0": {"cell_type": "RGC"},
+            "1": {"cell_type": "Amacrine"},
+            "2": {"cell_type": "RGC"},
+        }
+    )
+    result, fuse_calls, qualities = _run_celltypist_capture_engine(adata, cfg, fake, ai_response)
+
+    assert result is not None
+    expected_ct = {"0": "RGC", "1": "Amacrine", "2": "RGC"}
+    assert fuse_calls, "fuse_all_clusters must be called"
+    assert fuse_calls[0].get("celltypist_results") == expected_ct, fuse_calls[0]
+    # both passes mirror the same captured dict (Oracle r1 BLOCKER 1)
+    assert fuse_calls[-1].get("celltypist_results") == expected_ct
+    # real fusion quality: celltypist True + numeric harmonization_rate
+    assert qualities, "return_quality must be requested"
+    assert qualities[-1]["celltypist"] is True
+    assert isinstance(qualities[-1]["harmonization_rate"], float)
+    assert qualities[-1]["harmonization_rate"] > 0
+    # written JSON carries the numeric harmonization_rate
+    quality_path = os.path.join(cfg.table_dir, "05_annotation_quality.json")
+    with open(quality_path, encoding="utf-8") as f:
+        written = json.load(f)
+    assert written["harmonization_rate"] == qualities[-1]["harmonization_rate"]
+
+
+def test_celltypist_capture_predicted_labels_column(tmp_path) -> None:
+    """todo 11 fix: majority_voting=False path uses the "predicted_labels"
+    column of the AnnotationResult."""
+    cfg = _make_celltypist_cfg(tmp_path / "ct_pl", majority_voting=False)
+    adata = _make_ai_gate_adata()
+    fake = _FakeCelltypistResult(
+        _celltypist_labels_df(adata, "predicted_labels", {"0": "RGC", "1": "RGC", "2": "Amacrine"})
+    )
+    ai_response = json.dumps(
+        {
+            "0": {"cell_type": "RGC"},
+            "1": {"cell_type": "RGC"},
+            "2": {"cell_type": "Amacrine"},
+        }
+    )
+    result, fuse_calls, qualities = _run_celltypist_capture_engine(adata, cfg, fake, ai_response)
+
+    assert result is not None
+    assert fuse_calls[0].get("celltypist_results") == {"0": "RGC", "1": "RGC", "2": "Amacrine"}
+    assert qualities[-1]["celltypist"] is True
+    assert qualities[-1]["harmonization_rate"] > 0
+
+
+def test_celltypist_capture_degrades_when_labels_missing(tmp_path) -> None:
+    """todo 11: empty/absent predicted_labels -> celltypist_results stays {},
+    no crash, quality celltypist False (the existing degrade path)."""
+    cfg = _make_celltypist_cfg(tmp_path / "ct_deg", majority_voting=True)
+    adata = _make_ai_gate_adata()
+    ai_response = json.dumps({})
+
+    # absent predicted_labels column: DataFrame without the expected column
+    empty_df = pd.DataFrame(index=adata.obs_names)
+    fake = _FakeCelltypistResult(empty_df)
+    result, fuse_calls, qualities = _run_celltypist_capture_engine(adata, cfg, fake, ai_response)
+    assert result is not None
+    assert fuse_calls[0].get("celltypist_results") == {}, "no labels -> source abstains"
+    assert qualities[-1]["celltypist"] is False
+    assert qualities[-1]["harmonization_rate"] is None
+
+    # annotate raising -> caught, no crash, empty results
+    def _boom(*a, **k):
+        raise RuntimeError("model download failed")
+
+    cfg2 = _make_celltypist_cfg(tmp_path / "ct_boom", majority_voting=True)
+    result2, fuse_calls2, _ = _run_celltypist_capture_engine(
+        adata, cfg2, annotate_mock=MagicMock(side_effect=_boom)
+    )
+    assert result2 is not None, "annotate failure must degrade, not crash"
+    assert fuse_calls2[0].get("celltypist_results") == {}, "caught -> source abstains"
