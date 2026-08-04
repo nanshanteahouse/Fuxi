@@ -643,7 +643,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
         detect_low_quality_cluster,
         score_cluster_against_kb,
     )
-    from rna.utils.evidence_fusion import fuse_all_clusters
+    from rna.utils.evidence_fusion import METCConfig, fuse_all_clusters
     from rna.utils.marker_expert_rules import (
         apply_expert_rules,
         resolve_expert_rule_params,
@@ -868,6 +868,16 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
         use_gap_criterion=getattr(CFG.annotation, "use_gap_criterion", False),
     )
 
+    # ── Layer-4 METC multi-source voting config (plan annotation-kadp-metc) ──
+    # Constructed ONCE from CFG.annotation and mirrored into BOTH
+    # fuse_all_clusters calls (first pass + AI second pass) exactly like the
+    # KADPConfig above (Oracle r1 BLOCKER 1 extended to METC by todo 10).
+    metc_cfg = METCConfig(
+        enabled=getattr(CFG.annotation, "metc_enabled", False),
+        min_sources=getattr(CFG.annotation, "metc_min_sources", 3),
+        min_distinct_transition=getattr(CFG.annotation, "metc_min_distinct_transition", 3),
+    )
+
     # ── Label harmonization resources (todo 8) ────────────────────────
     # CellTypist and AI labels are resolved to canonical KB names through
     # the SHARED harmonize_label chain (parallel A/B evaluation, ambiguous
@@ -892,6 +902,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
         multi_peak_score_floor=getattr(CFG.annotation, "multi_peak_score_floor", 0.9),
         kadp_cfg=kadp_cfg,
         synonyms=synonyms,
+        metc_cfg=metc_cfg,
     )
     logger.info("Evidence fusion: %d clusters processed", len(decisions))
 
@@ -978,6 +989,12 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
     low_conf_clusters = _l1 + [d for d in _l2 if d not in _l1]
     ai_results = {}
 
+    # Quality reported to _write_quality_report: the first-pass dict unless
+    # the AI second pass re-fused, in which case the second pass's quality
+    # wins (Oracle r3 MINOR 5) so 05_annotation_quality.json reflects the
+    # AI-enhanced final decision_map.
+    reported_quality = fusion_quality
+
     if low_conf_clusters and ai_enabled and ai_annot_on:
         logger.info("AI fallback for %d low-confidence clusters", len(low_conf_clusters))
         kb_candidates = sorted([k for k in kb if k != "expert_rules" and not k.startswith("_")])
@@ -1038,13 +1055,18 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
                         if _canon is not None:
                             _resolved_ai[_cid] = _canon
                     ai_results = _resolved_ai
-                # Re-run fusion with AI context
-                decisions = fuse_all_clusters(
+                # Re-run fusion with AI context.  The second pass also
+                # requests return_quality=True and its quality dict becomes
+                # the reported one (Oracle r3 MINOR 5): 05_annotation_quality.json
+                # must reflect the AI-enhanced final decision_map, not the
+                # pre-AI first pass.
+                decisions, reported_quality = fuse_all_clusters(
                     fine_scores,
                     all_rules,
                     kb=kb,
                     all_marker_dfs=marker_df,
                     ai_results=ai_results,
+                    return_quality=True,
                     low_quality_clusters=low_quality_clusters,
                     unconstrained=getattr(CFG.ai, "unconstrained_annotation", False),
                     allows_transitions=allows_transitions,
@@ -1054,6 +1076,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
                     multi_peak_score_floor=getattr(CFG.annotation, "multi_peak_score_floor", 0.9),
                     kadp_cfg=kadp_cfg,
                     synonyms=synonyms,
+                    metc_cfg=metc_cfg,
                 )
                 decision_map = dict(zip(decision_clusters, decisions))
         except Exception as exc:
@@ -1223,6 +1246,12 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
                     "subtype_resolution": v.subtype_resolution,
                     "cell_subtype": tiered_subtypes.get(k, "N/A"),
                     "potency": v.potency,
+                    # Layer-4 METC (todo 10): the per-source vote dict
+                    # {marker/expert/ai/celltypist: label}, serialized inside
+                    # this JSON string exactly like ``potency`` (None/omitted
+                    # for non-METC decisions).  cell_metadata.csv has no
+                    # source_votes column — annot_evidence only.
+                    "source_votes": v.source_votes,
                 }
                 | (
                     {"subtype_candidates": tiered_candidates.get(k, [])}
@@ -1345,12 +1374,19 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
 
     # ── k. Annotation quality report ────────────────────────────────────────
     _write_quality_report(
-        adata, ann_records, fusion_quality, cell_category_map, decision_map, CFG, logger, kb=kb
+        adata,
+        ann_records,
+        reported_quality,
+        cell_category_map,
+        decision_map,
+        CFG,
+        logger,
+        kb=kb,
     )
 
     # ── l. Interactive review (--interactive flag) ──────────────────────────
     if getattr(CFG, "interactive", False):
-        _interactive_annotation_review(adata, fusion_quality, CFG, logger)
+        _interactive_annotation_review(adata, reported_quality, CFG, logger)
 
     return decision_map
 
@@ -1377,7 +1413,12 @@ def _write_quality_report(
         if "also matched rules:" in reasoning:
             ambiguity_clusters.append(rec["cluster"])
 
-    # D8 — KB coverage: annotated types vs KB fine types vs ghost transition endpoints
+    # D8 — KB coverage: annotated types vs KB fine types vs ghost transition
+    # endpoints.  F14: these ghost endpoints (transition-pair members that are
+    # not annotated cell types) are REPORT-ONLY — they never enter KADP
+    # precursor naming.  That is structurally enforced upstream by the
+    # score > 0 filtering in core/annotation/potency.py (a ghost endpoint
+    # has no marker scores, so it can never be a progenitor-pole argmax).
     annotated_types = {d.cell_type for d in decision_map.values()}
     transition_pairs = {
         tuple(d.cell_type[len("transitional: ") :].split("/"))
@@ -1402,6 +1443,10 @@ def _write_quality_report(
         "annotated_by_rule": fusion_quality.get("annotated_by_rule", 0),
         "annotated_by_scoring": fusion_quality.get("annotated_by_scoring", 0),
         "unknown": fusion_quality.get("unknown", 0),
+        # Layer-4 METC (todo 8/10): fraction of clusters with raw CellTypist
+        # labels that aligned to a canonical KB name.  None when no raw labels
+        # exist (Oracle r3 MINOR 6 — never a division by zero).
+        "harmonization_rate": fusion_quality.get("harmonization_rate"),
         "ambiguity_clusters": ambiguity_clusters,
         "ai_disagreement_rate": round(
             sum(1 for r in ann_records if not r.get("ai_agreed", True)) / max(len(ann_records), 1),
@@ -1425,13 +1470,17 @@ def _write_quality_report(
                 # precedence; a plain multi-peak ambiguity decision (no
                 # review_reason) gets the canonical "ambiguous".
                 "reason": getattr(d, "review_reason", "") or "ambiguous",
-                # Tie detail is only meaningful for multi-peak ambiguity;
-                # downgraded (non-ambiguous) entries carry empty values.
+                # Tie detail is meaningful for multi-peak ambiguity AND for
+                # METC entries (metc_divergent / metc_2way carry a ranked
+                # top_competitors list of {cell_type, score} dicts — F13).
+                # Kadp/consensus entries keep empty values.
                 "n_tied_types": len(d.diagnostic.top_competitors)
-                if d.diagnostic and d.method == "ambiguous"
+                if d.diagnostic
+                and (d.method == "ambiguous" or (d.review_reason or "").startswith("metc"))
                 else 0,
                 "top_types": [c["cell_type"] for c in d.diagnostic.top_competitors]
-                if d.diagnostic and d.method == "ambiguous"
+                if d.diagnostic
+                and (d.method == "ambiguous" or (d.review_reason or "").startswith("metc"))
                 else [],
             }
             for cl, d in decision_map.items()

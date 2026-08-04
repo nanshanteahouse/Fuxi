@@ -1146,7 +1146,7 @@ def _run_ai_gate_engine(adata, cfg, ai_response: str):
             captured_ai.update(kwargs["ai_results"])
         if len(fuse_calls) == 1:
             return list(decisions), {}
-        return list(decisions)
+        return list(decisions), {}
 
     logger = MagicMock()
     with (
@@ -1439,7 +1439,7 @@ def _run_kadp_wiring_engine(adata, cfg, ai_response: str):
         fuse_calls.append(kwargs)
         if len(fuse_calls) == 1:
             return list(decisions), {}
-        return list(decisions)
+        return list(decisions), {}
 
     logger = MagicMock()
     with (
@@ -1523,3 +1523,266 @@ def test_kadp_wiring_dual_call_mirror_and_obs(tmp_path) -> None:
     assert q0["reason"] == "kadp_precursor", q0
     assert q0["n_tied_types"] == 0, q0
     assert q0["top_types"] == [], q0
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Todo 10 — engine/schema METC wiring: dual-call mirroring + second-pass
+#  quality capture (Oracle r3 MINOR 5) + review_queue metc reasons +
+#  tie-gate extension (F13) + source_votes in annot_evidence +
+#  harmonization_rate plumbing (None guard).
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _make_metc_wiring_cfg(
+    tmp_path,
+    *,
+    metc_enabled: bool = True,
+    min_sources: int = 3,
+    min_distinct: int = 3,
+) -> SimpleNamespace:
+    """Developing-tissue config: AI on, celltypist off, METC on with
+    explicit thresholds so the captured METCConfig can be value-asserted."""
+    table_dir = tmp_path / "results" / "tables"
+    figure_dir = tmp_path / "figures"
+    table_dir.mkdir(parents=True, exist_ok=True)
+    figure_dir.mkdir(parents=True, exist_ok=True)
+    return SimpleNamespace(
+        tissue_kb="retina",
+        tissue="retina",
+        species="human",
+        target_class="",
+        target_order="",
+        tissue_maturity="developing",
+        table_dir=str(table_dir),
+        figure_dir=str(figure_dir),
+        interactive=False,
+        marker=SimpleNamespace(
+            candidate_pool_expand_steps=[5],
+            expert_rule_top_n=0,
+            expert_rule_pval_cutoff=0.0,
+            expert_rule_strictness="default",
+            developmental_mode=False,
+        ),
+        annotation=SimpleNamespace(
+            method="kb_unified",
+            celltypist=SimpleNamespace(enabled=False, model="", majority_voting=False),
+            kadp_enabled=False,
+            metc_enabled=metc_enabled,
+            metc_min_sources=min_sources,
+            metc_min_distinct_transition=min_distinct,
+        ),
+        ai=SimpleNamespace(enabled=True, ai_annotation=True, unconstrained_annotation=False),
+        plot=SimpleNamespace(figure_dpi=150, figure_format="pdf", figure_transparent=True),
+        execution=SimpleNamespace(random_seed=42),
+    )
+
+
+_METC_SOURCE_VOTES = {
+    "divergent": {"marker": "RGC", "expert": None, "ai": "Amacrine", "celltypist": "NRPC"},
+    "2way": {"marker": "RGC", "expert": None, "ai": "Amacrine", "celltypist": None},
+    "consensus": {"marker": "RGC", "expert": None, "ai": "RGC", "celltypist": "RGC"},
+}
+
+_METC_QUALITY_FIRST = {
+    "annotated_by_rule": 0,
+    "annotated_by_scoring": 1,
+    "unknown": 0,
+    "ambiguity": 0,
+    "ai_agreed": 0,
+    "total": 3,
+    "diagnostic_summary": {},
+    "celltypist": True,
+    "harmonization_rate": 0.0,
+}
+
+_METC_QUALITY_SECOND = {
+    "annotated_by_rule": 0,
+    "annotated_by_scoring": 1,
+    "unknown": 0,
+    "ambiguity": 0,
+    "ai_agreed": 0,
+    "total": 3,
+    "diagnostic_summary": {},
+    "celltypist": True,
+    "harmonization_rate": 0.6667,
+}
+
+
+def _metc_wiring_decisions() -> list:
+    """Canned fusion output covering the three METC review reasons.
+
+    Cluster 0 → metc_divergent (transition_state), 1 → metc_2way (ambiguous),
+    2 → metc_consensus (rescued marker_scoring).  Each carries a fresh
+    ``source_votes`` dict so annot_evidence can round-trip it."""
+    divergent = FusionDecision(
+        cell_type="transitional: RGC/Amacrine",
+        confidence="transition",
+        score=0.0,
+        method="transition_state",
+        n_markers_found=0,
+        ai_agreed=False,
+        ai_suggested="",
+        explanation="METC divergent: 3 sources split across 3 labels.",
+        alternative_rules=[],
+        diagnostic=DiagnosticInfo(
+            category="metc_divergent",
+            top_competitors=[
+                {"cell_type": "RGC", "score": 1},
+                {"cell_type": "Amacrine", "score": 1},
+                {"cell_type": "NRPC", "score": 1},
+            ],
+            detail="METC divergent votes.",
+        ),
+        review_reason="metc_divergent",
+        source_votes=dict(_METC_SOURCE_VOTES["divergent"]),
+    )
+    two_way = FusionDecision(
+        cell_type="Unknown",
+        confidence="low",
+        score=0.0,
+        method="ambiguous",
+        n_markers_found=0,
+        ai_agreed=False,
+        ai_suggested="",
+        explanation="METC 2-way split: 'RGC' (1 vote) vs 'Amacrine' (1 vote).",
+        alternative_rules=[],
+        diagnostic=DiagnosticInfo(
+            category="metc_2way",
+            top_competitors=[
+                {"cell_type": "RGC", "score": 1},
+                {"cell_type": "Amacrine", "score": 1},
+            ],
+            detail="METC 2-way votes.",
+        ),
+        review_reason="metc_2way",
+        source_votes=dict(_METC_SOURCE_VOTES["2way"]),
+    )
+    consensus = FusionDecision(
+        cell_type="RGC",
+        confidence="medium",
+        score=0.0,
+        method="marker_scoring",
+        n_markers_found=0,
+        ai_agreed=False,
+        ai_suggested="",
+        explanation="METC consensus: all 3 sources agree on 'RGC'.",
+        alternative_rules=[],
+        diagnostic=DiagnosticInfo(
+            category="metc_consensus",
+            top_competitors=[],
+            detail="METC consensus votes.",
+        ),
+        review_reason="metc_consensus",
+        source_votes=dict(_METC_SOURCE_VOTES["consensus"]),
+    )
+    return [divergent, two_way, consensus]
+
+
+def _run_metc_wiring_engine(adata, cfg, ai_response: str, second_quality=None):
+    """Drive the real ``run_unified_annotation``; capture BOTH fuse calls and
+    keep the first/second-pass quality dicts distinct so the second-pass
+    capture can be asserted on the written 05_annotation_quality.json."""
+    decisions = _metc_wiring_decisions()
+    fuse_calls: list = []
+    q2 = second_quality if second_quality is not None else dict(_METC_QUALITY_SECOND)
+
+    def _fake_fuse_all(*args, **kwargs):
+        fuse_calls.append(kwargs)
+        if len(fuse_calls) == 1:
+            return list(decisions), dict(_METC_QUALITY_FIRST)
+        return list(decisions), dict(q2)
+
+    logger = MagicMock()
+    with (
+        patch("core.kb.load_kb", return_value=_make_ai_gate_kb()),
+        patch(
+            "core.annotation.scoring.score_cluster_against_kb",
+            side_effect=lambda *a, **k: dict(_ai_gate_canned_scores()),
+        ),
+        patch("rna.utils.evidence_fusion.fuse_all_clusters", side_effect=_fake_fuse_all),
+        patch("core.ai.caller.ai_query", return_value=ai_response),
+        patch("core.annotation.engine.safe_plot"),
+    ):
+        result = run_unified_annotation(adata, cfg, logger)
+    return result, adata, fuse_calls
+
+
+def test_metc_wiring_dual_call_mirror_and_second_pass_quality(tmp_path) -> None:
+    """todo 10: BOTH fuse_all_clusters calls receive the SAME METCConfig
+    instance and ``return_quality=True``; the quality written to
+    05_annotation_quality.json is the SECOND (AI-enhanced) pass's quality
+    (Oracle r3 MINOR 5) carrying the harmonization_rate key; the review_queue
+    surfaces metc_divergent/metc_2way/metc_consensus with tie detail (F13);
+    annot_evidence carries source_votes."""
+    cfg = _make_metc_wiring_cfg(tmp_path / "metc")
+    ai_response = json.dumps(
+        {
+            "0": {"cell_type": "RGC"},
+            "1": {"cell_type": "Amacrine"},
+            "2": {"cell_type": "RGC"},
+        }
+    )
+    result, adata, fuse_calls = _run_metc_wiring_engine(_make_ai_gate_adata(), cfg, ai_response)
+
+    # ── AI fallback fired → second pass ran ──
+    assert len(fuse_calls) == 2, "low-conf/transition candidates must trigger the AI second pass"
+
+    # ── dual-call mirroring (Oracle r1 BLOCKER 1, extended to METC) ──
+    metc_cfg_0 = fuse_calls[0].get("metc_cfg")
+    metc_cfg_1 = fuse_calls[1].get("metc_cfg")
+    assert metc_cfg_0 is not None, "first fuse_all_clusters call must receive metc_cfg"
+    assert metc_cfg_0 is metc_cfg_1, "both calls must share the SAME METCConfig instance"
+    assert metc_cfg_0.enabled is True
+    assert metc_cfg_0.min_sources == 3
+    assert metc_cfg_0.min_distinct_transition == 3
+
+    # ── both calls request quality; the SECOND one is written (Oracle r3 MINOR 5) ──
+    assert fuse_calls[0].get("return_quality") is True
+    assert fuse_calls[1].get("return_quality") is True
+    quality_path = os.path.join(cfg.table_dir, "05_annotation_quality.json")
+    with open(quality_path, encoding="utf-8") as f:
+        quality = json.load(f)
+    assert quality["harmonization_rate"] == _METC_QUALITY_SECOND["harmonization_rate"], (
+        "written quality must come from the SECOND (AI-enhanced) fuse pass"
+    )
+
+    # ── review_queue: metc_divergent reason + tie detail populated (F13) ──
+    q0 = next(q for q in quality["review_queue"] if q["cluster"] == "0")
+    assert q0["reason"] == "metc_divergent", q0
+    assert q0["n_tied_types"] == 3, q0
+    assert q0["top_types"] == ["RGC", "Amacrine", "NRPC"], q0
+
+    # ── review_queue: metc_2way / metc_consensus reasons ──
+    q1 = next(q for q in quality["review_queue"] if q["cluster"] == "1")
+    assert q1["reason"] == "metc_2way", q1
+    assert q1["n_tied_types"] == 2, q1
+    q2 = next(q for q in quality["review_queue"] if q["cluster"] == "2")
+    assert q2["reason"] == "metc_consensus", q2
+    assert q2["n_tied_types"] == 0, q2
+
+    # ── obs-level: metc method + annot_evidence source_votes ──
+    assert result is not None
+    assert result["0"].method == "transition_state"
+    assert result["0"].review_reason == "metc_divergent"
+    mask0 = adata.obs["leiden"].astype(str) == "0"
+    assert adata.obs.loc[mask0, "annot_method"].unique().tolist() == ["transition_state"]
+    ev0 = json.loads(adata.obs.loc[mask0, "annot_evidence"].iloc[0])
+    assert ev0["source_votes"] == _METC_SOURCE_VOTES["divergent"], ev0
+    mask1 = adata.obs["leiden"].astype(str) == "1"
+    ev1 = json.loads(adata.obs.loc[mask1, "annot_evidence"].iloc[0])
+    assert ev1["source_votes"] == _METC_SOURCE_VOTES["2way"], ev1
+
+
+def test_metc_quality_harmonization_rate_none_guard(tmp_path) -> None:
+    """No celltypist labels → second-pass quality carries harmonization_rate
+    None and the written JSON keeps it null (Oracle r3 MINOR 6) — the engine
+    plumbing passes the None through without crashing."""
+    cfg = _make_metc_wiring_cfg(tmp_path / "metc_none")
+    ai_response = json.dumps({"0": {"cell_type": "RGC"}, "1": {"cell_type": "Amacrine"}})
+    q2_none = dict(_METC_QUALITY_SECOND)
+    q2_none["harmonization_rate"] = None
+    _run_metc_wiring_engine(_make_ai_gate_adata(), cfg, ai_response, second_quality=q2_none)
+    quality_path = os.path.join(cfg.table_dir, "05_annotation_quality.json")
+    with open(quality_path, encoding="utf-8") as f:
+        quality = json.load(f)
+    assert quality["harmonization_rate"] is None, quality

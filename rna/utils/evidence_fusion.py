@@ -1335,6 +1335,7 @@ def fuse_all_clusters(
     multi_peak_score_floor: float = 0.9,
     kadp_cfg: Optional[KADPConfig] = None,
     synonyms: Optional[dict] = None,
+    metc_cfg: Optional[METCConfig] = None,
 ) -> list | tuple[list, dict]:
     """Process all clusters and return a list of :class:`FusionDecision`.
 
@@ -1378,7 +1379,10 @@ def fuse_all_clusters(
         labels through :func:`harmonize_label` before forwarding each as
         ``celltypist_suggestion``.  Default ``None`` leaves every cluster's
         celltypist vote abstaining.
-
+    metc_cfg : METCConfig or None
+        Layer-4 METC multi-source transition consensus config, mirrored into
+        every :func:`fuse_evidence` call.  Default ``None`` keeps baseline
+        behavior (METC never fires).
     Returns
     -------
     list[FusionDecision]  or  tuple[list[FusionDecision], dict]
@@ -1434,6 +1438,7 @@ def fuse_all_clusters(
             multi_peak_score_floor=multi_peak_score_floor,
             kadp_cfg=kadp_cfg,
             celltypist_suggestion=harmonized_celltypist.get(cl),
+            metc_cfg=metc_cfg,
         )
         decisions.append(decision)
 

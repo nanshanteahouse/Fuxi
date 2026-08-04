@@ -706,13 +706,10 @@ _GETATTR_ANNOTATION_RE = re.compile(
     r'getattr\(\s*(?:cfg|CFG)\.annotation\s*,\s*["\']([a-zA-Z_][a-zA-Z0-9_]*)["\']'
 )
 
-# t2 (AI-fallback gate) already reads metc_enabled via getattr; the METC
-# config fields are owned by plan todo 10 (Wave 3) and land there.
-_ANNOTATION_GHOST_ALLOWLIST: set[str] = {"metc_enabled"}
-
-_GETATTR_ANNOTATION_RE = re.compile(
-    r'getattr\(\s*(?:cfg|CFG)\.annotation\s*,\s*["\']([a-zA-Z_][a-zA-Z0-9_]*)["\']'
-)
+# The t2 AI-fallback gate read metc_enabled via getattr before the schema
+# fields existed (todo 5 documented the gap).  Todo 10 landed the three
+# metc_* fields in AnnotationSettings, so no ghost allowlist remains.
+_ANNOTATION_GHOST_ALLOWLIST: set[str] = set()
 
 
 class TestAnnotationSettingsFields:
@@ -776,3 +773,13 @@ class TestAnnotationSettingsFields:
         assert fields["kadp_gap_threshold"].default == 0.1
         assert fields["use_gap_criterion"].annotation is bool
         assert fields["use_gap_criterion"].default is False
+
+    def test_metc_fields_schema_drift(self) -> None:
+        """Verify the 3 METC fields' type annotations and defaults (plan todo 10)."""
+        fields = AnnotationSettings.model_fields
+        assert fields["metc_enabled"].annotation is bool
+        assert fields["metc_enabled"].default is False
+        assert fields["metc_min_sources"].annotation is int
+        assert fields["metc_min_sources"].default == 3
+        assert fields["metc_min_distinct_transition"].annotation is int
+        assert fields["metc_min_distinct_transition"].default == 3

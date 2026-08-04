@@ -247,6 +247,13 @@ class TestConfigDefaults:
         assert cfg.annotation.kadp_gap_threshold == 0.1
         assert cfg.annotation.use_gap_criterion is False
 
+    def test_annotation_metc_defaults(self) -> None:
+        """AnnotationSettings METC multi-source voting defaults (plan todo 10)."""
+        cfg = Config()
+        assert cfg.annotation.metc_enabled is False
+        assert cfg.annotation.metc_min_sources == 3
+        assert cfg.annotation.metc_min_distinct_transition == 3
+
     def test_downsample_defaults(self) -> None:
         """Downsample defaults."""
         cfg = Config()

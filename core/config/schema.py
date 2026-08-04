@@ -839,6 +839,18 @@ class AnnotationSettings(BaseModel):
     use_gap_criterion: bool = False
     """When True, the gap variant joins the ratio/abs pass combination."""
 
+    # ── Layer-4 METC multi-source transition voting (plan annotation-kadp-metc todo 10) ──
+    # Default off; thresholds mirror METCConfig in rna/utils/evidence_fusion.py.
+    metc_enabled: bool = False
+    """Enable METC: multi-source voting (marker / expert / AI / CellTypist)
+    arbitrates ambiguous/transition_state candidates that KADP did not name.
+    Requires ``allows_transitions`` context (developing tissue or _dev_mode)."""
+    metc_min_sources: int = 3
+    """Minimum number of speaking evidence sources for METC arbitration."""
+    metc_min_distinct_transition: int = 3
+    """Minimum number of distinct votes to emit a transitional (vs a 2-way
+    ambiguous split) decision."""
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Top-level Config
