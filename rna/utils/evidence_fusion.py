@@ -696,14 +696,13 @@ def fuse_evidence(
                 diagnostic=diagnostic,
             )
 
-        # Tiers 1–3: marker-scoring-based decisions
-        if tier_name == "marker_scoring_medium":
-            ai_agreed = _labels_match(ai_suggestion, best_type) if ai_suggestion else True
+            # Tiers 1–3: marker-scoring-based decisions
+            ai_agreed = _labels_match(ai_suggestion, best_type) if ai_suggestion else False
         elif tier_name == "marker_scoring_low":
             ai_agreed = _labels_match(ai_suggestion, best_type) if ai_suggestion else False
         else:
             # marker_scoring_high — AI not required for agreement
-            ai_agreed = _labels_match(ai_suggestion, best_type) if ai_suggestion else True
+            ai_agreed = _labels_match(ai_suggestion, best_type) if ai_suggestion else False
 
         return FusionDecision(
             cell_type=best_type,
