@@ -824,6 +824,21 @@ class AnnotationSettings(BaseModel):
     在簇中 pct 表达全部低于此值 → 降级 confidence=low + 计入 review_queue
     (reason=no_canonical_expression)。"""
 
+    # ── Layer-3 KADP developmental potency (plan annotation-kadp-metc todo 5) ──
+    # Thresholds default off; the exact values are locked by calibration
+    # (todo 6/7) on GSE246169 fetal.
+    kadp_enabled: bool = False
+    """Enable the KADP potency axis: ambiguous multi-peak clusters are named as
+    differentiating precursors when the Progenitor pole dominates."""
+    kadp_ratio_threshold: float = 2.0
+    """KADP ratio variant pass threshold: max_prog / max(max_term, epsilon)."""
+    kadp_abs_threshold: float = 0.6
+    """KADP abs variant pass threshold: max_prog (with max_prog > max_term guard)."""
+    kadp_gap_threshold: float = 0.1
+    """KADP gap variant pass threshold: max_prog - max_term."""
+    use_gap_criterion: bool = False
+    """When True, the gap variant joins the ratio/abs pass combination."""
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Top-level Config

@@ -23,6 +23,7 @@ import textwrap
 from typing import Any
 
 from core.config.schema import (
+    AnnotationSettings,
     ClusteringSettings,
     Config,
     IntegrationSettings,
@@ -694,3 +695,84 @@ class TestH5adIncrementalIOFields:
         cfg = resolve_config(str(dst))
         assert cfg.incremental_io is True
         assert cfg.trajectory.save_final_h5ad is True
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Test 9 — AnnotationSettings (incl. KADP fields) schema ↔ code consistency
+#  (plan todo 5: engine reads the 5 KADP fields via getattr(CFG.annotation, ...)).
+# ═══════════════════════════════════════════════════════════════════════
+
+_GETATTR_ANNOTATION_RE = re.compile(
+    r'getattr\(\s*(?:cfg|CFG)\.annotation\s*,\s*["\']([a-zA-Z_][a-zA-Z0-9_]*)["\']'
+)
+
+# t2 (AI-fallback gate) already reads metc_enabled via getattr; the METC
+# config fields are owned by plan todo 10 (Wave 3) and land there.
+_ANNOTATION_GHOST_ALLOWLIST: set[str] = {"metc_enabled"}
+
+_GETATTR_ANNOTATION_RE = re.compile(
+    r'getattr\(\s*(?:cfg|CFG)\.annotation\s*,\s*["\']([a-zA-Z_][a-zA-Z0-9_]*)["\']'
+)
+
+
+class TestAnnotationSettingsFields:
+    """Verify AnnotationSettings fields match production code usage."""
+
+    def test_all_annotation_fields_are_read(self) -> None:
+        """Every AnnotationSettings field name appears in ≥1 production .py file."""
+        schema_fields = set(AnnotationSettings.model_fields.keys())
+        py_files = _collect_production_py_files()
+
+        found: set[str] = set()
+        for fpath in py_files:
+            content = _safe_read(fpath)
+            for field_name in schema_fields - found:
+                if field_name in content:
+                    found.add(field_name)
+
+        dead = schema_fields - found
+        assert not dead, textwrap.dedent(f"""\
+            Dead AnnotationSettings field(s) — not referenced in any production .py file:
+            {_fmt_field_list(dead)}
+            These fields exist in the schema but aren't read by any production code.""")
+
+    def test_no_ghost_annotation_fields(self) -> None:
+        """No getattr(cfg.annotation|CFG.annotation, ...) references a missing field."""
+        schema_fields = set(AnnotationSettings.model_fields.keys())
+        py_files = _collect_production_py_files()
+        ghosts: dict[str, list[tuple[pathlib.Path, int]]] = {}
+        for fpath in py_files:
+            content = _safe_read(fpath)
+            for lineno, line in enumerate(content.splitlines(), start=1):
+                for m in _GETATTR_ANNOTATION_RE.finditer(line):
+                    name = m.group(1)
+                    if name not in schema_fields and name not in _ANNOTATION_GHOST_ALLOWLIST:
+                        ghosts.setdefault(name, []).append((fpath, lineno))
+                        ghosts.setdefault(name, []).append((fpath, lineno))
+        if not ghosts:
+            return
+        msg_lines = ["Ghost AnnotationSettings field(s) accessed via getattr():", ""]
+        for name, locations in sorted(ghosts.items()):
+            msg_lines.append(f"  \u2022 {name!r}  (used in {len(locations)} location(s)):")
+            for fpath, lineno in locations:
+                rel = fpath.relative_to(_REPO)
+                msg_lines.append(f"      {rel}:{lineno}")
+        msg_lines.append("")
+        msg_lines.append(
+            "Either add these fields to AnnotationSettings or remove the ghost getattr calls."
+        )
+        assert not ghosts, "\n".join(msg_lines)
+
+    def test_kadp_fields_schema_drift(self) -> None:
+        """Verify the 5 KADP fields' type annotations and defaults (plan todo 5)."""
+        fields = AnnotationSettings.model_fields
+        assert fields["kadp_enabled"].annotation is bool
+        assert fields["kadp_enabled"].default is False
+        assert fields["kadp_ratio_threshold"].annotation is float
+        assert fields["kadp_ratio_threshold"].default == 2.0
+        assert fields["kadp_abs_threshold"].annotation is float
+        assert fields["kadp_abs_threshold"].default == 0.6
+        assert fields["kadp_gap_threshold"].annotation is float
+        assert fields["kadp_gap_threshold"].default == 0.1
+        assert fields["use_gap_criterion"].annotation is bool
+        assert fields["use_gap_criterion"].default is False

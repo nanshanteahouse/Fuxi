@@ -1046,6 +1046,7 @@ def fuse_all_clusters(
     celltypist_results: Optional[dict] = None,
     multi_peak_min_types: int = 3,
     multi_peak_score_floor: float = 0.9,
+    kadp_cfg: Optional[KADPConfig] = None,
 ) -> list | tuple[list, dict]:
     """Process all clusters and return a list of :class:`FusionDecision`.
 
@@ -1079,6 +1080,10 @@ def fuse_all_clusters(
         Passed through to :func:`fuse_evidence` (default 3).
     multi_peak_score_floor : float
         Passed through to :func:`fuse_evidence` (default 0.9).
+    kadp_cfg : KADPConfig or None
+        Layer-3 KADP developmental-potency config, mirrored into every
+        :func:`fuse_evidence` call.  Default ``None`` keeps baseline
+        behavior (KADP never fires).
 
     Returns
     -------
@@ -1122,6 +1127,7 @@ def fuse_all_clusters(
             incompatible_transitions=incompatible_transitions,
             multi_peak_min_types=multi_peak_min_types,
             multi_peak_score_floor=multi_peak_score_floor,
+            kadp_cfg=kadp_cfg,
         )
         decisions.append(decision)
 

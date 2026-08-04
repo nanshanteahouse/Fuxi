@@ -479,6 +479,27 @@ def test_T9_map_cell_state_proliferating_precedes_progenitor() -> None:
     assert _map_cell_state(d, "Broad_Progenitor") == "cycling"
 
 
+def test_T9_map_cell_state_developmental_potency() -> None:
+    """KADP: method == 'developmental_potency' → 'differentiating' (plan todo 5)."""
+
+    d = _make_decision(method="developmental_potency", cell_type="NRPC", confidence="medium")
+
+    assert _map_cell_state(d, "Broad_Progenitor") == "differentiating"
+
+
+def test_T9_map_cell_state_kadp_precedes_proliferating_row() -> None:
+    """Row order: the differentiating row sits BEFORE the 'Proliferating' row.
+
+    A KADP-named type that happens to contain 'Proliferating' (e.g.
+    Proliferating_RPC) must still map to 'differentiating', not 'cycling'."""
+
+    d = _make_decision(
+        method="developmental_potency", cell_type="Proliferating_RPC", confidence="medium"
+    )
+
+    assert _map_cell_state(d, "Broad_Progenitor") == "differentiating"
+
+
 def _make_kb() -> dict:
     """Minimal retina-like KB: 4 fine types + hierarchy/expert/Broad_* containers."""
 
@@ -1209,3 +1230,267 @@ def test_ai_fallback_gate_includes_transition_state_decision(tmp_path) -> None:
     assert not ai_mock_off.called, "baseline: transition_state must stay out of low_conf_clusters"
     assert captured_ai_off == {}
     assert len(fuse_calls_off) == 1
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  Todo 5 — engine/schema KADP wiring: dual-call mirroring + obs-level
+#  four-value assertions + tiered-block exemption + AI second-pass keep.
+#  The engine drives the REAL run_unified_annotation with canned fusion
+#  output; the KADPConfig is captured from BOTH fuse_all_clusters calls.
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _make_kadp_wiring_cfg(
+    tmp_path,
+    *,
+    kadp_enabled: bool = True,
+    ratio: float = 2.0,
+    abs_: float = 0.6,
+    gap: float = 0.1,
+    use_gap: bool = False,
+) -> SimpleNamespace:
+    """Developing-tissue config: AI on, celltypist off, KADP on with
+    explicit thresholds so the captured KADPConfig can be value-asserted."""
+    table_dir = tmp_path / "results" / "tables"
+    figure_dir = tmp_path / "figures"
+    table_dir.mkdir(parents=True, exist_ok=True)
+    figure_dir.mkdir(parents=True, exist_ok=True)
+    return SimpleNamespace(
+        tissue_kb="retina",
+        tissue="retina",
+        species="human",
+        target_class="",
+        target_order="",
+        tissue_maturity="developing",
+        table_dir=str(table_dir),
+        figure_dir=str(figure_dir),
+        interactive=False,
+        marker=SimpleNamespace(
+            candidate_pool_expand_steps=[5],
+            expert_rule_top_n=0,
+            expert_rule_pval_cutoff=0.0,
+            expert_rule_strictness="default",
+            developmental_mode=False,
+        ),
+        annotation=SimpleNamespace(
+            method="kb_unified",
+            celltypist=SimpleNamespace(enabled=False, model="", majority_voting=False),
+            kadp_enabled=kadp_enabled,
+            kadp_ratio_threshold=ratio,
+            kadp_abs_threshold=abs_,
+            kadp_gap_threshold=gap,
+            use_gap_criterion=use_gap,
+            metc_enabled=False,
+        ),
+        ai=SimpleNamespace(enabled=True, ai_annotation=True, unconstrained_annotation=False),
+        plot=SimpleNamespace(figure_dpi=150, figure_format="pdf", figure_transparent=True),
+        execution=SimpleNamespace(random_seed=42),
+    )
+
+
+def _make_kadp_tiered_kb() -> dict:
+    """Retina-like KB WITH ``_hierarchy`` so the engine's tiered block runs.
+
+    The Progenitor/Neuron/Glia/Non-neural category members drive both the
+    category guard and the tiered block; the KADP cluster (NRPC) must be
+    exempted from the tiered block's _replace entirely."""
+    return {
+        "RGC": {
+            "markers": {"confirm": {"RBPMS": ["PMID1"]}},
+            "negative_markers": [],
+            "species": ["human"],
+            "synonyms": [],
+        },
+        "Amacrine": {
+            "markers": {"confirm": {"TFAP2A": ["PMID2"]}},
+            "negative_markers": [],
+            "species": ["human"],
+            "synonyms": [],
+        },
+        "Rod Photoreceptor": {
+            "markers": {"confirm": {"RHO": ["PMID3"]}},
+            "negative_markers": [],
+            "species": ["human"],
+            "synonyms": [],
+        },
+        "Müller Glia": {
+            "markers": {"confirm": {"RLBP1": ["PMID4"]}},
+            "negative_markers": [],
+            "species": ["human"],
+            "synonyms": [],
+        },
+        "NRPC": {
+            "markers": {"confirm": {"NRPCMARK": ["PMID5"]}},
+            "negative_markers": [],
+            "species": ["human"],
+            "synonyms": [],
+        },
+        "_hierarchy": {
+            "categories": {
+                "Progenitor": {"members": ["NRPC"], "subtypes": {}},
+                "Neuron": {
+                    "members": ["RGC", "Amacrine", "Rod Photoreceptor"],
+                    "subtypes": {},
+                },
+                "Glia": {"members": ["Müller Glia"], "subtypes": {}},
+                "Non-neural": {"members": [], "subtypes": {}},
+            }
+        },
+        "expert_rules": {},
+        "Broad_Progenitor": {},
+        "Broad_Neuron": {},
+        "Broad_Glia": {},
+        "Broad_Non-neural": {},
+    }
+
+
+_KADP_POTENCY = {"ratio": 3.17, "abs": 0.95, "gap": 0.65}
+
+
+def _kadp_wiring_decisions() -> list:
+    """Canned fusion output: KADP (cluster 0), low (cluster 1), high (2).
+
+    The KADP decision carries ``ai_agreed=True`` + ``ai_suggested='NRPC'`` to
+    simulate the AI second pass agreeing with the KADP name — this makes the
+    ``_clean_method`` ordering test meaningful (developmental_potency must
+    win over the marker_scoring+ai suffix)."""
+    kadp = FusionDecision(
+        cell_type="NRPC",
+        confidence="medium",
+        score=0.95,
+        method="developmental_potency",
+        n_markers_found=3,
+        ai_agreed=True,
+        ai_suggested="NRPC",
+        explanation="Developmental potency named 'NRPC' as differentiating precursor.",
+        alternative_rules=[],
+        diagnostic=DiagnosticInfo(
+            category="developmental_potency",
+            top_competitors=[{"cell_type": "NRPC", "score": 0.95}],
+            detail="Developmental potency naming -- max progenitor 0.950 vs max terminal 0.300.",
+        ),
+        review_reason="kadp_precursor",
+        potency=dict(_KADP_POTENCY),
+        source_votes=None,
+    )
+    low = FusionDecision(
+        cell_type="RGC",
+        confidence="low",
+        score=0.6,
+        method="marker_scoring",
+        n_markers_found=2,
+        ai_agreed=False,
+        ai_suggested="",
+        explanation="Weak RBPMS signal.",
+        alternative_rules=[],
+        tier="L2",
+    )
+    high = FusionDecision(
+        cell_type="Amacrine",
+        confidence="high",
+        score=0.9,
+        method="marker_scoring_high",
+        n_markers_found=3,
+        ai_agreed=False,
+        ai_suggested="",
+        explanation="Strong TFAP2A.",
+        alternative_rules=[],
+        cell_category="Broad_Neuron",
+        tier="L2",
+    )
+    return [kadp, low, high]
+
+
+def _run_kadp_wiring_engine(adata, cfg, ai_response: str):
+    """Drive the real ``run_unified_annotation``; capture both fuse calls."""
+    decisions = _kadp_wiring_decisions()
+    fuse_calls: list = []
+
+    def _fake_fuse_all(*args, **kwargs):
+        fuse_calls.append(kwargs)
+        if len(fuse_calls) == 1:
+            return list(decisions), {}
+        return list(decisions)
+
+    logger = MagicMock()
+    with (
+        patch("core.kb.load_kb", return_value=_make_kadp_tiered_kb()),
+        patch(
+            "core.annotation.scoring.score_cluster_against_kb",
+            side_effect=lambda *a, **k: dict(_ai_gate_canned_scores()),
+        ),
+        patch("rna.utils.evidence_fusion.fuse_all_clusters", side_effect=_fake_fuse_all),
+        patch("core.ai.caller.ai_query", return_value=ai_response),
+        patch("core.annotation.engine.safe_plot"),
+    ):
+        result = run_unified_annotation(adata, cfg, logger)
+    return result, adata, fuse_calls
+
+
+def test_kadp_wiring_dual_call_mirror_and_obs(tmp_path) -> None:
+    """todo 5: BOTH fuse_all_clusters calls receive the same KADPConfig, and
+    the KADP decision survives the AI second pass with cell_state=differentiating,
+    annot_method=developmental_potency, tiered metadata untouched, potency in
+    annot_evidence / ann_records / cell_metadata, and a kadp_precursor review.
+    """
+    cfg = _make_kadp_wiring_cfg(tmp_path / "kadp")
+    ai_response = json.dumps({"0": {"cell_type": "NRPC"}, "1": {"cell_type": "RGC"}})
+    result, adata, fuse_calls = _run_kadp_wiring_engine(_make_ai_gate_adata(), cfg, ai_response)
+
+    # ── AI fallback fired → second pass ran ──
+    assert len(fuse_calls) == 2, "a low-confidence cluster must trigger the AI second pass"
+
+    # ── dual-call mirroring (Oracle r1 BLOCKER 1) ──
+    kadp_cfg_0 = fuse_calls[0].get("kadp_cfg")
+    kadp_cfg_1 = fuse_calls[1].get("kadp_cfg")
+    assert kadp_cfg_0 is not None, "first fuse_all_clusters call must receive kadp_cfg"
+    assert kadp_cfg_0 is kadp_cfg_1, "both calls must share the SAME KADPConfig instance"
+    assert kadp_cfg_0.enabled is True
+    assert kadp_cfg_0.ratio_threshold == 2.0
+    assert kadp_cfg_0.abs_threshold == 0.6
+    assert kadp_cfg_0.gap_threshold == 0.1
+    assert kadp_cfg_0.use_gap_criterion is False
+
+    # ── KADP naming preserved after the AI second pass ──
+    assert result is not None
+    assert result["0"].method == "developmental_potency"
+    assert result["0"].cell_type == "NRPC"
+
+    # ── tiered-block exemption (Oracle r3 MAJOR 2): tiered metadata untouched ──
+    d0 = result["0"]
+    assert d0.tier == "", f"tiered block must not overwrite KADP tier: {d0.tier!r}"
+    assert d0.consensus == "", f"KADP consensus must stay default: {d0.consensus!r}"
+    assert d0.n_sources == 0, f"KADP n_sources must stay default: {d0.n_sources!r}"
+    assert d0.subtype_resolution == "", (
+        f"KADP subtype_resolution must stay default: {d0.subtype_resolution!r}"
+    )
+
+    # ── obs-level four-value assertions ──
+    mask0 = adata.obs["leiden"].astype(str) == "0"
+    assert adata.obs.loc[mask0, "cell_state"].unique().tolist() == ["differentiating"]
+    assert adata.obs.loc[mask0, "annot_method"].unique().tolist() == ["developmental_potency"], (
+        "_clean_method must keep KADP annot_method (not marker_scoring+ai)"
+    )
+    ev0 = json.loads(adata.obs.loc[mask0, "annot_evidence"].iloc[0])
+    assert ev0["potency"] == _KADP_POTENCY, ev0
+
+    # ── ann_records / cell_type_annotations.csv contain potency ──
+    ann_df = pd.read_csv(os.path.join(cfg.table_dir, "cell_type_annotations.csv"))
+    row0 = ann_df[ann_df["cluster"].astype(str) == "0"].iloc[0]
+    assert json.loads(row0["potency"]) == _KADP_POTENCY
+    row1 = ann_df[ann_df["cluster"].astype(str) == "1"].iloc[0]
+    assert pd.isna(row1["potency"]) or row1["potency"] == "", (
+        "non-KADP ann_records potency must be empty"
+    )
+    # ── cell_metadata.csv potency column (single JSON-string column) ──
+    meta_df = pd.read_csv(os.path.join(cfg.table_dir, "cell_metadata.csv"))
+    assert meta_df.loc[mask0.values, "potency"].iloc[0] == json.dumps(_KADP_POTENCY)
+    non_kadp = meta_df.loc[~mask0.values, "potency"]
+    assert non_kadp.isna().all(), "non-KADP cell_metadata potency must be empty"
+    quality_path = os.path.join(cfg.table_dir, "05_annotation_quality.json")
+    with open(quality_path, encoding="utf-8") as f:
+        quality = json.load(f)
+    q0 = next(q for q in quality["review_queue"] if q["cluster"] == "0")
+    assert q0["reason"] == "kadp_precursor", q0
+    assert q0["n_tied_types"] == 0, q0
+    assert q0["top_types"] == [], q0

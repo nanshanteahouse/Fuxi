@@ -238,6 +238,15 @@ class TestConfigDefaults:
         cfg = Config()
         assert cfg.annotation.canonical_pct_floor == 0.05
 
+    def test_annotation_kadp_defaults(self) -> None:
+        """AnnotationSettings KADP developmental-potency defaults (plan todo 5)."""
+        cfg = Config()
+        assert cfg.annotation.kadp_enabled is False
+        assert cfg.annotation.kadp_ratio_threshold == 2.0
+        assert cfg.annotation.kadp_abs_threshold == 0.6
+        assert cfg.annotation.kadp_gap_threshold == 0.1
+        assert cfg.annotation.use_gap_criterion is False
+
     def test_downsample_defaults(self) -> None:
         """Downsample defaults."""
         cfg = Config()

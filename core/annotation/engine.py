@@ -543,6 +543,9 @@ def _map_cell_state(decision, cell_category: str) -> str:
 
     ``method == "transition_state"`` → ``transient_transitional``
     ``method == "ambiguous"`` → ``N/A`` (downgraded; manual review)
+    ``method == "developmental_potency"`` → ``differentiating`` (KADP;
+    emitted before the Proliferating row so a KADP-named type that contains
+    "Proliferating" still maps to ``differentiating``)
     ``"Proliferating" in cell_type`` → ``cycling``
     ``cell_category == "Broad_Progenitor"`` → ``committed_precursor``
     ``confidence in ("high", "medium")`` and ``cell_category in
@@ -554,14 +557,18 @@ def _map_cell_state(decision, cell_category: str) -> str:
     (non-precursor), NOT biological terminal differentiation — e.g. Müller
     Glia in developing tissue may retain plasticity, and its proliferating
     subset is captured by the ``cycling`` row ("Proliferating_MG" contains
-    "Proliferating"). ``differentiating`` stays reserved in the cell_state
-    enum and is not yet emitted; it will be produced once P2.2 KADP supplies
-    potency signals.
+    "Proliferating").  ``differentiating`` is emitted by the KADP potency
+    path (method == "developmental_potency", plan annotation-kadp-metc).
     """
     if decision.method == "transition_state":
         return "transient_transitional"
     if decision.method == "ambiguous":
         return "N/A"
+    # KADP (layer 3): differentiating precursor named by developmental
+    # potency.  Row sits BEFORE the Proliferating row so a KADP type like
+    # Proliferating_RPC still reads differentiating.
+    if decision.method == "developmental_potency":
+        return "differentiating"
     if "Proliferating" in decision.cell_type:
         return "cycling"
     if cell_category == "Broad_Progenitor":
@@ -631,6 +638,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
     logger.info("Loaded KB: %s (%d cell types, %d rules)", CFG.tissue_kb, n_types, n_rules)
 
     # ── d. Full marker scoring + expert rules per cluster ─────────────────
+    from core.annotation.potency import KADPConfig
     from core.annotation.scoring import (
         detect_low_quality_cluster,
         score_cluster_against_kb,
@@ -848,6 +856,18 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
             except Exception as exc:
                 logger.warning("CellTypist prediction failed: %s — skipping", exc)
 
+    # ── Layer-3 KADP developmental-potency config (plan annotation-kadp-metc)
+    # Constructed ONCE from CFG.annotation and mirrored into BOTH
+    # fuse_all_clusters calls (first pass + AI second pass) so a KADP naming
+    # survives the AI-enhanced re-fusion (Oracle r1 BLOCKER 1).
+    kadp_cfg = KADPConfig(
+        enabled=getattr(CFG.annotation, "kadp_enabled", False),
+        ratio_threshold=getattr(CFG.annotation, "kadp_ratio_threshold", 2.0),
+        abs_threshold=getattr(CFG.annotation, "kadp_abs_threshold", 0.6),
+        gap_threshold=getattr(CFG.annotation, "kadp_gap_threshold", 0.1),
+        use_gap_criterion=getattr(CFG.annotation, "use_gap_criterion", False),
+    )
+
     decisions, fusion_quality = fuse_all_clusters(
         fine_scores,
         all_rules,
@@ -861,6 +881,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
         celltypist_results=celltypist_results,
         multi_peak_min_types=getattr(CFG.annotation, "multi_peak_min_types", 3),
         multi_peak_score_floor=getattr(CFG.annotation, "multi_peak_score_floor", 0.9),
+        kadp_cfg=kadp_cfg,
     )
     logger.info("Evidence fusion: %d clusters processed", len(decisions))
 
@@ -1010,6 +1031,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
                     celltypist_results=celltypist_results,
                     multi_peak_min_types=getattr(CFG.annotation, "multi_peak_min_types", 3),
                     multi_peak_score_floor=getattr(CFG.annotation, "multi_peak_score_floor", 0.9),
+                    kadp_cfg=kadp_cfg,
                 )
                 decision_map = dict(zip(decision_clusters, decisions))
         except Exception as exc:
@@ -1060,9 +1082,20 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
         _hierarchy = kb["_hierarchy"]
         _subtype_map = _build_subtype_map(_hierarchy)
         for cl_str in list(decision_map):
+            # Tiered-block exemption (Oracle r3 MAJOR 2): a KADP decision
+            # (method == "developmental_potency") skips the ENTIRE block —
+            # tier / consensus / n_sources / subtype_resolution / L2-forcing
+            # all keep their KADP defaults.  The cluster still gets a
+            # tiered_subtypes default via the else branch below (N/A) and a
+            # .get(k, []) fallback in tiered_candidates consumers.
+            if decision_map[cl_str].method == "developmental_potency":
+                continue
             _scores = all_scores.get(cl_str, {})
             _label, _ev = resolve_tiered_label(
-                _scores, _hierarchy, _kb_lookup, all_top_genes.get(cl_str, [])
+                _scores,
+                _hierarchy,
+                _kb_lookup,
+                all_top_genes.get(cl_str, []),
             )
             tiered_candidates[cl_str] = _ev.get("subtype_candidates", [])
             # Force fusion cell_type to its L2 ancestor.
@@ -1125,6 +1158,11 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
             return "ambiguous"
         if d.method == "transition_state":
             return "transition_state"
+        # KADP (layer 3): must win over the marker_scoring+ai suffix — the
+        # AI second pass may agree with the KADP name (ai_agreed=True), yet
+        # the annot_method must stay developmental_potency.
+        if d.method == "developmental_potency":
+            return "developmental_potency"
         if d.ai_agreed or d.ai_suggested:
             return "marker_scoring+ai"
         return "marker_scoring"
@@ -1162,6 +1200,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
                     "n_sources": v.n_sources,
                     "subtype_resolution": v.subtype_resolution,
                     "cell_subtype": tiered_subtypes.get(k, "N/A"),
+                    "potency": v.potency,
                 }
                 | (
                     {"subtype_candidates": tiered_candidates.get(k, [])}
@@ -1198,6 +1237,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
             "consensus": d.consensus,
             "n_sources": d.n_sources,
             "subtype_resolution": d.subtype_resolution,
+            "potency": json.dumps(d.potency) if d.potency else "",
         }
         if tiered_candidates:
             record["subtype_candidates"] = format_subtype_candidates(
@@ -1258,6 +1298,11 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
     )
 
     # ── j. Cell metadata export ───────────────────────────────────────────
+    # KADP potency (layer 3, plan annotation-kadp-metc): single column, JSON
+    # string of the three-value dict, empty string when no potency present.
+    potency_map = {
+        k: (json.dumps(v.potency) if v.potency else "") for k, v in decision_map.items()
+    }
     meta_df = pd.DataFrame(
         {
             "barcode": adata.obs_names,
@@ -1269,6 +1314,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
             "annot_confidence": adata.obs["annot_confidence"].values,
             "annot_method": adata.obs["annot_method"].values,
             "cell_category": adata.obs["cell_category"].values,
+            "potency": leiden_str.map(potency_map).values,
         }
     )
     meta_csv = os.path.join(CFG.table_dir, "cell_metadata.csv")
