@@ -19,7 +19,7 @@ from scipy import sparse
 
 from core.utils import safe_plot
 
-_FUXI_FAST_RANKS_THRESHOLD = 200_000
+_FUXI_FAST_RANKS_THRESHOLD = 50_000
 
 
 def _patch_scanpy_fast_ranks() -> None:
