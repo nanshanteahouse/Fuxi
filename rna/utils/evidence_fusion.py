@@ -77,6 +77,11 @@ class FusionDecision(NamedTuple):
         ``"resolved"`` (L3 subtype elected), ``"unresolved"`` (subtypes
         existed in KB but none passed the gates), or ``"na"`` (KB has no
         subtypes for this L2 type).
+    review_reason : str
+        Non-empty when this decision should be surfaced in the engine-side
+        review queue.  Currently set to ``"single_marker_rule"`` by the D5
+        arbitration for uncorroborated single-marker expert-rule hits that
+        carried no strong marker-scoring competitor.
     """
 
     cell_type: str
@@ -94,6 +99,7 @@ class FusionDecision(NamedTuple):
     consensus: str = ""
     n_sources: int = 0
     subtype_resolution: str = ""
+    review_reason: str = ""
 
 
 def _is_transition_state(
@@ -224,6 +230,14 @@ _CONFIDENCE_MAP = {
 }
 
 
+# WEAK_EVIDENCE — evidence-strength labels that must never produce a
+# confident label (plan D1/D2).  A marker-scoring winner carrying one of
+# these is capped at ``confidence="low"`` regardless of the tier mapping,
+# and its cluster is flagged for the engine-side review queue via
+# ``FusionDecision.review_reason = evidence_type``.
+WEAK_EVIDENCE = frozenset({"single_marker", "window_padding", "weak_multi", "zero_evidence"})
+
+
 # ── Label normalisation ──────────────────────────────────────────────
 # AI-generated labels and KB cell-type keys often differ only by
 # whitespace vs underscores (e.g. "Amacrine Cell" vs "Amacrine_Cell").
@@ -293,6 +307,66 @@ def _find_best_type(marker_scores: dict) -> tuple:
     best_type = max(marker_scores, key=lambda k: _resolve_score(marker_scores, k)[0])
     best_score, n_markers = _resolve_score(marker_scores, best_type)
     return best_type, best_score, n_markers
+
+
+def _winning_rule_entry(
+    alternative_rules: Optional[list],
+    expert_rule_result: Optional[str],
+) -> Optional[dict]:
+    """Locate the winning rule's metadata entry among *alternative_rules*.
+
+    ``apply_expert_rules`` returns the priority-sorted list of matched rules
+    as its second element with the winner first, so the first entry whose
+    ``"action"`` equals *expert_rule_result* is the winner; when no match
+    is found the first entry is returned as a fallback.  ``None`` when
+    *alternative_rules* is empty (callers that omit the metadata are treated
+    as legacy: every rule hit is corroborated).
+    """
+    if not alternative_rules:
+        return None
+    for rule in alternative_rules:
+        if rule.get("action") == expert_rule_result:
+            return rule
+    return alternative_rules[0]
+
+
+def _rule_is_single_marker(rule: Optional[dict]) -> bool:
+    """True when a rule requires exactly one ``markers_present`` gene.
+
+    The D5 arbitration applies only to *single-marker* rules; multi-marker
+    rules (two or more independent ``markers_present`` genes) keep the legacy
+    full-confidence behavior even when uncorroborated.
+    """
+    if not rule:
+        return False
+    condition = rule.get("condition", {}) or {}
+    return len(condition.get("markers_present", {}) or {}) == 1
+
+
+def _has_strong_multi_marker_competitor(marker_scores: dict) -> bool:
+    """Whether a top-2 marker-scoring type carries strong multi-marker evidence.
+
+    D5 competitor check: returns ``True`` when any of the two highest-scoring
+    types has ``evidence_type == "multi_marker"`` with ``consensus`` in
+    ``("gold", "high")``.  Bare-float score entries (no :class:`~utils.marker_scoring.Score`
+    metadata) never qualify, preserving simplified test contexts.
+    """
+    if not marker_scores:
+        return False
+    ranked = sorted(
+        marker_scores.items(),
+        key=lambda kv: _resolve_score(marker_scores, kv[0])[0],
+        reverse=True,
+    )
+    for type_key, _ in ranked[:2]:
+        entry = marker_scores[type_key]
+        if isinstance(entry, (int, float)):
+            continue
+        if getattr(entry, "evidence_type", "") == "multi_marker" and getattr(
+            entry, "consensus", ""
+        ) in ("gold", "high"):
+            return True
+    return False
 
 
 def _explain(
@@ -475,55 +549,124 @@ def fuse_evidence(
     Returns
     -------
     FusionDecision
+
+    Notes
+    -----
+    **D5 weak-rule arbitration.** A corroborated expert-rule hit keeps the
+    legacy full-confidence early return (``confidence="rule"``).  An
+    *uncorroborated single-marker* rule hit (``corroborated=False`` and
+    exactly one ``markers_present`` gene) does not early-return: when a
+    top-2 marker-scoring type carries ``evidence_type="multi_marker"`` with
+    ``consensus`` in ``("gold", "high")`` the rule yields to marker scoring
+    (its label is recorded in the explanation as "weak rule overridden");
+    otherwise it returns ``confidence="low"`` with
+    ``review_reason="single_marker_rule"`` for engine-side review-queue
+    collection.
+
+    **D2 weak-evidence cap.** A marker-scoring winner (tiers 1-3) whose
+    ``evidence_type`` is in ``WEAK_EVIDENCE`` (single-marker /
+    window-padding / weak-multi / zero-evidence) or is ``"ai_only"`` is capped
+    at ``confidence="low"`` regardless of the tier mapping, and
+    ``review_reason=evidence_type`` flags the cluster for the engine-side
+    review queue.  ``ai_only`` is normally set engine-side (task 9); this cap
+    only guards against a tier-level Score that already carries it.
+
+    **M1 boundary.** In developmental RPC contexts the "correct" label is
+    a marker-context-conditional question owned by **layer 3**; layers 1+2
+    only guarantee that weak evidence never produces a confident label.
     """
+
     # ── Tier 0: expert rule (highest priority) ─────────────────────────
+    # D5 weak-rule arbitration: a *corroborated* rule hit keeps the legacy
+    # full-confidence early return; an *uncorroborated single-marker* rule
+    # hit does not — it either yields to a strong marker-scoring competitor
+    # or returns at low confidence flagged for engine-side review.
+    #
+    # Boundary (M1): in developmental RPC contexts the "correct" label is a
+    # context-conditional question owned by layer 3.  Layers 1+2 only
+    # guarantee that weak evidence never produces a confident label.
+    weak_rule_override_label: Optional[str] = None
     if expert_rule_result is not None:
         rule_score, rule_n = _resolve_score(marker_scores, expert_rule_result)
         ai_agreed = _labels_match(ai_suggestion, expert_rule_result) if ai_suggestion else False
 
-        # Quality gate (v3.1.0+): if Fisher scoring completely disagrees
-        # with the expert rule (zero KB marker overlap), downgrade confidence
-        # from 'rule' to 'low'.  This prevents noise-triggered rules (e.g.
-        # a gene buried at rank 4000 in relaxed mode) from outranking well-
-        # scored Fisher matches in downstream analysis.
-        if rule_score < 0.25 and rule_n == 0:
-            conf = "low"
-            warning_note = (
-                f"Expert rule matched '{expert_rule_result}' but independent "
-                f"marker scoring found zero KB marker overlap (score={rule_score:.3f}, "
-                f"n_markers=0). Downgrading confidence from 'rule' to 'low'."
+        # D5: read the winning rule's corroboration metadata (populated by
+        # apply_expert_rules on its second return element).
+        winning_rule = _winning_rule_entry(alternative_rules, expert_rule_result)
+        corroborated = bool(winning_rule.get("corroborated", True)) if winning_rule else True
+        uncorroborated_single = (not corroborated) and _rule_is_single_marker(winning_rule)
+
+        if uncorroborated_single and _has_strong_multi_marker_competitor(marker_scores):
+            # (a) Yield: a strong multi-marker candidate wins.  Run the
+            # marker-scoring path; the rule label is recorded in the
+            # explanation and the cluster is NOT labelled by the rule.
+            weak_rule_override_label = expert_rule_result
+            expert_rule_result = None
+        elif uncorroborated_single:
+            # (b) No strong competitor: low-confidence rule label + review.
+            score_note = f" (marker score: {rule_score:.3f})" if rule_score > 0 else ""
+            return FusionDecision(
+                cell_type=expert_rule_result,
+                confidence="low",
+                score=rule_score,
+                method="expert_rule",
+                n_markers_found=rule_n,
+                ai_agreed=ai_agreed,
+                ai_suggested=ai_suggestion or "",
+                explanation=(
+                    f"Expert rule matched '{expert_rule_result}' but its "
+                    f"corroborators were absent from the DE top-N subset. "
+                    f"Uncorroborated single-marker rule — labelled at low "
+                    f"confidence.{score_note}"
+                ),
+                alternative_rules=alternative_rules or [],
+                review_reason="single_marker_rule",
             )
         else:
-            conf = "rule"
-            warning_note = ""
+            # Corroborated hit (or non-single-marker rule): legacy behavior.
+            # Quality gate (v3.1.0+): if Fisher scoring completely disagrees
+            # with the expert rule (zero KB marker overlap), downgrade confidence
+            # from 'rule' to 'low'.  This prevents noise-triggered rules (e.g.
+            # a gene buried at rank 4000 in relaxed mode) from outranking well-
+            # scored Fisher matches in downstream analysis.
+            if rule_score < 0.25 and rule_n == 0:
+                conf = "low"
+                warning_note = (
+                    f"Expert rule matched '{expert_rule_result}' but independent "
+                    f"marker scoring found zero KB marker overlap (score={rule_score:.3f}, "
+                    f"n_markers=0). Downgrading confidence from 'rule' to 'low'."
+                )
+            else:
+                conf = "rule"
+                warning_note = ""
 
-        explanation_parts = []
-        if warning_note:
-            explanation_parts.append(warning_note)
-        explanation_parts.append(
-            _explain(
-                expert_rule_result,
-                "expert_rule",
-                rule_score,
-                rule_n,
-                expert_rule_result,
-                ai_suggestion,
-                ai_agreed,
-                alternative_rules=alternative_rules,
+            explanation_parts = []
+            if warning_note:
+                explanation_parts.append(warning_note)
+            explanation_parts.append(
+                _explain(
+                    expert_rule_result,
+                    "expert_rule",
+                    rule_score,
+                    rule_n,
+                    expert_rule_result,
+                    ai_suggestion,
+                    ai_agreed,
+                    alternative_rules=alternative_rules,
+                )
             )
-        )
 
-        return FusionDecision(
-            cell_type=expert_rule_result,
-            confidence=conf,
-            score=rule_score,
-            method="expert_rule",
-            n_markers_found=rule_n,
-            ai_agreed=ai_agreed,
-            ai_suggested=ai_suggestion or "",
-            explanation=" | ".join(explanation_parts),
-            alternative_rules=alternative_rules or [],
-        )
+            return FusionDecision(
+                cell_type=expert_rule_result,
+                confidence=conf,
+                score=rule_score,
+                method="expert_rule",
+                n_markers_found=rule_n,
+                ai_agreed=ai_agreed,
+                ai_suggested=ai_suggestion or "",
+                explanation=" | ".join(explanation_parts),
+                alternative_rules=alternative_rules or [],
+            )
 
     # ── Unconstrained AI mode: accept AI suggestion directly ──────────
     if (
@@ -675,6 +818,20 @@ def fuse_evidence(
                 marker_scores,
                 low_quality_reason=low_quality_reason,
             )
+            explanation = _explain(
+                "Unknown",
+                "unknown",
+                best_score,
+                n_markers,
+                best_type,
+                ai_suggestion,
+                False,
+            )
+            if weak_rule_override_label is not None:
+                explanation = (
+                    f"Rule '{weak_rule_override_label}' overridden by strong "
+                    f"marker scoring (weak rule overridden) | {explanation}"
+                )
             return FusionDecision(
                 cell_type="Unknown",
                 confidence="unknown",
@@ -683,45 +840,56 @@ def fuse_evidence(
                 n_markers_found=n_markers,
                 ai_agreed=False,
                 ai_suggested=ai_suggestion or "",
-                explanation=_explain(
-                    "Unknown",
-                    "unknown",
-                    best_score,
-                    n_markers,
-                    best_type,
-                    ai_suggestion,
-                    False,
-                ),
+                explanation=explanation,
                 alternative_rules=alternative_rules or [],
                 diagnostic=diagnostic,
             )
 
-            # Tiers 1–3: marker-scoring-based decisions
-            ai_agreed = _labels_match(ai_suggestion, best_type) if ai_suggestion else False
-        elif tier_name == "marker_scoring_low":
-            ai_agreed = _labels_match(ai_suggestion, best_type) if ai_suggestion else False
-        else:
-            # marker_scoring_high — AI not required for agreement
-            ai_agreed = _labels_match(ai_suggestion, best_type) if ai_suggestion else False
+        # Tiers 1-3: marker-scoring-based decisions.
+        ai_agreed = _labels_match(ai_suggestion, best_type) if ai_suggestion else False
 
+        # D2 weak-evidence cap: confidence is derived from *evidence strength*,
+        # not from the tier alone.  A winner whose evidence_type is in
+        # WEAK_EVIDENCE (single-marker / window-padding / weak-multi /
+        # zero-evidence) or is "ai_only" is capped at confidence="low"
+        # regardless of the tier mapping, and the cluster is flagged for the
+        # engine-side review queue via review_reason=evidence_type.
+        winner = marker_scores.get(best_type)
+        winner_evidence = (
+            getattr(winner, "evidence_type", "") if not isinstance(winner, (int, float)) else ""
+        )
+        if winner_evidence in WEAK_EVIDENCE or winner_evidence == "ai_only":
+            confidence = "low"
+            review_reason = winner_evidence
+        else:
+            confidence = _CONFIDENCE_MAP[tier_name]
+            review_reason = ""
+
+        explanation = _explain(
+            best_type,
+            tier_name,
+            best_score,
+            n_markers,
+            best_type,
+            ai_suggestion,
+            ai_agreed,
+        )
+        if weak_rule_override_label is not None:
+            explanation = (
+                f"Rule '{weak_rule_override_label}' overridden by strong "
+                f"marker scoring (weak rule overridden) | {explanation}"
+            )
         return FusionDecision(
             cell_type=best_type,
-            confidence=_CONFIDENCE_MAP[tier_name],
+            confidence=confidence,
             score=best_score,
             method=tier_name,
             n_markers_found=n_markers,
             ai_agreed=ai_agreed,
             ai_suggested=ai_suggestion or "",
-            explanation=_explain(
-                best_type,
-                tier_name,
-                best_score,
-                n_markers,
-                best_type,
-                ai_suggestion,
-                ai_agreed,
-            ),
+            explanation=explanation,
             alternative_rules=[],
+            review_reason=review_reason,
         )
 
     # Fallback (should never reach here — 'unknown' always matches)

@@ -3,6 +3,7 @@ _is_transition_state and public API fuse_all_clusters/FusionDecision/DiagnosticI
 
 import pytest
 
+from core.annotation.scoring import Score
 from rna.utils.evidence_fusion import (
     DiagnosticInfo,
     FusionDecision,
@@ -40,6 +41,7 @@ class TestEvidenceFusionImport:
             "consensus",
             "n_sources",
             "subtype_resolution",
+            "review_reason",
         }
         missing = expected - fields
         extra = fields - expected
@@ -263,6 +265,270 @@ class TestFuseAllClusters:
         assert d.method == "marker_scoring_high"
         assert d.cell_type == "Muller_Glia"
         assert d.confidence == "high"
+        d = decisions[0]
+        assert d.method != "ambiguous"
+        assert d.method == "marker_scoring_high"
+        assert d.cell_type == "Muller_Glia"
+        assert d.confidence == "high"
+
+
+# ── D5 weak-rule arbitration ─────────────────────────────────────────
+
+
+class TestD5WeakRuleArbitration:
+    """D5 arbitration in fuse_all_clusters → fuse_evidence.
+
+    Covers the three Tier-0 branches: corroborated rule hits keep the legacy
+    full-confidence early return; uncorroborated single-marker rule hits
+    either yield to a strong multi-marker competitor or return at low
+    confidence flagged for engine-side review.
+    """
+
+    @staticmethod
+    def _make_rule(action, markers, corroborators, corroborated):
+        """Build a KB expert-rule dict carrying apply_expert_rules metadata."""
+        return {
+            "priority": 10,
+            "action": action,
+            "condition": {
+                "markers_present": markers,
+                "corroborators": corroborators,
+            },
+            "corroborated": corroborated,
+            "corroborators_hit": [],
+        }
+
+    @staticmethod
+    def _score(value, n_markers, evidence_type, consensus):
+        return Score(
+            value,
+            0.001,
+            "hypergeometric",
+            n_markers,
+            False,
+            evidence_type=evidence_type,
+            consensus=consensus,
+        )
+
+    def test_corroborated_rule_keeps_full_confidence(self) -> None:
+        """Given a corroborated rule hit, When fused, Then the cluster keeps
+        the legacy full-confidence label (confidence='rule')."""
+        all_scores = {
+            "0": {"RGC_Alpha": self._score(0.80, 2, "multi_marker", "gold")},
+        }
+        all_rules = {
+            "0": (
+                "RGC_Alpha",
+                [self._make_rule("RGC_Alpha", {"SPP1": 1.0}, ["RBPMS"], True)],
+            ),
+        }
+        d = fuse_all_clusters(all_scores, all_rules)[0]
+
+        assert d.cell_type == "RGC_Alpha"
+        assert d.confidence == "rule"
+        assert d.method == "expert_rule"
+        assert d.review_reason == ""
+
+    def test_uncorroborated_single_yields_to_strong_competitor(self) -> None:
+        """Given an uncorroborated single-marker rule and a top-2 multi_marker
+        competitor with consensus >= high, When fused, Then marker scoring wins
+        and the rule label is recorded in the explanation as 'weak rule
+        overridden' (the cluster is NOT labelled by the rule)."""
+        all_scores = {
+            "0": {
+                "RGC_Alpha": self._score(0.30, 1, "single_marker", "medium"),
+                "RGC": self._score(0.80, 3, "multi_marker", "gold"),
+            },
+        }
+        all_rules = {
+            "0": (
+                "RGC_Alpha",
+                [self._make_rule("RGC_Alpha", {"SPP1": 1.0}, ["RBPMS", "NEFH"], False)],
+            ),
+        }
+        d = fuse_all_clusters(all_scores, all_rules)[0]
+
+        assert d.cell_type == "RGC"
+        assert d.method == "marker_scoring_high"
+        assert d.confidence == "high"
+        assert "weak rule overridden" in d.explanation
+
+    def test_uncorroborated_single_without_competitor_low_and_review(self) -> None:
+        """Given an uncorroborated single-marker rule with no strong
+        multi-marker competitor, When fused, Then the rule label is kept at low
+        confidence and flagged review_reason='single_marker_rule' for the
+        engine-side review queue."""
+        all_scores = {
+            "0": {
+                "RGC_Alpha": self._score(0.30, 1, "single_marker", "medium"),
+                "RGC": self._score(0.45, 1, "single_marker", "low"),
+            },
+        }
+        all_rules = {
+            "0": (
+                "RGC_Alpha",
+                [self._make_rule("RGC_Alpha", {"SPP1": 1.0}, ["RBPMS", "NEFH"], False)],
+            ),
+        }
+        d = fuse_all_clusters(all_scores, all_rules)[0]
+
+        assert d.cell_type == "RGC_Alpha"
+        assert d.confidence == "low"
+        assert d.method == "expert_rule"
+        assert d.review_reason == "single_marker_rule"
+
+    def test_bare_rule_string_without_metadata_stays_legacy(self) -> None:
+        """Callers passing a bare rule action (no matched-rule metadata) keep
+        the legacy full-confidence behavior: corroboration is undeterminable,
+        so the hit is treated as corroborated."""
+        all_scores = {
+            "0": {"RGC_Alpha": self._score(0.80, 2, "multi_marker", "gold")},
+        }
+        all_rules = {"0": "RGC_Alpha"}
+        d = fuse_all_clusters(all_scores, all_rules)[0]
+
+        assert d.cell_type == "RGC_Alpha"
+        assert d.confidence == "rule"
+        assert d.method == "expert_rule"
+
+    def test_uncorroborated_multi_marker_rule_not_arbitrated(self) -> None:
+        """D5 scopes arbitration to SINGLE-marker rules: an uncorroborated
+        rule requiring two independent markers keeps the legacy
+        full-confidence behavior."""
+        all_scores = {
+            "0": {"RGC": self._score(0.80, 2, "multi_marker", "gold")},
+        }
+        all_rules = {
+            "0": (
+                "RGC",
+                [self._make_rule("RGC", {"RBPMS": 1.0, "SNCG": 0.5}, ["NEFL"], False)],
+            ),
+        }
+        d = fuse_all_clusters(all_scores, all_rules)[0]
+
+        assert d.cell_type == "RGC"
+        assert d.confidence == "rule"
+        assert d.method == "expert_rule"
+
+
+# ── D2 weak-evidence cap ─────────────────────────────────────────────
+
+
+class TestD2WeakEvidenceCap:
+    """D2 cap in fuse_all_clusters → fuse_evidence.
+
+    Confidence is derived from *evidence strength*, not from the tier
+    alone: a marker-scoring winner whose evidence_type is in WEAK_EVIDENCE
+    (single-marker / window-padding / weak-multi / zero-evidence) or is
+    ai_only is capped at confidence='low' regardless of the tier mapping,
+    and review_reason=evidence_type flags the cluster for the engine-side
+    review queue.
+    """
+
+    @staticmethod
+    def _score(value, n_markers, evidence_type, consensus):
+        return Score(
+            value,
+            0.001,
+            "hypergeometric",
+            n_markers,
+            False,
+            evidence_type=evidence_type,
+            consensus=consensus,
+        )
+
+    def test_single_marker_high_tier_capped_to_low(self) -> None:
+        """Given a score >= 0.7 (marker_scoring_high) whose winner carries
+        evidence_type='single_marker', When fused, Then confidence is forced
+        to 'low' and review_reason='single_marker' flags the review queue."""
+        all_scores = {
+            "0": {"RGC_Alpha": self._score(0.85, 1, "single_marker", "gold")},
+        }
+        all_rules = {"0": None}
+        d = fuse_all_clusters(all_scores, all_rules)[0]
+
+        assert d.cell_type == "RGC_Alpha"
+        assert d.method == "marker_scoring_high"
+        assert d.confidence == "low"
+        assert d.review_reason == "single_marker"
+
+    def test_window_padding_high_tier_capped_to_low(self) -> None:
+        """Given a high-tier winner whose evidence exists only because the
+        window was padded (> 20), When fused, Then confidence is 'low' with
+        review_reason='window_padding'."""
+        all_scores = {
+            "0": {"RGC": self._score(0.80, 2, "window_padding", "medium")},
+        }
+        all_rules = {"0": None}
+        d = fuse_all_clusters(all_scores, all_rules)[0]
+
+        assert d.method == "marker_scoring_high"
+        assert d.confidence == "low"
+        assert d.review_reason == "window_padding"
+
+    def test_strong_multi_marker_not_capped(self) -> None:
+        """Given a strong winner (multi_marker + gold consensus) at high
+        tier, When fused, Then confidence keeps the tier mapping ('high') and
+        no review_reason is set."""
+        all_scores = {
+            "0": {"RGC": self._score(0.85, 3, "multi_marker", "gold")},
+        }
+        all_rules = {"0": None}
+        d = fuse_all_clusters(all_scores, all_rules)[0]
+
+        assert d.method == "marker_scoring_high"
+        assert d.confidence == "high"
+        assert d.review_reason == ""
+
+    def test_weak_multi_medium_tier_capped_to_low(self) -> None:
+        """Given a medium-tier winner with evidence_type='weak_multi', When
+        fused, Then confidence is capped to 'low' and review_reason set."""
+        all_scores = {
+            "0": {"Bipolar": self._score(0.60, 2, "weak_multi", "medium")},
+        }
+        all_rules = {"0": None}
+        d = fuse_all_clusters(all_scores, all_rules)[0]
+
+        assert d.method == "marker_scoring_medium"
+        assert d.confidence == "low"
+        assert d.review_reason == "weak_multi"
+
+    def test_zero_evidence_capped_to_low(self) -> None:
+        """zero_evidence is part of WEAK_EVIDENCE: capped at low + review."""
+        all_scores = {
+            "0": {"Amacrine": self._score(0.75, 0, "zero_evidence", "")},
+        }
+        all_rules = {"0": None}
+        d = fuse_all_clusters(all_scores, all_rules)[0]
+
+        assert d.confidence == "low"
+        assert d.review_reason == "zero_evidence"
+
+    def test_ai_only_capped_at_tier_level(self) -> None:
+        """ai_only joins the capping union: a tier-level Score carrying it
+        is capped to low (normally set engine-side by task 9; the union check
+        is validated here)."""
+        all_scores = {
+            "0": {"RGC": self._score(0.80, 2, "ai_only", "gold")},
+        }
+        all_rules = {"0": None}
+        d = fuse_all_clusters(all_scores, all_rules)[0]
+
+        assert d.confidence == "low"
+        assert d.review_reason == "ai_only"
+
+    def test_bare_float_winner_not_capped(self) -> None:
+        """Bare-float score entries (no Score metadata) have empty
+        evidence_type → not capped; tier confidence mapping applies."""
+        all_scores = {"0": {"T_cell": 0.85}}
+        all_rules = {"0": None}
+        d = fuse_all_clusters(all_scores, all_rules)[0]
+
+        assert d.confidence == "high"
+        assert d.review_reason == ""
+
+
+# ── Private helper: _is_transition_state ──────────────────────────────
 
 
 # ── Private helper: _is_transition_state ──────────────────────────────
