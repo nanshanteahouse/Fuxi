@@ -14,6 +14,13 @@ logger = logging.getLogger(__name__)
 
 
 # ── Strictness template constants ─────────────────────────────────
+#
+# NOTE (2026-08-04): developmental datasets (tissue_maturity="developing")
+# auto-select strictness="deep" -> top_n=200, NOT the default 50.
+# The corroborator (any-of) gate uses the SAME de_subset (top_n + pval
+# cutoff), so corroborator genes ranked 50-200 are only visible in
+# deep/wide modes. Design rule corroborators against the dataset's
+# actual strictness window; shallower rank = stronger evidence.
 
 _STRICTNESS_TEMPLATES: Dict[str, tuple] = {
     "strict": (50, 0.01),
