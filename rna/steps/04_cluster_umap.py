@@ -937,6 +937,19 @@ def main():
     umap_method = getattr(cfg.clustering, "umap_selection_method", "convex_hull")
     use_paga = getattr(cfg.clustering, "umap_paga_init", False)
 
+    # Guard: multi-value min_dist sweep needs an O(n^2) trustworthiness matrix
+    # (76k cells ≈ 92GB). Silhouette is computed on the UMAP embedding, so a
+    # sweep also makes silhouette non-comparable across grid combos. Enforce
+    # single-value grids on large datasets; degrade to the first value.
+    if len(min_dist_grid) > 1 and adata.n_obs > 30_000:
+        log.warning(
+            "UMAP min_dist sweep disabled for n_obs=%d > 30k (O(n^2) trustworthiness OOM + "
+            "silhouette non-comparability). Using min_dist=%s only.",
+            adata.n_obs,
+            min_dist_grid[0],
+        )
+        min_dist_grid = min_dist_grid[:1]
+
     # If PAGA init is enabled, compute PAGA backbone first
     if use_paga:
         log.info("Computing PAGA backbone for UMAP initialization...")

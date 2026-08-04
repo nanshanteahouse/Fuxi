@@ -350,7 +350,12 @@ class ClusteringSettings(BaseModel):
         default=False,
         description="Use PAGA-initialized UMAP positions during parameter selection.",
     )
-    param_grid_min_dist: Optional[list] = Field(default_factory=lambda: [0.1, 0.3, 0.5])
+    # min_dist sweep is an O(n^2) trustworthiness cost and makes silhouette
+    # non-comparable across grid combos (different embedding geometry).
+    # Default: single value (production, reproducible). Multi-value grids are
+    # a research-mode escape hatch — step 04 degrades to the first value with a
+    # warning when n_obs > 30k (76k cells ≈ 92GB pairwise matrix).
+    param_grid_min_dist: Optional[list] = Field(default_factory=lambda: [0.3])
     param_grid_spread: Optional[list] = Field(default_factory=lambda: [1.0])
     umap_min_dist: float = 0.5
     de_pairwise_max_clusters: int = Field(
