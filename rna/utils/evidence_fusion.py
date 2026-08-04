@@ -13,10 +13,18 @@ Decision priority (hard-coded tiers):
     5. All else                 →  Unknown
 """
 
+import json
 from dataclasses import dataclass
 from typing import NamedTuple, Optional
 
 import pandas as pd
+
+from core.annotation.potency import (
+    KADPConfig,
+    compute_potency,
+    derive_developmental_poles,
+    evaluate_passes,
+)
 
 
 class DiagnosticInfo(NamedTuple):
@@ -522,6 +530,63 @@ def _classify_unknown(
 
 
 # ═══════════════════════════════════════════════════════════════════════
+def _kadp_name_candidate(
+    marker_scores: dict,
+    kb: dict,
+    candidate: "FusionDecision",
+    cfg: KADPConfig,
+) -> Optional["FusionDecision"]:
+    """Name an ambiguous multi-peak candidate via developmental potency (todo 4).
+
+    When the Progenitor pole dominates the marker scores, the ambiguous
+    candidate is replaced by a ``developmental_potency`` decision naming the
+    argmax progenitor type.  The replacement is built with ``._replace`` so
+    every other field (score / n_markers_found / ai_* / alternative_rules) is
+    inherited from the candidate -- a fresh FusionDecision is never constructed.
+
+    Returns the named decision, or ``None`` when potency does not pass -- the
+    caller then returns the candidate unchanged (exit semantics: a KADP miss
+    never falls into the tier loop).
+    """
+    result = compute_potency(
+        marker_scores,
+        derive_developmental_poles(kb),
+        cfg,
+    )
+    if not evaluate_passes(result, cfg):
+        return None
+    best = result.best_progenitor_type
+    if best is None:  # naming precondition: max_prog > 0 (defensive)
+        return None
+    potency = result.to_potency_dict()
+    # The tied multi-peak list doubles as the competitor list -- it already
+    # carries the {'cell_type', 'score'} dict shape the corpus uses.
+    competitors = list(candidate.diagnostic.top_competitors) if candidate.diagnostic else []
+    return candidate._replace(
+        cell_type=best,
+        confidence="medium",
+        method="developmental_potency",
+        explanation=(
+            f"Developmental potency named '{best}' as differentiating precursor "
+            f"(max progenitor {result.max_prog:.3f} vs max terminal "
+            f"{result.max_term:.3f}, ratio {result.ratio:.3f}, "
+            f"gap {result.gap:.3f})"
+        ),
+        diagnostic=DiagnosticInfo(
+            category="developmental_potency",
+            top_competitors=competitors,
+            detail=(
+                f"Developmental potency naming -- max progenitor "
+                f"{result.max_prog:.3f} vs max terminal {result.max_term:.3f}; "
+                f"{json.dumps(potency)}"
+            ),
+        ),
+        review_reason="kadp_precursor",
+        potency=potency,
+        source_votes=None,
+    )
+
+
 #  Public API
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -539,6 +604,9 @@ def fuse_evidence(
     incompatible_transitions: Optional[list] = None,
     multi_peak_min_types: int = 3,
     multi_peak_score_floor: float = 0.9,
+    kadp_cfg: Optional[KADPConfig] = None,
+    metc_cfg: Optional[METCConfig] = None,
+    celltypist_suggestion: Optional[str] = None,
 ) -> "FusionDecision":
     """Combine marker scores, expert rules, and AI into one decision.
 
@@ -574,6 +642,19 @@ def fuse_evidence(
     multi_peak_score_floor : float
         Score floor for counting a tied type in the multi-peak check
         (default 0.9).
+    kadp_cfg : KADPConfig or None
+        Layer-3 KADP developmental-potency config (todo 4).  When enabled and
+        a multi-peak ``ambiguous`` candidate carries progenitor-dominant
+        potency, the candidate is named as its argmax precursor type
+        (``method="developmental_potency"``).  Default ``None`` keeps the
+        baseline candidate-return behavior byte-identical.
+    metc_cfg : METCConfig or None
+        Layer-4 METC multi-source transition consensus config (todo 9).
+        Reserved in this todo: enables the candidate exit gate so METC
+        arbitration can slot in later; no arbitration happens yet.
+    celltypist_suggestion : str or None
+        CellTypist label for this cluster, pre-harmonized engine-side (todo 8).
+        Passed through for METC arbitration (todo 9) — not consumed here.
 
     Returns
     -------
@@ -777,7 +858,7 @@ def fuse_evidence(
             ]
             if len(tied) >= multi_peak_min_types:
                 top3 = ", ".join(f"{k}={s:.3f}" for k, s in tied[:3])
-                return FusionDecision(
+                candidate: "FusionDecision" = FusionDecision(
                     cell_type="Unknown",
                     confidence="unknown",
                     score=best_score,
@@ -801,38 +882,62 @@ def fuse_evidence(
                         detail=f"Multi-peak tie: {len(tied)} types >= {floor} (top: {top3})",
                     ),
                 )
-            delta = abs(
-                _resolve_score(marker_scores, t1)[0] - _resolve_score(marker_scores, t2)[0]
-            )
-            parent = kb.get(t1, {}).get("parent", "")
-            explanation = _explain(
-                cell_type=f"transitional: {t1}/{t2}",
-                method="transition_state",
-                score=best_score,
-                n_markers=n_markers,
-                best_type=t1,
-                ai_suggestion=ai_suggestion,
-                ai_agreed=False,
-                confidence="transition",
-                alternative_rules=[
-                    f"Top-2 scores within {delta:.3f}, shared lineage {parent}",
-                    f"  {t1}: {_resolve_score(marker_scores, t1)[0]:.3f}",
-                    f"  {t2}: {_resolve_score(marker_scores, t2)[0]:.3f}",
-                ],
-            )
-            return FusionDecision(
-                cell_type=f"transitional: {t1}/{t2}",
-                confidence="transition",
-                score=best_score,
-                method="transition_state",
-                n_markers_found=n_markers,
-                ai_agreed=False,
-                ai_suggested=ai_suggestion if ai_suggestion else "",
-                explanation=explanation,
-                alternative_rules=[],
-                diagnostic=None,
-                cell_category="",
-            )
+            else:
+                delta = abs(
+                    _resolve_score(marker_scores, t1)[0] - _resolve_score(marker_scores, t2)[0]
+                )
+                parent = kb.get(t1, {}).get("parent", "")
+                explanation = _explain(
+                    cell_type=f"transitional: {t1}/{t2}",
+                    method="transition_state",
+                    score=best_score,
+                    n_markers=n_markers,
+                    best_type=t1,
+                    ai_suggestion=ai_suggestion,
+                    ai_agreed=False,
+                    confidence="transition",
+                    alternative_rules=[
+                        f"Top-2 scores within {delta:.3f}, shared lineage {parent}",
+                        f"  {t1}: {_resolve_score(marker_scores, t1)[0]:.3f}",
+                        f"  {t2}: {_resolve_score(marker_scores, t2)[0]:.3f}",
+                    ],
+                )
+                candidate = FusionDecision(
+                    cell_type=f"transitional: {t1}/{t2}",
+                    confidence="transition",
+                    score=best_score,
+                    method="transition_state",
+                    n_markers_found=n_markers,
+                    ai_agreed=False,
+                    ai_suggested=ai_suggestion if ai_suggestion else "",
+                    explanation=explanation,
+                    alternative_rules=[],
+                    diagnostic=None,
+                    cell_category="",
+                )
+
+            # ── Layer 3/4 candidate exit semantics (plan todo 4) ─────────
+            # The candidate (ambiguous or transition_state) is the terminal
+            # output for this cluster.  KADP naming / METC arbitration run
+            # only when explicitly enabled; a KADP miss or an un-arbitrated
+            # candidate is returned unchanged — byte-identical to the baseline
+            # early returns above.  The tier loop below is reachable only for
+            # non-ambiguous/transition_state candidates.
+            if (kadp_cfg and kadp_cfg.enabled) or (metc_cfg and metc_cfg.enabled):
+                if kadp_cfg and kadp_cfg.enabled and candidate.method == "ambiguous":
+                    named = _kadp_name_candidate(
+                        marker_scores=marker_scores,
+                        kb=kb,
+                        candidate=candidate,
+                        cfg=kadp_cfg,
+                    )
+                    if named is not None:
+                        return named
+                # METC arbitration lands in todo 9; until then (and for any
+                # non-arbitrated candidate incl. n_spoke < 3) the candidate is
+                # returned unchanged — never falls into the tier loop.
+                return candidate
+            return candidate
 
     # ── Apply tiers 1–4 ────────────────────────────────────────────────
     for tier_name, tier_fn in DECISION_TIERS:

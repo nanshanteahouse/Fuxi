@@ -3,12 +3,14 @@ _is_transition_state and public API fuse_all_clusters/FusionDecision/DiagnosticI
 
 import pytest
 
+from core.annotation.potency import KADPConfig
 from core.annotation.scoring import Score
 from rna.utils.evidence_fusion import (
     DiagnosticInfo,
     FusionDecision,
     _is_transition_state,
     fuse_all_clusters,
+    fuse_evidence,
 )
 
 # ── Public API ────────────────────────────────────────────────────────
@@ -708,3 +710,306 @@ class TestIsTransitionState:
         result = _is_transition_state(scores, kb)
         # parent2 defaults to '' → parent1 != parent2 → None
         assert result is None
+
+
+# ── KADP developmental-potency naming branch (plan todo 4) ───────────
+# A multi-peak ambiguous candidate is named via the KADP potency axis when
+# the KB hierarchy (Progenitor pole) dominates the marker scores.  The exit
+# semantics are written in stone: a KADP *miss* returns the candidate
+# decision byte-identical to the baseline (never falling into the tier loop).
+# Each test KB carries both ``_hierarchy`` (for pole derivation) and the type
+# entries (for _is_transition_state confirmation).
+
+
+def _hcat(label, members):
+    return {"label": label, "members": list(members), "markers": {}, "subtypes": {}}
+
+
+_KADP_KB = {
+    "_hierarchy": {
+        "categories": {
+            "Progenitor": _hcat(
+                "Progenitor", ["NRPC", "Proliferating_RPC", "Photoreceptor_Precursor"]
+            ),
+            "Neuron": _hcat("Neuron", ["Rod_Photoreceptor", "Cone_Photoreceptor", "Bipolar_Cell"]),
+            "Glia": _hcat("Glia", ["Muller_Glia"]),
+            "Non-neural": _hcat("Non-neural", ["RPE"]),
+        }
+    },
+    "Progenitor": {"parent": "", "markers": {"confirm": {"PAX6": ["s1"]}}},
+    "NRPC": {
+        "parent": "Progenitor",
+        "markers": {"confirm": {"VSX2": ["s1"], "PAX6": ["s1"]}},
+        "_private_markers": ["VSX2"],
+    },
+    "Proliferating_RPC": {
+        "parent": "Progenitor",
+        "markers": {"confirm": {"VSX2": ["s1"], "PCNA": ["s1"]}},
+        "_private_markers": ["VSX2"],
+    },
+    "Photoreceptor": {"parent": "", "markers": {"confirm": {"RHO": ["s1"]}}},
+    "Photoreceptor_Precursor": {
+        "parent": "Photoreceptor",
+        "markers": {"confirm": {"RHO": ["s1"], "NRL": ["s1"]}},
+        "_private_markers": ["RHO"],
+    },
+    "Rod_Photoreceptor": {
+        "parent": "Photoreceptor",
+        "markers": {"confirm": {"RHO": ["s1"]}},
+        "_private_markers": ["RHO"],
+    },
+    "Cone_Photoreceptor": {
+        "parent": "Photoreceptor",
+        "markers": {"confirm": {"RHO": ["s1"]}},
+        "_private_markers": ["RHO"],
+    },
+    "Bipolar": {"parent": "", "markers": {"confirm": {"VSX2": ["s1"]}}},
+    "Bipolar_Cell": {
+        "parent": "Bipolar",
+        "markers": {"confirm": {"VSX2": ["s1"], "OTX2": ["s1"]}},
+        "_private_markers": ["VSX2"],
+    },
+    "Muller_Glia": {"parent": "Glia", "markers": {"confirm": {"RLBP1": ["s1"]}}},
+    "RPE": {"parent": "", "markers": {"confirm": {"RPE65": ["s1"]}}},
+}
+
+# Progenitor-dominant multi-peak: 3 tied types >= 0.9, terminal pole low.
+#   -> ambiguous candidate, then KADP names NRPC (ratio ~3.17 >= 2.0).
+_KADP_HIT_SCORES = {
+    "NRPC": 0.95,
+    "Proliferating_RPC": 0.93,
+    "Photoreceptor_Precursor": 0.91,
+    "Rod_Photoreceptor": 0.30,
+}
+
+# Terminal-dominant multi-peak: 3 tied types >= 0.9, progenitor pole weak.
+#   -> ambiguous candidate, potency fails (max_prog=0.30 < max_term=0.95),
+#      KADP misses and the candidate is returned byte-identical.
+_KADP_MISS_SCORES = {
+    "Rod_Photoreceptor": 0.95,
+    "Cone_Photoreceptor": 0.93,
+    "Bipolar_Cell": 0.91,
+    "NRPC": 0.30,
+}
+
+_KADP_CFG = KADPConfig(enabled=True)
+
+
+class TestKADPNameBranch:
+    """KADP developmental-potency naming in fuse_evidence (plan todo 4).
+
+    Covers the full TDD matrix: hit, miss (exit semantics — candidate
+    returned byte-identical to the disabled baseline), disabled, adult
+    context, dev_mode trigger, _replace field inheritance and the
+    three-value potency dict write.
+    """
+
+    # ── KADP hit ─────────────────────────────────────────────────────
+
+    def test_kadp_hit_names_progenitor(self) -> None:
+        """High potency ambiguous candidate -> named precursor with
+        method=developmental_potency, confidence=medium, review_reason=kadp_precursor.
+        """
+        d = fuse_evidence(
+            marker_scores=dict(_KADP_HIT_SCORES),
+            expert_rule_result=None,
+            kb=_KADP_KB,
+            allows_transitions=True,
+            kadp_cfg=_KADP_CFG,
+        )
+        assert d.method == "developmental_potency"
+        assert d.cell_type == "NRPC"
+        assert d.confidence == "medium"
+        assert d.review_reason == "kadp_precursor"
+        assert d.diagnostic is not None
+        assert d.diagnostic.category == "developmental_potency"
+
+    def test_kadp_hit_potency_three_value_dict(self) -> None:
+        """potency tail field carries the full {'ratio','abs','gap'} dict."""
+        d = fuse_evidence(
+            marker_scores=dict(_KADP_HIT_SCORES),
+            expert_rule_result=None,
+            kb=_KADP_KB,
+            allows_transitions=True,
+            kadp_cfg=_KADP_CFG,
+        )
+        assert d.potency is not None
+        assert set(d.potency) == {"ratio", "abs", "gap"}
+        assert d.potency["abs"] == pytest.approx(0.95)
+        assert d.potency["gap"] == pytest.approx(0.95 - 0.30)
+        assert d.potency["ratio"] == pytest.approx(0.95 / 0.30)
+        assert d.source_votes is None
+
+    def test_kadp_hit_replace_inherits_candidate_fields(self) -> None:
+        """The named decision is built via _replace: score / n_markers_found /
+        ai_* fields are inherited from the ambiguous candidate, not recreated.
+        """
+        base = fuse_evidence(
+            marker_scores=dict(_KADP_HIT_SCORES),
+            expert_rule_result=None,
+            kb=_KADP_KB,
+            allows_transitions=True,
+            ai_suggestion="Rod Cell",
+        )
+        assert base.method == "ambiguous"
+        d = fuse_evidence(
+            marker_scores=dict(_KADP_HIT_SCORES),
+            expert_rule_result=None,
+            kb=_KADP_KB,
+            allows_transitions=True,
+            ai_suggestion="Rod Cell",
+            kadp_cfg=_KADP_CFG,
+        )
+        assert d.method == "developmental_potency"
+        # Inherited via _replace — identical to the candidate's values.
+        assert d.score == base.score == pytest.approx(0.95)
+        assert d.n_markers_found == base.n_markers_found == 0
+        assert d.ai_agreed == base.ai_agreed is False
+        assert d.ai_suggested == base.ai_suggested == "Rod Cell"
+        assert d.alternative_rules == base.alternative_rules == []
+        # KADP-specific overrides.
+        assert d.cell_type == "NRPC"
+        assert d.review_reason == "kadp_precursor"
+
+    def test_kadp_hit_top_competitors_dict_form(self) -> None:
+        """diagnostic.top_competitors stays in {'cell_type','score'} dict form
+        (the same shape the corpus ambiguous diagnostic uses).
+        """
+        d = fuse_evidence(
+            marker_scores=dict(_KADP_HIT_SCORES),
+            expert_rule_result=None,
+            kb=_KADP_KB,
+            allows_transitions=True,
+            kadp_cfg=_KADP_CFG,
+        )
+        comps = d.diagnostic.top_competitors
+        assert len(comps) >= 3
+        assert all(isinstance(c, dict) for c in comps)
+        assert all({"cell_type", "score"} <= set(c) for c in comps)
+        assert {c["cell_type"] for c in comps} == {
+            "NRPC",
+            "Proliferating_RPC",
+            "Photoreceptor_Precursor",
+        }
+
+    # ── KADP miss — exit semantics (Momus r2 MAJOR-1) ─────────────────
+
+    def test_kadp_miss_returns_candidate_byte_identical(self) -> None:
+        """kadp_cfg.enabled=True with a low-potency candidate must return
+        the SAME ambiguous decision as the disabled baseline — full-field
+        equality including the diagnostic (no drift, no tier-loop fallthrough).
+        """
+        disabled = fuse_evidence(
+            marker_scores=dict(_KADP_MISS_SCORES),
+            expert_rule_result=None,
+            kb=_KADP_KB,
+            allows_transitions=True,
+        )
+        enabled = fuse_evidence(
+            marker_scores=dict(_KADP_MISS_SCORES),
+            expert_rule_result=None,
+            kb=_KADP_KB,
+            allows_transitions=True,
+            kadp_cfg=_KADP_CFG,
+        )
+        assert enabled == disabled
+        assert enabled.method == "ambiguous"
+        assert enabled.cell_type == "Unknown"
+        assert enabled.confidence == "unknown"
+        assert enabled.diagnostic is not None
+        assert enabled.diagnostic.category == "ambiguous"
+        assert enabled.potency is None
+        assert enabled.source_votes is None
+
+    def test_kadp_miss_never_reaches_tier_loop(self) -> None:
+        """A KADP miss must not fall into the tier loop: the ambiguous
+        candidate keeps its ambiguous method (no marker_scoring label).
+        """
+        d = fuse_evidence(
+            marker_scores=dict(_KADP_MISS_SCORES),
+            expert_rule_result=None,
+            kb=_KADP_KB,
+            allows_transitions=True,
+            kadp_cfg=_KADP_CFG,
+        )
+        assert d.method == "ambiguous"
+        assert not d.method.startswith("marker_scoring")
+
+    # ── Disabled / adult / dev_mode ──────────────────────────────────
+
+    def test_kadp_disabled_default_params(self) -> None:
+        """kadp_cfg=None (default) keeps baseline behavior: the same input
+        stays ambiguous without any developmental naming.
+        """
+        d = fuse_evidence(
+            marker_scores=dict(_KADP_HIT_SCORES),
+            expert_rule_result=None,
+            kb=_KADP_KB,
+            allows_transitions=True,
+        )
+        assert d.method == "ambiguous"
+        assert d.cell_type == "Unknown"
+        assert d.review_reason == ""
+        assert d.potency is None
+
+    def test_kadp_disabled_explicit_enabled_false(self) -> None:
+        """KADPConfig(enabled=False) behaves exactly like kadp_cfg=None."""
+        d = fuse_evidence(
+            marker_scores=dict(_KADP_HIT_SCORES),
+            expert_rule_result=None,
+            kb=_KADP_KB,
+            allows_transitions=True,
+            kadp_cfg=KADPConfig(enabled=False),
+        )
+        assert d.method == "ambiguous"
+        assert d.potency is None
+
+    def test_adult_context_no_kadp_trigger(self) -> None:
+        """allows_transitions=False (adult tissue) disables the whole
+        transition block — KADP never fires; normal tier logic applies.
+        """
+        d = fuse_evidence(
+            marker_scores=dict(_KADP_HIT_SCORES),
+            expert_rule_result=None,
+            kb=_KADP_KB,
+            allows_transitions=False,
+            kadp_cfg=_KADP_CFG,
+        )
+        assert d.method == "marker_scoring_high"
+        assert d.cell_type == "NRPC"
+        assert d.review_reason == ""
+        assert d.potency is None
+
+    def test_dev_mode_transitions_trigger_kadp(self) -> None:
+        """engine.py sets allows_transitions = bool(transition_context) or
+        _dev_mode (marker.developmental_mode).  Through that single flag
+        dev_mode activates the KADP branch: naming fires.
+        """
+        d = fuse_evidence(
+            marker_scores=dict(_KADP_HIT_SCORES),
+            expert_rule_result=None,
+            kb=_KADP_KB,
+            allows_transitions=True,  # == dev-mode activation path
+            kadp_cfg=_KADP_CFG,
+        )
+        assert d.method == "developmental_potency"
+        assert d.cell_type == "NRPC"
+
+    # ── transition_state candidate is NOT eligible for KADP ──────────
+
+    def test_transition_candidate_not_kadp_eligible(self) -> None:
+        """KADP names only ambiguous (multi-peak) candidates.  A genuine
+        transition_state candidate stays untouched even with kadp enabled.
+        """
+        scores = {"NRPC": 0.60, "Proliferating_RPC": 0.55, "Rod_Photoreceptor": 0.10}
+        d = fuse_evidence(
+            marker_scores=scores,
+            expert_rule_result=None,
+            kb=_KADP_KB,
+            allows_transitions=True,
+            kadp_cfg=_KADP_CFG,
+        )
+        assert d.method == "transition_state"
+        assert d.cell_type == "transitional: NRPC/Proliferating_RPC"
+        assert d.potency is None
+        assert d.review_reason == ""
