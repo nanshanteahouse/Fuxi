@@ -233,6 +233,11 @@ class TestConfigDefaults:
         assert cfg.annotation.multi_peak_min_types == 3
         assert cfg.annotation.multi_peak_score_floor == 0.9
 
+    def test_annotation_canonical_pct_floor_default(self) -> None:
+        """AnnotationSettings canonical 表达兜底 pct 下限默认值 (D3)."""
+        cfg = Config()
+        assert cfg.annotation.canonical_pct_floor == 0.05
+
     def test_downsample_defaults(self) -> None:
         """Downsample defaults."""
         cfg = Config()

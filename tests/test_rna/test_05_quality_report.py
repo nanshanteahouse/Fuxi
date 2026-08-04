@@ -289,7 +289,10 @@ def test_new_engine_fields_survive_pass_rate_update() -> None:
             "pass_rate": 0,
             "source": "unified_kb",
             "review_queue": [
-                {"cluster": "3", "n_tied_types": 4, "top_types": ["RGC", "Cone", "Rod", "NRPC"]}
+                # old format (task 10 backward compat: no reason)
+                {"cluster": "3", "n_tied_types": 4, "top_types": ["RGC", "Cone", "Rod", "NRPC"]},
+                # new format: reason-carrying entry
+                {"cluster": "5", "reason": "no_canonical_expression"},
             ],
             "transition_clusters": [{"cluster": "0", "pair": "RGC/Amacrine"}],
             "kb_coverage": {

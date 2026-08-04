@@ -818,6 +818,12 @@ class AnnotationSettings(BaseModel):
     multi_peak_score_floor: float = 0.9
     """多峰歧义降级分数下限:score≥floor 的类型计入并列集合。"""
 
+    canonical_pct_floor: float = 0.05
+    """canonical 表达兜底的 pct 表达下限 (D3):融合后, confidence ∈ (high, medium)
+    的 marker_scoring 决策, winning 类型的 top-consensus 标记 (consensus≥2, 取前 3)
+    在簇中 pct 表达全部低于此值 → 降级 confidence=low + 计入 review_queue
+    (reason=no_canonical_expression)。"""
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Top-level Config

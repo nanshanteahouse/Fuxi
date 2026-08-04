@@ -19,9 +19,16 @@ import pandas as pd
 import scanpy as sc
 from anndata import AnnData
 
-from core.annotation.engine import _map_cell_state, _write_quality_report
+from core.annotation.engine import (
+    _apply_canonical_expression_fallback,
+    _cluster_marker_pcts,
+    _flag_ai_only_decisions,
+    _map_cell_state,
+    _top_consensus_markers,
+    _write_quality_report,
+)
 from core.annotation.scoring import Score
-from rna.utils.evidence_fusion import DiagnosticInfo
+from rna.utils.evidence_fusion import DiagnosticInfo, FusionDecision
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if _REPO_ROOT not in sys.path:
@@ -603,6 +610,9 @@ def test_T9_quality_report_new_fields() -> None:
 
         entry = quality["review_queue"][0]
 
+        # Task 10 (D6): ambiguous (multi-peak) entries carry reason "ambiguous"
+        assert entry["reason"] == "ambiguous"
+
         assert entry["n_tied_types"] == 3
 
         assert entry["top_types"] == ["RGC", "Amacrine", "Cone"]
@@ -655,3 +665,287 @@ def test_T9_quality_report_kb_none_backward_compat() -> None:
         assert quality["kb_coverage"]["kb_types_unannotated"] == []
 
         assert quality["kb_coverage"]["ghost_endpoints"] == ["Amacrine", "RGC"]
+
+
+# ═══════════════════════════════════════════════════════════════════════
+#  T10 — D3 canonical-expression fallback + ai_only audit
+# ═══════════════════════════════════════════════════════════════════════
+
+
+def _make_fusion_decision(**overrides):
+    """Build a FusionDecision stub for the D3 audit functions."""
+    base = dict(
+        cell_type="RGC",
+        confidence="high",
+        score=0.85,
+        method="marker_scoring_high",
+        n_markers_found=3,
+        ai_agreed=False,
+        ai_suggested="",
+        explanation="test",
+        alternative_rules=[],
+        diagnostic=None,
+    )
+    base.update(overrides)
+    return FusionDecision(**base)
+
+
+def _make_consensus_kb() -> dict:
+    """Minimal KB: one multi-source type (RGC) + one single-source type (RGC_Alpha)."""
+    return {
+        "RGC": {
+            "markers": {
+                "confirm": {
+                    "RBPMS": ["s1", "s2", "s3"],
+                    "NEFL": ["s1", "s2"],
+                    "POU4F1": ["s1", "s2", "s3", "s4"],
+                }
+            },
+            "consensus_levels": {"RBPMS": "gold", "NEFL": "high", "POU4F1": "gold"},
+        },
+        "RGC_Alpha": {
+            "markers": {"confirm": {"SPP1": ["tran2019"]}},
+            "consensus_levels": {"SPP1": "low"},
+        },
+    }
+
+
+def _make_expression_adata(cl_pcts: dict) -> AnnData:
+    """AnnData where cluster '0' (10 cells) expresses genes at given pcts.
+
+    ``cl_pcts: {gene: fraction}`` of the 10 cluster-0 cells carry raw count 1
+    for that gene; cluster '1' (5 cells) never expresses anything.
+    """
+    genes = list(cl_pcts)
+    n_cluster, n_other = 10, 5
+    x = np.zeros((n_cluster + n_other, len(genes)), dtype=np.float32)
+    for j, g in enumerate(genes):
+        n_expr = int(round(cl_pcts[g] * n_cluster))
+        x[:n_expr, j] = 1.0
+    adata = AnnData(x)
+    adata.var_names = genes
+    adata.obs["leiden"] = ["0"] * n_cluster + ["1"] * n_other
+    raw = AnnData(x.copy())
+    raw.var_names = genes
+    adata.raw = raw
+    return adata
+
+
+def test_D3_top_consensus_markers_orders_and_filters() -> None:
+    """gold/high markers qualify, ordered by rank; single-source type → empty."""
+    kb = _make_consensus_kb()
+    assert _top_consensus_markers(kb, "RGC") == ["RBPMS", "POU4F1", "NEFL"]
+    assert _top_consensus_markers(kb, "RGC_Alpha") == []
+
+
+def test_D3_canonical_fallback_downgrades_confident_label() -> None:
+    """All top-consensus markers ~0 pct → confidence forced low + review reason."""
+    kb = _make_consensus_kb()
+    adata = _make_expression_adata({"RBPMS": 0.0, "NEFL": 0.0, "POU4F1": 0.0})
+    dm = {"0": _make_fusion_decision()}
+    cfg = SimpleNamespace(annotation=SimpleNamespace(canonical_pct_floor=0.05))
+    reasons = _apply_canonical_expression_fallback(adata, kb, dm, cfg, _make_logger())
+    assert reasons == {"0": "no_canonical_expression"}
+    assert dm["0"].confidence == "low"
+    assert dm["0"].review_reason == "no_canonical_expression"
+    assert "no_canonical_expression" in dm["0"].explanation
+
+
+def test_D3_canonical_fallback_keeps_when_markers_expressed() -> None:
+    """Markers expressed above the floor → decision untouched."""
+    kb = _make_consensus_kb()
+    adata = _make_expression_adata({"RBPMS": 0.9, "NEFL": 0.8, "POU4F1": 0.7})
+    dm = {"0": _make_fusion_decision()}
+    cfg = SimpleNamespace(annotation=SimpleNamespace(canonical_pct_floor=0.05))
+    reasons = _apply_canonical_expression_fallback(adata, kb, dm, cfg, _make_logger())
+    assert reasons == {}
+    assert dm["0"].confidence == "high"
+    assert dm["0"].review_reason == ""
+
+
+def test_D3_canonical_fallback_skips_when_raw_missing() -> None:
+    """adata.raw is None → silent skip (mirrors _ribo_fallback_pct_scores)."""
+    kb = _make_consensus_kb()
+    adata = _make_expression_adata({"RBPMS": 0.0, "NEFL": 0.0, "POU4F1": 0.0})
+    adata.raw = None
+    dm = {"0": _make_fusion_decision()}
+    cfg = SimpleNamespace(annotation=SimpleNamespace(canonical_pct_floor=0.05))
+    reasons = _apply_canonical_expression_fallback(adata, kb, dm, cfg, _make_logger())
+    assert reasons == {}
+    assert dm["0"].confidence == "high"
+
+
+def test_D3_canonical_fallback_skips_single_source_type() -> None:
+    """Winning type with no consensus>=2 markers → empty set, naturally skipped."""
+    kb = _make_consensus_kb()
+    adata = _make_expression_adata({"SPP1": 0.0})
+    dm = {"0": _make_fusion_decision(cell_type="RGC_Alpha")}
+    cfg = SimpleNamespace(annotation=SimpleNamespace(canonical_pct_floor=0.05))
+    reasons = _apply_canonical_expression_fallback(adata, kb, dm, cfg, _make_logger())
+    assert reasons == {}
+    assert dm["0"].confidence == "high"
+
+
+def test_D3_canonical_fallback_default_floor_when_cfg_absent() -> None:
+    """Missing CFG.annotation.canonical_pct_floor → 0.05 getattr fallback."""
+    kb = _make_consensus_kb()
+    adata = _make_expression_adata({"RBPMS": 0.0, "NEFL": 0.0, "POU4F1": 0.0})
+    dm = {"0": _make_fusion_decision()}
+    reasons = _apply_canonical_expression_fallback(
+        adata, kb, dm, SimpleNamespace(), _make_logger()
+    )
+    assert reasons == {"0": "no_canonical_expression"}
+    assert dm["0"].confidence == "low"
+
+
+def test_D3_cluster_marker_pcts_csr_pattern() -> None:
+    """Pct fractions computed per gene via raw counts > 0 (CSR row-slice pattern)."""
+    adata = _make_expression_adata({"RBPMS": 0.5, "NEFL": 0.0, "POU4F1": 1.0})
+    pcts = _cluster_marker_pcts(adata, "0", ["RBPMS", "NEFL", "POU4F1"])
+    assert pcts is not None
+    np.testing.assert_allclose(pcts, [0.5, 0.0, 1.0], atol=1e-6)
+    # raw missing → None (silent skip contract)
+    adata.raw = None
+    assert _cluster_marker_pcts(adata, "0", ["RBPMS"]) is None
+
+
+def test_D3_ai_only_forces_low_confidence() -> None:
+    """ai_unconstrained (medium, no KB support) → forced low + ai_only reason."""
+    dm = {
+        "0": _make_fusion_decision(
+            cell_type="Foo",
+            method="ai_unconstrained",
+            confidence="medium",
+            score=0.0,
+            n_markers_found=0,
+            ai_agreed=True,
+            ai_suggested="Foo",
+        )
+    }
+    reasons = _flag_ai_only_decisions(dm, _make_logger())
+    assert reasons == {"0": "ai_only"}
+    assert dm["0"].confidence == "low"
+    assert dm["0"].review_reason == "ai_only"
+
+
+def test_D3_ai_agreed_with_kb_support_not_ai_only() -> None:
+    """AI agreeing on a KB-backed decision (score/markers present) is not ai_only."""
+    dm = {"0": _make_fusion_decision(ai_agreed=True, ai_suggested="RGC")}
+    reasons = _flag_ai_only_decisions(dm, _make_logger())
+    assert reasons == {}
+    assert dm["0"].confidence == "high"
+    assert dm["0"].review_reason == ""
+
+
+def test_T9_quality_report_review_queue_includes_review_reason() -> None:
+    """D3-downgraded decision (review_reason set) enters the quality-report review_queue."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        adata = SimpleNamespace(obs={}, n_obs=10)
+        ann_records = [
+            {"cluster": "0", "reasoning": "best match", "ai_agreed": True},
+        ]
+        fusion_quality = {"annotated_by_rule": 0, "annotated_by_scoring": 1, "unknown": 0}
+        cell_category_map = {"0": "Broad_Neuron"}
+        decision_map = {
+            "0": _make_fusion_decision(confidence="low", review_reason="no_canonical_expression"),
+        }
+        cfg = SimpleNamespace(table_dir=tmp_dir)
+        _write_quality_report(
+            adata,
+            ann_records,
+            fusion_quality,
+            cell_category_map,
+            decision_map,
+            cfg,
+            _make_logger(),
+            kb=_make_consensus_kb(),
+        )
+        with open(os.path.join(tmp_dir, "05_annotation_quality.json")) as f:
+            quality = json.load(f)
+        assert [q["cluster"] for q in quality["review_queue"]] == ["0"]
+        entry = quality["review_queue"][0]
+        # Task 10 (D6): downgraded entries carry the decision's review_reason;
+        # non-multi-peak entries have empty tie detail.
+        assert entry["reason"] == "no_canonical_expression"
+        assert entry["n_tied_types"] == 0
+        assert entry["top_types"] == []
+
+
+def test_T10_review_queue_review_reason_beats_ambiguous() -> None:
+    """D6 merge rule: a decision with both review_reason and ambiguous keeps review_reason."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        adata = SimpleNamespace(obs={}, n_obs=10)
+        ann_records = [{"cluster": "0", "reasoning": "best match", "ai_agreed": True}]
+        fusion_quality = {"annotated_by_rule": 0, "annotated_by_scoring": 1, "unknown": 0}
+        cell_category_map = {"0": "Broad_Neuron"}
+        decision_map = {
+            "0": _make_fusion_decision(
+                method="ambiguous",
+                confidence="unknown",
+                review_reason="zero_evidence",
+                diagnostic=DiagnosticInfo(
+                    category="ambiguous",
+                    top_competitors=[{"cell_type": "RGC", "score": 1.0}],
+                    detail="tie",
+                ),
+            ),
+        }
+        cfg = SimpleNamespace(table_dir=tmp_dir)
+        _write_quality_report(
+            adata,
+            ann_records,
+            fusion_quality,
+            cell_category_map,
+            decision_map,
+            cfg,
+            _make_logger(),
+            kb=_make_consensus_kb(),
+        )
+        with open(os.path.join(tmp_dir, "05_annotation_quality.json")) as f:
+            quality = json.load(f)
+        entry = quality["review_queue"][0]
+        assert entry["reason"] == "zero_evidence"
+
+
+def test_T10_review_queue_reason_passthrough() -> None:
+    """D6: downgraded decisions surface their review_reason verbatim in review_queue.
+
+    Covers every non-ambiguous reason in the D6 enum, plus the old-format
+    entry (no reason) staying loadable.
+    """
+    reasons = [
+        "single_marker_rule",
+        "window_padding",
+        "weak_multi",
+        "zero_evidence",
+        "ai_only",
+        "no_canonical_expression",
+    ]
+    for reason in reasons:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            adata = SimpleNamespace(obs={}, n_obs=10)
+            ann_records = [{"cluster": "0", "reasoning": "best match", "ai_agreed": True}]
+            fusion_quality = {"annotated_by_rule": 0, "annotated_by_scoring": 1, "unknown": 0}
+            cell_category_map = {"0": "Broad_Neuron"}
+            decision_map = {
+                "0": _make_fusion_decision(confidence="low", review_reason=reason),
+            }
+            cfg = SimpleNamespace(table_dir=tmp_dir)
+            _write_quality_report(
+                adata,
+                ann_records,
+                fusion_quality,
+                cell_category_map,
+                decision_map,
+                cfg,
+                _make_logger(),
+                kb=_make_consensus_kb(),
+            )
+            with open(os.path.join(tmp_dir, "05_annotation_quality.json")) as f:
+                quality = json.load(f)
+            entry = quality["review_queue"][0]
+            assert entry["cluster"] == "0"
+            assert entry["reason"] == reason
+            # non-multi-peak: no tie detail
+            assert entry["n_tied_types"] == 0
+            assert entry["top_types"] == []

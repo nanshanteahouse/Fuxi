@@ -174,6 +174,153 @@ def _ribo_fallback_pct_scores(adata, kb, cl_str, logger):
     return None
 
 
+# ═══════════════════════════════════════════════════════════════════════
+#  D3 — canonical-expression fallback + ai_only audit (plan §3 D3)
+# ═══════════════════════════════════════════════════════════════════════
+# ``consensus_levels`` maps a marker gene to its multi-source support level:
+# "low" (1 source) | "medium" (2) | "high" (3-4) | "gold" (5+).
+_CONSENSUS_LEVEL_RANK = {"low": 0, "medium": 2, "high": 3, "gold": 4}
+_CANONICAL_TOP_N = 3
+
+
+def _top_consensus_markers(kb, type_key, top_n=_CANONICAL_TOP_N):
+    """Top-*top_n* confirm markers of *type_key* backed by >= 2 KB sources.
+
+    Only markers whose ``consensus_levels`` entry ranks at least ``"medium"``
+    (>= 2 independent sources) qualify, ordered gold > high > medium.  A
+    single-source type (e.g. RGC_Alpha, only tran2019) has no qualifying
+    marker, so the returned list is empty — the D3 canonical-expression
+    check then degrades into a natural no-op.
+    """
+    entry = kb.get(type_key) or {}
+    levels = entry.get("consensus_levels") or {}
+    confirm = (entry.get("markers") or {}).get("confirm") or {}
+    ranked = sorted(
+        (g for g in confirm if _CONSENSUS_LEVEL_RANK.get(levels.get(g, "low"), 0) >= 2),
+        key=lambda g: _CONSENSUS_LEVEL_RANK.get(levels.get(g, "low"), 0),
+        reverse=True,
+    )
+    return ranked[:top_n]
+
+
+def _cluster_marker_pcts(adata, cl_str, genes):
+    """Fraction of cluster cells with raw counts > 0 for each *gene*.
+
+    Reuses ``_ribo_fallback_pct_scores``'s raw-matrix access pattern — CSR
+    row slice ``x_mat[mask]`` followed by column-index ``> 0`` fractions
+    (no ``toarray()`` materialisation).
+
+    Returns ``None`` when ``adata.raw`` is missing, the cluster is empty,
+    or none of *genes* exist in the raw var index (the D3 canonical check
+    then silently skips, mirroring ``_ribo_fallback_pct_scores``).
+    """
+    if adata.raw is None:
+        return None
+    raw_vars = list(adata.raw.var_names)
+    ridx = {g: i for i, g in enumerate(raw_vars)}
+    mask = (adata.obs["leiden"].astype(str) == str(cl_str)).values
+    if not mask.any():
+        return None
+    present = [g for g in genes if g in ridx]
+    if not present:
+        return None
+    x_mat = adata.raw.X
+    sub = x_mat[mask]
+    pcts = (sub[:, [ridx[g] for g in present]] > 0).mean(axis=0)
+    return np.asarray(pcts, dtype=float).reshape(-1)
+
+
+def _apply_canonical_expression_fallback(adata, kb, decision_map, CFG, logger):  # noqa: N803
+    """D3 canonical-expression fallback for confident marker-scoring decisions.
+
+    For ``marker_scoring``-family decisions with ``confidence in ("high",
+    "medium")``, fetch the winning type's top-consensus confirm markers
+    (>= 2 KB sources, top 3) and compute each marker's pct expression in the
+    cluster (raw counts > 0).  When **all** of them fall below
+    ``CFG.annotation.canonical_pct_floor`` (default 0.05), the confident
+    label is unsupported by raw expression → downgrade ``confidence="low"``,
+    record ``review_reason="no_canonical_expression"`` on the decision, and
+    return ``{cluster_str: reason}`` as the review ledger.
+
+    Silent skips (documented semantics):
+    - ``adata.raw is None`` → expression statistics are undefined; the whole
+      check is skipped (mirrors ``_ribo_fallback_pct_scores``).
+    - winning type with no consensus>=2 markers (single-source types such as
+      RGC_Alpha, only tran2019) → empty top-N set, naturally skipped.
+    """
+    if adata.raw is None:
+        return {}
+    floor = getattr(getattr(CFG, "annotation", None), "canonical_pct_floor", 0.05)
+    reasons: dict[str, str] = {}
+    for cl_str, d in decision_map.items():
+        if d.confidence not in ("high", "medium"):
+            continue
+        if not d.method.startswith("marker_scoring"):
+            continue
+        markers = _top_consensus_markers(kb, d.cell_type)
+        if not markers:
+            continue
+        pcts = _cluster_marker_pcts(adata, cl_str, markers)
+        if pcts is None:
+            continue
+        if all(p < floor for p in pcts):
+            logger.warning(
+                "Cluster %s: all top-consensus markers of %s below pct floor %.3f"
+                " (%s) — downgrading %s → low",
+                cl_str,
+                d.cell_type,
+                floor,
+                ", ".join(f"{g}={p:.3f}" for g, p in zip(markers, pcts)),
+                d.confidence,
+            )
+            decision_map[cl_str] = d._replace(
+                confidence="low",
+                review_reason="no_canonical_expression",
+                explanation=(
+                    f"{d.explanation} | no_canonical_expression: top-consensus "
+                    f"markers ({', '.join(markers)}) all below {floor:.2f} pct "
+                    f"in cluster"
+                ),
+            )
+            reasons[cl_str] = "no_canonical_expression"
+    return reasons
+
+
+def _flag_ai_only_decisions(decision_map, logger):
+    """Flag AI-only decisions (D3) and force them down to low confidence.
+
+    A decision is ``ai_only`` when AI was involved (``method == "ai_unconstrained"``
+    or ``ai_agreed``/``ai_suggested``) and there is no meaningful KB marker
+    support (``score < 0.25`` or ``n_markers_found == 0``).  Such decisions
+    get ``review_reason="ai_only"`` and — when currently ``high``/``medium``
+    — are forced down to ``confidence="low"``.
+
+    Returns ``{cluster_str: "ai_only"}`` (the review ledger).
+    """
+    reasons: dict[str, str] = {}
+    for cl_str, d in decision_map.items():
+        ai_involved = d.method == "ai_unconstrained" or d.ai_agreed or bool(d.ai_suggested)
+        if not ai_involved:
+            continue
+        if d.score >= 0.25 and d.n_markers_found > 0:
+            continue  # KB marker support present — not ai_only
+        if d.confidence in ("high", "medium"):
+            logger.info(
+                "Cluster %s: ai_only (no KB marker support) — forcing %s → low",
+                cl_str,
+                d.confidence,
+            )
+            decision_map[cl_str] = d._replace(
+                confidence="low",
+                review_reason="ai_only",
+                explanation=f"{d.explanation} | ai_only: no KB marker support",
+            )
+        else:
+            decision_map[cl_str] = d._replace(review_reason="ai_only")
+        reasons[cl_str] = "ai_only"
+    return reasons
+
+
 def _check_zero_scores_and_retry(
     kb,
     all_scores,
@@ -923,6 +1070,22 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
     else:
         tiered_subtypes = {k: "N/A" for k in decision_map}
 
+    # ── D3 evidence-strength audit: canonical-expression fallback + ai_only ──
+    # Runs on the final (post-tiering) decisions, before any obs column is
+    # written, so a downgrade propagates to cell_state / annot_confidence /
+    # ann_records / review_queue downstream.  Both gates mutate decision_map
+    # in place via NamedTuple._replace and record their reason on the
+    # decision's ``review_reason`` field (the intermediate structure task 10
+    # surfaces in the quality-report review_queue).
+    review_reasons = _apply_canonical_expression_fallback(adata, kb, decision_map, CFG, logger)
+    review_reasons.update(_flag_ai_only_decisions(decision_map, logger))
+    if review_reasons:
+        logger.info(
+            "Evidence-strength audit: %d decision(s) flagged for review: %s",
+            len(review_reasons),
+            ", ".join(f"{cl}={reason}" for cl, reason in sorted(review_reasons.items())),
+        )
+
     adata.obs["cell_type"] = leiden_str.map(
         {k: v.cell_type for k, v in decision_map.items()}
     ).astype("category")
@@ -1173,13 +1336,24 @@ def _write_quality_report(
         "review_queue": [
             {
                 "cluster": cl,
-                "n_tied_types": len(d.diagnostic.top_competitors) if d.diagnostic else 0,
+                # Task 10 (D6): every entry carries a review ``reason``.
+                # decision.review_reason (the downgrade source) takes
+                # precedence; a plain multi-peak ambiguity decision (no
+                # review_reason) gets the canonical "ambiguous".
+                "reason": getattr(d, "review_reason", "") or "ambiguous",
+                # Tie detail is only meaningful for multi-peak ambiguity;
+                # downgraded (non-ambiguous) entries carry empty values.
+                "n_tied_types": len(d.diagnostic.top_competitors)
+                if d.diagnostic and d.method == "ambiguous"
+                else 0,
                 "top_types": [c["cell_type"] for c in d.diagnostic.top_competitors]
-                if d.diagnostic
+                if d.diagnostic and d.method == "ambiguous"
                 else [],
             }
             for cl, d in decision_map.items()
-            if d.method == "ambiguous"
+            # D3: decisions carrying a review_reason (canonical-expression
+            # fallback / ai_only / weak evidence) also enter the review queue.
+            if d.method == "ambiguous" or getattr(d, "review_reason", "")
         ],
         "kb_coverage": {
             "annotated_types": sorted(annotated_types),
