@@ -27,6 +27,7 @@ import scanpy as sc
 
 from core.ai.json_extract import extract_json_block
 from core.utils import resolve_config, safe_plot, safe_write, setup_logger
+from core.utils._gpu import gpu_harmony, gpu_leiden, gpu_neighbors, gpu_pca, gpu_umap, sync_to_cpu
 
 
 def resolve_cell_type(cell_types, requested, cutoff=0.6):
@@ -345,9 +346,10 @@ def _ai_subcluster_annotation(sub, cfg, args, log):
                 sub,
                 color="sub_ai_label",
                 show=False,
-                save=f"sub_{safe_cell_type}_umap_ai.pdf",
+                save=f"sub_{safe_cell_type}_umap_ai.png",
                 title=f"{args.cell_type} — AI subcluster",
                 cfg=cfg,
+                fmt="png",
             )
 
     except Exception as e:
@@ -459,9 +461,10 @@ def main():
                 sub,
                 color="cell_subtype",
                 show=False,
-                save=f"sub_{safe_cell_type}_cell_subtype_umap.pdf",
+                save=f"sub_{safe_cell_type}_cell_subtype_umap.png",
                 title=f"{args.cell_type} — cell_subtype (step05)",
                 cfg=cfg,
+                fmt="png",
             )
             log.info("Saved pre-subcluster cell_subtype UMAP for %s", safe_cell_type)
         else:
@@ -488,7 +491,7 @@ def main():
         if n_common >= min_cells:
             # Align both objects to the same barcode order
             sub = sub[common_bc].copy()
-            sub_raw = raw_adata[common_bc].to_memory().copy()
+            sub_raw = raw_adata[common_bc].to_memory()
             del raw_adata
             log.info("Raw subset loaded: %d cells, %d genes", sub_raw.n_obs, sub_raw.n_vars)
 
@@ -520,10 +523,13 @@ def main():
 
                 # PCA
                 n_comps_sub = min(50, sub_raw.n_obs - 2)
-                sc.pp.pca(
+                gpu_pca(
                     sub_raw,
+                    log=log,
+                    device=cfg.execution.device,
+                    cfg=cfg,
+                    step="06_subcluster",
                     n_comps=n_comps_sub,
-                    svd_solver="randomized",
                     random_state=cfg.execution.random_seed,
                 )
                 log.info("Subset PCA: n_comps=%d", n_comps_sub)
@@ -533,8 +539,6 @@ def main():
                     cfg.integration.method == "harmony"
                     and cfg.integration.batch_key in sub_raw.obs.columns
                 ):
-                    import harmonypy as hm
-
                     n_pcs_use = min(cfg.pca.n_pcs_use, n_comps_sub)
                     log.info(
                         "Subset Harmony (batch_key=%s, n_pcs_use=%d)...",
@@ -542,14 +546,15 @@ def main():
                         n_pcs_use,
                     )
                     try:
-                        ho = hm.run_harmony(
-                            sub_raw.obsm["X_pca"][:, :n_pcs_use],
-                            sub_raw.obs,
-                            vars_use=cfg.integration.batch_key,
+                        gpu_harmony(
+                            sub_raw,
+                            key=cfg.integration.batch_key,
+                            output_key="X_integrated",
+                            log=log,
+                            device=cfg.execution.device,
                             random_state=cfg.execution.random_seed,
                             max_iter_harmony=cfg.integration.max_iter,
                         )
-                        sub_raw.obsm["X_integrated"] = ho.Z_corr
                     except Exception as e:
                         log.warning("Subset Harmony failed (%s), using raw PCA", e)
                         sub_raw.obsm["X_integrated"] = sub_raw.obsm["X_pca"].copy()
@@ -562,6 +567,7 @@ def main():
                     sub_raw.obsm["X_integrated"] = sub_raw.obsm["X_pca"].copy()
 
                 # Copy embeddings back to sub (already index-aligned)
+                sync_to_cpu(sub_raw, log=log)
                 sub.obsm["X_pca"] = sub_raw.obsm["X_pca"]
                 sub.obsm["X_integrated"] = sub_raw.obsm["X_integrated"]
             else:
@@ -589,18 +595,38 @@ def main():
         n_pcs_use = min(n_pcs_use, sub.obsm[use_rep].shape[1])
     use_rep = "X_integrated" if "X_integrated" in sub.obsm else "X_pca"
     log.info("Computing neighbor graph (use_rep=%s, n_pcs=%d)...", use_rep, n_pcs_use)
-    sc.pp.neighbors(sub, n_pcs=n_pcs_use, use_rep=use_rep, random_state=cfg.execution.random_seed)
+    gpu_neighbors(
+        sub,
+        log=log,
+        device=cfg.execution.device,
+        n_neighbors=getattr(cfg.clustering, "best_n_neighbors", 15) or 15,
+        n_pcs=n_pcs_use,
+        use_rep=use_rep,
+        random_state=cfg.execution.random_seed,
+    )
 
     # ── (f) UMAP ──────────────────────────────────────────────────────
     log.info("Computing UMAP...")
-    sc.tl.umap(sub, random_state=cfg.execution.random_seed)
+    gpu_umap(
+        sub,
+        log=log,
+        device=cfg.execution.device,
+        random_state=cfg.execution.random_seed,
+    )
 
     # ── (g) Multi-resolution Leiden ───────────────────────────────────
     log.info("Leiden subclustering, resolutions: %s", cfg.clustering.param_grid_resolutions)
     for res in cfg.clustering.param_grid_resolutions:
         key = f"sub_leiden_r{res}"
-        sc.tl.leiden(
+        gpu_leiden(
             sub,
+            log=log,
+            device=(
+                cfg.execution.device
+                if cfg.execution.device == "cpu"
+                or sub.n_obs >= getattr(cfg.clustering, "leiden_gpu_min_cells", 20_000)
+                else "cpu"
+            ),
             resolution=res,
             key_added=key,
             random_state=cfg.execution.random_seed,
@@ -653,9 +679,10 @@ def main():
         sub,
         color="leiden",
         show=False,
-        save=f"sub_{safe_cell_type}_leiden_umap.pdf",
+        save=f"sub_{safe_cell_type}_leiden_umap.png",
         title=f"{args.cell_type} — leiden",
         cfg=cfg,
+        fmt="png",
     )
 
     # Multi-resolution comparison
@@ -688,7 +715,7 @@ def main():
             axes[j].axis("off")
         fig.tight_layout()
         fig.savefig(
-            os.path.join(fig_dir, f"sub_{safe_cell_type}_multires.pdf"),
+            os.path.join(fig_dir, f"sub_{safe_cell_type}_multires.png"),
             dpi=cfg.plot.figure_dpi,
             bbox_inches="tight",
         )
