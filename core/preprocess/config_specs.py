@@ -1054,6 +1054,10 @@ _VISIUM = FormatSpec(
         SpecField("hvg.flavor", value="seurat_v3"),
         SpecComment(("use_regress_out: false",), indent=1),
         SpecComment(("forced_genes: []",), indent=1),
+        SpecComment(
+            ("auto_forced_genes: false        # fill forced_genes from tissue KB when empty",),
+            indent=1,
+        ),
         SpecComment(("",)),
         SpecComment(("── PCA ──",)),
         SpecField("pca.n_pcs_full", value=100),

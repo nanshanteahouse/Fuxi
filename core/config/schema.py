@@ -202,6 +202,12 @@ class HVGSettings(BaseModel):
     flavor: str = "seurat_v3"
     batch_key: str = "sample"
     forced_genes: list[str] = Field(default_factory=list)
+    auto_forced_genes: bool = Field(
+        default=False,
+        description="When True and forced_genes is empty, auto-fill from the tissue KB "
+        "(build_forced_genes) at the 'high' consensus threshold.  Default False "
+        "keeps legacy behaviour.",
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════

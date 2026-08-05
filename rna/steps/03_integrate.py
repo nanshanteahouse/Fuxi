@@ -161,6 +161,24 @@ def main():
     forced_set: set[str] = set()
     if cfg.hvg.forced_genes:
         forced_set.update(cfg.hvg.forced_genes)
+    elif cfg.hvg.auto_forced_genes:
+        # Auto-fill from the tissue KB when nothing is configured explicitly.
+        # Keeps legacy behaviour (no forced genes) when the flag is off.
+        if not cfg.tissue_kb:
+            log.warning(
+                "hvg.auto_forced_genes=True but tissue_kb not set — skipping KB force-keep"
+            )
+        else:
+            from core.kb.forced_genes import build_forced_genes
+
+            kb_genes = build_forced_genes(cfg.tissue_kb, cfg.species, threshold="high")
+            log.info(
+                "Auto forced-genes from KB %s/%s: %d genes",
+                cfg.tissue_kb,
+                cfg.species,
+                len(kb_genes),
+            )
+            forced_set.update(kb_genes)
     if cfg.marker.marker_dict:
         for markers in cfg.marker.marker_dict.values():
             forced_set.update(markers)
