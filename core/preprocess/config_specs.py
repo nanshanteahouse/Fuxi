@@ -1,12 +1,10 @@
 """Per-format config specifications — the single source for starter configs.
 
-Replaces the hand-maintained ``templates/config_templates/*.yaml`` files as
-the *authoring* layer: every format's starter config (fields, defaults,
-placeholders, comments) is declared here as data.  The scaffold CLI
-(``core/config/scaffold.py``) renders these specs into YAML templates for
-humans; ``generate_config()`` assembles project configs directly from the
-specs at runtime — the committed template files are never on the runtime
-path.
+Every format's starter config (fields, defaults, placeholders, comments)
+is declared here as data.  The scaffold CLI (``core/config/scaffold.py``)
+renders these specs on demand (``--format``) as human starting points;
+``generate_config()`` assembles project configs directly from the specs
+at runtime — no template files exist on disk.
 
 Field names/defaults come from :mod:`core.config.schema` (single source of
 truth) — ``validate_specs()`` fails on any dotted path that is not a real
@@ -64,7 +62,6 @@ class FormatSpec:
     key: str
     modality: str
     data_format: str
-    template_name: str
     items: Tuple[Union[SpecComment, SpecField], ...]
 
 
@@ -381,7 +378,6 @@ _10X_H5 = FormatSpec(
     key="10X_h5",
     modality="rna",
     data_format="10X_h5",
-    template_name="config_10X_h5.yaml",
     items=(
         *_header("10X_h5"),
         SpecComment(("── Data input ──",)),
@@ -553,7 +549,6 @@ _10X_MTX = FormatSpec(
     key="10X_mtx",
     modality="rna",
     data_format="10X_mtx",
-    template_name="config_10X_mtx.yaml",
     items=(
         *_header("10X_mtx"),
         SpecComment(("── Data input ──",)),
@@ -675,7 +670,6 @@ _CSV = FormatSpec(
     key="csv_matrix",
     modality="rna",
     data_format="csv_matrix",
-    template_name="config_csv_matrix.yaml",
     items=(
         *_header("csv_matrix"),
         SpecComment(("── Data input ──",)),
@@ -791,7 +785,6 @@ _PREPROCESSED = FormatSpec(
     key="preprocessed",
     modality="rna",
     data_format="preprocessed",
-    template_name="config_preprocessed.yaml",
     items=(
         *_header("preprocessed"),
         SpecField(
@@ -898,7 +891,6 @@ _FRAGMENTS = FormatSpec(
     key="10x_fragments",
     modality="atac",
     data_format="10x_fragments",
-    template_name="config_fragments.yaml",
     items=(
         SpecComment(("── Modality & data format ──",)),
         SpecField("modality", value="atac"),
@@ -1010,7 +1002,6 @@ _VISIUM = FormatSpec(
     key="visium",
     modality="spatial",
     data_format="visium",
-    template_name="config_visium.yaml",
     items=(
         SpecComment(("── Modality & data format ──",)),
         SpecField("modality", value="spatial"),
@@ -1152,7 +1143,6 @@ _BULK = FormatSpec(
     key="bulk",
     modality="bulk",
     data_format="count_matrix",
-    template_name="config_bulk.yaml",
     items=(
         SpecComment(("── Data format ──",)),
         SpecField("data_format", value="count_matrix"),

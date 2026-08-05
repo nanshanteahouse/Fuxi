@@ -685,13 +685,15 @@ class TestH5adIncrementalIOFields:
         assert cfg.incremental_io is False
         assert cfg.trajectory.save_final_h5ad is False
 
-    def test_rna_template_loads(self, tmp_path: pathlib.Path) -> None:
-        """RNA main template must load via resolve_config (template regression)."""
-        template = _REPO / "templates" / "config_templates" / "config_10X_h5.yaml"
-        assert template.is_file(), f"Template not found: {template}"
-        # Load a copy from tmp so resolve_config's dir creation stays out of the repo.
+    def test_rna_starter_config_loads(self, tmp_path: pathlib.Path) -> None:
+        """RNA starter config must load via resolve_config (scaffold regression)."""
+        from core.config.scaffold import render_template_text
+        from core.preprocess.config_specs import materialized_specs
+
+        spec = next(s for s in materialized_specs() if s.key == "10X_h5")
+        # Write a copy to tmp so resolve_config's dir creation stays out of the repo.
         dst = tmp_path / "config_10X_h5.yaml"
-        dst.write_text(template.read_text(encoding="utf-8"), encoding="utf-8")
+        dst.write_text(render_template_text(spec), encoding="utf-8")
         cfg = resolve_config(str(dst))
         assert cfg.incremental_io is True
         assert cfg.trajectory.save_final_h5ad is True

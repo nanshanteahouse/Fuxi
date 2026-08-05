@@ -2,8 +2,7 @@
 
 Supported commands:
   resolve   — export resolved config to stdout/file
-  scaffold  — regenerate templates/config_templates/*.yaml from specs
-              (--check: exit 1 when templates are stale)
+  scaffold  — render starter config YAML from specs (--list/--format/--out)
 """
 
 import sys
@@ -15,7 +14,7 @@ def main():
             "Usage: python -m core.config <command> [args]\n",
             "Commands:\n",
             "  resolve   --project <path>  Resolve and export config to stdout/file\n",
-            "  scaffold [--check]          Regenerate templates from specs",
+            "  scaffold [--list|--format KEY [--out PATH]]  Render starter configs from specs",
         )
         sys.exit(1)
 

@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import yaml
 
 pytestmark = pytest.mark.smoke
 
@@ -90,11 +91,16 @@ def test_pipeline_list_all_modalities_parallel() -> None:
 # ── Config template discovery ────────────────────────────────────────────
 
 
-def test_config_templates_exist() -> None:
-    """All config templates are present on disk."""
-    template_dir = REPO_ROOT / "templates" / "config_templates"
-    templates = list(template_dir.glob("config_*.yaml"))
-    assert len(templates) >= 4, f"Expected ≥4 templates, found {len(templates)}"
+def test_scaffold_renders_starter_configs() -> None:
+    """Every format spec renders to a loadable starter config (smoke)."""
+    from core.config.scaffold import render_template_text
+    from core.preprocess.config_specs import materialized_specs
+
+    specs = materialized_specs()
+    assert len(specs) >= 4, f"Expected ≥4 format specs, found {len(specs)}"
+    for spec in specs:
+        data = yaml.safe_load(render_template_text(spec))
+        assert data["data_format"] == spec.data_format
 
 
 # ── Pyproject integrity ──────────────────────────────────────────────────

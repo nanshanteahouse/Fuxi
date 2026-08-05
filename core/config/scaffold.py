@@ -1,19 +1,19 @@
-"""Template scaffold — render committed starter-config YAML files from specs.
+"""Config scaffold — render starter-config YAML from schema specs on demand.
 
-The committed files under ``templates/config_templates/`` are *generated
-artifacts*: their only consumers are humans (manual config starting point)
-and regression tests.  Runtime config generation never reads them — it
-assembles from the specs directly (``core/preprocess/config_specs.py``).
+There are no committed template files: the specs in
+``core/preprocess/config_specs.py`` are the single source, and this module
+renders them whenever a human needs a starting point (manual dataset setup).
 
 Usage::
 
-    python -m core.config scaffold            # regenerate templates/
-    python -m core.config scaffold --check    # exit 1 if templates are stale
+    python -m core.config scaffold --list                    # available formats
+    python -m core.config scaffold --format 10X_h5           # render to stdout
+    python -m core.config scaffold --format 10X_mtx --out config_GSE.yaml
 """
 
 from __future__ import annotations
 
-import os
+import argparse
 import re
 import sys
 from typing import Any, Tuple, Union
@@ -111,50 +111,8 @@ def _render_items(items: Tuple[Union[SpecComment, SpecField], ...]) -> str:
 
 
 def render_template_text(spec: FormatSpec) -> str:
-    """Render the full committed template text for *spec*."""
+    """Render the full starter-config text for *spec*."""
     return GENERATED_HEADER + _render_items(spec.items)
-
-
-# ═══════════════════════════════════════════════════════════════════
-# Scaffold I/O
-# ═══════════════════════════════════════════════════════════════════
-
-
-def _template_dir() -> str:
-    """Absolute path to ``templates/config_templates/``."""
-    this_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(
-        os.path.dirname(os.path.dirname(this_dir)), "templates", "config_templates"
-    )
-
-
-def write_templates(directory: str | None = None) -> list[str]:
-    """Regenerate all committed template files; return written paths."""
-    directory = directory or _template_dir()
-    os.makedirs(directory, exist_ok=True)
-    written: list[str] = []
-    for spec in materialized_specs():
-        path = os.path.join(directory, spec.template_name)
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(render_template_text(spec))
-        written.append(path)
-    return written
-
-
-def check_templates(directory: str | None = None) -> list[str]:
-    """Return template paths whose committed content differs from the
-    freshly rendered text (empty = everything is up to date)."""
-    directory = directory or _template_dir()
-    stale: list[str] = []
-    for spec in materialized_specs():
-        path = os.path.join(directory, spec.template_name)
-        if not os.path.isfile(path):
-            stale.append(f"{path} (missing)")
-            continue
-        with open(path, encoding="utf-8") as f:
-            if f.read() != render_template_text(spec):
-                stale.append(path)
-    return stale
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -163,7 +121,20 @@ def check_templates(directory: str | None = None) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    argv = list(sys.argv[1:] if argv is None else argv)
+    parser = argparse.ArgumentParser(
+        prog="python -m core.config scaffold",
+        description="Render starter config YAML from core/preprocess/config_specs.py specs.",
+    )
+    parser.add_argument("--list", action="store_true", help="list available format keys and exit")
+    parser.add_argument(
+        "--format", metavar="KEY", help="render a single format spec (default: all)"
+    )
+    parser.add_argument(
+        "--out",
+        metavar="PATH",
+        help="write rendered YAML to PATH instead of stdout (requires --format)",
+    )
+    args = parser.parse_args(argv)
 
     # Sanity guard: schema fields exist before rendering anything
     from core.preprocess.config_specs import validate_specs
@@ -175,19 +146,33 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  - {e}", file=sys.stderr)
         return 2
 
-    check = "--check" in argv
-    if check:
-        stale = check_templates()
-        if stale:
-            for p in stale:
-                print(f"[STALE] {p}")
-            print("Run: python -m core.config scaffold")
-            return 1
-        print("templates up to date")
+    specs = materialized_specs()
+    if args.list:
+        for spec in specs:
+            print(f"{spec.key:<16} {spec.modality:<9} {spec.data_format}")
         return 0
 
-    for p in write_templates():
-        print(f"[WRITTEN] {p}")
+    if args.format is not None:
+        specs = [s for s in specs if s.key == args.format]
+        if not specs:
+            print(f"unknown format key: {args.format}", file=sys.stderr)
+            print(
+                "available keys: " + ", ".join(s.key for s in materialized_specs()),
+                file=sys.stderr,
+            )
+            return 1
+
+    if args.out is not None:
+        if len(specs) != 1:
+            print("--out requires --format (one spec)", file=sys.stderr)
+            return 1
+        with open(args.out, "w", encoding="utf-8") as f:
+            f.write(render_template_text(specs[0]))
+        print(f"[WRITTEN] {args.out}")
+        return 0
+
+    for spec in specs:
+        sys.stdout.write(render_template_text(spec))
     return 0
 
 

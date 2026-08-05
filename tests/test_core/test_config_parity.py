@@ -5,7 +5,7 @@ defaults to the old dataclass and that YAML serialization/deserialization
 works correctly.
 """
 
-import os
+import pathlib
 
 import pytest
 import yaml
@@ -411,17 +411,16 @@ execution:
         with pytest.raises(Exception, match="extra"):
             Config.model_validate(data)
 
-    def test_yaml_template_round_trip(self) -> None:
-        """Loading the 10X H5 template YAML works."""
-        template_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-            "templates",
-            "config_templates",
-            "config_10X_h5.yaml",
-        )
-        assert os.path.exists(template_path), f"Template not found: {template_path}"
+    def test_yaml_template_round_trip(self, tmp_path: pathlib.Path) -> None:
+        """Loading the 10X H5 starter config YAML works."""
+        from core.config.scaffold import render_template_text
+        from core.preprocess.config_specs import materialized_specs
 
-        with open(template_path) as f:
+        spec = next(s for s in materialized_specs() if s.key == "10X_h5")
+        cfg_path = tmp_path / "config_10X_h5.yaml"
+        cfg_path.write_text(render_template_text(spec), encoding="utf-8")
+
+        with open(cfg_path) as f:
             data = yaml.safe_load(f)
 
         cfg = Config.model_validate(data)

@@ -1,19 +1,21 @@
 """Regression tests for the schema-driven config scaffold.
 
-Guards the "forgot to update the template" class of bugs:
+Guards the "spec drifted from schema" class of bugs:
 
 1. Spec ↔ schema consistency (``validate_specs``) — schema renames or
    deleted fields fail immediately; free-form keys below dict-typed
    fields (e.g. marker_dict entries) stay allowed.
-2. Committed template files match the freshly rendered output — forgetting
-   to run ``python -m core.config scaffold`` fails CI.
-3. Every committed template resolves through ``resolve_config``.
-4. ``generate_config`` end-to-end across modalities/formats, including the
+2. Every rendered starter config is valid YAML (no duplicate keys,
+   which used to silently corrupt nested blocks) and resolves through
+   ``resolve_config`` — rendering happens on demand, so the rendered
+   text itself is the artifact under test.
+3. ``generate_config`` end-to-end across modalities/formats, including the
    previously unsupported visium / preprocessed / unknown / multiome paths.
 """
 
 from __future__ import annotations
 
+import io
 import pathlib
 
 import pytest
@@ -25,10 +27,6 @@ from core.preprocess.config_specs import (
     validate_specs,
 )
 from core.utils._config import resolve_config
-
-_REPO = pathlib.Path(__file__).resolve().parent.parent.parent
-_TEMPLATE_DIR = _REPO / "templates" / "config_templates"
-
 
 # ═══════════════════════════════════════════════════════════════════
 # 1 — Spec ↔ schema consistency
@@ -55,41 +53,96 @@ class TestValidateSpecs:
 
 
 # ═══════════════════════════════════════════════════════════════════
-# 2 — Committed templates == rendered output
+# 2 — Rendered starter configs are valid and resolvable
 # ═══════════════════════════════════════════════════════════════════
 
 
-class TestCommittedTemplatesUpToDate:
-    def test_templates_match_rendered_output(self) -> None:
+def _duplicate_keys(text: str) -> list[str]:
+    """Return mapping keys that appear twice in the same YAML mapping."""
+    dups: list[str] = []
+    stack: list[list] = []  # [known_keys: set[str], expect_key: bool]
+    seq_depth = 0
+    for ev in yaml.parse(io.StringIO(text)):
+        if isinstance(ev, yaml.events.MappingStartEvent):
+            stack.append([set(), True])
+        elif isinstance(ev, yaml.events.MappingEndEvent):
+            stack.pop()
+        elif isinstance(ev, yaml.events.SequenceStartEvent):
+            if seq_depth == 0 and stack:
+                stack[-1][1] = True  # the sequence consumed the value slot
+            seq_depth += 1
+        elif isinstance(ev, yaml.events.SequenceEndEvent):
+            seq_depth -= 1
+        elif isinstance(ev, yaml.events.ScalarEvent) and seq_depth == 0:
+            if stack and stack[-1][1]:
+                if ev.value in stack[-1][0]:
+                    dups.append(ev.value)
+                stack[-1][0].add(ev.value)
+            if stack:
+                stack[-1][1] = not stack[-1][1]
+    return dups
+
+
+class TestRenderedTemplates:
+    @pytest.mark.parametrize("name", [s.key for s in materialized_specs()])
+    def test_spec_renders_to_valid_yaml(self, name: str) -> None:
         from core.config.scaffold import render_template_text
 
-        for spec in materialized_specs():
-            path = _TEMPLATE_DIR / spec.template_name
-            assert path.is_file(), f"missing committed template: {path}"
-            assert path.read_text(encoding="utf-8") == render_template_text(spec), (
-                f"{spec.template_name} is stale — run: python -m core.config scaffold"
-            )
+        spec = next(s for s in materialized_specs() if s.key == name)
+        data = yaml.safe_load(render_template_text(spec))
+        assert isinstance(data, dict)
+        assert data["data_format"] == spec.data_format
 
-    def test_no_orphan_templates(self) -> None:
-        expected = {spec.template_name for spec in materialized_specs()}
-        actual = {p.name for p in _TEMPLATE_DIR.glob("config_*.yaml")}
-        assert actual == expected, f"orphan/stale templates: {actual - expected}"
+    @pytest.mark.parametrize("name", [s.key for s in materialized_specs()])
+    def test_spec_render_has_no_duplicate_keys(self, name: str) -> None:
+        from core.config.scaffold import render_template_text
 
+        spec = next(s for s in materialized_specs() if s.key == name)
+        assert _duplicate_keys(render_template_text(spec)) == []
 
-# ═══════════════════════════════════════════════════════════════════
-# 3 — Templates resolve through the config pipeline
-# ═══════════════════════════════════════════════════════════════════
+    @pytest.mark.parametrize("name", [s.key for s in materialized_specs()])
+    def test_rendered_spec_resolves(self, tmp_path: pathlib.Path, name: str) -> None:
+        from core.config.scaffold import render_template_text
 
-
-class TestTemplatesResolve:
-    @pytest.mark.parametrize("name", [s.template_name for s in materialized_specs()])
-    def test_template_loads(self, tmp_path: pathlib.Path, name: str) -> None:
-        src = _TEMPLATE_DIR / name
-        dst = tmp_path / name
-        dst.write_text(src.read_text(encoding="utf-8"), encoding="utf-8")
+        spec = next(s for s in materialized_specs() if s.key == name)
+        dst = tmp_path / f"{name}.yaml"
+        dst.write_text(render_template_text(spec), encoding="utf-8")
         cfg = resolve_config(str(dst))
         assert cfg.data_format
         assert cfg.modality
+
+
+# ═══════════════════════════════════════════════════════════════════
+# 3 — scaffold CLI
+# ═══════════════════════════════════════════════════════════════════
+
+
+class TestScaffoldCli:
+    def test_list_lists_all_formats(self, capsys: pytest.CaptureFixture) -> None:
+        from core.config.scaffold import main
+
+        assert main(["--list"]) == 0
+        out = capsys.readouterr().out
+        for spec in materialized_specs():
+            assert spec.key in out
+
+    def test_unknown_format_fails(self, capsys: pytest.CaptureFixture) -> None:
+        from core.config.scaffold import main
+
+        assert main(["--format", "not_a_format"]) == 1
+        assert "not_a_format" in capsys.readouterr().err
+
+    def test_out_requires_format(self) -> None:
+        from core.config.scaffold import main
+
+        assert main(["--out", "config.yaml"]) == 1
+
+    def test_format_out_writes_file(self, tmp_path: pathlib.Path) -> None:
+        from core.config.scaffold import main
+
+        out = tmp_path / "config.yaml"
+        assert main(["--format", "10X_h5", "--out", str(out)]) == 0
+        assert yaml.safe_load(out.read_text(encoding="utf-8"))["data_format"] == "10X_h5"
 
 
 # ═══════════════════════════════════════════════════════════════════
