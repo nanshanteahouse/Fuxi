@@ -359,7 +359,7 @@ def main():
         )
         if not resolve_device(cfg.execution.device, log):
             _pca_kwargs["svd_solver"] = _solver
-        gpu_pca(adata, log=log, device=cfg.execution.device, **_pca_kwargs)
+        gpu_pca(adata, log=log, device=cfg.execution.device, cfg=cfg, **_pca_kwargs)
         var_ratio = adata.uns["pca"]["variance_ratio"]
         log.info("  top-5 variance ratio: %.4f", var_ratio[:5].sum())
         log.info("  Cumulative variance ratio first 50 PCs: %.4f", var_ratio[:50].sum())

@@ -212,12 +212,19 @@ def gpu_pca(
     adata,
     log: logging.Logger | None = None,
     device: str = "auto",
+    cfg: Any = None,
+    step: str = "03_integrate",
     **kwargs: Any,
 ):
     """scanpy.pp.pca equivalent with GPU dispatch.
 
     GPU path uses ``rapids_singlecell.pp.pca`` (cuVS / cuSOLVER SVD).
     Speed-up is most visible for n_obs > 100k.
+
+    ``cfg`` (optional): resolved config — when provided, a VRAM-triggered
+    GPU→CPU fallback is recorded to ``<results_dir>/memory_skips.jsonl``
+    via :func:`core.utils._perf.record_memory_skip`, mirroring the
+    memory_policy skip audit.
     """
     if resolve_device(device, log):
         # NOTE(2026-08-01): 显存 guard —— rsc.pp.pca 需要 X dense 化进显存
@@ -237,6 +244,18 @@ def gpu_pca(
                     _fmt_gb(dense_bytes),
                     free_bytes / 1e9,
                 )
+            from core.utils._perf import record_memory_skip  # lazy: _perf imports _gpu
+
+            record_memory_skip(
+                step=step,
+                operation="pca GPU→CPU fallback",
+                reason=(
+                    f"dense X {_fmt_gb(dense_bytes)} exceeds free VRAM "
+                    f"{free_bytes / 1e9:.1f}GB (0.9x guard) — n_obs={n_obs}, n_vars={n_vars}"
+                ),
+                cfg=cfg,
+                log=log,
+            )
         else:
             rsc.get.anndata_to_GPU(adata)
             if log is not None and "pca" not in _dispatched_ops_logged:
