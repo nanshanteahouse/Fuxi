@@ -22,10 +22,16 @@ import gc
 import numpy as np
 import pandas as pd
 import scanpy as sc
+import scanpy.tools._rank_genes_groups as _rgg
 import scipy.sparse as sp
 from joblib import Parallel, delayed
 from scipy.stats import rankdata
 
+from core.annotation.engine import (
+    _patch_scanpy_basic_stats,
+    _patch_scanpy_fast_ranks,
+    _patch_scanpy_wilcoxon,
+)
 from core.utils import resolve_config, safe_plot, setup_logger, timed_substep
 
 
@@ -39,9 +45,12 @@ def layer1_markers(adata, cfg, log, group_col, table_dir):
         groupby=group_col,
         method=cfg.de.method,
         n_genes=cfg.de.n_genes * 2,
-        use_raw=True,
+        use_raw=cfg.de.use_raw,
         pts=True,
-        n_jobs=getattr(cfg.execution, "n_jobs", 1),
+        n_jobs=1,  # loky workers would drop self.pts (never synced back to the
+        #          main process), so filter_rank_genes_groups would fall back to
+        #          recomputing X[mask] > 0 fractions; parallelism comes from the
+        #          fused engine patches (numba) instead
         random_state=cfg.execution.random_seed,
     )
 
@@ -104,8 +113,8 @@ def _layer2_one_pair(ct, s1, s2, adata, ct_col, cfg, log):
             reference=s1,
             method=cfg.de.pairwise_method,  # safe: _layer2_one_pair only reads pvals_adj, not logfoldchanges
             n_genes=cfg.de.n_genes,
-            n_jobs=getattr(cfg.execution, "n_jobs", 1),
-            use_raw=True,
+            n_jobs=1,  # same loky-pts reasoning as layer1; sub is small anyway
+            use_raw=cfg.de.use_raw,
             random_state=cfg.execution.random_seed,
         )
         de_df = sc.get.rank_genes_groups_df(sub, group=s2)
@@ -192,21 +201,22 @@ def layer3_temporal_trends(adata, cfg, log, table_dir, primary_col=None):
         stage_means = {}
         for s in valid_stages:
             s_mask = (stages == s).values
+            layer_src = adata.raw if cfg.de.use_raw else adata
             s_idx = np.flatnonzero(ct_mask.values)[s_mask]
-            sub_x = adata.raw[s_idx].X
+            sub_x = layer_src[s_idx].X
             mean_expr = sub_x.mean(axis=0).A1 if sp.issparse(sub_x) else sub_x.mean(axis=0)
             stage_means[s] = mean_expr
 
         stage_nums = np.array([stage_numeric[s] for s in valid_stages])
         mean_matrix = np.stack([stage_means[s] for s in valid_stages], axis=1)
-        gene_names = adata.raw.var_names
+        gene_names = (adata.raw if cfg.de.use_raw else adata).var_names
 
         # Vectorized Spearman: rank each gene across stages, then Pearson = Spearman.
         # NOTE: replaced np.corrcoef(combined) — that allocates an O(n_genes²)
         # matrix (~5 GiB at 25k genes) per cell type, explaining the 21 GB peak
         # seen on GSE107618/v1 (8 CTs × 5 stages). The replacement below computes
         # only the corr(gene_i, stage) vector we actually need — O(n_genes × n_stages).
-        ranked_genes = np.apply_along_axis(rankdata, 1, mean_matrix)  # (n_genes, n_stages)
+        ranked_genes = _rgg.rankdata(mean_matrix.T).T  # multithreaded per-gene ranks
         ranked_stages = rankdata(stage_nums)  # (n_stages,)
         stage_centered = ranked_stages - ranked_stages.mean()  # (n_stages,)
         stage_ss = float((stage_centered**2).sum())
@@ -301,8 +311,9 @@ def generate_figures(adata, markers_df, cfg, log, primary_col=None):
     # 关键标记基因 dotplot
     if cfg.marker.marker_dict:
         all_markers = []
+        var_names_ref = adata.raw.var_names if cfg.de.use_raw else adata.var_names
         for genes in cfg.marker.marker_dict.values():
-            all_markers.extend([g for g in genes if g in adata.raw.var_names][:2])
+            all_markers.extend([g for g in genes if g in var_names_ref][:2])
         all_markers = list(dict.fromkeys(all_markers))
         if all_markers:
             safe_plot(
@@ -354,12 +365,26 @@ def main():
     cfg = resolve_config(args.config)
     log = setup_logger("07_de", os.path.join(cfg.log_dir, "07_markers_de.log"))
 
+    # ── Enable scanpy wilcoxon fast paths (step05 engine patches) ──
+    _patch_scanpy_fast_ranks()
+    _patch_scanpy_wilcoxon()
+    _patch_scanpy_basic_stats()
+
     # ── Load data ONCE before dispatch ───────────────────────
     input_h5ad = os.path.join(cfg.h5ad_dir, "05_annotated.h5ad")
     if not os.path.exists(input_h5ad):
         input_h5ad = cfg.cluster_h5ad
         log.warning("05_annotated.h5ad not found, falling back to: %s", input_h5ad)
-    adata = sc.read(input_h5ad)
+    if cfg.de.use_raw:
+        adata = sc.read(input_h5ad)
+    else:
+        # use_raw=False: the raw layer (all genes, often >20 GB on 1M+ cell
+        # datasets) is never used — open backed, drop it, then materialize
+        # only X/obs/var into memory (Li2026_Lobe_Neurons: 119.5s/31 GB
+        # full read -> 27.5s/5.4 GB).
+        adata = sc.read_h5ad(input_h5ad, backed="r")
+        adata.raw = None
+        adata = adata.to_memory()
     log.info("Loaded: %s — %d cells", input_h5ad, adata.n_obs)
 
     # ── Pseudobulk dispatch (de.method: pseudobulk) ───────────────────

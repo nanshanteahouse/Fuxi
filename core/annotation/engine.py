@@ -157,12 +157,54 @@ def _patch_scanpy_wilcoxon() -> None:
     orig_wilcoxon = rgg._RankGenes.wilcoxon
 
     def fast_wilcoxon(self, *, tie_correct):
-        from scipy import stats
+        from scipy.special import ndtr
 
         self._basic_stats()
         n_genes = self.X.shape[1]
         if self.ireference is not None:
-            yield from orig_wilcoxon(self, tie_correct=tie_correct)
+            # Reference mode: each group is ranked jointly with the reference
+            # group only (not the whole dataset).  Reuse the sparse fused
+            # accumulator on the two-group row subset — same merged-ranking
+            # semantics as scanpy's masked vstack path, bit-identical rank
+            # sums (exact integers) and tie correction.
+            groups = self.groups_masks_obs
+            for group_index in range(len(groups)):
+                if group_index == self.ireference:
+                    continue
+                mask_obs = groups[group_index]
+                mask_obs_rest = groups[self.ireference]
+                n_active = np.count_nonzero(mask_obs)
+                m_active = np.count_nonzero(mask_obs_rest)
+                rows = np.concatenate([np.flatnonzero(mask_obs), np.flatnonzero(mask_obs_rest)])
+                n_sub = rows.size
+                if not (sparse.issparse(self.X) and n_active and m_active):
+                    yield from orig_wilcoxon(self, tie_correct=tie_correct)
+                    return
+                xt = self.X[rows].tocsc()  # CSC: indptr per gene column
+                labels = np.zeros(n_sub, dtype=np.int64)
+                labels[:n_active] = 1  # group rows first, mirroring vstack
+                sums, nz_cnt, z, tc = _sparse_wilcoxon_accum(
+                    xt.indptr,
+                    xt.indices,
+                    xt.data,
+                    n_sub,
+                    labels,
+                    2,
+                )
+                rank_sums = _rank_sums_from_accum(
+                    sums,
+                    nz_cnt,
+                    z,
+                    np.array([m_active, n_active]),
+                )
+                scores = rank_sums[1] - n_active * (n_sub + 1) / 2.0
+                std_dev = np.sqrt(
+                    (tc if tie_correct else 1.0) * n_active * m_active * (n_sub + 1) / 12.0
+                )
+                scores = scores / std_dev
+                scores[np.isnan(scores)] = 0
+                pvals = 2 * ndtr(-np.abs(scores))
+                yield group_index, scores, pvals
             return
         n_groups = self.groups_masks_obs.shape[0]
         scores = np.zeros((n_groups, n_genes))
@@ -176,7 +218,7 @@ def _patch_scanpy_wilcoxon() -> None:
             # Sparse fused accumulation: no ranks matrix is materialized;
             # per-column nonzero sorting plus direct per-cluster accumulation
             # (21x on 110k x 25k, bit-identical on real and synthetic data).
-            xt = self.X.T.tocsr()
+            xt = self.X.tocsc()  # CSC: indptr per gene column, accum-ready
             sums, nz_cnt, z, tc = _sparse_wilcoxon_accum(
                 xt.indptr, xt.indices, xt.data, n_cells, labels, n_groups
             )
@@ -207,9 +249,10 @@ def _patch_scanpy_wilcoxon() -> None:
             scores[group_index, :] = (
                 scores[group_index, :] - (n_active * (n_cells + 1) / 2.0)
             ) / std_dev
-            scores[np.isnan(scores)] = 0
-            pvals = 2 * stats.distributions.norm.sf(np.abs(scores[group_index, :]))
-            yield group_index, scores[group_index], pvals
+            row = scores[group_index]
+            row[np.isnan(row)] = 0  # row-level; other rows are untouched zeros
+            pvals = 2 * ndtr(-np.abs(row))
+            yield group_index, row, pvals
 
     rgg._RankGenes.wilcoxon = fast_wilcoxon
     rgg._fuxi_fast_wilcoxon = True
@@ -228,6 +271,7 @@ def _mean_var_bucket(
     minor_len,
     bucket_i,
     n_threads,
+    inv_n,
 ):
     """Accumulate one thread-bucket's sums over strided rows ``bucket_i, +T, ...``.
 
@@ -238,6 +282,7 @@ def _mean_var_bucket(
     numba thread pools (which deadlock non-deterministically on this stack)."""
     sums = np.zeros(minor_len)
     squared_sums = np.zeros(minor_len)
+    pos_acc = np.zeros(minor_len, dtype=np.float64)
     for t in range(bucket_i, len(rows), n_threads):
         r = rows[t]
         for j in range(indptr[r], indptr[r + 1]):
@@ -247,7 +292,9 @@ def _mean_var_bucket(
             value = data[j]
             sums[mi] += value
             squared_sums[mi] += value * value
-    return sums, squared_sums
+            if value > 0:
+                pos_acc[mi] += inv_n
+    return sums, squared_sums, pos_acc
 
 
 def _fused_mean_var_rows(
@@ -258,6 +305,7 @@ def _fused_mean_var_rows(
     major_len,
     minor_len,
     n_threads,
+    inv_n,
 ):
     """mean/var over selected CSR rows, bit-identical to fast_array_utils.
 
@@ -269,25 +317,31 @@ def _fused_mean_var_rows(
     avoiding both X[mask] copies and numba thread-pool deadlocks."""
     global _FUSED_BS_WARMED, _BS_POOL
     if n_threads <= 1 or len(rows) <= 1:
-        sums, squared_sums = _mean_var_bucket(indptr, indices, data, rows, minor_len, 0, 1)
+        sums, squared_sums, pos_acc = _mean_var_bucket(
+            indptr, indices, data, rows, minor_len, 0, 1, inv_n
+        )
         sums = sums[None, :]
         squared_sums = squared_sums[None, :]
+        pos_acc = pos_acc[None, :]
     else:
         if not _FUSED_BS_WARMED:
-            _mean_var_bucket(indptr, indices, data, rows[:1], minor_len, 0, 1)
+            _mean_var_bucket(indptr, indices, data, rows[:1], minor_len, 0, 1, inv_n)
             _FUSED_BS_WARMED = True
         if _BS_POOL is None:
             _BS_POOL = ThreadPoolExecutor(max_workers=n_threads)
         futures = [
-            _BS_POOL.submit(_mean_var_bucket, indptr, indices, data, rows, minor_len, i, n_threads)
+            _BS_POOL.submit(
+                _mean_var_bucket, indptr, indices, data, rows, minor_len, i, n_threads, inv_n
+            )
             for i in range(min(n_threads, len(rows)))
         ]
         buckets = [f.result() for f in futures]
         sums = np.stack([b[0] for b in buckets])
         squared_sums = np.stack([b[1] for b in buckets])
+        pos_acc = np.stack([b[2] for b in buckets])
     means = sums.sum(axis=0) / major_len
     variances = squared_sums.sum(axis=0) / major_len - (means) ** 2
-    return means, variances
+    return means, variances, pos_acc.sum(axis=0)
 
 
 def _patch_scanpy_basic_stats() -> None:
@@ -298,8 +352,12 @@ def _patch_scanpy_basic_stats() -> None:
     1.05M-cell atlas).  This variant feeds row-id arrays straight into a
     replica of fast_array_utils' reduction (identical strided row->thread
     mapping and reduction order), eliminating submatrix copies entirely
-    (16x on 110k x 25k, bit-identical).  Falls back to the original for
-    dense/small matrices and reference/comp_pts modes."""
+    (16x on 110k x 25k, bit-identical).  When ``comp_pts`` is set, the
+    per-gene >0 fractions (``pts``/``pts_rest``) are accumulated in the same
+    fused scan, replicating scipy's ``(X * (1/n)).sum()`` multiply-then-add
+    semantics per row, so ``X[mask] > 0`` bool matrices and their column
+    reductions are never materialized.  Falls back to the original for
+    dense/small matrices and reference mode."""
     import scanpy.tools._rank_genes_groups as rgg
 
     if getattr(rgg, "_fuxi_fast_basic_stats", False):
@@ -315,7 +373,6 @@ def _patch_scanpy_basic_stats() -> None:
             and x.format == "csr"
             and x.shape[0] >= _FUXI_FAST_RANKS_THRESHOLD
             and self.ireference is None
-            and not self.comp_pts
         ):
             orig(self)
             return
@@ -323,27 +380,33 @@ def _patch_scanpy_basic_stats() -> None:
         indptr, indices, data = x.indptr, x.indices, x.data
         self.means = np.zeros((n_groups, n_genes))
         self.vars = np.zeros((n_groups, n_genes))
-        self.pts = None
+        self.pts = np.zeros((n_groups, n_genes)) if self.comp_pts else None
         self.means_rest = np.zeros((n_groups, n_genes))
         self.vars_rest = np.zeros((n_groups, n_genes))
-        self.pts_rest = None
+        self.pts_rest = np.zeros((n_groups, n_genes)) if self.comp_pts else None
         for g in range(n_groups):
             rows = np.flatnonzero(self.groups_masks_obs[g])
             n_c = rows.size
-            mean, var = _fused_mean_var_rows(indptr, indices, data, rows, n_c, n_genes, n_threads)
+            mean, var, pos = _fused_mean_var_rows(
+                indptr, indices, data, rows, n_c, n_genes, n_threads, 1.0 / n_c
+            )
             if n_c != 1:
                 var = var * (n_c / (n_c - 1))
             self.means[g] = mean
             self.vars[g] = var
+            if self.comp_pts:
+                self.pts[g] = pos
             rows_r = np.flatnonzero(~self.groups_masks_obs[g])
             n_r = rows_r.size
-            mean_r, var_r = _fused_mean_var_rows(
-                indptr, indices, data, rows_r, n_r, n_genes, n_threads
+            mean_r, var_r, pos_r = _fused_mean_var_rows(
+                indptr, indices, data, rows_r, n_r, n_genes, n_threads, 1.0 / n_r
             )
             if n_r != 1:
                 var_r = var_r * (n_r / (n_r - 1))
             self.means_rest[g] = mean_r
             self.vars_rest[g] = var_r
+            if self.comp_pts:
+                self.pts_rest[g] = pos_r
 
     rgg._RankGenes._basic_stats = fast_basic_stats
     rgg._fuxi_fast_basic_stats = True

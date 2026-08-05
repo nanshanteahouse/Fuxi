@@ -470,6 +470,7 @@ class DESettings(BaseModel):
     pairwise_method: Literal["wilcoxon", "t-test"] = "wilcoxon"
     branch_method: Literal["wilcoxon", "t-test"] = "t-test"
     stage_pairwise: bool = True
+    use_raw: bool = True
     auto_switch_on_low_quality: bool = False
     pseudobulk: "PseudobulkDESettings" = Field(default_factory=lambda: PseudobulkDESettings())
 
