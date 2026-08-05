@@ -634,16 +634,13 @@ class ConfigEditorScreen(Screen):
             errors.append(f"maximum {le}")
 
         if errors:
-            widget.classes = widget.classes + " field-invalid"
+            widget.add_class("field-invalid")
             self._update_status(
                 f"[red]Validation:[/] {widget.id or 'field'} — {', '.join(errors)}"
             )
         else:
             # Remove invalid class if previously set
-            classes = widget.classes.split()
-            if "field-invalid" in classes:
-                classes.remove("field-invalid")
-                widget.classes = " ".join(classes)
+            widget.remove_class("field-invalid")
             # Clear transient validation messages from status bar
             # (only if the current status starts with "Validation")
             self.query_one("#status-bar", Static)
