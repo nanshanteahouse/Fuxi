@@ -303,8 +303,24 @@ Supports multiple LLM backends: OpenAI API, DeepSeek, vLLM, Ollama, etc. (config
 If neither KB nor AI is available, the pipeline falls back to classic marker gene scoring — you only need to provide `CFG.marker_dict` (manually curated marker gene lists per cell type).
 
 > 💡 **Annotation output includes**: `cell_type` (primary label), `cell_subtype` (subtype), `cell_state` (state), `annot_confidence` (confidence level), and `annot_reasoning` (rationale).
-#### Advanced: KADP developmental-potency axis + METC multi-source arbitration (off by default)
 
+#### Performance mode: approximate sampling (off by default)
+
+For very large datasets (million-cell scale), the Wilcoxon and statistical workload of KB mode grows linearly with cell count.
+An optional fast mode **down-samples per cluster** (at most `fast_sampling` cells per cluster, default 5000, fixed random seed for reproducibility),
+which substantially cuts compute and memory while preserving cluster structure and cell-type discriminative power:
+
+```yaml
+execution:
+  approximation: fast   # exact (default, bit-for-bit reproducible) or fast (down-sampled approximation)
+  fast_sampling: 5000   # per-cluster sampling cap (>=100)
+```
+
+⚠️ **Difference from `use_float32`**: `use_float32` only changes the numeric dtype (representation precision, ulp-level); output statistics are still computed on the full data.
+`approximation: fast` is instead a **statistical approximation** — Wilcoxon rankings and basic_stats are sampled estimates based on 5000 cells per cluster,
+so results will not match exact mode bit-for-bit (measured top-20 marker-gene overlap ~90%, annotation conclusions stay directionally consistent).
+
+#### Advanced: KADP developmental-potency axis + METC multi-source arbitration (off by default)
 For ambiguous/transitional clusters in **developing tissue** (`CFG.tissue_maturity = "developing"` or `CFG.marker.developmental_mode = True`), two optional layers sit above KB mode: **Layer 3 — the KADP developmental-potency axis** (KADP Developmental Potency, names transitional precursors from precursor/terminal expression potency) and **Layer 4 — METC multi-source arbitration** (Multi-Evidence Transition Consensus, votes on candidates from multiple evidence sources). Both are **off by default**; when disabled, the fusion engine behaves bit-for-bit identically to baseline.
 
 ##### Layer 3: KADP developmental-potency KB axis
