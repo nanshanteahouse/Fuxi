@@ -301,7 +301,11 @@ def _select_pseudotime_correlated(adata, cfg) -> Tuple[List[str], pd.DataFrame]:
     # 3. Vectorized Spearman correlation over all candidates
     #    Transposed CSR row-slice: one pass over the matrix instead of
     #    per-gene column slices (each column slice was O(nnz) full scan).
-    expr_mat = np.asarray(adata.raw.X.T.tocsr()[candidate_indices].toarray(), dtype=float)
+    raw = adata.raw.X
+    if issparse(raw):
+        expr_mat = np.asarray(raw.T.tocsr()[candidate_indices].toarray(), dtype=float)
+    else:
+        expr_mat = np.asarray(raw.T[candidate_indices], dtype=float)
     expr_mat = expr_mat[:, pt_mask]
     keep = np.var(expr_mat, axis=1) > 0
     expr_mat = expr_mat[keep]
@@ -313,11 +317,12 @@ def _select_pseudotime_correlated(adata, cfg) -> Tuple[List[str], pd.DataFrame]:
     pt_ranks = rankdata(pseudotime_clean)
     ranks_c = ranks - ranks.mean(axis=1, keepdims=True)
     pt_c = pt_ranks - pt_ranks.mean()
-    denom = np.sqrt((ranks_c**2).sum(axis=1) * (pt_c**2).sum())
-    rhos_arr = (ranks_c @ pt_c) / denom
-    dof = len(pseudotime_clean) - 2
-    tvals = rhos_arr * np.sqrt((dof / ((rhos_arr + 1.0) * (1.0 - rhos_arr))).clip(0))
-    pvals_arr = 2.0 * t_dist.sf(np.abs(tvals), dof)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        denom = np.sqrt((ranks_c**2).sum(axis=1) * (pt_c**2).sum())
+        rhos_arr = np.clip((ranks_c @ pt_c) / denom, -1.0, 1.0)
+        dof = len(pseudotime_clean) - 2
+        tvals = rhos_arr * np.sqrt((dof / ((rhos_arr + 1.0) * (1.0 - rhos_arr))).clip(0))
+        pvals_arr = 2.0 * t_dist.sf(np.abs(tvals), dof)
     finite = np.isfinite(rhos_arr) & np.isfinite(pvals_arr)
     rhos = rhos_arr[finite].tolist()
     pvals = pvals_arr[finite].tolist()

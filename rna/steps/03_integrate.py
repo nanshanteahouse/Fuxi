@@ -162,10 +162,10 @@ def main():
     forced_set: set[str] = set()
     if cfg.hvg.forced_genes:
         forced_set.update(cfg.hvg.forced_genes)
-    elif cfg.hvg.auto_forced_genes:
+    elif isinstance(cfg.hvg.auto_forced_genes, bool) and cfg.hvg.auto_forced_genes:
         # Auto-fill from the tissue KB when nothing is configured explicitly.
         # Keeps legacy behaviour (no forced genes) when the flag is off.
-        if not cfg.tissue_kb:
+        if not isinstance(cfg.tissue_kb, str) or not cfg.tissue_kb:
             log.warning(
                 "hvg.auto_forced_genes=True but tissue_kb not set — skipping KB force-keep"
             )

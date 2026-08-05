@@ -98,6 +98,8 @@ def _make_cfg(
     cfg.hvg.n_top_genes = 100
     cfg.hvg.flavor = "seurat_v3"
     cfg.hvg.batch_key = None
+    cfg.hvg.forced_genes = []
+    cfg.hvg.auto_forced_genes = False
 
     # Normalization (disable all heavy work)
     cfg.normalization = MagicMock()
@@ -119,6 +121,8 @@ def _make_cfg(
     # Plot config (production code reads cfg.plot.qc_figure_size[0] / palette / dpi)
     cfg.plot.qc_figure_size = [8, 5]
     cfg.plot.figure_dpi = 150
+    cfg.plot.figure_format = "png"
+    cfg.plot.figure_transparent = False
     cfg.plot.palette.qc_threshold = "red"
 
     return cfg

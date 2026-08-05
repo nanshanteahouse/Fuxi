@@ -345,8 +345,14 @@ def save_figure(fig, path, cfg=None, dpi=None, fmt=None, **kwargs):
     """
     import matplotlib.pyplot as plt
 
-    final_fmt = fmt or (cfg.plot.figure_format if cfg else "pdf")
-    final_dpi = dpi or (cfg.plot.figure_dpi if cfg else 150)
+    cfg_fmt = cfg.plot.figure_format if cfg else None
+    final_fmt = fmt if isinstance(fmt, str) else (cfg_fmt if isinstance(cfg_fmt, str) else "pdf")
+    cfg_dpi = cfg.plot.figure_dpi if cfg else None
+    final_dpi = (
+        dpi
+        if isinstance(dpi, (int, float))
+        else (cfg_dpi if isinstance(cfg_dpi, (int, float)) else 150)
+    )
     base, _ = os.path.splitext(path)
     out = f"{base}.{final_fmt}"
     for ext in (".pdf", ".png", ".svg", ".jpg", ".jpeg", ".tiff"):
@@ -407,7 +413,9 @@ def safe_plot(
                 dpi=dpi,
                 fmt=fmt,
                 bbox_inches="tight",
-                transparent=cfg.plot.figure_transparent if cfg else True,
+                transparent=cfg.plot.figure_transparent
+                if cfg and isinstance(cfg.plot.figure_transparent, bool)
+                else True,
             )
         return result
     except Exception as e:
