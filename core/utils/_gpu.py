@@ -198,7 +198,11 @@ def gpu_leiden(
         gpu_kwargs = dict(kwargs)
         gpu_kwargs.pop("flavor", None)
         gpu_kwargs.pop("directed", None)
-        gpu_kwargs.pop("n_iterations", None)  # cuGraph uses max_iter
+        # scanpy's n_iterations=-1 (full convergence) is meaningless to rsc:
+        # rsc's n_iterations is a *bounded global-round count* (default 100).
+        # Trial 2026-08-05: passing n_iterations=2 shattered the partition
+        # (k=42 -> k=9503 on 76k cells) — keep rsc's default.
+        gpu_kwargs.pop("n_iterations", None)
         if log is not None and "leiden" not in _dispatched_ops_logged:
             log.info("[device] sc.tl.leiden → rsc.tl.leiden (GPU)")
             _dispatched_ops_logged.add("leiden")
