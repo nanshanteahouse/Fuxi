@@ -28,7 +28,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import scanpy as sc
 
-from core.utils import resolve_config, setup_logger
+from core.utils import resolve_config, save_figure, setup_logger
 
 matplotlib.use("Agg")
 
@@ -100,7 +100,7 @@ def plot_spatial_heatmap(top_df, cfg, log):
 
     fig.tight_layout()
     path = os.path.join(fig_dir, "cci_spatial_heatmap.png")
-    fig.savefig(path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
+    save_figure(fig, path, cfg=cfg, bbox_inches="tight")
     plt.close(fig)
     log.info("Saved: %s", path)
 
@@ -158,7 +158,7 @@ def plot_spatial_dotplot(top_df, cfg, log):
 
     fig.tight_layout()
     path = os.path.join(fig_dir, "cci_spatial_dotplot.png")
-    fig.savefig(path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
+    save_figure(fig, path, cfg=cfg, bbox_inches="tight")
     plt.close(fig)
     log.info("Saved: %s", path)
 

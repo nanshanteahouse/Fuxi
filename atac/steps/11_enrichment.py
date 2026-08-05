@@ -24,7 +24,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from core.utils import resolve_config, setup_logger
+from core.utils import resolve_config, save_figure, setup_logger
 
 
 def peak_to_gene(peak_df, genome="hg38", gene_bed=None, max_distance=100000):
@@ -241,8 +241,10 @@ def main():
             ax.set_yticklabels(top["Term"].str[:50])
             ax.set_xlabel("-log10(Adjusted P-value)")
             plt.tight_layout()
-            plt.savefig(
-                os.path.join(atac_fig_dir, "enrichment_barplot.png"),
+            save_figure(
+                None,
+                os.path.join(atac_fig_dir, "enrichment_barplot"),
+                cfg=cfg,
                 dpi=cfg.plot.figure_dpi,
                 bbox_inches="tight",
             )

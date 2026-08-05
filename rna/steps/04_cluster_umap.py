@@ -31,6 +31,7 @@ from core.utils import (
     gpu_umap,
     resolve_config,
     safe_write,
+    save_figure,
     setup_logger,
     timed_substep,
 )
@@ -162,8 +163,10 @@ def plot_step04_figures(h5ad_path: str, cfg, log):
                     ax.text(0.5, 0.5, "N/A", ha="center", va="center", transform=ax.transAxes)
                     ax.set_title(f"n={n}, r={r}")
         fig.tight_layout()
-        fig.savefig(
-            os.path.join(fig_dir, "param_grid_summary.png"),
+        save_figure(
+            fig,
+            os.path.join(fig_dir, "param_grid_summary"),
+            cfg=cfg,
             dpi=cfg.plot.figure_dpi,
             bbox_inches="tight",
         )
@@ -189,8 +192,10 @@ def plot_step04_figures(h5ad_path: str, cfg, log):
             for j in range(len(keys), len(axes)):
                 axes[j].axis("off")
             fig.tight_layout()
-            fig.savefig(
-                os.path.join(fig_dir, f"leiden_multires_n{n}.png"),
+            save_figure(
+                fig,
+                os.path.join(fig_dir, f"leiden_multires_n{n}"),
+                cfg=cfg,
                 dpi=cfg.plot.figure_dpi,
                 bbox_inches="tight",
             )
@@ -215,8 +220,10 @@ def plot_step04_figures(h5ad_path: str, cfg, log):
                     if _smart_plot_umap(
                         light, batch_key, ax_b, f"UMAP colored by {batch_key}", cfg, log
                     ):
-                        fig_b.savefig(
-                            os.path.join(fig_dir, "batch_colored_umap.png"),
+                        save_figure(
+                            fig_b,
+                            os.path.join(fig_dir, "batch_colored_umap"),
+                            cfg=cfg,
                             dpi=cfg.plot.figure_dpi,
                             bbox_inches="tight",
                         )
@@ -268,8 +275,10 @@ def plot_step04_figures(h5ad_path: str, cfg, log):
                         for j in range(n_batches, len(axes)):
                             axes[j].axis("off")
                         fig.tight_layout()
-                        fig.savefig(
-                            os.path.join(fig_dir, "batch_faceted_umap.png"),
+                        save_figure(
+                            fig,
+                            os.path.join(fig_dir, "batch_faceted_umap"),
+                            cfg=cfg,
                             dpi=cfg.plot.figure_dpi,
                             bbox_inches="tight",
                         )
@@ -833,8 +842,10 @@ def main():
                         log=log,
                     )
                     if drawn:
-                        fig.savefig(
-                            os.path.join(fig_dir, f"leiden_grid_n{n}_r{res}.png"),
+                        save_figure(
+                            fig,
+                            os.path.join(fig_dir, f"leiden_grid_n{n}_r{res}"),
+                            cfg=cfg,
                             dpi=cfg.plot.figure_dpi,
                             bbox_inches="tight",
                         )
@@ -955,8 +966,10 @@ def main():
         log.info("Computing PAGA backbone for UMAP initialization...")
         sc.tl.paga(adata, groups="leiden")
         sc.pl.paga(adata, show=False)
-        plt.savefig(
-            os.path.join(fig_dir, "paga_backbone.png"),
+        save_figure(
+            None,
+            os.path.join(fig_dir, "paga_backbone"),
+            cfg=cfg,
             dpi=cfg.plot.figure_dpi,
             bbox_inches="tight",
         )
@@ -1068,8 +1081,10 @@ def main():
             for j in range(len(sweep_results), len(axes_flat)):
                 axes_flat[j].axis("off")
             fig.tight_layout()
-            fig.savefig(
-                os.path.join(fig_dir, "min_dist_sweep.png"),
+            save_figure(
+                fig,
+                os.path.join(fig_dir, "min_dist_sweep"),
+                cfg=cfg,
                 dpi=cfg.plot.figure_dpi,
                 bbox_inches="tight",
             )
@@ -1105,8 +1120,10 @@ def main():
                         adata, batch_key, ax_b, f"UMAP colored by {batch_key}", cfg, log
                     )
                     if drawn:
-                        plt.savefig(
-                            os.path.join(fig_dir, "batch_colored_umap.png"),
+                        save_figure(
+                            None,
+                            os.path.join(fig_dir, "batch_colored_umap"),
+                            cfg=cfg,
                             dpi=cfg.plot.figure_dpi,
                             bbox_inches="tight",
                         )
@@ -1161,8 +1178,10 @@ def main():
                         for j in range(n_batches, len(axes_flat)):
                             axes_flat[j].axis("off")
                         fig.tight_layout()
-                        fig.savefig(
-                            os.path.join(fig_dir, "batch_faceted_umap.png"),
+                        save_figure(
+                            fig,
+                            os.path.join(fig_dir, "batch_faceted_umap"),
+                            cfg=cfg,
                             dpi=cfg.plot.figure_dpi,
                             bbox_inches="tight",
                         )
@@ -1204,8 +1223,10 @@ def main():
                     ax.set_title(f"Cluster \u00d7 batch mixing ({batch_key})")
                     plt.colorbar(im, ax=ax, label="cell count")
                     fig.tight_layout()
-                    fig.savefig(
-                        os.path.join(fig_dir, "batch_mixing_heatmap.png"),
+                    save_figure(
+                        fig,
+                        os.path.join(fig_dir, "batch_mixing_heatmap"),
+                        cfg=cfg,
                         dpi=cfg.plot.figure_dpi,
                         bbox_inches="tight",
                     )
@@ -1260,8 +1281,10 @@ def main():
                     )
                     ax.set_title(f"n={n}, r={res}")
         fig.tight_layout()
-        fig.savefig(
-            os.path.join(fig_dir, "param_grid_summary.png"),
+        save_figure(
+            fig,
+            os.path.join(fig_dir, "param_grid_summary"),
+            cfg=cfg,
             dpi=cfg.plot.figure_dpi,
             bbox_inches="tight",
         )
@@ -1293,8 +1316,10 @@ def main():
                 for j in range(len(res_keys), len(axes)):
                     axes[j].axis("off")
                 fig.tight_layout()
-                fig.savefig(
-                    os.path.join(fig_dir, f"leiden_multires_n{n}.png"),
+                save_figure(
+                    fig,
+                    os.path.join(fig_dir, f"leiden_multires_n{n}"),
+                    cfg=cfg,
                     dpi=cfg.plot.figure_dpi,
                     bbox_inches="tight",
                 )

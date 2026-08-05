@@ -42,6 +42,7 @@ from core.utils import (
     resolve_config,
     resolve_device,
     safe_write,
+    save_figure,
     setup_logger,
     stream_write_raw,
     timed_substep,
@@ -398,7 +399,12 @@ def main():
         ax.set_ylabel("Variance ratio")
         ax.legend()
         fig.tight_layout()
-        fig.savefig(os.path.join(fig_dir, "pca_elbow.png"), dpi=cfg.plot.figure_dpi)
+        save_figure(
+            fig,
+            os.path.join(fig_dir, "pca_elbow"),
+            cfg=cfg,
+            dpi=cfg.plot.figure_dpi,
+        )
         plt.close(fig)
         log.info("  PCA elbow plot saved")
 
@@ -533,7 +539,12 @@ def main():
                 title="Harmony-corrected",
             )
             fig.tight_layout()
-            fig.savefig(os.path.join(fig_dir, "harmony_comparison.png"), dpi=cfg.plot.figure_dpi)
+            save_figure(
+                fig,
+                os.path.join(fig_dir, "harmony_comparison"),
+                cfg=cfg,
+                dpi=cfg.plot.figure_dpi,
+            )
             plt.close(fig)
             log.info("  Harmony comparison plot saved")
             # ── Post-Harmony preservation check ──
@@ -598,7 +609,12 @@ def main():
                 title="Combat-corrected",
             )
             fig.tight_layout()
-            fig.savefig(os.path.join(fig_dir, "combat_comparison.png"), dpi=cfg.plot.figure_dpi)
+            save_figure(
+                fig,
+                os.path.join(fig_dir, "combat_comparison"),
+                cfg=cfg,
+                dpi=cfg.plot.figure_dpi,
+            )
             plt.close(fig)
             log.info("  Combat comparison plot saved")
         else:

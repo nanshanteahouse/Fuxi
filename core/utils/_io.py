@@ -328,6 +328,39 @@ def write_obs_columns_inplace(
     _log("In-place writeback OK — backup removed")
 
 
+def save_figure(fig, path, cfg=None, dpi=None, fmt=None, **kwargs):
+    """Save a matplotlib figure honoring cfg.plot.figure_format.
+
+    Any extension on *path* is replaced by the resolved format (explicit fmt
+    > cfg.plot.figure_format > "pdf"). Stale files of other formats with the
+    same basename are removed so only one format survives per figure.
+
+    Args:
+        fig: Figure object, or None to use the current pyplot figure.
+        path: target path; its extension (if any) is replaced.
+        cfg: optional Config — supplies figure_format / figure_dpi.
+        dpi: explicit DPI — priority over cfg.plot.figure_dpi, over 150.
+        fmt: explicit format — priority over cfg.plot.figure_format, over "pdf".
+        **kwargs: passed through to savefig (e.g. bbox_inches, transparent).
+    """
+    import matplotlib.pyplot as plt
+
+    final_fmt = fmt or (cfg.plot.figure_format if cfg else "pdf")
+    final_dpi = dpi or (cfg.plot.figure_dpi if cfg else 150)
+    base, _ = os.path.splitext(path)
+    out = f"{base}.{final_fmt}"
+    for ext in (".pdf", ".png", ".svg", ".jpg", ".jpeg", ".tiff"):
+        stale = base + ext
+        if stale != out and os.path.exists(stale):
+            os.remove(stale)
+    os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
+    if fig is None:
+        plt.savefig(out, dpi=final_dpi, **kwargs)
+    else:
+        fig.savefig(out, dpi=final_dpi, **kwargs)
+    return out
+
+
 def safe_plot(
     func,
     *args,
@@ -365,23 +398,17 @@ def safe_plot(
     try:
         result = func(*args, **kwargs)
         if save_path:
-            import matplotlib.pyplot as plt
-
-            # Resolve DPI: explicit dpi > cfg.plot.figure_dpi > 150
-            final_dpi = dpi or (cfg.plot.figure_dpi if cfg else 150)
-            # Resolve format: explicit fmt > cfg.plot.figure_format > "pdf"
-            final_fmt = fmt or (cfg.plot.figure_format if cfg else "pdf")
-            # Resolve transparency
-            transparent = cfg.plot.figure_transparent if cfg else True
-
             if not os.path.isabs(save_path):
                 save_path = os.path.join(sc.settings.figdir, save_path)
-            # If save_path has no extension, append final_fmt
-            if not os.path.splitext(save_path)[1]:
-                save_path = f"{save_path}.{final_fmt}"
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            plt.savefig(save_path, dpi=final_dpi, bbox_inches="tight", transparent=transparent)
-            plt.close()
+            save_figure(
+                None,
+                save_path,
+                cfg=cfg,
+                dpi=dpi,
+                fmt=fmt,
+                bbox_inches="tight",
+                transparent=cfg.plot.figure_transparent if cfg else True,
+            )
         return result
     except Exception as e:
         logger.warning("Plot failed (skipped): %s", e)

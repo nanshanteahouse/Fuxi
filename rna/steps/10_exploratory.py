@@ -21,7 +21,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scanpy as sc
 
-from core.utils import resolve_config, safe_plot, setup_logger
+from core.utils import resolve_config, safe_plot, save_figure, setup_logger
 from core.utils._optional import require_sccoda
 
 
@@ -60,8 +60,10 @@ def plot_composition(adata, group_col, stage_col, stage_order, fig_dir, table_di
     )
     fig.tight_layout()
     _dpi = cfg.plot.figure_dpi if cfg else 150
-    fig.savefig(
-        os.path.join(fig_dir, f"composition_by_stage_{group_col}.png"),
+    save_figure(
+        fig,
+        os.path.join(fig_dir, f"composition_by_stage_{group_col}"),
+        cfg=cfg,
         dpi=_dpi,
         bbox_inches="tight",
     )
@@ -152,7 +154,7 @@ def main():
             adata,
             color=qc_metrics,
             show=False,
-            save="qc_umap.pdf",
+            save="qc_umap",
             vmax="p99",
             ncols=3,
             cfg=cfg,
@@ -174,7 +176,7 @@ def main():
                 color=batch,
                 use_raw=True,
                 show=False,
-                save=f"marker_umap_batch{batch_start}.pdf",
+                save=f"marker_umap_batch{batch_start}",
                 vmax="p99",
                 ncols=4,
                 cfg=cfg,
@@ -189,7 +191,7 @@ def main():
             var_names=all_markers,
             groupby=group_col,
             show=False,
-            save="marker_dotplot.pdf",
+            save="marker_dotplot",
             cfg=cfg,
         )
 
@@ -272,7 +274,7 @@ def main():
             color=col,
             show=False,
             legend_loc="on data" if len(sizes) < 30 else "right margin",
-            save=f"umap_{col}.pdf",
+            save=f"umap_{col}",
             cfg=cfg,
         )
 

@@ -68,7 +68,7 @@ def run_paga(adata, cfg, log):
         adata,
         color=group_col,
         show=False,
-        save="paga_graph.pdf",
+        save="paga_graph",
         title="PAGA trajectory",
         cfg=cfg,
     )
@@ -78,7 +78,7 @@ def run_paga(adata, cfg, log):
         basis="umap",
         color=group_col,
         show=False,
-        save="paga_umap.pdf",
+        save="paga_umap",
         edge_width_scale=0.5,
         title="PAGA on UMAP",
         cfg=cfg,
@@ -169,7 +169,7 @@ def compute_dpt(adata, root_mask, cfg, log):
         adata,
         color="dpt_pseudotime",
         show=False,
-        save="pseudotime_umap.pdf",
+        save="pseudotime_umap",
         cmap=cfg.plot.palette.pseudotime,
         cfg=cfg,
     )
@@ -178,7 +178,7 @@ def compute_dpt(adata, root_mask, cfg, log):
         adata,
         color="dpt_pseudotime",
         show=False,
-        save="pseudotime_diffmap.pdf",
+        save="pseudotime_diffmap",
         cmap=cfg.plot.palette.pseudotime,
         cfg=cfg,
     )
@@ -501,7 +501,7 @@ def gene_trends(adata, cfg, log, table_dir, branch_results: Optional[pd.DataFram
             y=gene,
             use_raw=True,
             show=False,
-            save=f"trend_{gene}.pdf",
+            save=f"trend_{gene}",
             cfg=cfg,
         )
 
@@ -521,7 +521,7 @@ def gene_trends(adata, cfg, log, table_dir, branch_results: Optional[pd.DataFram
                     groupby="dpt_pseudotime_bin",
                     use_raw=True,
                     show=False,
-                    save="dev_gene_heatmap.pdf",
+                    save="dev_gene_heatmap",
                     cfg=cfg,
                 )
             except (ValueError, TypeError) as e:
@@ -726,7 +726,7 @@ def main():
     for color in ["stage", "cell_type", "cell_type_sub", "dpt_pseudotime"]:
         if color in adata.obs or color in adata.obsm:
             safe_plot(
-                sc.pl.umap, adata, color=color, show=False, save=f"final_umap_{color}.pdf", cfg=cfg
+                sc.pl.umap, adata, color=color, show=False, save=f"final_umap_{color}", cfg=cfg
             )
 
     _write_final_output(adata, cfg, log)

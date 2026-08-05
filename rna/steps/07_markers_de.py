@@ -304,7 +304,7 @@ def generate_figures(adata, markers_df, cfg, log, primary_col=None):
             var_names=top_genes,
             groupby=group_col,
             show=False,
-            save="marker_heatmap.pdf",
+            save="marker_heatmap",
             cfg=cfg,
         )
 
@@ -322,7 +322,7 @@ def generate_figures(adata, markers_df, cfg, log, primary_col=None):
                 var_names=all_markers,
                 groupby=group_col,
                 show=False,
-                save="marker_dotplot.pdf",
+                save="marker_dotplot",
                 cfg=cfg,
             )
 

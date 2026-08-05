@@ -24,7 +24,7 @@ import pandas as pd
 import scanpy as sc
 import squidpy as sq
 
-from core.utils import resolve_config, safe_plot, safe_write, setup_logger
+from core.utils import resolve_config, safe_plot, safe_write, save_figure, setup_logger
 
 
 def run_de_per_cluster(adata, cfg, log):
@@ -151,8 +151,10 @@ def plot_top_svg(adata, moran_df, cfg, log):
             axes[j // 3, j % 3].axis("off")
 
         fig.tight_layout()
-        fig.savefig(
-            os.path.join(fig_dir, "top_svg_spatial.png"),
+        save_figure(
+            fig,
+            os.path.join(fig_dir, "top_svg_spatial"),
+            cfg=cfg,
             dpi=cfg.plot.figure_dpi,
             bbox_inches="tight",
         )
@@ -175,7 +177,7 @@ def run_nhood_enrichment(adata, cfg, log):
         sq.pl.nhood_enrichment(adata, cluster_key=group_col, show=False)
         fig_path = os.path.join(cfg.figure_dir, "06_spatial_de", "nhood_enrichment_heatmap.png")
         os.makedirs(os.path.dirname(fig_path), exist_ok=True)
-        plt.savefig(fig_path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
+        save_figure(None, fig_path, cfg=cfg, bbox_inches="tight")
         plt.close()
 
         enrich_key = "nhood_enrichment"
@@ -203,7 +205,7 @@ def run_co_occurrence(adata, cfg, log):
         sq.pl.co_occurrence(adata, cluster_key=group_col, show=False)
         fig_path = os.path.join(cfg.figure_dir, "06_spatial_de", "co_occurrence_plot.png")
         os.makedirs(os.path.dirname(fig_path), exist_ok=True)
-        plt.savefig(fig_path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
+        save_figure(None, fig_path, cfg=cfg, bbox_inches="tight")
         plt.close()
         log.info("Co-occurrence plot saved: %s", fig_path)
     except Exception as e:
@@ -223,7 +225,7 @@ def run_interaction_matrix(adata, cfg, log):
         sq.pl.interaction_matrix(adata, cluster_key=group_col, show=False)
         fig_path = os.path.join(cfg.figure_dir, "06_spatial_de", "interaction_matrix_heatmap.png")
         os.makedirs(os.path.dirname(fig_path), exist_ok=True)
-        plt.savefig(fig_path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
+        save_figure(None, fig_path, cfg=cfg, bbox_inches="tight")
         plt.close()
         log.info("Interaction matrix heatmap saved: %s", fig_path)
     except Exception as e:
@@ -319,8 +321,10 @@ def main():
                 for j in range(len(top_genes), axes.size):
                     axes[j // 3, j % 3].axis("off")
                 fig.tight_layout()
-                fig.savefig(
-                    os.path.join(fig_dir, "top_markers_umap.png"),
+                save_figure(
+                    fig,
+                    os.path.join(fig_dir, "top_markers_umap"),
+                    cfg=cfg,
                     dpi=cfg.plot.figure_dpi,
                     bbox_inches="tight",
                 )

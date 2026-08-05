@@ -26,7 +26,7 @@ import scanpy as sc
 from scipy.cluster.hierarchy import dendrogram, linkage
 
 from core.pipeline.grn import compute_tf_relevance
-from core.utils import resolve_config, setup_logger
+from core.utils import resolve_config, save_figure, setup_logger
 
 
 def build_pseudobulk(adata, group_col: str, use_raw: bool = True, log=None) -> pd.DataFrame:
@@ -334,9 +334,10 @@ def plot_heatmap(top_df, cfg, log):
     )
 
     path = os.path.join(fig_dir, "tf_activity_heatmap.png")
-    fig.savefig(
+    save_figure(
+        fig,
         path,
-        dpi=cfg.plot.figure_dpi,
+        cfg=cfg,
         bbox_inches="tight",
         facecolor=cfg.plot.palette.grn_facecolor,
     )

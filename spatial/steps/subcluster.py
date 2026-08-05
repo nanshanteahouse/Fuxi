@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import scanpy as sc
 
-from core.utils import resolve_config, safe_plot, safe_write, setup_logger
+from core.utils import resolve_config, safe_plot, safe_write, save_figure, setup_logger
 
 
 def resolve_cell_type(cell_types, requested, cutoff=0.6):
@@ -259,7 +259,7 @@ def main():
         sub,
         color="leiden",
         show=False,
-        save=f"_sub_{safe_cell_type}_leiden.pdf",
+        save=f"_sub_{safe_cell_type}_leiden",
         title=f"{args.cell_type} — leiden",
         cfg=cfg,
     )
@@ -292,9 +292,10 @@ def main():
         for j in range(i + 1, len(axes)):
             axes[j].axis("off")
         fig.tight_layout()
-        fig.savefig(
+        save_figure(
+            fig,
             os.path.join(fig_dir, f"umap_sub_{safe_cell_type}_resolutions.pdf"),
-            dpi=cfg.plot.figure_dpi,
+            cfg=cfg,
             bbox_inches="tight",
         )
         plt.close(fig)
@@ -367,7 +368,7 @@ def main():
                     sub,
                     color="sub_ai_label",
                     show=False,
-                    save=f"_sub_{safe_cell_type}_ai.pdf",
+                    save=f"_sub_{safe_cell_type}_ai",
                     title=f"{args.cell_type} — AI subcluster",
                     cfg=cfg,
                 )

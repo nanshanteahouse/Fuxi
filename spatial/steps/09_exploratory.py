@@ -23,7 +23,7 @@ import scanpy as sc
 import scipy.sparse
 import squidpy as sq
 
-from core.utils import resolve_config, safe_plot, setup_logger
+from core.utils import resolve_config, safe_plot, save_figure, setup_logger
 
 
 def spatial_cell_type_plot(adata, cfg, log):
@@ -44,12 +44,13 @@ def spatial_cell_type_plot(adata, cfg, log):
             shape=None,
             size=1.5,
             show=False,
-            save="_09_spatial_celltype.png",
+            save="_09_spatial_celltype",
             cfg=cfg,
         )
-        plt.savefig(
+        save_figure(
+            None,
             os.path.join(fig_dir, "spatial_cell_type.png"),
-            dpi=cfg.plot.figure_dpi,
+            cfg=cfg,
             bbox_inches="tight",
         )
         plt.close()
@@ -124,9 +125,10 @@ def spatial_gene_plots(adata, cfg, log):
             axes[j // 3, j % 3].axis("off")
 
         fig.tight_layout()
-        fig.savefig(
+        save_figure(
+            fig,
             os.path.join(fig_dir, "spatial_marker_genes.png"),
-            dpi=cfg.plot.figure_dpi,
+            cfg=cfg,
             bbox_inches="tight",
         )
         plt.close(fig)
@@ -218,7 +220,7 @@ def main():
     for col in ["cell_type", "leiden", "total_counts", "n_genes_by_counts"]:
         if col in adata.obs:
             try:
-                safe_plot(sc.pl.umap, adata, color=col, show=False, save=f"_09_{col}.pdf", cfg=cfg)
+                safe_plot(sc.pl.umap, adata, color=col, show=False, save=f"_09_{col}", cfg=cfg)
             except Exception as e:
                 log.warning("UMAP plot failed: %s", e)
 

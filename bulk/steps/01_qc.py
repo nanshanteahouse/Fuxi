@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 
-from core.utils import resolve_config, setup_logger
+from core.utils import resolve_config, save_figure, setup_logger
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -124,7 +124,7 @@ def main():
     fig.tight_layout()
     corr_path = os.path.join(cfg.figure_dir, "01_sample_correlation.png")
     os.makedirs(cfg.figure_dir, exist_ok=True)
-    fig.savefig(corr_path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
+    save_figure(fig, corr_path, cfg=cfg, bbox_inches="tight")
     plt.close(fig)
     log.info("  Saved: %s", corr_path)
 

@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 
-from core.utils import resolve_config, setup_logger
+from core.utils import resolve_config, save_figure, setup_logger
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -47,7 +47,7 @@ def main():
     log.info("Step 04: Exploratory analysis / visualization")
 
     # ── Resume check ──────────────────────────────────────────────────
-    pca_fig = os.path.join(cfg.figure_dir, "04_pca.png")
+    pca_fig = os.path.join(cfg.figure_dir, f"04_pca.{cfg.plot.figure_format}")
     if os.path.exists(pca_fig):
         log.info("Skip: %s already exists. Delete figures to force rerun.", pca_fig)
         return
@@ -133,7 +133,15 @@ def _pca_plot(adata, contrast_col, figure_dir, log, cfg=None):
             log.warning("contrast_column '%s' not in adata.obs — PCA without color", contrast_col)
 
         _dpi = cfg.plot.figure_dpi if cfg else 150
-        fig.savefig(os.path.join(figure_dir, "04_pca.png"), dpi=_dpi, bbox_inches="tight")
+        _fmt = cfg.plot.figure_format if cfg else "png"
+        save_figure(
+            fig,
+            os.path.join(figure_dir, "04_pca"),
+            cfg=cfg,
+            fmt=_fmt,
+            dpi=_dpi,
+            bbox_inches="tight",
+        )
         plt.close(fig)
         log.info("PCA plot saved: 04_pca.png")
 
@@ -182,9 +190,12 @@ def _sample_distance_heatmap(adata, contrast_col, figure_dir, log, cfg=None):
         ax.set_title("Sample Distance (Euclidean, log1p counts)")
         fig.tight_layout()
         _dpi = cfg.plot.figure_dpi if cfg else 150
-        fig.savefig(
-            os.path.join(figure_dir, "04_sample_heatmap.png"),
-            dpi=_dpi,
+        _fmt = cfg.plot.figure_format if cfg else "png"
+        save_figure(
+            fig,
+            os.path.join(figure_dir, "04_sample_heatmap"),
+            cfg=cfg,
+            fmt=_fmt,
             bbox_inches="tight",
         )
         plt.close(fig)
@@ -263,9 +274,12 @@ def _de_heatmap(adata, sig_df, contrast_col, figure_dir, log, cfg=None):
         )
         g.fig.suptitle(f"Top {n_top} DEGs — Z-score (log1p counts)", y=1.02)
         _dpi = cfg.plot.figure_dpi if cfg else 150
-        g.savefig(
-            os.path.join(figure_dir, "04_de_heatmap.png"),
-            dpi=_dpi,
+        _fmt = cfg.plot.figure_format if cfg else "png"
+        save_figure(
+            g,
+            os.path.join(figure_dir, "04_de_heatmap"),
+            cfg=cfg,
+            fmt=_fmt,
             bbox_inches="tight",
         )
         plt.close(g.fig)
@@ -360,9 +374,12 @@ def _top_genes_boxplot(adata, sig_df, contrast_col, figure_dir, log, cfg=None):
         fig.tight_layout()
 
         _dpi = cfg.plot.figure_dpi if cfg else 150
-        fig.savefig(
-            os.path.join(figure_dir, "04_top_genes_boxplot.png"),
-            dpi=_dpi,
+        _fmt = cfg.plot.figure_format if cfg else "png"
+        save_figure(
+            fig,
+            os.path.join(figure_dir, "04_top_genes_boxplot"),
+            cfg=cfg,
+            fmt=_fmt,
             bbox_inches="tight",
         )
         plt.close(fig)

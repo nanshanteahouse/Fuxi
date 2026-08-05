@@ -441,11 +441,9 @@ def ai_annotate(adata, cfg, logger, std=None):
         + ")"
     )
 
+    safe_plot(sc.pl.umap, adata, color="cell_type", show=False, save="celltype_umap_ai", cfg=cfg)
     safe_plot(
-        sc.pl.umap, adata, color="cell_type", show=False, save="celltype_umap_ai.pdf", cfg=cfg
-    )
-    safe_plot(
-        sc.pl.umap, adata, color="annot_label", show=False, save="annot_label_umap_ai.pdf", cfg=cfg
+        sc.pl.umap, adata, color="annot_label", show=False, save="annot_label_umap_ai", cfg=cfg
     )
 
     meta_dict = {
@@ -503,17 +501,15 @@ def score_genes_mode(adata, cfg, logger):
     sc.settings.figdir = os.path.join(cfg.figure_dir, "05_annotation")
     os.makedirs(sc.settings.figdir, exist_ok=True)
     sc.settings.autoshow = False
-    safe_plot(sc.pl.umap, adata, color="cell_type", show=False, save="celltype_umap.pdf", cfg=cfg)
-    safe_plot(
-        sc.pl.umap, adata, color="annot_label", show=False, save="annot_label_umap.pdf", cfg=cfg
-    )
+    safe_plot(sc.pl.umap, adata, color="cell_type", show=False, save="celltype_umap", cfg=cfg)
+    safe_plot(sc.pl.umap, adata, color="annot_label", show=False, save="annot_label_umap", cfg=cfg)
     if "annotation_confidence" in adata.obs:
         safe_plot(
             sc.pl.umap,
             adata,
             color="annotation_confidence",
             show=False,
-            save="annot_confidence_umap.pdf",
+            save="annot_confidence_umap",
             cmap=cfg.plot.palette.pseudotime,
             cfg=cfg,
         )

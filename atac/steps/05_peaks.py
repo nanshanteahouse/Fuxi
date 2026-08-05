@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 import snapatac2 as snap
 
-from core.utils import resolve_config, safe_write, setup_logger, validate_adata
+from core.utils import resolve_config, safe_write, save_figure, setup_logger, validate_adata
 
 
 def main():
@@ -81,8 +81,9 @@ def main():
         fig, ax = plt.subplots(figsize=(6, 4))
         ax.hist(pd.obs["frip"], bins=50)
         ax.set_xlabel("FRiP")
-        plt.savefig(
-            os.path.join(cfg.figure_dir, "05_peaks", "frip_distribution.png"),
+        save_figure(
+            None,
+            os.path.join(cfg.figure_dir, "05_peaks", "frip_distribution"),
             dpi=cfg.plot.figure_dpi,
         )
         plt.close()

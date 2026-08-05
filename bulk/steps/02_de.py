@@ -34,7 +34,7 @@ import scanpy as sc
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from core.utils import resolve_config, safe_write, setup_logger
+from core.utils import resolve_config, safe_write, save_figure, setup_logger
 
 
 def main():
@@ -367,7 +367,7 @@ def _volcano_plot(results_df, alpha, treatment, baseline, figure_dir, log, cfg=N
         ax.legend(loc="upper right")
 
         vol_path = os.path.join(figure_dir, "02_volcano.png")
-        fig.savefig(vol_path, dpi=cfg.plot.figure_dpi if cfg else 150, bbox_inches="tight")
+        save_figure(fig, vol_path, cfg=cfg, bbox_inches="tight")
         plt.close(fig)
         log.info("Volcano plot saved: %s", vol_path)
 
@@ -422,7 +422,7 @@ def _ma_plot(results_df, alpha, treatment, baseline, figure_dir, log, cfg=None):
         ax.set_title(f"MA Plot: {treatment} vs {baseline}")
 
         ma_path = os.path.join(figure_dir, "02_ma_plot.png")
-        fig.savefig(ma_path, dpi=cfg.plot.figure_dpi if cfg else 150, bbox_inches="tight")
+        save_figure(fig, ma_path, cfg=cfg, bbox_inches="tight")
         plt.close(fig)
         log.info("MA plot saved: %s", ma_path)
 

@@ -68,7 +68,7 @@ def main():
             snap.pl.frag_size_distr,
             data,
             show=False,
-            save=os.path.join(cfg.figure_dir, "02_qc", "fragment_size_distribution.png"),
+            save=os.path.join(cfg.figure_dir, "02_qc", "fragment_size_distribution"),
             cfg=cfg,
         )
     except Exception as e:

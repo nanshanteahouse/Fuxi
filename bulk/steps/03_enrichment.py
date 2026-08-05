@@ -31,7 +31,7 @@ import pandas as pd
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from core.utils import resolve_config, setup_logger
+from core.utils import resolve_config, save_figure, setup_logger
 
 
 def main():
@@ -228,7 +228,7 @@ def _dot_ora(df: pd.DataFrame, direction: str, cfg, log):
     ax.set_title(f"Enrichment ({direction}-regulated), top {len(sig)} terms")
     fig.tight_layout()
     path = os.path.join(cfg.figure_dir, f"03_enrichment_{direction}_dot.png")
-    fig.savefig(path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
+    save_figure(fig, path, cfg=cfg, bbox_inches="tight")
     plt.close(fig)
     log.info("  Dot plot: %s", path)
 
@@ -264,7 +264,7 @@ def _dot_gsea(df: pd.DataFrame, cfg, log):
     ax.set_title(f"GSEA (preranked), top {len(sig)} terms")
     fig.tight_layout()
     path = os.path.join(cfg.figure_dir, "03_gsea_dot.png")
-    fig.savefig(path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
+    save_figure(fig, path, cfg=cfg, bbox_inches="tight")
     plt.close(fig)
     log.info("  GSEA dot plot: %s", path)
 

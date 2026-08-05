@@ -26,7 +26,7 @@ import numpy as np
 import scanpy as sc
 
 from core.ai.json_extract import extract_json_block
-from core.utils import resolve_config, safe_plot, safe_write, setup_logger
+from core.utils import resolve_config, safe_plot, safe_write, save_figure, setup_logger
 from core.utils._gpu import gpu_harmony, gpu_leiden, gpu_neighbors, gpu_pca, gpu_umap, sync_to_cpu
 
 
@@ -346,7 +346,7 @@ def _ai_subcluster_annotation(sub, cfg, args, log):
                 sub,
                 color="sub_ai_label",
                 show=False,
-                save=f"sub_{safe_cell_type}_umap_ai.png",
+                save=f"sub_{safe_cell_type}_umap_ai",
                 title=f"{args.cell_type} — AI subcluster",
                 cfg=cfg,
                 fmt="png",
@@ -461,7 +461,7 @@ def main():
                 sub,
                 color="cell_subtype",
                 show=False,
-                save=f"sub_{safe_cell_type}_cell_subtype_umap.png",
+                save=f"sub_{safe_cell_type}_cell_subtype_umap",
                 title=f"{args.cell_type} — cell_subtype (step05)",
                 cfg=cfg,
                 fmt="png",
@@ -679,7 +679,7 @@ def main():
         sub,
         color="leiden",
         show=False,
-        save=f"sub_{safe_cell_type}_leiden_umap.png",
+        save=f"sub_{safe_cell_type}_leiden_umap",
         title=f"{args.cell_type} — leiden",
         cfg=cfg,
         fmt="png",
@@ -714,8 +714,10 @@ def main():
         for j in range(i + 1, len(axes)):
             axes[j].axis("off")
         fig.tight_layout()
-        fig.savefig(
-            os.path.join(fig_dir, f"sub_{safe_cell_type}_multires.png"),
+        save_figure(
+            fig,
+            os.path.join(fig_dir, f"sub_{safe_cell_type}_multires"),
+            cfg=cfg,
             dpi=cfg.plot.figure_dpi,
             bbox_inches="tight",
         )

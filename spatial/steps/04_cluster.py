@@ -31,7 +31,7 @@ from sklearn.metrics import silhouette_score
 from core.cluster.evaluation import select_best_umap_params
 from core.cluster.grid_search import grid_search_clustering, select_best_params
 from core.config.schema import SILHOUETTE_SAMPLE_THRESHOLD
-from core.utils import resolve_config, safe_plot, safe_write, setup_logger
+from core.utils import resolve_config, safe_plot, safe_write, save_figure, setup_logger
 
 
 def main():
@@ -239,8 +239,10 @@ def main():
                     title=f"UMAP (n_neighbors={n}, resolution={res})",
                     cfg=cfg,
                 )
-                plt.savefig(
-                    os.path.join(fig_dir, f"umap_grid_n{n}_r{res}.png"),
+                save_figure(
+                    None,
+                    os.path.join(fig_dir, f"umap_grid_n{n}_r{res}"),
+                    cfg=cfg,
                     dpi=cfg.plot.figure_dpi,
                     bbox_inches="tight",
                 )
@@ -410,8 +412,10 @@ def main():
             for j in range(len(sweep_results), len(axes_flat)):
                 axes_flat[j].axis("off")
             fig.tight_layout()
-            fig.savefig(
-                os.path.join(fig_dir, "umap_min_dist_comparison.png"),
+            save_figure(
+                fig,
+                os.path.join(fig_dir, "umap_min_dist_comparison"),
+                cfg=cfg,
                 dpi=cfg.plot.figure_dpi,
                 bbox_inches="tight",
             )
@@ -460,8 +464,10 @@ def main():
                     )
                     ax.set_title(f"n={n}, r={res}")
         fig.tight_layout()
-        fig.savefig(
-            os.path.join(fig_dir, "umap_param_grid_summary.png"),
+        save_figure(
+            fig,
+            os.path.join(fig_dir, "umap_param_grid_summary"),
+            cfg=cfg,
             dpi=cfg.plot.figure_dpi,
             bbox_inches="tight",
         )
@@ -494,8 +500,10 @@ def main():
                 for j in range(len(res_keys), len(axes)):
                     axes[j].axis("off")
                 fig.tight_layout()
-                fig.savefig(
-                    os.path.join(fig_dir, f"umap_leiden_n{n}_all_resolutions.pdf"),
+                save_figure(
+                    fig,
+                    os.path.join(fig_dir, f"umap_leiden_n{n}_all_resolutions"),
+                    cfg=cfg,
                     dpi=cfg.plot.figure_dpi,
                     bbox_inches="tight",
                 )

@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 
-from core.utils import resolve_config, safe_write, setup_logger
+from core.utils import resolve_config, safe_write, save_figure, setup_logger
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -325,6 +325,7 @@ def _plot_qc_diagnostics(adata, thresholds, output_dir, log, cfg=None):
     """
     os.makedirs(output_dir, exist_ok=True)
     _dpi = cfg.plot.figure_dpi if cfg else 150
+    _fmt = cfg.plot.figure_format if cfg else "png"
     _figsize = cfg.plot.qc_figure_size if cfg else [8, 5]
     _qchist = cfg.plot.palette.qc_hist if cfg else "steelblue"
     _qcthresh = cfg.plot.palette.qc_threshold if cfg else "red"
@@ -358,7 +359,9 @@ def _plot_qc_diagnostics(adata, thresholds, output_dir, log, cfg=None):
         ax.set_title(f"nFeature distribution (N={adata.n_obs}, median={np.median(vals):.0f})")
         ax.legend(fontsize=9)
         fig.tight_layout()
-        fig.savefig(os.path.join(output_dir, "nFeature_distribution.png"), dpi=_dpi)
+        save_figure(
+            fig, os.path.join(output_dir, "nFeature_distribution"), cfg=cfg, fmt=_fmt, dpi=_dpi
+        )
         plt.close(fig)
         log.info("  Plot saved: nFeature_distribution.png")
     except Exception as e:
@@ -404,7 +407,9 @@ def _plot_qc_diagnostics(adata, thresholds, output_dir, log, cfg=None):
         if ncount_hi is not None:
             ax.legend(fontsize=9)
         fig.tight_layout()
-        fig.savefig(os.path.join(output_dir, "nCount_vs_nFeature.png"), dpi=_dpi)
+        save_figure(
+            fig, os.path.join(output_dir, "nCount_vs_nFeature"), cfg=cfg, fmt=_fmt, dpi=_dpi
+        )
         plt.close(fig)
         log.info("  Plot saved: nCount_vs_nFeature.png")
     except Exception as e:
@@ -431,7 +436,9 @@ def _plot_qc_diagnostics(adata, thresholds, output_dir, log, cfg=None):
         if hi is not None:
             ax.legend(fontsize=9)
         fig.tight_layout()
-        fig.savefig(os.path.join(output_dir, "pct_mito_distribution.png"), dpi=_dpi)
+        save_figure(
+            fig, os.path.join(output_dir, "pct_mito_distribution"), cfg=cfg, fmt=_fmt, dpi=_dpi
+        )
         plt.close(fig)
         log.info("  Plot saved: pct_mito_distribution.png")
     except Exception as e:

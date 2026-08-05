@@ -297,7 +297,7 @@ def main():
     if "cell_type" in adata.obs:
         try:
             safe_plot(
-                sc.pl.umap, adata, color="cell_type", show=False, save="_05_celltype.png", cfg=cfg
+                sc.pl.umap, adata, color="cell_type", show=False, save="_05_celltype", cfg=cfg
             )
         except Exception as e:
             log.warning("UMAP cell_type plot failed: %s", e)
@@ -316,7 +316,7 @@ def main():
                         adata,
                         color=gene,
                         show=False,
-                        save=f"_05_marker_{gene}.png",
+                        save=f"_05_marker_{gene}",
                         use_raw=True,
                         cfg=cfg,
                     )

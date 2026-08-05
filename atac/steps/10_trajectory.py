@@ -63,7 +63,7 @@ def main():
             color="pseudotime",
             cmap=cfg.plot.palette.pseudotime,
             show=False,
-            save=os.path.join(cfg.figure_dir, "07_trajectory", "trajectory_pseudotime.png"),
+            save=os.path.join(cfg.figure_dir, "07_trajectory", "trajectory_pseudotime"),
             cfg=cfg,
         )
     except Exception:

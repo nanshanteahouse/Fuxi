@@ -30,7 +30,7 @@ import scanpy as sc
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from core.utils import resolve_config, safe_write, setup_logger
+from core.utils import resolve_config, safe_write, save_figure, setup_logger
 
 
 def main():
@@ -219,7 +219,7 @@ def _pca_comparison(x_before, x_after, obs, batch_col, figure_dir, log, cfg=None
         fig.tight_layout()
 
         comparison_path = os.path.join(figure_dir, "05_pca_comparison.png")
-        fig.savefig(comparison_path, dpi=cfg.plot.figure_dpi if cfg else 150, bbox_inches="tight")
+        save_figure(fig, comparison_path, cfg=cfg, bbox_inches="tight")
         log.info("Saved: %s", comparison_path)
 
         plt.close(fig)

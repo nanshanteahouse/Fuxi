@@ -25,7 +25,7 @@ import pandas as pd
 import scanpy as sc
 import scipy.sparse as sparse
 
-from core.utils import resolve_config, setup_logger
+from core.utils import resolve_config, save_figure, setup_logger
 
 try:
     import hdf5plugin  # zstd 滤镜；写 zstd 压缩文件需要
@@ -341,7 +341,12 @@ def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, cfg, log):
         )
         _ax.legend(fontsize=9)
         _fig.tight_layout()
-        _fig.savefig(os.path.join(fig_dir, "nFeature_distribution.png"), dpi=cfg.plot.figure_dpi)
+        save_figure(
+            _fig,
+            os.path.join(fig_dir, "nFeature_distribution"),
+            cfg=cfg,
+            dpi=cfg.plot.figure_dpi,
+        )
         plt.close(_fig)
         log.info("  Plot saved: nFeature_distribution.png")
     except Exception as e:
@@ -396,7 +401,12 @@ def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, cfg, log):
         if ncount_hi is not None:
             _ax.legend(fontsize=9)
         _fig.tight_layout()
-        _fig.savefig(os.path.join(fig_dir, "nCount_vs_nFeature.png"), dpi=cfg.plot.figure_dpi)
+        save_figure(
+            _fig,
+            os.path.join(fig_dir, "nCount_vs_nFeature"),
+            cfg=cfg,
+            dpi=cfg.plot.figure_dpi,
+        )
         plt.close(_fig)
         log.info("  Plot saved: nCount_vs_nFeature.png")
     except Exception as e:
@@ -427,7 +437,12 @@ def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, cfg, log):
         if hi is not None:
             _ax.legend(fontsize=9)
         _fig.tight_layout()
-        _fig.savefig(os.path.join(fig_dir, "pct_mito_distribution.png"), dpi=cfg.plot.figure_dpi)
+        save_figure(
+            _fig,
+            os.path.join(fig_dir, "pct_mito_distribution"),
+            cfg=cfg,
+            dpi=cfg.plot.figure_dpi,
+        )
         plt.close(_fig)
         log.info("  Plot saved: pct_mito_distribution.png")
     except Exception as e:
@@ -501,7 +516,12 @@ def _plot_nfeature_kde(adata, fig_dir, mode_label, cfg, log):
         )
 
         _fig.tight_layout()
-        _fig.savefig(os.path.join(fig_dir, "nFeature_KDE_density.png"), dpi=cfg.plot.figure_dpi)
+        save_figure(
+            _fig,
+            os.path.join(fig_dir, "nFeature_KDE_density"),
+            cfg=cfg,
+            dpi=cfg.plot.figure_dpi,
+        )
         plt.close(_fig)
         log.info("  Plot saved: nFeature_KDE_density.png (%s)", assessment)
     except Exception as e:

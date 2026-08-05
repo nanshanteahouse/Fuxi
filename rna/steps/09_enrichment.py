@@ -36,7 +36,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc  # for loading annotated h5ad (quality check)
 
-from core.utils import resolve_config, setup_logger
+from core.utils import resolve_config, save_figure, setup_logger
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 
@@ -675,7 +675,7 @@ def plot_ora_bubble(
     plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
     fig.tight_layout()
     path = os.path.join(fig_dir, f"ora_{gs_name}_bubble.pdf")
-    fig.savefig(path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
+    save_figure(fig, path, cfg=cfg, bbox_inches="tight")
     plt.close(fig)
     log.info("  ORA bubble plot: %s", path)
 
@@ -731,7 +731,7 @@ def plot_prerank_bubble(
     plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
     fig.tight_layout()
     path = os.path.join(fig_dir, f"prerank_{gs_name}_bubble.pdf")
-    fig.savefig(path, dpi=cfg.plot.figure_dpi, bbox_inches="tight")
+    save_figure(fig, path, cfg=cfg, bbox_inches="tight")
     plt.close(fig)
     log.info("  GSEA bubble plot: %s", path)
 
