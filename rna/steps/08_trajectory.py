@@ -26,7 +26,8 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 from scipy.sparse import issparse
-from scipy.stats import spearmanr
+from scipy.stats import rankdata
+from scipy.stats import t as t_dist
 from statsmodels.stats.multitest import multipletests
 
 from core.kb import load_kb
@@ -297,30 +298,30 @@ def _select_pseudotime_correlated(adata, cfg) -> Tuple[List[str], pd.DataFrame]:
         return [], pd.DataFrame(columns=("gene", "rho", "pval_raw", "pval_adj"))  # type: ignore[arg-type]
     pseudotime_clean = pseudotime[pt_mask]
 
-    # 3. Compute Spearman correlation per candidate gene
-    rhos: List[float] = []
-    pvals: List[float] = []
-    gene_names: List[str] = []
-    for idx in candidate_indices:
-        # Extract expression values as float array
-        if issparse(adata.raw.X):
-            raw_values: np.ndarray = adata.raw.X[:, idx].toarray().ravel()
-        else:
-            raw_values = np.asarray(adata.raw.X[:, idx], dtype=float)
-        expr = np.asarray(raw_values, dtype=float)[pt_mask]
+    # 3. Vectorized Spearman correlation over all candidates
+    #    Transposed CSR row-slice: one pass over the matrix instead of
+    #    per-gene column slices (each column slice was O(nnz) full scan).
+    expr_mat = np.asarray(adata.raw.X.T.tocsr()[candidate_indices].toarray(), dtype=float)
+    expr_mat = expr_mat[:, pt_mask]
+    keep = np.var(expr_mat, axis=1) > 0
+    expr_mat = expr_mat[keep]
+    kept_indices = candidate_indices[keep]
+    if expr_mat.shape[0] == 0:
+        return [], pd.DataFrame(columns=("gene", "rho", "pval_raw", "pval_adj"))  # type: ignore[arg-type]
 
-        if np.var(expr) == 0:
-            continue
-
-        result = spearmanr(expr, pseudotime_clean)
-        rho: float = result.statistic  # type: ignore[assignment]
-        pval: float = result.pvalue  # type: ignore[assignment]
-        if np.isnan(rho) or np.isnan(pval):
-            continue
-
-        rhos.append(rho)
-        pvals.append(pval)
-        gene_names.append(adata.raw.var_names[idx])
+    ranks = rankdata(expr_mat, axis=1)
+    pt_ranks = rankdata(pseudotime_clean)
+    ranks_c = ranks - ranks.mean(axis=1, keepdims=True)
+    pt_c = pt_ranks - pt_ranks.mean()
+    denom = np.sqrt((ranks_c**2).sum(axis=1) * (pt_c**2).sum())
+    rhos_arr = (ranks_c @ pt_c) / denom
+    dof = len(pseudotime_clean) - 2
+    tvals = rhos_arr * np.sqrt((dof / ((rhos_arr + 1.0) * (1.0 - rhos_arr))).clip(0))
+    pvals_arr = 2.0 * t_dist.sf(np.abs(tvals), dof)
+    finite = np.isfinite(rhos_arr) & np.isfinite(pvals_arr)
+    rhos = rhos_arr[finite].tolist()
+    pvals = pvals_arr[finite].tolist()
+    gene_names = [adata.raw.var_names[i] for i in kept_indices[finite]]
 
     if len(rhos) == 0:
         return [], pd.DataFrame(columns=("gene", "rho", "pval_raw", "pval_adj"))  # type: ignore[arg-type]
@@ -571,8 +572,65 @@ def _write_final_output(adata, cfg, log) -> None:
     _write_step08_sentinel(cfg, log)
 
 
+def _fuxi_patch_dpt_kendall() -> None:
+    """Numba Kendall-tau split for scanpy DPT branching detection.
+
+    Replaces scanpy's O(n^2) per-split numpy passes (numpy call overhead +
+    masked scatter per split index) with a single numba loop that replicates
+    the incremental float chain bit-identically.
+    """
+    from numba import njit
+
+    @njit(cache=True)
+    def _kendall_split_core(a, b, pos_old, neg_old, min_length):
+        n = a.size
+        n_idx = n - 2 * min_length - 1
+        corr_coeff = np.empty(n_idx, dtype=np.float64)
+        for ii in range(n_idx):
+            i = min_length + ii
+            ai = a[i]
+            bi = b[i]
+            dp = 0
+            dn = 0
+            for j in range(i):
+                sa = (a[j] > ai) - (a[j] < ai)
+                sb = (b[j] > bi) - (b[j] < bi)
+                dp += sa * sb
+            for j in range(i + 1, n):
+                sa = (a[j] > ai) - (a[j] < ai)
+                sb = (b[j] > bi) - (b[j] < bi)
+                dn += sa * sb
+            pos = pos_old + (2.0 / (i + 1)) * ((float(dp) / i) - pos_old)
+            neg = neg_old + (2.0 / (n - i - 2)) * (-(float(dn) / (n - i - 1)) + neg_old)
+            corr_coeff[ii] = pos - neg
+            pos_old = pos
+            neg_old = neg
+        iimax = 0
+        best = corr_coeff[0]
+        for ii in range(1, n_idx):
+            if corr_coeff[ii] > best:
+                best = corr_coeff[ii]
+                iimax = ii
+        return min_length + iimax
+
+    import scanpy.tools._dpt as _dpt_mod
+    from scipy.stats import kendalltau
+
+    orig = _dpt_mod.DPT.kendall_tau_split
+
+    def _fuxi_kendall_tau_split(self, a, b):
+        if a.size <= 2 * 5 + 1:
+            return orig(self, a, b)
+        pos_old = kendalltau(a[:5], b[:5])[0]
+        neg_old = kendalltau(a[5:], b[5:])[0]
+        return _kendall_split_core(a, b, pos_old, neg_old, 5)
+
+    _dpt_mod.DPT.kendall_tau_split = _fuxi_kendall_tau_split
+
+
 def main():
     t0 = time.time()
+    _fuxi_patch_dpt_kendall()
     args_parser = argparse.ArgumentParser()
     args_parser.add_argument("--config", default="../config.py")
     args = args_parser.parse_args()
