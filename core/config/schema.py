@@ -400,8 +400,8 @@ class ClusteringSettings(BaseModel):
 
     # ── Funnel mode ──
     funnel_enabled: bool = Field(
-        default=True,
-        description="Enable progressive funnel grid search for datasets > funnel_threshold.",
+        default=False,
+        description="Progressive funnel grid search (subsample grid + full re-validation) for datasets > funnel_threshold. 2026-08-05 A/B: full grid now faster (134k 182s vs 6613s; 1.05M 907s vs 6731s) and unbiased — funnel subsampling changed best param on both test sets. Keep off by default; escape hatch only for >2M-cell datasets.",
     )
     funnel_threshold: int = Field(
         default=100_000, description="Minimum n_obs to trigger funnel mode."
