@@ -160,9 +160,12 @@ def _estimate_step05_peak(
     raw_csr = nnz * 12 / 1e9
     if approximation == "fast":
         # downsampled workloads shrink transposed/rank buffers, but the
-        # raw view stays resident and the 05 h5ad write is unchanged
-        return max(5.0, raw_csr * 1.2 + 4.0)
-    return max(8.0, raw_csr * 2 + 3.0)
+        # raw + X views stay resident and the 05 h5ad write is unchanged
+        return max(5.0, raw_csr * 1.4 + 5.0)
+    # exact: raw + X CSR stay resident (~24B/nnz when X is full-gene, as in
+    # stress atlases) plus the transposed copy; calibrated on the 1.05M and
+    # 1.93M cell runs (formula previously underestimated peak by ~10%).
+    return max(8.0, raw_csr * 2.25 + 6.0)
 
 
 # ═══════════════════════════════════════════════════════════════════════
