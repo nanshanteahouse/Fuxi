@@ -712,6 +712,7 @@ class ExecutionConfig(BaseModel):
     # auto = detect at runtime, fall back to CPU if RAPIDS unavailable
     # gpu  = force GPU, raise on missing RAPIDS
     # cpu  = force CPU (skip detection entirely)
+    device: Literal["auto", "cpu", "gpu"] = "auto"
     # ── Memory budget / policy / guard (steps 01-03) ──
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
     # ── Statistical approximation (step 05 fast mode) ──
