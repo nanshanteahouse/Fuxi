@@ -412,6 +412,14 @@ class ClusteringSettings(BaseModel):
     funnel_top_k: int = Field(
         default=3, description="Number of top candidates to re-validate on full data."
     )
+    funnel_kmeans_dim: int | None = Field(
+        default=None,
+        description="KMeans dims for stratified subsampling (None=full embedding; dim reduction rejected after measurement: 100->50 changes 70% of picks for only 2x).",
+    )
+    funnel_kmeans_n_init: int = Field(
+        default=1,
+        description="KMeans init runs for stratified subsampling (single init suffices for coverage).",
+    )
 
     # ── Target mode ──
     target_n_clusters: int | None = Field(
