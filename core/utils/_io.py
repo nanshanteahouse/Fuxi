@@ -15,6 +15,10 @@ try:
     )
 except ImportError:
     hdf5plugin = None
+    logging.getLogger(__name__).warning(
+        "hdf5plugin missing: zstd-compressed h5ad files (e.g. obsm/X_integrated)",
+        " cannot be read. Run: pip install hdf5plugin",
+    )
 
 import anndata
 
