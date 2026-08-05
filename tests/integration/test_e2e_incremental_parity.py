@@ -59,6 +59,8 @@ import scipy.sparse as sp
 import yaml
 from anndata import OldFormatWarning
 
+import core.utils._io  # noqa: F401  (registers the HDF5 zstd plugin for read-back)
+
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _FIXTURE = _REPO_ROOT / "tests" / "fixtures" / "synthetic_rna.h5ad"
 
