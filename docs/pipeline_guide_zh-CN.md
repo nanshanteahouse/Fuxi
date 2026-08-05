@@ -304,6 +304,22 @@ CFG.ai.ai_annotation = True
 
 > 💡 **注释结果包含**：`cell_type`（主类型）、`cell_subtype`（亚型）、`cell_state`（状态）、`annot_confidence`（置信度）、`annot_reasoning`（推理过程）。
 
+#### 性能模式：近似采样（默认关闭）
+
+对于超大规模数据集（百万细胞级），KB 模式的 Wilcoxon 与统计计算成本随细胞数线性增长。
+可选快速模式按聚类**降采样**（每簇最多 `fast_sampling` 个细胞，默认 5000，固定随机种子可复现），
+在保持聚类结构与细胞类型判别能力的前提下显著降低计算与内存：
+
+```yaml
+execution:
+  approximation: fast   # exact（默认，bit 级复现）或 fast（降采样近似）
+  fast_sampling: 5000   # 每簇采样上限（≥100）
+```
+
+⚠️ **与 `use_float32` 的区别**：`use_float32` 只改变数值 dtype（表示精度，ulp 级），输出统计量仍按全量数据计算；
+`approximation: fast` 则是**统计近似**——基于每簇 5000 细胞的采样，Wilcoxon 排名与 basic_stats 是抽样估计，
+结果不会与 exact 模式逐位一致（实测 top-20 标记基因重叠率 ~90%，注释结论方向一致）。
+生产环境请默认保持 `exact`，仅在超大数据集探索时使用 `fast`。
 #### 进阶机制：发育状态 KADP 轴 + METC 多源仲裁（默认关闭）
 
 针对**发育中组织**（`CFG.tissue_maturity = "developing"` 或 `CFG.marker.developmental_mode = True`）的歧义/过渡态聚类，KB 模式之上还有两个可选的补充层：**层 3 KADP 发育状态轴**（KADP Developmental Potency，用前体/终末表达势命名过渡前体）与**层 4 METC 多源仲裁**（Multi-Evidence Transition Consensus，用多个证据源投票裁决候选）。两者默认**全部关闭**，关闭时融合引擎行为与基线逐位一致。

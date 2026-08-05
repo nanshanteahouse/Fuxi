@@ -712,9 +712,14 @@ class ExecutionConfig(BaseModel):
     # auto = detect at runtime, fall back to CPU if RAPIDS unavailable
     # gpu  = force GPU, raise on missing RAPIDS
     # cpu  = force CPU (skip detection entirely)
-    device: Literal["auto", "cpu", "gpu"] = "auto"
     # ── Memory budget / policy / guard (steps 01-03) ──
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
+    # ── Statistical approximation (step 05 fast mode) ──
+    # orthogonal to use_float32: that flag trades numeric dtype (ulp-level
+    # representation), while approximation trades statistical precision
+    # (downsampled cluster statistics are estimates of the full-data ones).
+    approximation: Literal["exact", "fast"] = "exact"
+    fast_sampling: int = Field(default=5000, ge=100)
 
 
 # ═══════════════════════════════════════════════════════════════════════

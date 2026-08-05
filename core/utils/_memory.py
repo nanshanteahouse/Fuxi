@@ -135,6 +135,7 @@ def estimate_step_peak(
     nnz: int = 0,
     policy: str = "speed",
     budget_bytes: int = 0,
+    approximation: str = "exact",
 ) -> float:
     """Estimated peak RSS (GB) for a pipeline step."""
     if step == 1:
@@ -143,7 +144,25 @@ def estimate_step_peak(
         return _estimate_step02_peak(nnz)
     if step == 3:
         return _estimate_step03_peak(n_cells, n_genes, nnz, policy)
+    if step == 5:
+        return _estimate_step05_peak(n_cells, n_genes, nnz, approximation)
     return 0.0
+
+
+def _estimate_step05_peak(
+    n_cells: int, n_genes: int, nnz: int, approximation: str = "exact"
+) -> float:
+    """Estimated peak RSS (GB) for step 05 (KB annotation).
+
+    exact: raw CSR (~12B/nnz) + transposed copy + adata overhead.
+    fast : cluster-downsampled workloads shrink with the sample; the
+    n_cells (sampled nnz is bounded by sampling*n_genes)."""
+    raw_csr = nnz * 12 / 1e9
+    if approximation == "fast":
+        # downsampled workloads shrink transposed/rank buffers, but the
+        # raw view stays resident and the 05 h5ad write is unchanged
+        return max(5.0, raw_csr * 1.2 + 4.0)
+    return max(8.0, raw_csr * 2 + 3.0)
 
 
 # ═══════════════════════════════════════════════════════════════════════

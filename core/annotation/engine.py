@@ -349,6 +349,18 @@ def _patch_scanpy_basic_stats() -> None:
     rgg._fuxi_fast_basic_stats = True
 
 
+def _fast_sample_mask(leiden, n_sampling, seed):
+    """Per-cluster seeded downsample mask (deterministic for a given seed)."""
+    rng = np.random.default_rng(seed)
+    keep = np.zeros(len(leiden), dtype=bool)
+    for cl in leiden.cat.categories:
+        idx = np.flatnonzero(leiden == cl)
+        if idx.size > n_sampling:
+            idx = rng.choice(idx, size=n_sampling, replace=False)
+        keep[idx] = True
+    return keep
+
+
 def _ribo_fallback_pct_scores(adata, kb, cl_str, logger):
     """Re-score a ribo-dominated cluster via raw expression fractions (pct).
 
@@ -812,11 +824,49 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
 
     Returns
     -------
-    dict or None
         Cluster -> FusionDecision mapping, or None on failure (triggers fallback).
     """
+    # ── memory guard (step 05 peak estimate) ──
+    try:
+        from core.utils import check_memory_guard, estimate_step_peak, resolve_memory_settings
+
+        _policy, _budget, _guard = resolve_memory_settings(CFG)
+        _raw = adata.raw.X if adata.raw is not None else adata.X
+        _nnz = _raw.nnz if sparse.issparse(_raw) else adata.n_obs * adata.n_vars
+        _est = {
+            5: estimate_step_peak(
+                5,
+                adata.n_obs,
+                adata.n_vars,
+                _nnz,
+                _policy,
+                _budget,
+                approximation=getattr(CFG.execution, "approximation", "exact"),
+            )
+        }
+        check_memory_guard(_est, _budget, _guard, logger_obj=logger)
+    except Exception as _exc:
+        logger.debug("memory guard skipped: %s", _exc)
     # ── a. Compute marker genes ───────────────────────────────────────────
     _n_genes = max(CFG.marker.candidate_pool_expand_steps)
+    fast_approx = getattr(CFG.execution, "approximation", "exact") == "fast"
+    if fast_approx and adata.raw is not None:
+        # Statistical approximation: downsample per cluster (seeded,
+        # deterministic) before Wilcoxon/basic_stats so transposed copies and
+        # rank workloads shrink with the sample.  Cluster identity is
+        # preserved, so decisions map back 1:1 to full-data clusters.
+        sampling = getattr(CFG.execution, "fast_sampling", 5000)
+        keep = _fast_sample_mask(adata.obs["leiden"], sampling, CFG.execution.random_seed)
+        if keep.sum() < adata.n_obs:
+            adata = adata[keep]
+            logger.info(
+                "approximation=fast: downsampled to %d cells (<=%d/cluster, seed=%d)",
+                adata.n_obs,
+                sampling,
+                CFG.execution.random_seed,
+            )
+        else:
+            logger.info("approximation=fast: all clusters <=%d cells, no downsampling", sampling)
     logger.info("Computing marker genes (Wilcoxon rank-sum, n_genes=%d)...", _n_genes)
     _patch_scanpy_fast_ranks()
     _patch_scanpy_wilcoxon()
