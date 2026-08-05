@@ -1,7 +1,10 @@
+# ══════════════════════════════════════════════════════════════
+# AUTO-GENERATED from core/preprocess/config_specs.py
+# Do NOT edit by hand — run: python -m core.config scaffold
+# ══════════════════════════════════════════════════════════════
 # ── Modality & data format ──
 modality: spatial
 data_format: visium
-
 # 公共默认参数已移至 global.yaml (参考 global.example.yaml)
 # 本模板仅包含数据集特异性和生物学相关参数
 
@@ -55,7 +58,7 @@ pca:
 # ── Clustering ──
 clustering:
   n_neighbors: 30
-  leiden_resolutions: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
+  param_grid_resolutions: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
   best_resolution: 1.0
   best_n_neighbors: 0
   leiden_flavor: igraph
@@ -100,9 +103,7 @@ trajectory:
 enrichment:
   run: true
   method: both
-  gene_sets:
-    - GO_Biological_Process_2023
-    - KEGG_2021_Human
+  gene_sets: [GO_Biological_Process_2023, KEGG_2021_Human]
   organism: human
   # n_top_genes: 2000
   # pval_cutoff: 0.05
@@ -138,9 +139,9 @@ cci:
 #   thinking_enabled: true
 #   reasoning_effort: high
 #   annotation: true
+#   subcluster: true
 #   interpretation: true
 #   cache_responses: true
-
 
 # h5ad_compression: gzip
 # h5ad_tempdir: /tmp/Fuxi

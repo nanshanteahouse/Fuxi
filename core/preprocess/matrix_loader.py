@@ -3,33 +3,20 @@
 matrix_loader.py — Phase 5 of the Fuxi preprocessing pipeline.
 
 Detects primary matrix formats and generates ``config_GSE_ID.yaml``
-files from config templates.
+files from the schema-driven format specs (core/preprocess/config_specs.py).
 """
 
 import os
 import sys
-from typing import Optional
+from typing import Any, Optional
+
+import yaml
 
 # Add repo root to sys.path (consistent with all step scripts)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-
+from core.config.schema import Config
 from core.preprocess import format_detector as fd
-
-# ── Template mapping: format → template file ──────────────────────────
-
-TEMPLATE_MAP = {
-    "10X_h5": "config_10X_h5.yaml",
-    "10X_mtx": "config_10X_mtx.yaml",
-    "csv_matrix": "config_csv_matrix.yaml",
-    "h5ad": "config_10X_h5.yaml",  # reuse 10X_h5 template
-    "10x_fragments": "config_fragments.yaml",
-    "10x_peak_h5": "config_fragments.yaml",  # reuse ATAC template
-    # ── Bulk entries ─────────────────────────────
-    "count_matrix": "config_bulk.yaml",
-    "tpm_matrix": "config_bulk.yaml",
-    "bulk_h5ad": "config_bulk.yaml",
-}
-
+from core.preprocess.config_specs import SpecField, lookup_spec
 
 # ── Shared path helpers ──────────────────────────────────────────────
 
@@ -42,11 +29,6 @@ def _resolve_repo_root() -> str:
     """
     this_dir = os.path.dirname(os.path.abspath(__file__))  # .../core/preprocess
     return os.path.dirname(os.path.dirname(this_dir))  # .../ (repo root)
-
-
-def _resolve_template_dir() -> str:
-    """Return the path to the templates/config_templates/ directory."""
-    return os.path.join(_resolve_repo_root(), "templates", "config_templates")
 
 
 def _resolve_project_dir(modality: str, gse_id: str, output_dir: Optional[str] = None) -> str:
@@ -82,6 +64,8 @@ def _detect_primary_format(classification: dict, modality: str = "") -> str:
             return "10x_fragments"
         if classification.get("tenx_peak_dirs"):
             return "10x_peak_h5"
+    if modality == "spatial":
+        return "visium"
 
     if classification.get("tenx_h5_dirs"):
         return "10X_h5"
@@ -95,15 +79,9 @@ def _detect_primary_format(classification: dict, modality: str = "") -> str:
         return "h5ad"
     if classification.get("csv_files"):
         return "csv_matrix"
+    if classification.get("preprocessed_dirs"):
+        return "preprocessed"
     return "unknown"
-
-
-def _fill_template(template_text: str, replacements: dict) -> str:
-    """Replace {{KEY}} placeholders in *template_text* with values from *replacements*."""
-    result = template_text
-    for key, value in replacements.items():
-        result = result.replace("{{" + key + "}}", str(value))
-    return result
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -166,6 +144,16 @@ def _post_process_yaml(
 _post_process_config = _post_process_yaml  # noqa: F811
 
 
+def _set_nested(d: dict, dotted: str, value: Any) -> None:
+    """Set *value* at *dotted* (e.g. "qc.min_genes") in *d*, creating
+    intermediate dicts as needed."""
+    parts = dotted.split(".")
+    cur = d
+    for p in parts[:-1]:
+        cur = cur.setdefault(p, {})
+    cur[parts[-1]] = value
+
+
 # ═══════════════════════════════════════════════════════════════════════
 #  Phase 5: Config generation
 # ═══════════════════════════════════════════════════════════════════════
@@ -204,23 +192,18 @@ def generate_config(
     Returns the path to the generated config, or None.
     """
     data_format = _detect_primary_format(classification, modality)
-    template_name = TEMPLATE_MAP.get(data_format)
-    if not template_name:
-        print(f"  [WARNING] No template for format '{data_format}' — skipping config generation")
+    spec = lookup_spec(modality, data_format)
+    if spec is None:
+        print(
+            f"  [WARNING] No spec for format '{data_format}' (modality '{modality}') — ",
+            "skipping config generation",
+        )
         return None
-
-    template_path = os.path.join(_resolve_template_dir(), template_name)
-    if not os.path.exists(template_path):
-        print(f"  [WARNING] Template not found: {template_path}")
-        return None
-
-    with open(template_path, "r", encoding="utf-8") as f:
-        template_text = f.read()
 
     # Collect file paths relative to the input directory
     gse_dir = input_dir_override or os.path.join(data_root, gse_id)
 
-    # Gather replacements
+    # Gather detected values
     species = fd.guess_species(file_list)
     if species == "unknown" and superseries_info:
         ncbi_species = superseries_info.get("species", "")
@@ -318,6 +301,7 @@ def generate_config(
         "BARCODES_FILE": barcodes_file,
         "FEATURES_FILE": features_file,
         "FRAGMENT_FILE": fragment_file,
+        "LIBRARY_ID": "",
         "TISSUE": tissue,
         "SPECIES": species,
         "GENOME": genome,
@@ -330,7 +314,38 @@ def generate_config(
             if key in paper_context and paper_context[key] is not None:
                 replacements[key.upper()] = str(paper_context[key])
 
-    filled = _fill_template(template_text, replacements)
+    # ── Assemble config dict from the format spec ──
+    config_dict: dict = {}
+    for item in spec.items:
+        if not isinstance(item, SpecField):
+            continue
+        if item.placeholder:
+            value = replacements.get(item.placeholder)
+            if value is None:
+                continue
+        else:
+            value = item.value
+        _set_nested(config_dict, item.path, value)
+
+    # Paper-derived fields (dict-level; replaces _post_process_yaml appends)
+    if paper_context:
+        features = paper_context.get("features")
+        if features is not None:
+            config_dict.setdefault("marker", {})["marker_dict"] = {"extracted": list(features)}
+        if paper_context.get("is_nuclei"):
+            config_dict.setdefault("qc", {})["is_nuclei"] = True
+        for key in ("tissue_kb", "tissue_ontology"):
+            val = paper_context.get(key)
+            if val is not None:
+                config_dict[key] = str(val)
+
+    # ── Validate the assembled config against the schema ──
+    try:
+        Config.model_validate(config_dict)
+    except Exception as exc:
+        print(f"  [WARNING] Assembled config failed schema validation: {exc}")
+        print("         Not writing config — inspect the detected values above.")
+        return None
 
     os.makedirs(output_dir, exist_ok=True)
     config_path = os.path.join(output_dir, f"config_{gse_id}.yaml")
@@ -345,11 +360,13 @@ def generate_config(
         return config_path
 
     with open(config_path, "w", encoding="utf-8") as f:
-        f.write(filled)
-
-    # Post-process: append paper-derived fields (marker_dict, is_nuclei, etc.)
-    if paper_context:
-        _post_process_yaml(config_path, paper_context)
+        yaml.safe_dump(
+            config_dict,
+            f,
+            sort_keys=False,
+            allow_unicode=True,
+            default_flow_style=False,
+        )
 
     print(f"  Written: {config_path}")
     return config_path

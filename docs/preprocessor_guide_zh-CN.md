@@ -432,7 +432,7 @@ python core/preprocess/preprocessor.py --gse GSE12345 --modality atac
 - 每个样本单独 CSV/TSV 文件（如 GSM 文件）
 
 如果仍然无法识别，你可以：
-1. 参考 `templates/config_templates/` 中的模板手工写 config
+1. 参考 `templates/config_templates/` 中的模板（由 `python -m core.config scaffold` 生成；不要手工改模板——改 `core/preprocess/config_specs.py` 后重新生成）手工写 config
 2. 在 `projects/{modality}/{GSE_ID}/` 下创建对应的 `config_*.yaml`
 
 ### Q6: 预处理会覆盖我已有的 config 文件吗？

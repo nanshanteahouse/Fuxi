@@ -1,7 +1,10 @@
+# ══════════════════════════════════════════════════════════════
+# AUTO-GENERATED from core/preprocess/config_specs.py
+# Do NOT edit by hand — run: python -m core.config scaffold
+# ══════════════════════════════════════════════════════════════
 # ── Modality & data format ──
 modality: atac
 data_format: 10x_fragments
-
 # 公共默认参数已移至 global.yaml (参考 global.example.yaml)
 # 本模板仅包含数据集特异性和生物学相关参数
 
@@ -11,8 +14,8 @@ data_input:
   barcodes_file: "{{BARCODES_FILE}}"
 
 # ── ATAC-specific config ──
-atac:
   # Reference genome
+atac:
   genome: "{{GENOME}}"
   # chrom_sizes: ""
   # blacklist_bed: ""
@@ -97,8 +100,9 @@ enrichment:
 #   thinking_enabled: true
 #   reasoning_effort: high
 #   annotation: true
+#   subcluster: true
+#   interpretation: true
 #   cache_responses: true
-
 
 h5ad_tempdir: /tmp/Fuxi
 # h5ad_compression: gzip

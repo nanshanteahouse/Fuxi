@@ -1,9 +1,12 @@
+# ══════════════════════════════════════════════════════════════
+# AUTO-GENERATED from core/preprocess/config_specs.py
+# Do NOT edit by hand — run: python -m core.config scaffold
+# ══════════════════════════════════════════════════════════════
 # ── Data format ──
 data_format: count_matrix
 
 # ── Modality ──
 modality: bulk
-
 # 公共默认参数已移至 global.yaml (参考 global.example.yaml)
 # 本模板仅包含数据集特异性和生物学相关参数
 
@@ -17,7 +20,7 @@ data_input:
 # ── Dataset metadata ──
 tissue: "{{TISSUE}}"
 species: "{{SPECIES}}"
-expression_type: "raw_counts"
+expression_type: raw_counts
 # raw_counts | tpm | fpkm | cpm
 
 # ── Bulk-specific settings ──
@@ -28,7 +31,7 @@ bulk:
   # contrast_baseline: "control"
   alpha: 0.05
   lfc_shrink: true
-  normalization_method: "deseq2_median_ratios"
+  normalization_method: deseq2_median_ratios
   # min_counts_per_gene: 10
   # min_samples_per_group: 2
   # n_jobs: 0

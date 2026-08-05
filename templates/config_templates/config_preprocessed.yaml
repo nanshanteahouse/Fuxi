@@ -1,9 +1,12 @@
+# ══════════════════════════════════════════════════════════════
+# AUTO-GENERATED from core/preprocess/config_specs.py
+# Do NOT edit by hand — run: python -m core.config scaffold
+# ══════════════════════════════════════════════════════════════
 # ── Data format ──
 data_format: preprocessed
-
 # 公共默认参数已移至 global.yaml (参考 global.example.yaml)
 # 本模板仅包含数据集特异性和生物学相关参数
-expression_type: "{{EXPRESSION_TYPE}}"  # log1p_counts / raw_counts / TPM / CPM / FPKM
+expression_type: "{{EXPRESSION_TYPE}}"   # log1p_counts / raw_counts / TPM / CPM / FPKM
 
 # ── Data input (optional overrides) ──
 # All auto-detectable by default; only override if needed.
@@ -26,8 +29,8 @@ qc:
   # max_pct_mito: 20.0  # global default; snRNA-seq→5-10%, heart/liver→15%
 
 # ── Scrublet (doublet detection) ──
-scrublet:
   # serial_threshold: 15000             # cells: >threshold → serial, ≤threshold → parallel
+scrublet:
   run: true   # auto-disabled when expression_type != raw_counts
 
 # ── HVG ──
@@ -35,17 +38,17 @@ hvg:
   n_top_genes: 4000
   batch_key: sample
   flavor: seurat_v3
+  # use_regress_out: false
 
 # ── Batch correction / Integration ──
 integration:
   method: harmony
   batch_key: sample
 
-  # -- v4.x+: batch diagnosis (auto-classify batch vs biology columns) --
-  # diagnose: true                        # 全量诊断（大细胞数深拷贝，百万级建议 false）
-  # diagnose_max_cells: 50000            # 诊断子采样上限（默认 5 万，秒级）
-  # stream_raw: true                     # 流式写 .raw（>100 万细胞建议 true，峰值内存 -24%）
-
+    # -- v4.x+: batch diagnosis (auto-classify batch vs biology columns) --
+    # diagnose: true                        # 全量诊断（大细胞数深拷贝，百万级建议 false）
+    # diagnose_max_cells: 50000            # 诊断子采样上限（默认 5 万，秒级）
+    # stream_raw: true                     # 流式写 .raw（从 02_qc 分块变换直写；>100 万细胞建议 true，峰值内存 -24%）
   # -- scVI (deep generative model, method: scvi) --
   scvi:
     n_latent: 30
@@ -55,15 +58,15 @@ integration:
     batch_key: sample
     use_gpu: true
     train_size: 0.9
-    batch_size: 1024           # 128→1024: scverse 官方线性加速建议，实测 0.51→0.32 s/epoch
-    early_stopping: true       # ELBO 早停（Lightning patience=3 默认），避免傻跑满 max_epochs
-    precision: "16-mixed"       # 3090 AMP 加速（实测 ~1.5-2x）；CPU 自动降级 "32"
-    # ── WSL2 关键（实测 GPU 饿死根因修复，勿改）──
+    batch_size: 1024   # 128→1024: scverse 官方线性加速建议（census 35M 用 1024），实测 0.51→0.32 s/epoch
+    early_stopping: true   # ELBO 早停（Lightning patience=3 默认），避免傻跑满 max_epochs
+    precision: 16-mixed   # 3090 AMP 加速（实测 ~1.5-2x）；CPU 自动降级 "32"
+        # ── WSL2 关键（实测 GPU 饿死根因修复，勿改）──
     datasplitter_kwargs:
-      num_workers: 0            # WSL2 IPC 阻塞 → GPU 0% 利用率；0 = 主进程加载
+      num_workers: 0   # WSL2 IPC 阻塞 → GPU 0% 利用率；0 = 主进程加载
     trainer_kwargs:
-      enable_progress_bar: false  # 去 tqdm 每 batch 管道写（加剧 pipe_write 阻塞）
-    # Advanced params: see global.example.yaml → integration.scvi
+      enable_progress_bar: false   # 去 tqdm 每 batch 管道写（加剧 pipe_write 阻塞）
+        # Advanced params: see global.example.yaml → integration.scvi
 
 # ── PCA ──
 # n_pcs_full = PCA 计算量；n_pcs_use = 下游消费维数（04+ 用 min() 兑底）
@@ -74,11 +77,29 @@ pca:
 
 # ── Clustering ──
 clustering:
-  leiden_resolutions: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
+  param_grid_resolutions: [0.3, 0.5, 0.8, 1.0, 1.5, 2.0]
   best_resolution: 1.0
   best_n_neighbors: 0
   umap_color_by_batch: false
   # batch_key_override: null  # optionally override integration.batch_key
+  # ── Multi-metric evaluation ──
+  # stability_n_seeds: 12                  # random seeds for stability scoring
+  # stability_leiden_n_iterations: 1000    # Leiden iterations for stability
+  # umap_selection_metric: trustworthiness # UMAP quality metric (trustworthiness /
+  # umap_maxiter: null                    # max UMAP iterations (null=auto). 200-500 for 1M+ cells.
+  # umap_n_epochs: null                   # UMAP training epochs (null=auto)
+  #   continuity / distance_mse / sil_score)
+  # param_grid_n_neighbors_adaptive: true  # auto-scale neighbors from n_obs
+  # plot_per_combo: false                 # per-(n_neighbors, resolution) UMAP plots
+  # ── Funnel mode (large datasets) ──
+  # funnel_enabled: true                   # progressive grid search for >100k cells
+  # funnel_threshold: 100000               # min n_obs to trigger funnel
+  # funnel_subsample_size: 50000           # subsample for funnel grid
+  # funnel_top_k: 3                        # top candidates re-validated on full data
+  # ── Target cluster mode ──
+  # target_n_clusters: null                # target cluster count (binary-search
+  #   resolution instead of grid)
+  # target_search_max_iters: 10            # max binary-search iterations
 
 # ── Cell type markers ──
   # umap_maxiter: null                    # max UMAP iterations (null=auto). 200-500 for 1M+ cells.
@@ -93,11 +114,14 @@ marker:
 # ── Trajectory ──
 trajectory:
   root_cell_types: []
+  # root_markers: [SOX2, PAX6, NES]
+  # n_diffmap_comps: 15
+  # n_branchings: 2
 
 # ── Differential expression ──
 de:
   stage_pairwise: true
-
+  # auto_switch_on_low_quality: true
 # ── Pseudobulk DE (PyDESeq2) ──
 # de.pseudobulk:
 #   sample_col: sample
@@ -106,6 +130,7 @@ de:
 #   contrast_treatment: treated
 #   contrast_baseline: control
 #   alpha: 0.05
+
 # ── GRN regulatory network ──
 grn:
   run: true
@@ -117,7 +142,6 @@ grn:
 # ── CCI cell-cell interaction ──
 cci:
   run: true
-
 
 # ── Downsampling (optional) ──
 # downsample:

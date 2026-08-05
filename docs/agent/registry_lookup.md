@@ -40,7 +40,7 @@ python -m core.paper.registry find-orphans    # orphan datasets
 | Status shows | Next step |
 |---|---|
 | Data downloaded + config exists | `python core/run_pipeline.py --modality <mod> --config <path>` |
-| Data downloaded + no config | Generate config via `core/preprocess/` or copy from `templates/config_templates/` |
+|  Data downloaded + no config | Generate config via `core/preprocess/` or copy from `templates/config_templates/` (regenerate: `python -m core.config scaffold`) |
 | Data not downloaded | Download data (GEO) then repeat status check |
 | Not registered | `register --gse <GSE>` or `register --pmid <PMID>` first |
 | PMID not in registry | `python core/paper/insights.py --pmid <PMID>` then register |
