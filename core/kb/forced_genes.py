@@ -59,6 +59,24 @@ def _source_species(sources: list[dict]) -> dict[str, set[str]]:
     return out
 
 
+_KB_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+
+def _discover_kb_tissues() -> set[str]:
+    """Scan ``core/kb/`` for tissue directories carrying a ``sources/`` dir.
+
+    Module files (``merge.py`` etc.) and non-KB packages (``cell_cycle``)
+    are excluded.  Returns the set of tissue names usable with
+    :func:`build_forced_genes`.
+    """
+    tissues: set[str] = set()
+    for entry in sorted(os.listdir(_KB_ROOT)):
+        path = os.path.join(_KB_ROOT, entry)
+        if os.path.isdir(path) and os.path.isdir(os.path.join(path, "sources")):
+            tissues.add(entry)
+    return tissues
+
+
 def build_forced_genes(
     tissue: str,
     target_species: str,
@@ -146,8 +164,13 @@ if __name__ == "__main__":
     import argparse
 
     ap = argparse.ArgumentParser(description="Generate species-aware forced genes from KB")
-    ap.add_argument("--tissue", default="retina")
-    ap.add_argument("--species", default="Homo sapiens")
+    ap.add_argument(
+        "--tissue",
+        required=True,
+        choices=sorted(_discover_kb_tissues()),
+        help="Tissue KB under core/kb/ (e.g. retina)",
+    )
+    ap.add_argument("--species", required=True, help="Target species (slug or Latin, e.g. human)")
     ap.add_argument("--threshold", default="high", choices=["gold", "high", "medium", "any"])
     ap.add_argument("--yaml", action="store_true", help="Print as YAML list for config")
     args = ap.parse_args()

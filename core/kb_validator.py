@@ -35,6 +35,7 @@ if _repo_root not in sys.path:
 
 from core.annotation.scoring import _normalize_gene_name  # noqa: E402
 from core.kb import load_kb  # noqa: E402
+from core.kb.forced_genes import _discover_kb_tissues  # noqa: E402
 
 # Threshold: at least 30% of cells must express a marker for it to validate
 DEFAULT_PCT_THRESHOLD: float = 0.3
@@ -61,7 +62,7 @@ class KbValidator:
 
     def __init__(
         self,
-        tissue: str = "retina",
+        tissue: str,
         pct_threshold: float = DEFAULT_PCT_THRESHOLD,
         use_ontology: bool = True,
     ) -> None:
@@ -260,9 +261,10 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--tissue",
-        default="retina",
+        required=True,
+        choices=sorted(_discover_kb_tissues()),
         type=str,
-        help="Tissue KB to validate against (default: retina)",
+        help="Tissue KB to validate against (e.g. retina)",
     )
     p.add_argument(
         "--output",

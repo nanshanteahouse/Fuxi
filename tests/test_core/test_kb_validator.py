@@ -296,6 +296,8 @@ class TestCLI:
             str(h5ad_path),
             "--annotation",
             "cell_type",
+            "--tissue",
+            "retina",
             "--no-ontology",
             "--output",
             str(output_path),
@@ -331,6 +333,8 @@ class TestCLI:
             str(h5ad_path),
             "--annotation",
             "cell_type",
+            "--tissue",
+            "retina",
             "--no-ontology",
         ]
         _orig = sys.argv[:]
