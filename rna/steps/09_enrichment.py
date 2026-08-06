@@ -5,8 +5,9 @@ Step 09: GO/KEGG 富集分析
 输入: Step 07 输出的 marker_genes_per_group.csv
       （每类细胞 vs 其他所有细胞的 Wilcoxon 标记基因）
 
-方法 (通过 GSEApy + Enrichr API):
-  ORA: 取每类上调基因 top N → 过表达分析
+方法 (通过 GSEApy，本地优先):
+  ORA: 取每类上调基因 top N → 过表达分析（基因集库首次自动下载到
+       ~/.cache/gseapy，之后离线计算；下载失败时回退 Enrichr API）
   Pre-ranked GSEA: 使用全部基因的 score 排序 → 无需 cutoff
 
 输出:
@@ -27,6 +28,7 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -41,29 +43,79 @@ from core.utils import resolve_config, save_figure, setup_logger
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 
-def enrichr_with_retry(gene_list, gene_sets_library, max_retries=3, log=None):
-    """Call gseapy.enrichr() with exponential backoff on HTTP 429.
+_LOCAL_LIB_CACHE: dict = {}
+_LOCAL_LIB_LOCK = threading.Lock()
 
-    The Enrichr API returns 429 (Too Many Requests) when the pipeline
-    floods it with concurrent calls (e.g. ThreadPoolExecutor ORA mode).
-    On 429 we sleep 5s, 10s, 20s before retrying; any other exception
-    is re-raised immediately so genuine API/parse errors aren't masked.
+
+class _LocalEnrichrResult:
+    """Minimal stand-in for gseapy's EnrichrResult: carries a .results DataFrame."""
+
+    __slots__ = ("results",)
+
+    def __init__(self, results):
+        self.results = results
+
+
+def _load_library_local(gene_sets_library):
+    """Return an Enrichr library dict from the local gseapy cache (downloads once)."""
+    import gseapy as gp
+
+    cached = _LOCAL_LIB_CACHE.get(gene_sets_library)
+    if cached is not None:
+        return cached
+    with _LOCAL_LIB_LOCK:
+        cached = _LOCAL_LIB_CACHE.get(gene_sets_library)
+        if cached is None:
+            cached = gp.get_library(name=gene_sets_library)
+            _LOCAL_LIB_CACHE[gene_sets_library] = cached
+    return cached
+
+
+def enrichr_with_retry(gene_list, gene_sets_library, max_retries=3, log=None):
+    """Run ORA for a gene list, local-first with Enrichr API fallback.
+
+    The Enrichr gene-set libraries are downloaded once into the gseapy local
+    cache and analysed offline via gp.enrich() (hypergeometric test) — same
+    method the public API runs, minus the network round-trips and HTTP 429
+    rate limiting. If the library cannot be downloaded locally, falls back to
+    the remote API with exponential backoff on 429.
 
     Args:
         gene_list: Iterable of gene symbols to submit to Enrichr.
         gene_sets_library: Enrichr library name (e.g. 'KEGG_2021_Human').
-        max_retries: Maximum number of retries after the initial call.
-        log: Optional logger for WARNING-level retry messages; falls back
-            to a module-level logger when not provided.
+        max_retries: Maximum number of retries after the initial call (remote fallback only).
+        log: Optional logger for WARNING-level messages; falls back to a
+            module-level logger when not provided.
 
     Returns:
-        The Enrichr result object returned by a successful gp.enrichr()
-        call (carries .results, .res2d, etc. as appropriate).
+        An object carrying a .results DataFrame (same shape as gseapy's
+        EnrichrResult.results: Term, Overlap, P-value, Adjusted P-value,
+        Odds Ratio, Combined Score, Genes).
     """
     import gseapy as gp
 
     if log is None:
         log = logging.getLogger(__name__)
+
+    try:
+        lib = _load_library_local(gene_sets_library)
+    except Exception as e:
+        log.warning(
+            "Local library %s unavailable (%s); falling back to Enrichr API", gene_sets_library, e
+        )
+        lib = None
+    if lib is not None:
+        try:
+            res = gp.enrich(
+                gene_list=gene_list,
+                gene_sets=lib,
+                outdir=None,
+                no_plot=True,
+                cutoff=1.0,
+            )
+            return _LocalEnrichrResult(res.res2d)
+        except Exception as e:
+            log.warning("Local ORA failed (%s); falling back to Enrichr API", e)
 
     backoff_schedule = [5, 10, 20]
     last_err = None
