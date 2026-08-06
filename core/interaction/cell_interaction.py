@@ -22,6 +22,8 @@ from typing import cast
 
 import pandas as pd
 
+from core.utils import fuxi_cache_dir
+
 MYGENE_CHUNK_SIZE: int = 1000
 
 
@@ -155,7 +157,7 @@ def load_lr_database(
         'guide2pharma', 'italk', 'kirouac', 'nichenet', 'omni', 'scaffold'.
         Default: 'consensus' (union of major databases).
     cache_dir : str
-        LIANA cache directory. Empty = auto (~/.cache/liana).
+        LIANA cache directory. Empty = unified Fuxi cache (~/.cache/fuxi/liana).
     log : object, optional
         Logger with .info() method.
 
@@ -166,6 +168,8 @@ def load_lr_database(
     """
     if cache_dir:
         os.environ["LIANA_CACHE_DIR"] = cache_dir
+    else:
+        os.environ.setdefault("LIANA_CACHE_DIR", fuxi_cache_dir("liana"))
 
     import liana.resource
 
