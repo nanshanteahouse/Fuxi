@@ -169,3 +169,167 @@ def compute_tf_relevance(
     )
 
     return annotated_activity_df, tf_annotation_table
+
+
+# ======================================================================
+#  Streaming pseudobulk (bypasses full anndata load)
+# ======================================================================
+
+
+def streaming_pseudobulk(
+    h5ad_path: str,
+    group_col: str = "cell_type",
+    log: Optional[logging.Logger] = None,
+) -> pd.DataFrame:
+    """Per-group mean-expression pseudobulk by streaming the h5ad matrix.
+
+    Reads ``raw/X`` (fallback ``X``) chunk-wise with h5py and accumulates
+    per-group sums via CSR construction, never materialising the full matrix.
+    This avoids loading the dense HVG ``X`` that anndata would otherwise
+    read in full.  Returns a log1p-transformed group x gene DataFrame.
+    """
+    logger = log or _log
+    import h5py
+    import numpy as np
+
+    try:
+        import hdf5plugin  # noqa: F401  (registers the zstd filter)
+    except ImportError:
+        pass
+
+    with h5py.File(h5ad_path, "r") as f:
+        obs = f["obs"]
+
+        # ---- group codes: categorical (codes+categories) or plain array ----
+        col = group_col if group_col in obs else "leiden"
+        if col != group_col:
+            logger.warning("%s not in obs - using 'leiden'", group_col)
+        if f"{col}/categories" in obs:
+            codes = np.asarray(obs[f"{col}/codes"][...])
+            cats = obs[f"{col}/categories"][...]
+            categories = [str(c, "utf-8") if isinstance(c, bytes) else str(c) for c in cats]
+        else:
+            raw_col = obs[col][...]
+            dec = [c.decode() if isinstance(c, bytes) else c for c in raw_col]
+            codes, cats = pd.factorize(dec)
+            categories = [str(c) for c in cats]
+
+        # ---- expression source: raw/X sparse (preferred), else X ----
+        if "raw" in f and "X" in f["raw"]:
+            xgrp = f["raw/X"]
+            var_index = f["raw/var/_index"]
+            use_raw = True
+        else:
+            xgrp = f["X"]
+            var_index = f["var/_index"]
+            use_raw = False
+
+        var_names = [v.decode() if isinstance(v, bytes) else v for v in var_index[...]]
+        n_groups = len(categories)
+        n_genes = len(var_names)
+
+        if isinstance(xgrp, h5py.Group):  # sparse CSR storage
+            data = xgrp["data"]
+            indices = xgrp["indices"]
+            indptr_arr = xgrp["indptr"][...]
+            n_cells = int(indptr_arr.shape[0] - 1)
+            dense = None
+        else:  # dense dataset
+            data = indices = None
+            indptr_arr = None
+            n_cells = int(xgrp.shape[0])
+            dense = xgrp
+
+        sums = np.zeros((n_groups, n_genes), dtype=np.float64)
+        chunk = 20_000
+        if data is not None:
+            for start in range(0, n_cells, chunk):
+                end = min(start + chunk, n_cells)
+                p0, p1 = int(indptr_arr[start]), int(indptr_arr[end])
+                d = data[p0:p1]
+                idx = indices[p0:p1]
+                seg = np.diff(indptr_arr[start : end + 1])
+                rows = np.repeat(np.arange(end - start), seg)
+                gr = codes[start:end][rows]
+                lin = gr * n_genes + idx
+                bc = np.bincount(lin, weights=d, minlength=n_groups * n_genes)
+                sums += bc.reshape(n_groups, n_genes)
+        else:
+            onehot = np.arange(n_groups)
+            for start in range(0, n_cells, chunk):
+                end = min(start + chunk, n_cells)
+                block = dense[start:end]
+                gc = codes[start:end]
+                sums += (gc[:, None] == onehot).T.astype(np.float64) @ block
+
+        counts = np.bincount(codes, minlength=n_groups)
+        pseudo = np.log1p(sums / np.maximum(counts, 1)[:, None])
+        df = pd.DataFrame(pseudo, index=categories, columns=var_names)
+
+    logger.info("Pseudobulk: %d cells -> %d groups", n_cells, n_groups)
+    logger.info("  Pseudobulk matrix: %d x %d (raw=%s)", n_groups, n_genes, use_raw)
+    return df
+
+
+# ======================================================================
+#  Decoupler network download cache
+# ======================================================================
+
+
+def patch_decoupler_cache(log: Optional[logging.Logger] = None) -> None:
+    """Cache decoupler network downloads under ``~/.cache/fuxi/decoupler/``.
+
+    decoupler's ``_download`` (Zenodo CollecTRI, HCOP ortholog maps, ...)
+    has no disk cache and re-fetches on every process; this wrapper makes
+    each resource a single-fetch.  Idempotent - safe to call repeatedly.
+    """
+    logger = log or _log
+    import hashlib
+    import importlib
+    import io
+    import os
+
+    from core.utils import fuxi_cache_dir
+
+    cache_dir = fuxi_cache_dir("decoupler")
+    os.makedirs(cache_dir, exist_ok=True)
+    import decoupler._download as _dl
+
+    _orig = _dl._download
+    if getattr(_dl, "_fuxi_cached", False):
+        return
+
+    def _cached(
+        url: str, verbose: bool = False, retries: int = 5, wait_time: int = 20
+    ) -> io.BytesIO:
+        key = hashlib.sha1(url.encode()).hexdigest()[:16]
+        fname = url.rsplit("/", 1)[-1].split("?", 1)[0]
+        path = os.path.join(cache_dir, f"{key}_{fname}")
+        if os.path.exists(path):
+            with open(path, "rb") as fh:
+                data = io.BytesIO(fh.read())
+            logger.info("decoupler cache hit: %s", fname)
+            return data
+        data = _orig(url, verbose=verbose, retries=retries, wait_time=wait_time)
+        with open(path, "wb") as fh:
+            fh.write(data.getvalue())
+        data.seek(0)
+        logger.info("decoupler cached: %s", fname)
+        return data
+
+    # Module-level ``from decoupler._download import _download`` bindings
+    _dl._download = _cached
+    _dl._fuxi_cached = True
+    for _mod_name in (
+        "decoupler.op._collectri",
+        "decoupler.op._translate",
+        "decoupler.op._dorothea",
+    ):
+        try:
+            _mod = importlib.import_module(_mod_name)
+        except ImportError:
+            continue
+        if getattr(_mod, "_download", None) is _orig:
+            _mod._download = _cached
+        _mod._fuxi_cached = True
+    logger.info("decoupler download cache enabled -> %s", cache_dir)

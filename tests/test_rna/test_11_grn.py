@@ -202,3 +202,71 @@ def test_tissue_unknown_falls_back() -> None:
     markers = grn.load_all_kb_markers("unknown")
     assert isinstance(markers, set)
     assert len(markers) == 0
+
+
+# ======================================================================
+#  streaming_pseudobulk tests
+# ======================================================================
+
+
+def _make_synth_adata(
+    n_cells: int = 600,
+    n_genes: int = 300,
+    n_ct: int = 8,
+    seed: int = 42,
+    categorical: bool = True,
+    has_raw: bool = False,
+):
+    import scanpy as sc
+
+    rng = np.random.default_rng(seed)
+    labels = np.array([f"CT{i % n_ct}" for i in range(n_cells)])
+    mat = np.log1p(rng.poisson(1.5, size=(n_cells, n_genes)).astype(np.float32))
+    adata = sc.AnnData(X=mat)
+    adata.var_names = [f"G{i}" for i in range(n_genes)]
+    adata.obs["cell_type"] = pd.Categorical(labels) if categorical else labels.astype(str)
+    if has_raw:
+        adata.raw = adata
+    return adata
+
+
+def test_streaming_pseudobulk_dense_matches_anndata(tmp_path) -> None:
+    """Dense X without raw — streaming equals the anndata reference."""
+    adata = _make_synth_adata(has_raw=False)
+    path = tmp_path / "dense.h5ad"
+    adata.write_h5ad(path, compression="gzip")
+    got = grn.streaming_pseudobulk(str(path), "cell_type")
+    ref = grn.build_pseudobulk(adata, "cell_type", use_raw=False)
+    np.testing.assert_allclose(got.values, ref.values, atol=1e-5)
+    assert list(got.columns) == list(ref.columns)
+
+
+def test_streaming_pseudobulk_sparse_raw_matches_anndata(tmp_path) -> None:
+    """Sparse raw/X (production path) — streaming equals the anndata reference."""
+    adata = _make_synth_adata(has_raw=True)
+    path = tmp_path / "raw.h5ad"
+    adata.write_h5ad(path, compression="gzip")
+    got = grn.streaming_pseudobulk(str(path), "cell_type")
+    ref = grn.build_pseudobulk(adata, "cell_type", use_raw=True)
+    np.testing.assert_allclose(got.values, ref.values, atol=1e-5)
+
+
+def test_streaming_pseudobulk_plain_string_obs(tmp_path) -> None:
+    """Non-categorical obs column — factorized on the fly."""
+    adata = _make_synth_adata(categorical=False)
+    path = tmp_path / "plain.h5ad"
+    adata.write_h5ad(path, compression="gzip")
+    got = grn.streaming_pseudobulk(str(path), "cell_type")
+    ref = grn.build_pseudobulk(adata, "cell_type", use_raw=False)
+    np.testing.assert_allclose(got.values, ref.values, atol=1e-5)
+
+
+def test_streaming_pseudobulk_falls_back_to_leiden(tmp_path) -> None:
+    """Missing group column falls back to 'leiden'."""
+    adata = _make_synth_adata()
+    adata.obs["leiden"] = pd.Categorical([f"L{i % 6}" for i in range(adata.n_obs)])
+    path = tmp_path / "fallback.h5ad"
+    adata.write_h5ad(path, compression="gzip")
+    got = grn.streaming_pseudobulk(str(path), "missing_col")
+    assert got.shape[0] == 6
+    assert list(got.index) == [f"L{i}" for i in range(6)]

@@ -26,11 +26,14 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import scanpy as sc
 from scipy.cluster.hierarchy import dendrogram, linkage
 
 from core.kb import load_all_kb_markers
-from core.pipeline.grn import compute_tf_relevance
+from core.pipeline.grn import (
+    compute_tf_relevance,
+    patch_decoupler_cache,
+    streaming_pseudobulk,
+)
 from core.utils import resolve_config, safe_write, save_figure, setup_logger
 
 
@@ -262,7 +265,9 @@ def export_results(estimates_df, top_df, pvals_df, net_top, cfg, log, kb_markers
     if net_top.empty:
         log.warning("Top-TF edge list is empty — no edges to export")
 
-    adata_pb = sc.AnnData(
+    from anndata import AnnData
+
+    adata_pb = AnnData(
         X=np.expm1(top_df.values),
         obs=pd.DataFrame(index=top_df.index),
         var=pd.DataFrame(index=top_df.columns),
@@ -428,19 +433,13 @@ def main():
         log.info("run_grn=False - skipping")
         return
 
-    # ---------- Load annotated data ----------
-    adata = sc.read(cfg.annotated_h5ad)
-    log.info("Loaded: %s - %d cells, %d genes", cfg.annotated_h5ad, adata.n_obs, adata.n_vars)
-
-    group_col = "cell_type" if "cell_type" in adata.obs else "leiden"
-    log.info("Group column: %s (%d categories)", group_col, adata.obs[group_col].nunique())
-
-    # ---------- Pseudobulk ----------
-    use_raw = adata.raw is not None
-    pseudo_df = build_pseudobulk(adata, group_col, use_raw=use_raw, log=log)
+    # ---------- Pseudobulk (streaming, skips full anndata load) ----------
+    pseudo_df = streaming_pseudobulk(cfg.annotated_h5ad, "cell_type", log=log)
 
     # ---------- Fetch regulon network ----------
     import decoupler as dc
+
+    patch_decoupler_cache(log=log)
 
     # cfg.grn.species may default to "human"; fall back to cfg.species
     # (normalised by resolve_config) so non-human datasets use the correct
