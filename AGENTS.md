@@ -151,6 +151,11 @@ See `docs/agent/methodology_patterns.md` for commands and schema reference.
 When user explicitly asks for a report (写报告, 写总结, write a report, etc.),
 generate a markdown report under `notes/`. Read `docs/agent/report_generation.md`
 for directory mapping, naming rules, and edge cases.
+Mandatory conventions (see `docs/agent/report_generation.md` → Notes 库维护惯例 section):
+- Every new report carries a 状态头 (status header): `> 状态：现行` + `> 后继/关联` lines (full-width colon).
+- When a report completes a backlog item, check it off in `notes/BACKLOG.md` (set done + 备注 link) in the same session.
+- Write a two-week work log under `notes/logs/`; move superseded reports to `notes/archive/` (never delete) and update `notes/INDEX.md` in the same session.
+
 
 ## Notes are private — never commit
 
