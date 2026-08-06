@@ -228,19 +228,8 @@ def _eval_ast_literal(node: ast.expr) -> Any:
         return node.id
 
 
-def _extract_getattr_fallback(file_path: pathlib.Path, line_no: int, field_name: str) -> Any:
-    """Return the third argument (fallback) of the getattr call on *line_no*.
-
-    Returns ``_UNRESOLVED`` on any parsing failure."""
-    content = _safe_read(file_path)
-    if not content:
-        return _UNRESOLVED
-    lines = content.splitlines()
-    if line_no > len(lines):
-        return _UNRESOLVED
-    line = lines[line_no - 1]
-
-    # pattern: getattr(cfg.clustering, "field", <FALLBACK>)
+def _parse_getattr_fallback(line: str, field_name: str) -> Any:
+    """Parse the fallback of a getattr(cfg.clustering, <field>, <fallback>) on one line."""
     pat = re.compile(
         rf'getattr\(\s*cfg\.clustering\s*,\s*["\']{re.escape(field_name)}["\']\s*,\s*(.+?)\s*\)'
     )
@@ -248,13 +237,34 @@ def _extract_getattr_fallback(file_path: pathlib.Path, line_no: int, field_name:
     if not m:
         return _UNRESOLVED
     fallback_expr = m.group(1)
-
-    # Try parsing as a Python expression.
     try:
         node = ast.parse(fallback_expr.strip(), mode="eval")
         return _eval_ast_literal(node.body)  # type: ignore[attr-defined]
     except SyntaxError:
         return fallback_expr.strip()  # raw string for diagnostics
+
+
+def _extract_getattr_fallback(file_path: pathlib.Path, line_no: int, field_name: str) -> Any:
+    """Return the third argument (fallback) of a getattr call for *field_name*.
+
+    Tries *line_no* first (fast path), then falls back to searching the whole
+    file — the known pairs' line numbers drift across refactors (see
+    umap_selection_metric: 964 → 977 → 990).
+
+    Returns ``_UNRESOLVED`` on any parsing failure."""
+    content = _safe_read(file_path)
+    if not content:
+        return _UNRESOLVED
+    lines = content.splitlines()
+    if line_no <= len(lines):
+        parsed = _parse_getattr_fallback(lines[line_no - 1], field_name)
+        if parsed is not _UNRESOLVED:
+            return parsed
+    for line in lines:
+        parsed = _parse_getattr_fallback(line, field_name)
+        if parsed is not _UNRESOLVED:
+            return parsed
+    return _UNRESOLVED
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -330,9 +340,10 @@ class TestClusteringSchemaConsistency:
         ("stability_n_seeds", "core/cluster/evaluation/enrichment.py", 76),
         ("stability_leiden_n_iterations", "core/cluster/evaluation/stability.py", 52),
         ("leiden_flavor", "core/cluster/evaluation/enrichment.py", 78),
-        # Line number drifts with rna/steps/04_cluster_umap.py; moved 964→977
-        # by commit 084021f (2026-08-04).
-        ("umap_selection_metric", "rna/steps/04_cluster_umap.py", 977),
+        # Line number drifts with rna/steps/04_cluster_umap.py; moved 964→977→990
+        # (084021f 2026-08-04, f3dbb41). _extract_getattr_fallback searches the
+        # whole file when the line no longer matches, so this stays accurate.
+        ("umap_selection_metric", "rna/steps/04_cluster_umap.py", 990),
     ]
 
     def test_clustering_defaults_match_code_fallbacks(self) -> None:
