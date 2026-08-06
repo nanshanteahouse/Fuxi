@@ -86,47 +86,75 @@ def resolve_memory_settings(cfg: Any) -> tuple[str, int, str]:
 
 
 # Step 01 — kNN result matrix is the hidden dominant term (1M cells -> ~18GB).
-#   manifold = n_cells * 3 (per-neighbor features)
-#   knn_index ~ manifold * 250B;  knn_result = n_cells * k_adj * 4B
-#   sparse X = n_cells * n_genes * 4B * density (density = nnz / total)
-#   zscore   = n_cells * n_genes * density * dtype
-#   worker   = base 0.8 GiB + per-worker manifold index share
+#   manifold = n_cells * 3 (per-neighbor features);  k_adj = 1.5 * sqrt(n_cells)
+#   knn_index ~ manifold * 250B (25B/point/tree x 10 trees; 411k -> 98 MiB)
+#   knn_result = manifold * k_adj * 4B — O(cells^1.5), the hidden big one
+#   zscore_main = max_group * n_genes * 4B * 2 (sparse_zscore densifies the
+#     largest sample group: result + temp, float32; float64 doubles it)
+#     max_group ~ 2 x mean group size (StressTest 1.97M -> 157k measured)
+#   worker = base 0.8 GiB + per-worker manifold index share
+#   Peak ~ max(kNN stage, zscore stage) + one group X + worker shares
+#   Anchors (2026-08-01 overhaul): StressTest 1.97M -> 52 GB (f32) / 71 GB
+#   (f64); 155k-cell runs ~3 GB (small-data floor).
 def _estimate_step01_peak(n_cells: int, n_genes: int, nnz: int, budget_bytes: int) -> float:
     import os
 
-    # kNN runs on the manifold (cells x 3 neighbours) — index ~ manifold x 250B
-    # per worker; result matrix = cells x k_adj x 4B. X loads per sample group
-    # (serial_threshold ~80k cells/group), never fully resident at once.
-    knn_index_pw = n_cells * 3 * 250
-    knn_result = n_cells * 30 * 4
+    manifold = n_cells * 3
+    k_adj = 1.5 * math.sqrt(n_cells)
+    knn_index_pw = manifold * 250
+    knn_result = manifold * k_adj * 4
+
     n_groups = max(1, math.ceil(n_cells / 80_000))
+    max_group = 2 * n_cells / n_groups  # largest sample group ~ 2x the mean
     group_x = nnz * 12 / n_groups  # one group resident (CSR, 12B/nnz)
-    base = (knn_result + group_x) / 1e9
+
+    # sparse_zscore densifies the largest group: dense result + temp, float32.
+    # 157k x 36,601 -> 46 GB (f32) / 92 GB (f64) measured.
+    zscore_main = max_group * n_genes * 4 * 2
+    stage_gb = max(knn_result, zscore_main) / 1e9  # kNN and zscore barely overlap
 
     n_workers = 1
     if budget_bytes:
         per_worker = 2**30 * 1.2
-        n_workers = max(1, int((budget_bytes * 0.95 - 2 * 2**30) / per_worker))
-    n_workers = min(n_workers, os.cpu_count() or 1)  # never exceed real cores
+        # mem_cap = (budget - main-process peak) / per-worker peak (report
+        # model); the scheduler caps ~12 parallel sample groups in practice
+        # (round 7 used 8 buckets, Lobe_Neurons measured ~13 workers).
+        main_gb = stage_gb + group_x / 1e9 + 0.8
+        n_workers = max(1, int((budget_bytes * 0.95 - main_gb * 1e9) / per_worker))
+    n_workers = min(n_workers, os.cpu_count() or 1, 12)  # never exceed real cores
     if n_cells < 80_000:  # serial path below scrublet.serial_threshold
         n_workers = 1
-    return base + n_workers * (knn_index_pw + 0.8 * 2**30) / 1e9
+    return stage_gb + group_x / 1e9 + 0.8 + n_workers * (knn_index_pw + 0.8 * 2**30) / 1e9
 
 
-# Step 02 — peak ~ 0.85 * full-gene CSR resident + buffer; live-adaptive
-#   block sizing keeps the working set at O(block) on top of X resident.
-#   Measured: StressTest nnz 3.54B -> 35.1 GB peak.
-def _estimate_step02_peak(nnz: int) -> float:
+# Step 02 — streaming (backed) QC keeps X out of RAM, so peak is budget-
+#   driven, not matrix-sized: ~0.4 x the memory budget (write staging) +
+#   536 B/cell + 1.0 GiB base.  Calibrated 2026-08-05 on 63 runs (496k ->
+#   42.4 GiB on 128G, Lobe_Neurons 1.05M -> 32.9, StressTest 1.97M -> 34.4,
+#   all +-7%).  Fallback (no budget): old nnz-resident model.
+def _estimate_step02_peak(n_cells: int, nnz: int, budget_bytes: int = 0) -> float:
+    if budget_bytes > 0:
+        return max(4.0, budget_bytes / 1e9 * 0.4 + n_cells * 536 / 1e9 + 1.0)
     return max(4.0, nnz * 12 / 1e9 * 0.85 + 3.0)
 
 
-# Step 03 — speed: dense PCA (n_cells x n_genes x 4B) + .raw CSR (12B/nnz);
-#   balanced/memory: CSR X + regress_out skipped -> much lower.
+# Step 03 — speed: dense HVG PCA (n_cells x n_genes x 4B) + .raw CSR (12B/nnz);
+#   balanced/memory: CSR X + regress_out skipped -> much lower.  stream_raw
+#   keeps the full-gene matrix off-RAM (chunked reads), so the raw term is
+#   scaled 0.95 as a conservative residual (StressTest 1.97M: 71.8 est vs
+#   71.1 measured; Lobe_Neurons 1.05M: 43.2 vs 46.9).
 def _estimate_step03_peak(n_cells: int, n_genes: int, nnz: int, policy: str) -> float:
     raw_csr = nnz * 12 / 1e9  # float32 data + int64 indices
     if policy in ("balanced", "memory"):
         return max(8.0, raw_csr + n_cells * n_genes * 4 * 0.10 / 1e9 + 2.0)
-    return max(10.0, raw_csr + n_cells * n_genes * 4 / 1e9 + 2.0)
+    return max(10.0, raw_csr * 0.95 + n_cells * n_genes * 4 / 1e9 + 2.0)
+
+
+def _estimate_step03_peak(n_cells: int, n_genes: int, nnz: int, policy: str) -> float:
+    raw_csr = nnz * 12 / 1e9  # float32 data + int64 indices
+    if policy in ("balanced", "memory"):
+        return max(8.0, raw_csr + n_cells * n_genes * 4 * 0.10 / 1e9 + 2.0)
+    return max(10.0, raw_csr * 0.95 + n_cells * n_genes * 4 / 1e9 + 2.0)
 
 
 # Step 04 — neighbors + UMAP + grid Leiden + stability on the integrated
@@ -420,7 +448,7 @@ def estimate_step_peak(
     if step == 1:
         return _estimate_step01_peak(n_cells, n_genes, nnz, budget_bytes)
     if step == 2:
-        return _estimate_step02_peak(nnz)
+        return _estimate_step02_peak(n_cells, nnz, budget_bytes)
     if step == 3:
         return _estimate_step03_peak(n_cells, n_genes, nnz, policy)
     if step == 4:
