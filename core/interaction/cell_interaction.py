@@ -193,6 +193,433 @@ def load_lr_database(
     return lr_df
 
 
+# ── LIANA hot-path monkeypatches (Step 12 permutation testing) ──
+#
+# cProfile across 10 datasets shows ~90% of Step 12 runtime in liana's
+# permutation pipeline, and 1M-cell datasets OOM on liana's dense
+# intermediates:
+#   * _get_positions: per-entity np.where(var_names == entity) — O(n_entities × n_vars)
+#   * _generate_perms_cube: X[perm_idx] + boolean row slicing triggers
+#     csr_sort_indices + csr_sum_duplicates per group per permutation
+#   * prep_check_adata: deep-copies the full expression matrix (25.6 GB at
+#     1.05M x 34.6k genes) and checks np.isfinite over all non-zero entries
+#     at once (two 2.1 GB bool temporaries)
+#   * _get_lr connectome method: sc.pp.scale(adata, copy=True) densifies the
+#     whole matrix (~146 GB at 1.05M x 34.6k)
+#   * liana_pipe mat_mean: np.mean(adata.X) allocates a full nnz temporary
+#     (8.4 GB) via data * (1/denom)
+#
+# All patches are mathematically/semantically equivalent; small datasets
+# keep the original code paths (bit-identical), the patched paths engage
+# only above size thresholds.
+
+_PATCHED_LIANA = False
+_SCALE_DENSE_BYTES_THRESHOLD = 5e9  # n_obs*n_vars*4B dense; below this keep liana's dense path
+_SPARSE_MEAN_CHUNK = 64_000_000  # entries per chunk in the chunked sparse mean
+_ORIG_GET_LR = None
+_ORIG_PREP_CHECK_ADATA = None
+_ORIG_SPARSE_MEAN = None
+
+
+def _patched_get_positions(adata, lr_res):
+    """Vectorized replacement for liana's per-entity np.where lookup.
+
+    Original does ``np.where(adata.var_names == entity)[0][0]`` for every
+    ligand and receptor — O(n_entities × n_vars) pandas __eq__ elementwise
+    scans.  ``Index.get_indexer`` finds all positions in one pass (first
+    match — same semantics as np.where()[0]).
+    """
+    import numpy as np
+
+    idx = pd.Index(adata.var_names)
+    entities = np.union1d(lr_res["ligand"], lr_res["receptor"])
+    pos = pd.Series(idx.get_indexer(entities), index=entities)
+    ligand_pos = {e: int(pos[e]) for e in lr_res["ligand"]}
+    receptor_pos = {e: int(pos[e]) for e in lr_res["receptor"]}
+    labels = adata.obs["@label"].cat.categories
+    labels_pos = {labels[i]: i for i in range(labels.shape[0])}
+    return ligand_pos, receptor_pos, labels_pos
+
+
+def _patched_generate_perms_cube(X, n_perms, labels_mask, seed, agg_fun, n_jobs, verbose):  # noqa: N803
+    """Sparse matvec replacement for liana's per-permutation boolean slicing.
+
+    liana's version does ``X[perm_idx]`` followed by per-group boolean row
+    slicing (``perm_mat[labels_mask[:, i]]``) for every group and every
+    permutation — each slice triggers csr_sort_indices / csr_sum_duplicates
+    (131s of 242s on a 71.5k-cell dataset).  Here all permutation index
+    vectors are generated up front with the identical RNG stream, then each
+    permutation's per-group column sums come from a single sparse matvec
+    ``X.T @ S`` where S is the one-hot group assignment scattered by the
+    permuted row order.  ``agg_fun == np.mean`` (CellPhoneDB, the only
+    permutation method in rank_aggregate) is supported; other aggs fall back
+    to liana's original implementation.
+    """
+    import numpy as np
+    from joblib import Parallel, delayed
+
+    rng = np.random.default_rng(seed=seed)
+    idx = np.arange(X.shape[0])
+    group_id = np.argmax(labels_mask, axis=1)
+    n_groups = labels_mask.shape[1]
+    n_cells, n_genes = X.shape
+
+    if agg_fun is np.mean:
+        perms = np.zeros((n_perms, n_groups, n_genes))
+        xt = X.T.tocsr()
+        if n_cells * n_genes * 4 >= _SCALE_DENSE_BYTES_THRESHOLD:
+            xt = X.T  # zero-copy csc view; keeps ~18 GB off at 1M+ cells
+        inv = np.asarray(labels_mask.sum(axis=0)).ravel()
+        inv = 1.0 / inv
+        inv[~np.isfinite(inv)] = np.nan
+
+        def _agg_one(perm, pidx):
+            s = np.zeros((n_cells, n_groups))
+            s[pidx, group_id] = 1.0
+            m = xt.dot(s)
+            m *= inv[None, :]
+            return perm, m
+
+        results = Parallel(n_jobs=n_jobs, prefer="threads")(
+            delayed(_agg_one)(perm, rng.permutation(idx)) for perm in range(n_perms)
+        )
+        for perm, m in results:
+            perms[perm] = m.T
+        return perms
+
+    # Non-mean aggs (e.g. CellChat trimean) — liana's original, threads only
+    from liana.method._pipe_utils._get_mean_perms import _permute_and_aggregate
+
+    results = Parallel(n_jobs=min(n_jobs, 4), prefer="threads")(
+        delayed(_permute_and_aggregate)(perm, rng.permutation(idx), X, labels_mask, agg_fun)
+        for perm in range(n_perms)
+    )
+    perms = np.zeros((n_perms, n_groups, n_genes))
+    for perm, permuted_means in results:
+        perms[perm] = np.reshape(permuted_means, (n_groups, n_genes))
+    return perms
+
+
+def _patched_get_lr(
+    adata, resource, groupby_pairs, relevant_cols, mat_mean, mat_max, de_method, base, verbose
+):
+    """Sparse-safe _get_lr for very large adata (avoids connectome dense scale).
+
+    liana's connectome method materializes ``sc.pp.scale(adata, copy=True)`` --
+    a full dense (n_obs x n_vars x 4B) copy of X.  At 1.05M x 34.6k that is
+    ~146 GB and OOMs.  scale() is column-wise and its only consumer is
+    ``temp.layers['scaled'].mean(axis=0)`` -- the per-label *mean* of the
+    global z-scores; mean over label cells commutes with the linear
+    z-transform: mean_L((x - mu)/sigma) == (mean_L(x) - mu)/sigma.  Global
+    (mu, sigma) come from one sparse pass using scanpy's own sparse variance
+    formula (E[x^2] - mu^2, ddof=0), so the dense layer is never built and
+    the per-label z-score means differ from liana's only by float summation
+    order (~1e-7).
+    """
+    n_obs, n_vars = adata.X.shape
+    if n_obs * n_vars * 4 < _SCALE_DENSE_BYTES_THRESHOLD:
+        return _ORIG_GET_LR(
+            adata,
+            resource,
+            groupby_pairs,
+            relevant_cols,
+            mat_mean,
+            mat_max,
+            de_method,
+            base,
+            verbose,
+        )
+
+    import liana.method.sc._liana_pipe as lp
+    import numpy as np
+    import pandas as pd
+    import scanpy as sc
+    from liana._constants import (
+        CommonColumns as _C,  # noqa: N814
+    )
+    from liana._constants import (
+        InternalValues as _I,  # noqa: N814
+    )
+    from liana._constants import (
+        MethodColumns as _M,  # noqa: N814
+    )
+    from liana._constants import (
+        PrimaryColumns as _P,  # noqa: N814
+    )
+    from liana.method._pipe_utils._common import _get_props, _join_stats
+
+    labels = adata.obs[_I.label].cat.categories
+
+    # Method-specific stats
+    connectome_flag = (_M.ligand_zscores in relevant_cols) | (_M.receptor_zscores in relevant_cols)
+    logfc_flag = (_M.ligand_logfc in relevant_cols) | (_M.receptor_logfc in relevant_cols)
+
+    # Global (mu, sigma) in one sparse pass — replaces the dense sc.pp.scale
+    mtx = adata.X
+    n_rows = mtx.shape[0]
+    mu = mtx.sum(axis=0).A1 / n_rows
+    sigma = np.sqrt(mtx.multiply(mtx).sum(axis=0).A1 / n_rows - mu * mu)
+
+    if logfc_flag:
+        adata.layers["normcounts"] = mtx.copy()
+        adata.layers["normcounts"].data = lp._expm1_base(mtx.data, base)
+
+    # initialize dict
+    dedict = {}
+
+    # Calc pvals + other stats per gene or not
+    rank_genes_bool = (_C.ligand_pvals in relevant_cols) | (_C.receptor_pvals in relevant_cols)
+    if rank_genes_bool:
+        adata = sc.tl.rank_genes_groups(
+            adata, groupby=_I.label, method=de_method, use_raw=False, copy=True
+        )
+
+    for label in labels:
+        temp = adata[adata.obs[_I.label] == label, :]
+        a = _get_props(temp.X)
+        stats = (
+            pd.DataFrame({"names": temp.var_names, "props": a})
+            .assign(label=label)
+            .sort_values("names")
+        )
+        if rank_genes_bool:
+            pvals = sc.get.rank_genes_groups_df(adata, label)
+            stats = stats.merge(pvals)
+        dedict[label] = stats
+
+    # check if genes are ordered correctly
+    if not list(adata.var_names) == list(dedict[labels[0]]["names"]):
+        raise AssertionError("Variable names did not match DE results!")
+
+    # Calculate Mean, logFC and z-scores by group
+    for label in labels:
+        temp = adata[adata.obs[_I.label].isin([label])]
+        dedict[label]["means"] = temp.X.mean(axis=0).A.flatten()
+        if connectome_flag:
+            # mean over label cells commutes with the linear z-transform
+            dedict[label]["zscores"] = (dedict[label]["means"] - mu) / sigma
+        if logfc_flag:
+            dedict[label]["logfc"] = lp._calc_log2fc(adata, label)
+        if isinstance(mat_max, np.float32):  # cellchat flag
+            dedict[label]["trimean"] = lp._trimean(temp.X / mat_max)
+
+    pairs = pd.DataFrame(
+        np.array(np.meshgrid(labels, labels)).reshape(2, np.size(labels) * np.size(labels)).T
+    ).rename(columns={0: _P.source, 1: _P.target})
+
+    if groupby_pairs is not None:
+        pairs = pairs.merge(groupby_pairs, on=[_P.source, _P.target], how="inner")
+
+    # Join Stats
+    lr_res = pd.concat(
+        [
+            _join_stats(source, target, dedict, resource)
+            for source, target in zip(pairs[_P.source], pairs[_P.target], strict=False)
+        ]
+    )
+
+    if _M.mat_mean in relevant_cols:
+        assert isinstance(mat_mean, np.float32)
+        lr_res[_M.mat_mean] = mat_mean
+
+    if isinstance(mat_max, np.float32):
+        lr_res[_M.mat_max] = mat_max
+
+    # subset to only relevant columns
+    relevant_cols = np.intersect1d(relevant_cols, lr_res.columns)
+
+    return lr_res[relevant_cols]
+
+
+def _patched_prep_check_adata(
+    adata,
+    groupby,
+    min_cells,
+    groupby_subset=None,
+    use_raw=False,
+    layer=None,
+    obsm=None,
+    uns=None,
+    complex_sep="_",
+    verbose=False,
+):
+    """prep_check_adata without the full-X deep copy and with chunked finite check.
+
+    liana's original builds ``sc.AnnData(X=X, obs=..., var=..., obsp=...,
+    uns=..., obsm=...).copy()`` -- a deep copy of the whole expression matrix
+    (25.6 GB at 1.05M x 34.6k genes, int64 indices) -- then checks
+    ``np.isfinite(adata.X.data)`` over all 2.26B entries at once, allocating
+    two 2.1 GB bool temporaries.  Both OOM on very large data.  The Step 12
+    loader hands liana a disposable lightweight AnnData, so the copy is
+    dropped; the finite-value check is chunked (512M entries at a time).
+    Everything else mirrors liana's original semantics exactly.
+    """
+    import numpy as np
+    import scanpy as sc
+    from liana._logging import _logg
+    from liana.method._pipe_utils._pre import _check_groupby, _choose_mtx_rep, check_vars
+
+    mtx = _choose_mtx_rep(adata=adata, use_raw=use_raw, layer=layer, verbose=verbose)
+
+    if use_raw and layer is None:
+        var = pd.DataFrame(index=adata.raw.var_names)
+    else:
+        var = pd.DataFrame(index=adata.var_names)
+
+    if obsm is not None:
+        # discard any instances of AnnData if in obsm
+        obsm = {k: v for k, v in obsm.items() if not isinstance(v, object)}
+
+    adata = sc.AnnData(
+        X=mtx,
+        obs=adata.obs.copy(),
+        var=var,
+        obsp=adata.obsp.copy(),
+        uns=uns,
+        obsm=obsm,
+    )
+    adata.var_names_make_unique()
+
+    # Check for empty features
+    msk_features = np.sum(adata.X, axis=0).A1 == 0
+    n_empty_features = np.sum(msk_features)
+    if n_empty_features > 0:
+        _logg(
+            f"{n_empty_features} features of mat are empty, they will be removed.",
+            level="warn",
+            verbose=verbose,
+        )
+        adata = adata[:, ~msk_features]
+
+    # Check for empty samples
+    msk_samples = adata.X.sum(axis=1).A1 == 0
+    n_empty_samples = np.sum(msk_samples)
+    if n_empty_samples > 0:
+        _logg(
+            f"{n_empty_samples} samples of mat are empty, they will be removed.",
+            level="warn",
+            verbose=verbose,
+        )
+
+    # Check if log-norm
+    data = adata.X.data if hasattr(adata.X, "data") else adata.X
+    _sum = np.sum(data[0:100])
+    if _sum == np.floor(_sum):
+        _logg("Make sure that normalized counts are passed!", level="warn", verbose=verbose)
+
+    # Check for non-finite values (chunked to bound the bool temporaries)
+    chunk = 512_000_000
+    if data.size > chunk:
+        finite = True
+        for i in range(0, data.size, chunk):
+            if np.any(~np.isfinite(data[i : i + chunk])):
+                finite = False
+                break
+    else:
+        finite = bool(np.all(np.isfinite(data)))
+    if not finite:
+        raise ValueError(
+            "mat contains non finite values (nan or inf), please set them to 0 or remove them."
+        )
+
+    if groupby is not None:
+        _check_groupby(adata, groupby, verbose)
+
+        if groupby_subset is not None:
+            adata = adata[adata.obs[groupby].isin(groupby_subset), :]
+
+        adata.obs["@label"] = adata.obs[groupby]
+
+        # Remove any cell types below X number of cells per cell type
+        count_cells = adata.obs.groupby(groupby)[groupby].size().reset_index(name="count").copy()
+        count_cells["keep"] = count_cells["count"] >= min_cells
+
+        if not all(count_cells.keep):
+            lowly_abundant_idents = list(count_cells[~count_cells.keep][groupby])
+            # remove lowly abundant identities
+            msk = ~np.isin(adata.obs[[groupby]], lowly_abundant_idents)
+            adata = adata[msk]
+            _logg(
+                "The following cell identities were excluded: {}".format(
+                    ", ".join(lowly_abundant_idents)
+                ),
+                level="warn",
+                verbose=verbose,
+            )
+
+    check_vars(adata.var_names, complex_sep=complex_sep, verbose=verbose)
+    # Re-order adata vars alphabetically
+    adata = adata[:, np.sort(adata.var_names)]
+    return adata
+
+
+def _patched_sparse_mean(self, axis=None, dtype=None, out=None):
+    """Chunked mean for very large sparse matrices.
+
+    scipy's sparse mean(axis=None) computes ``(X * (1/denom)).sum()`` -- the
+    scalar multiplication materializes a full nnz temporary (8.4 GB at 2.26B
+    non-zeros).  Mathematically identical: sum(data) / prod(shape) for
+    axis=None.  Small matrices keep scipy's original path (bit-identical).
+    """
+    import math
+
+    import numpy as np
+
+    if axis is None and out is None and self.data.size > _SPARSE_MEAN_CHUNK:
+        denom = math.prod(self.shape)
+        total = np.float64(0.0)
+        data = self.data
+        for i in range(0, data.size, _SPARSE_MEAN_CHUNK):
+            total += np.sum(data[i : i + _SPARSE_MEAN_CHUNK], dtype=np.float64)
+        res = total / denom
+        if dtype is not None:
+            res = res.astype(dtype, copy=False)
+        return res
+    return _ORIG_SPARSE_MEAN(self, axis=axis, dtype=dtype, out=out)
+
+
+def _patch_liana_perf():
+    """Apply the Step 12 hot-path patches to the installed liana package.
+
+    Idempotent; safe no-op when liana is not importable (RNA/spatial steps
+    degrade to liana's original implementation instead of crashing).
+    """
+    global _PATCHED_LIANA, _ORIG_GET_LR, _ORIG_PREP_CHECK_ADATA, _ORIG_SPARSE_MEAN
+    if _PATCHED_LIANA:
+        return
+    try:
+        import liana.method._pipe_utils as pu
+        import liana.method._pipe_utils._get_mean_perms as gmp
+        import liana.method._pipe_utils._pre as pre
+        import liana.method.sc._liana_pipe as lp
+
+        if getattr(gmp, "_get_positions", None) is not _patched_get_positions:
+            gmp._get_positions = _patched_get_positions
+        if getattr(gmp, "_generate_perms_cube", None) is not _patched_generate_perms_cube:
+            gmp._generate_perms_cube = _patched_generate_perms_cube
+
+        if getattr(pre, "prep_check_adata", None) is not _patched_prep_check_adata:
+            _ORIG_PREP_CHECK_ADATA = pre.prep_check_adata
+            pre.prep_check_adata = _patched_prep_check_adata
+        if getattr(pu, "prep_check_adata", None) is not _patched_prep_check_adata:
+            pu.prep_check_adata = _patched_prep_check_adata
+        if getattr(lp, "prep_check_adata", None) is not _patched_prep_check_adata:
+            lp.prep_check_adata = _patched_prep_check_adata
+
+        if getattr(lp, "_get_lr", None) is not _patched_get_lr:
+            _ORIG_GET_LR = lp._get_lr
+            lp._get_lr = _patched_get_lr
+
+        import scipy.sparse._base as spb
+
+        if getattr(spb._spbase, "mean", None) is not _patched_sparse_mean:
+            _ORIG_SPARSE_MEAN = spb._spbase.mean
+            spb._spbase.mean = _patched_sparse_mean
+        _PATCHED_LIANA = True
+    except ImportError:
+        pass
+
+
 def run_cci_permutation(
     adata,
     groupby_col: str = "cell_type",
@@ -201,7 +628,7 @@ def run_cci_permutation(
     seed: int = 1337,
     use_raw: bool = True,
     layer: str | None = None,
-    n_jobs: int = 1,  # noqa: ARG001 (deprecated, kept for backward compat)
+    n_jobs: int = 1,
     log: object = None,
 ) -> pd.DataFrame:
     """Run LIANA+ rank_aggregate permutation testing for ligand-receptor
@@ -226,21 +653,14 @@ def run_cci_permutation(
         Explicit layer key holding raw UMI counts (e.g. 'counts').
         When set, takes precedence over `use_raw` for LIANA's expression input.
     n_jobs : int
-        Number of parallel jobs for the permutation test.
+        Number of parallel jobs for the permutation test (threads; the RNG
+        stream is unchanged regardless of n_jobs).
     log : object, optional
         Logger with .info() method.
-    n_jobs : int
-        Number of parallel jobs for the permutation test.
-    log : object, optional
-        Logger with .info() method.
-
-    Returns
-    -------
-    pd.DataFrame
-        LIANA results with columns: source, target, ligand, receptor,
-        magnitude_rank, specificity_rank, pvalue, etc.
     """
     import liana as li
+
+    _patch_liana_perf()
 
     t0 = time.time()
     if log:
@@ -261,6 +681,7 @@ def run_cci_permutation(
         layer=layer,
         inplace=False,
         verbose=False,
+        n_jobs=n_jobs,
     )
     if lr_res is None:
         raise RuntimeError("LIANA rank_aggregate returned no result table")

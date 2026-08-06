@@ -27,7 +27,6 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 import matplotlib
 import matplotlib.pyplot as plt
-import scanpy as sc
 
 from core.utils import resolve_config, save_figure, setup_logger, timed_substep
 
@@ -251,6 +250,64 @@ def plot_dotplot(top_df, cfg, log):
 # ═══════════════════════════════════════════════════════════════════════
 
 
+def _read_h5_sparse(group):
+    """Read an h5ad sparse matrix group with h5py (no anndata materialization).
+
+    anndata's backed reader materializes the whole matrix through its own
+    path (peaks at ~2x RSS at 1.05M cells x 34.6k genes); h5py reads the
+    raw data/indices/indptr arrays directly (~1x RSS).  Supports csr/csc
+    """
+    import scipy.sparse as sp
+
+    encoding = group.attrs.get("encoding-type", "")
+    if encoding in ("csr_matrix", "csc_matrix"):
+        shape = tuple(int(s) for s in group.attrs["shape"])
+        data = group["data"][()]
+        indices = group["indices"][()]
+        indptr = group["indptr"][()]
+        if encoding == "csr_matrix":
+            return sp.csr_matrix((data, indices, indptr), shape=shape)
+        return sp.csc_matrix((data, indices, indptr), shape=shape)
+    return group[()]
+
+
+def _load_cci_data(adata_path, log):
+    """Lightweight Step 12 loader: obs + expression matrix only.
+
+    obs is read via anndata's backed reader (keeps categorical encodings);
+    the expression matrix (counts layer → raw.X → X) is read directly with
+    h5py so var_names align exactly with the matrix LIANA consumes.  Returns
+    a disposable AnnData; downstream use_raw/layer are disabled.
+    """
+    import anndata as ad
+    import h5py
+    import numpy as np
+    import pandas as pd
+    import scanpy as sc
+
+    adata = sc.read_h5ad(adata_path, backed="r")
+    obs = adata.obs.copy()
+
+    with h5py.File(adata_path, "r") as f:
+        if "layers" in f and "counts" in f["layers"]:
+            expr = _read_h5_sparse(f["layers"]["counts"])
+            var_names = np.asarray(adata.var_names)
+            log.info("Loaded adata.layers['counts'] for expression (explicit counts)")
+        elif "raw" in f and "X" in f["raw"]:
+            expr = _read_h5_sparse(f["raw"]["X"])
+            var_names = np.asarray(adata.raw.var_names)
+            log.info("Loaded adata.raw.X for expression (full transcriptome, log-normalized)")
+        elif "X" in f:
+            expr = _read_h5_sparse(f["X"])
+            var_names = np.asarray(adata.var_names)
+            log.warning("Loaded adata.X for expression (no counts layer or raw)")
+        else:
+            raise ValueError(f"No expression matrix found in {adata_path}")
+    adata.file.close()
+
+    return ad.AnnData(X=expr, obs=obs, var=pd.DataFrame(index=var_names))
+
+
 def main():
     t0 = time.time()
     args_parser = argparse.ArgumentParser()
@@ -273,30 +330,20 @@ def main():
         sys.exit(1)
 
     log.info("Loading: %s", adata_path)
-    adata = sc.read(adata_path)
+    adata = _load_cci_data(adata_path, log)
 
     # Resolve grouping column
     group_col = "cell_type" if "cell_type" in adata.obs.columns else "leiden"
     log.info("Grouping by: %s (%d groups)", group_col, adata.obs[group_col].nunique())
 
-    # ── 表达矩阵语义：优先显式 counts layer；否则 .raw（全基因 log-normalized）──
-    # NOTE(2026-08-01): 03 的 .raw 是全基因 normalize+log1p 表达（非 raw counts）；
-    # 若 05_annotated 携带显式 counts layer（如 scVI 分支的 adata.layers['counts']）
-    # 则优先用它，并让 LIANA 走 layer= 通道（语义更准确）。
-    counts_layer = "counts" if "counts" in adata.layers else None
-    use_raw = counts_layer is None and adata.raw is not None
-    if counts_layer:
-        log.info("Using adata.layers['counts'] for expression (explicit counts)")
-    elif use_raw:
-        log.info("Using adata.raw for expression (full transcriptome, log-normalized)")
-    else:
-        log.warning(
-            "Neither counts layer nor adata.raw available — using adata.X; ",
-            "ensure it contains normalized counts suitable for LIANA",
-        )
+    # ── 表达矩阵已由 _load_cci_data 烘焙进 X（counts layer → raw.X → X），
+    #    轻量加载使 var_names 与矩阵列严格对齐；LIANA 直接消费 X，不再走
+    #    use_raw/layer 通道（use_raw 指向的 .raw 对象不在轻量 AnnData 中）。
+    counts_layer = None
+    use_raw = False
 
-    n_jobs = getattr(cfg.execution, "n_jobs", 1) or 1
-    if n_jobs == 0:
+    n_jobs = getattr(cfg.execution, "n_jobs", 0) or 0
+    if n_jobs <= 0:
         n_jobs = os.cpu_count() or 4
         log.info("n_jobs=0 → auto-detected %d cores", n_jobs)
 
