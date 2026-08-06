@@ -90,7 +90,6 @@ def resolve_memory_settings(cfg: Any) -> tuple[str, int, str]:
 #   knn_index ~ manifold * 250B;  knn_result = n_cells * k_adj * 4B
 #   sparse X = n_cells * n_genes * 4B * density (density = nnz / total)
 #   zscore   = n_cells * n_genes * density * dtype
-#   zscore   = n_cells * n_genes * density * dtype
 #   worker   = base 0.8 GiB + per-worker manifold index share
 def _estimate_step01_peak(n_cells: int, n_genes: int, nnz: int, budget_bytes: int) -> float:
     import os
@@ -148,65 +147,149 @@ def _estimate_step04_peak(n_cells: int) -> float:
     return 21.0 + 45.0 * (n_cells - 620_000) / 1e6
 
 
-def estimate_step_peak(
-    step: int,
+# Step 05 — KB annotation on the annotated object.
+def _estimate_step05_peak(
+    n_cells: int, n_genes: int, nnz: int, approximation: str = "exact"
+) -> float:
+    """Estimated peak RSS (GB) for step 05 (KB annotation).
+
+    exact: raw CSR (~12B/nnz) + transposed copy + adata overhead.
+    fast : cluster-downsampled workloads shrink with the sample; the
+    n_cells (sampled nnz is bounded by sampling*n_genes)."""
+    raw_csr = nnz * 12 / 1e9
+    if approximation == "fast":
+        # downsampled workloads shrink transposed/rank buffers, but the
+        # raw + X views stay resident and the 05 h5ad write is unchanged
+        return max(5.0, raw_csr * 1.4 + 5.0)
+    # exact: raw + X CSR stay resident (~24B/nnz when X is full-gene, as in
+    # stress atlases) plus the transposed copy; calibrated on the 1.05M and
+    # 1.93M cell runs (formula previously underestimated peak by ~10%).
+    return max(8.0, raw_csr * 2.25 + 6.0)
+
+
+# Step 06 — subcluster on one cell type.  Dual-variable: the parent
+# 05_annotated full read materialises raw (full-gene dense lognorm, ~4B/gene)
+# and the subset work materialises sub_raw from 02_qc + PCA dense:
+#   parent_read = parent_cells * parent_genes * 4B        (transient peak)
+#   sub_dense   = n_cells * n_genes * 4B                 (to_memory + PCA)
+#   sub_sparse  = nnz * 12B                              (resident CSR copy)
+# Calibrated: 61k subset @ 27k genes -> ~8-9 GB peak; small subsets floor
+# at ~2.5 GB.  Wall-clock: t = 5 + 0.30ms*parent_cells + 2.4ms*n_cells
+# (GSE118546 61k: 5 + 18 + 146 = 169s vs 156.7s measured).
+def _estimate_step06_wall(n_cells: int, parent_cells: int = 0) -> float:
+    """Estimated wall-clock (s) for step 06 (GPU subcluster path).
+
+    Fixed ~5s startup + full parent read (~0.30ms/cell of parent 05, sc.read
+    materialising raw) + subset compute (neighbors/UMAP/leiden/plot ~2.4ms/cell)
+    + h5ad write (~0.1ms/cell).  Calibrated on GSE118546 61k (156.7s) and
+    four other post-optimisation runs (2.5k-52k cells, +-20%)."""
+    return 5.0 + 0.30e-3 * parent_cells + 2.4e-3 * n_cells + 0.1e-3 * n_cells
+
+
+def _estimate_step06_peak(
     n_cells: int,
     n_genes: int,
-    nnz: int = 0,
-    policy: str = "speed",
-    budget_bytes: int = 0,
-    approximation: str = "exact",
+    nnz: int,
     parent_cells: int = 0,
     parent_genes: int = 0,
-    plot_max_cells: int = 20_000,
 ) -> float:
-    """Estimated peak RSS (GB) for a pipeline step.
+    """Estimated peak RSS (GB) for step 06 (subcluster).
 
-    For step 06 the first three arguments describe the *subset* (cells /
-    full gene count / subset nnz); ``parent_cells`` / ``parent_genes``
-    describe the parent 05_annotated object whose full read dominates the
-    loading phase."""
-    if step == 1:
-        return _estimate_step01_peak(n_cells, n_genes, nnz, budget_bytes)
-    if step == 2:
-        return _estimate_step02_peak(nnz)
-    if step == 3:
-        return _estimate_step03_peak(n_cells, n_genes, nnz, policy)
-    if step == 4:
-        return _estimate_step04_peak(n_cells)
-    if step == 5:
-        return _estimate_step05_peak(n_cells, n_genes, nnz, approximation)
-    if step == 6:
-        return _estimate_step06_peak(
-            n_cells,
-            n_genes,
-            nnz,
-            parent_cells=parent_cells,
-            parent_genes=parent_genes,
-        )
-    if step == 7:
-        return _estimate_step07_peak(n_cells, n_genes, nnz, approximation=approximation)
-    if step == 8:
-        return _estimate_step08_peak(
-            n_cells,
-            n_genes,
-            nnz,
-            parent_genes=parent_genes,
-        )
-    if step == 9:
-        return _estimate_step09_peak(n_cells, n_genes, nnz)
-    if step == 10:
-        return _estimate_step10_peak(
-            n_cells,
-            n_genes,
-            nnz,
-            plot_max_cells=plot_max_cells,
-        )
-    if step == 11:
-        return _estimate_step11_peak()
-    if step == 12:
-        return _estimate_step12_peak(nnz)
-    return 0.0
+    ``n_cells/n_genes/nnz`` describe the subset; ``parent_cells/parent_genes``
+    the parent 05_annotated (defaults to the subset when omitted)."""
+    parent_read_gb = parent_cells * (parent_genes or n_genes) * 4 / 1e9
+    sub_dense_gb = n_cells * n_genes * 4 / 1e9
+    sub_sparse_gb = nnz * 12 / 1e9
+    return max(2.5, max(parent_read_gb, sub_dense_gb + sub_sparse_gb) + 1.5)
+
+
+# Step 07 — DE on the annotated object.  Two regimes:
+#
+#   use_raw=True (default):  the whole raw gene set is DE'd; peak is dominated
+#     by the in-memory raw CSR + the wilcoxon transpose (xt) working set, i.e.
+#     ~ file_size x 6-8 (zstd decompress + sparse->dense + xt).  Anchors:
+#       71.5k x 4002 (nnzRaw 158M):  12.1 GB   (wall 85.7s)
+#       136k  x 4002 (nnzRaw 229M):  16.3 GB   (wall 158.6s)
+#       234k  x 33770 (nnzRaw 658M): 25.0 GB   (wall ~300s, re-run estimate)
+#
+#   use_raw=False:  backed load + raw dropped -> only the HVG X dense slice
+#     stays resident; peak ~ 1.5 x X dense + base.  Anchors:
+#       1.05M x 4000: 13.3 GB (wall 182.3s)
+#       1.68M x 4000: 21.4 GB (wall 295.3s)
+#
+#   Wall-clock: two regimes split at the 50k fast-path threshold
+#     (numba patches active above it):
+#       slow (<50k cells):    wall = 5.0e-4 * (n*g)^0.666
+#       fast (>=50k cells):   wall = 1.2 * (n*g)^0.229 * (1.0 if raw else 0.55)
+
+
+def _estimate_step07_peak(
+    n_cells: int, n_genes: int, nnz: int, approximation: str = "exact"
+) -> float:
+    """Estimated peak RSS (GB) for step 07 (multi-layer DE).
+
+    ``n_genes`` is the DE gene count (HVG ~4000 when ``use_raw=False``, else
+    the raw gene set ~34k); ``nnz`` should be the *raw* matrix nnz when
+    available (CSR 12B/nnz on disk, ~6-8x decompressed in memory).
+    """
+    if approximation == "fast":
+        # use_raw=False / backed path: HVG dense X only (n x 4000 x 4B)
+        x_mib = n_cells * 4000 * 4 / 2**20
+        return max(2.0, x_mib * 0.9 / 1e3 + 1.7)
+    # exact: raw CSR resident + wilcoxon xt transpose.
+    # Calibrated on 9 measured step-07 runs; the per-nnz cost shrinks with
+    # matrix size (transpose chunking amortises), so a plain linear fit
+    # over-predicts at >600M nnz.  Two-segment model: A≈5.5 below 60M nnz,
+    # A≈3.2 above (GSE116106/241268/249004 anchors; Zuo2024 658M).
+    raw_gb = nnz * 12 / 1e9
+    a_coef = 5.5 if nnz < 60_000_000 else 3.2
+    x_gb = n_cells * 4000 * 4 / 1e9
+    return max(3.0, raw_gb * a_coef + x_gb + 1.7)
+
+
+def _estimate_step07_wall(n_cells: int, n_genes: int, use_raw: bool = True) -> float:
+    """Estimated wall-clock (s) for step 07; split at the 50k fast-path gate."""
+    work = n_cells * n_genes
+    if n_cells < 50_000:
+        return 5.0e-4 * work**0.666
+    return 1.2 * work**0.229 * (1.0 if use_raw else 0.55)
+
+
+# Step 08 — trajectory (PAGA/DPT) on the annotated object.  Peak is
+#   dominated by the 05_final raw (full-gene *dense* lognorm, 4B/gene —
+#   unlike step 07's sparse raw), read once and held with the HVG X +
+#   dense diffmap (n x 15 x 8B) + per-branch X[mask] DE copies.  Anchors
+#   (post-optimisation runs):
+#     2.3k  x 58.8k (GSE107618):  1.9 GB   (wall 11.8s)
+#     17.8k x 32.5k (GSE202212):  2.7 GB   (wall 51.6s)
+#     33.9k x 29.0k (GSE122680):  4.9 GB   (wall 153.0s)
+#     39.3k x 33.7k (GSE116106):  7.9 GB   (wall 257.9s)
+#     71.5k x 32.3k (GSE241268): 18.9 GB   (wall 138.4s — kendall patched,
+#                                        few branches; upper bound 3.5x here)
+def _estimate_step08_peak(n_cells: int, n_genes: int, nnz: int, parent_genes: int = 0) -> float:
+    """Estimated peak RSS (GB) for step 08 (trajectory).
+
+    ``n_genes`` is the *full* raw gene count (the dense raw dominates);
+    ``nnz`` is only used as a floor via the X sparse term.  Calibrated so
+    every anchor is an upper bound: raw_dense x 1.7 fits GSE241268
+    (18.9 GB) and over-covers the four smaller anchors."""
+    g_full = parent_genes or n_genes
+    raw_dense = n_cells * g_full * 4 / 1e9
+    x_hvg = n_cells * n_genes * 4 * 0.10 / 1e9
+    diffmap = n_cells * 15 * 8 / 1e9
+    return max(2.5, 1.5 + raw_dense * 1.7 + x_hvg + diffmap + 1.0)
+
+
+def _estimate_step08_wall(n_cells: int, n_genes: int, n_branches: int = 10) -> float:
+    """Estimated wall-clock (s) for step 08 — conservative upper bound.
+
+    Linear load/DPT term + O(n x g) vectorised Spearman (HVG scale,
+    capped at 4000 genes) + per-branch DE.  Not strictly monotonic in n:
+    GSE116106 (39.3k, 9 stages) runs 257.9s while GSE241268 (71.5k, 2
+    groups) runs 138.4s because branch count and KB trend-gene count
+    dominate."""
+    g_eff = min(n_genes, 4000)
+    return 5.0 + 1.5e-3 * n_cells + 1.3e-6 * n_cells * g_eff + 1.2e-4 * n_branches * g_eff
 
 
 # Step 09 — enrichment.  Reads 05_annotated.h5ad (zstd) for the marker-
@@ -277,159 +360,104 @@ def _estimate_step11_wall(nnz: int) -> float:
     return 3.5 + nnz / 1e9 * 10.0
 
 
-# Step 12 — cell-cell interaction (LIANA).  Reads 05_annotated in full
-#   (raw CSR 12B/nnz) + permutation-test intermediates.  Order-of-magnitude
-#   anchor only — not RSS-calibrated yet.
+# Step 12 — cell-cell interaction (LIANA).  Reads 05_annotated in full:
+#   raw CSR (12B/nnz, int64 indices) stays resident for the whole step;
+#   the LR-filtered slice (~10% of nnz, int32) plus its normcounts copy
+#   (logfc always triggers) add a second term; the permutation cube is a
+#   sparse matvec X.T @ S (MB-scale, ignored).  Calibrated on the 1.05M-
+#   cell Li2026_Lobe_Neurons run (peak 51.9 GB measured under a 60 GB
+#   RLIMIT; raw CSR 27.1 GB at 2.257e9 nnz):
+#     peak = 1.6 * (nnz*12e-9 + 2 * 0.1*nnz*8e-9 + 3)
 def _estimate_step12_peak(nnz: int) -> float:
-    return max(6.0, nnz * 12 / 1e9 * 1.5 + 3.0)
+    """Estimated peak RSS (GB) for step 12 (cell-cell interaction).
+
+    The full-gene raw CSR (12B/nnz) dominates; LIANA's filtered slice
+    (~10% of nnz) plus the normcounts layer copy are the second term.
+    ``nnz`` should be the *raw* matrix nnz.  Calibrated: Lobe_Neurons
+    2.257e9 nnz -> 53.9 GB est vs 51.9 GB measured."""
+    return max(6.0, 1.6 * (nnz * 12e-9 + 2 * 0.1 * nnz * 8e-9 + 3.0))
 
 
-# Step 08 — trajectory (PAGA/DPT) on the annotated object.  Peak is
-#   dominated by the 05_final raw (full-gene *dense* lognorm, 4B/gene —
-#   unlike step 07's sparse raw), read once and held with the HVG X +
-#   dense diffmap (n x 15 x 8B) + per-branch X[mask] DE copies.  Anchors
-#   (post-optimisation runs):
-#     2.3k  x 58.8k (GSE107618):  1.9 GB   (wall 11.8s)
-#     17.8k x 32.5k (GSE202212):  2.7 GB   (wall 51.6s)
-#     33.9k x 29.0k (GSE122680):  4.9 GB   (wall 153.0s)
-#     39.3k x 33.7k (GSE116106):  7.9 GB   (wall 257.9s)
-#     71.5k x 32.3k (GSE241268): 18.9 GB   (wall 138.4s — kendall patched,
-#                                        few branches; upper bound 3.5x here)
-def _estimate_step08_peak(n_cells: int, n_genes: int, nnz: int, parent_genes: int = 0) -> float:
-    """Estimated peak RSS (GB) for step 08 (trajectory).
-
-    ``n_genes`` is the *full* raw gene count (the dense raw dominates);
-    ``nnz`` is only used as a floor via the X sparse term.  Calibrated so
-    ``nnz`` is only used as a floor via the X sparse term.  Calibrated so
-    every anchor is an upper bound: raw_dense x 1.7 fits GSE241268
-    (18.9 GB) and over-covers the four smaller anchors."""
-    g_full = parent_genes or n_genes
-    raw_dense = n_cells * g_full * 4 / 1e9
-    x_hvg = n_cells * n_genes * 4 * 0.10 / 1e9
-    diffmap = n_cells * 15 * 8 / 1e9
-    return max(2.5, 1.5 + raw_dense * 1.7 + x_hvg + diffmap + 1.0)
-
-
-def _estimate_step08_wall(n_cells: int, n_genes: int, n_branches: int = 10) -> float:
-    """Estimated wall-clock (s) for step 08 — conservative upper bound.
-
-    Linear load/DPT term + O(n x g) vectorised Spearman (HVG scale,
-    capped at 4000 genes) + per-branch DE.  Not strictly monotonic in n:
-    GSE116106 (39.3k, 9 stages) runs 257.9s while GSE241268 (71.5k, 2
-    groups) runs 138.4s because branch count and KB trend-gene count
-    dominate."""
-    g_eff = min(n_genes, 4000)
-    return 5.0 + 1.5e-3 * n_cells + 1.3e-6 * n_cells * g_eff + 1.2e-4 * n_branches * g_eff
-
-
-# Step 07 — DE on the annotated object.  Two regimes:
-#
-#   use_raw=True (default):  the whole raw gene set is DE'd; peak is dominated
-#     by the in-memory raw CSR + the wilcoxon transpose (xt) working set, i.e.
-#     ~ file_size x 6-8 (zstd decompress + sparse->dense + xt).  Anchors:
-#       71.5k x 4002 (nnzRaw 158M):  12.1 GB   (wall 85.7s)
-#       136k  x 4002 (nnzRaw 229M):  16.3 GB   (wall 158.6s)
-#       234k  x 33770 (nnzRaw 658M): 25.0 GB   (wall ~300s, re-run estimate)
-#
-#   use_raw=False:  backed load + raw dropped -> only the HVG X dense slice
-#     stays resident; peak ~ 1.5 x X dense + base.  Anchors:
-#       1.05M x 4000: 13.3 GB (wall 182.3s)
-#       1.68M x 4000: 21.4 GB (wall 295.3s)
-#
-#   Wall-clock: two regimes split at the 50k fast-path threshold
-#     (numba patches active above it):
-#       slow (<50k cells):    wall = 5.0e-4 * (n*g)^0.666
-#       fast (>=50k cells):   wall = 1.2 * (n*g)^0.229 * (1.0 if raw else 0.55)
-
-
-def _estimate_step07_peak(
-    n_cells: int, n_genes: int, nnz: int, approximation: str = "exact"
+def _estimate_step12_wall(
+    nnz: int,
+    n_groups: int = 10,
+    permutations: int = 100,
+    n_jobs: int = 24,
 ) -> float:
-    """Estimated peak RSS (GB) for step 07 (multi-layer DE).
+    """Estimated wall-clock (s) for step 12 — three additive phases.
 
-    ``n_genes`` is the DE gene count (HVG ~4000 when ``use_raw=False``, else
-    the raw gene set ~34k); ``nnz`` should be the *raw* matrix nnz when
-    available (CSR 12B/nnz on disk, ~6-8x decompressed in memory).
-    """
-    if approximation == "fast":
-        # use_raw=False / backed path: HVG dense X only (n x 4000 x 4B)
-        x_mib = n_cells * 4000 * 4 / 2**20
-        return max(2.0, x_mib * 0.9 / 1e3 + 1.7)
-    # exact: raw CSR resident + wilcoxon xt transpose.
-    # Calibrated on 9 measured step-07 runs; the per-nnz cost shrinks with
-    # matrix size (transpose chunking amortises), so a plain linear fit
-    # over-predicts at >600M nnz.  Two-segment model: A≈5.5 below 60M nnz,
-    # A≈3.2 above (GSE116106/241268/249004 anchors; Zuo2024 658M).
-    raw_gb = nnz * 12 / 1e9
-    a_coef = 5.5 if nnz < 60_000_000 else 3.2
-    x_gb = n_cells * 4000 * 4 / 1e9
-    return max(3.0, raw_gb * a_coef + x_gb + 1.7)
+    Load: h5py direct sparse read + CSR build at ~2e7 elements/s (Lobe
+    2.257e9 nnz -> 113s).  Permutation cube: one sparse matvec X.T @ S
+    per permutation, thread-parallel at ~3.5e8 nnz*s/s/thread.  _get_lr:
+    per-group mean/zscore passes are *single-threaded* and do not shrink
+    with n_jobs.  Calibrated: Lobe_Neurons 100 perms -> 267.6s measured
+    (267 est); GSE241268 1000 perms -> 49.5s measured (39 est, -20%)."""
+    nnz_f = 0.1 * nnz  # LR-filtered slice (~10% of raw nnz)
+    load = nnz / 2e7
+    perm = nnz_f * n_groups * permutations / (n_jobs * 3.5e8)
+    lr = nnz_f * n_groups * 12 / 2e8
+    return load + perm + lr + 8.0
 
 
-def _estimate_step07_wall(n_cells: int, n_genes: int, use_raw: bool = True) -> float:
-    """Estimated wall-clock (s) for step 07; split at the 50k fast-path gate."""
-    work = n_cells * n_genes
-    if n_cells < 50_000:
-        return 5.0e-4 * work**0.666
-    return 1.2 * work**0.229 * (1.0 if use_raw else 0.55)
-
-
-def _estimate_step06_wall(n_cells: int, parent_cells: int = 0) -> float:
-    """Estimated wall-clock (s) for step 06 (GPU subcluster path).
-
-    Fixed ~5s startup + full parent read (~0.30ms/cell of parent 05, sc.read
-    materialising raw) + subset compute (neighbors/UMAP/leiden/plot ~2.4ms/cell)
-    + h5ad write (~0.1ms/cell).  Calibrated on GSE118546 61k (156.7s) and
-    four other post-optimisation runs (2.5k-52k cells, +-20%)."""
-    return 5.0 + 0.30e-3 * parent_cells + 2.4e-3 * n_cells + 0.1e-3 * n_cells
-
-
-# Step 06 — subcluster on one cell type.  Dual-variable: the parent
-
-
-# Step 06 — subcluster on one cell type.  Dual-variable: the parent
-# 05_annotated full read materialises raw (full-gene dense lognorm, ~4B/gene)
-# and the subset work materialises sub_raw from 02_qc + PCA dense:
-#   parent_read = parent_cells * parent_genes * 4B        (transient peak)
-#   sub_dense   = n_cells * n_genes * 4B                 (to_memory + PCA)
-#   sub_sparse  = nnz * 12B                              (resident CSR copy)
-# Calibrated: 61k subset @ 27k genes -> ~8-9 GB peak; small subsets floor
-# at ~2.5 GB.  Wall-clock: t = 5 + 0.30ms*parent_cells + 2.4ms*n_cells
-# (GSE118546 61k: 5 + 18 + 146 = 169s vs 156.7s measured).
-def _estimate_step06_peak(
+def estimate_step_peak(
+    step: int,
     n_cells: int,
     n_genes: int,
-    nnz: int,
+    nnz: int = 0,
+    policy: str = "speed",
+    budget_bytes: int = 0,
+    approximation: str = "exact",
     parent_cells: int = 0,
     parent_genes: int = 0,
+    plot_max_cells: int = 20_000,
 ) -> float:
-    """Estimated peak RSS (GB) for step 06 (subcluster).
+    """Estimated peak RSS (GB) for a pipeline step.
 
-    ``n_cells/n_genes/nnz`` describe the subset; ``parent_cells/parent_genes``
-    the parent 05_annotated (defaults to the subset when omitted)."""
-    parent_read_gb = parent_cells * (parent_genes or n_genes) * 4 / 1e9
-    sub_dense_gb = n_cells * n_genes * 4 / 1e9
-    sub_sparse_gb = nnz * 12 / 1e9
-    return max(2.5, max(parent_read_gb, sub_dense_gb + sub_sparse_gb) + 1.5)
-
-
-def _estimate_step05_peak(
-    n_cells: int, n_genes: int, nnz: int, approximation: str = "exact"
-) -> float:
-    """Estimated peak RSS (GB) for step 05 (KB annotation).
-
-    exact: raw CSR (~12B/nnz) + transposed copy + adata overhead.
-    fast : cluster-downsampled workloads shrink with the sample; the
-    n_cells (sampled nnz is bounded by sampling*n_genes)."""
-    raw_csr = nnz * 12 / 1e9
-    if approximation == "fast":
-        # downsampled workloads shrink transposed/rank buffers, but the
-        # raw + X views stay resident and the 05 h5ad write is unchanged
-        return max(5.0, raw_csr * 1.4 + 5.0)
-    # exact: raw + X CSR stay resident (~24B/nnz when X is full-gene, as in
-    # stress atlases) plus the transposed copy; calibrated on the 1.05M and
-    # 1.93M cell runs (formula previously underestimated peak by ~10%).
-    return max(8.0, raw_csr * 2.25 + 6.0)
+    For step 06 the first three arguments describe the *subset* (cells /
+    full gene count / subset nnz); ``parent_cells`` / ``parent_genes``
+    describe the parent 05_annotated object whose full read dominates the
+    loading phase."""
+    if step == 1:
+        return _estimate_step01_peak(n_cells, n_genes, nnz, budget_bytes)
+    if step == 2:
+        return _estimate_step02_peak(nnz)
+    if step == 3:
+        return _estimate_step03_peak(n_cells, n_genes, nnz, policy)
+    if step == 4:
+        return _estimate_step04_peak(n_cells)
+    if step == 5:
+        return _estimate_step05_peak(n_cells, n_genes, nnz, approximation)
+    if step == 6:
+        return _estimate_step06_peak(
+            n_cells,
+            n_genes,
+            nnz,
+            parent_cells=parent_cells,
+            parent_genes=parent_genes,
+        )
+    if step == 7:
+        return _estimate_step07_peak(n_cells, n_genes, nnz, approximation=approximation)
+    if step == 8:
+        return _estimate_step08_peak(
+            n_cells,
+            n_genes,
+            nnz,
+            parent_genes=parent_genes,
+        )
+    if step == 9:
+        return _estimate_step09_peak(n_cells, n_genes, nnz)
+    if step == 10:
+        return _estimate_step10_peak(
+            n_cells,
+            n_genes,
+            nnz,
+            plot_max_cells=plot_max_cells,
+        )
+    if step == 11:
+        return _estimate_step11_peak()
+    if step == 12:
+        return _estimate_step12_peak(nnz)
+    return 0.0
 
 
 # ═══════════════════════════════════════════════════════════════════════
