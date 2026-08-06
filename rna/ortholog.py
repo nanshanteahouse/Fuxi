@@ -11,8 +11,8 @@ gene symbols via Ensembl 1:1 ortholog mapping.  This enables:
 3. Cross-species KB scoring (marker overlap checks)
 
 Ortholog mappings are pre-downloaded via ``data/orthologs/process_compara101.py``
-and ``data/orthologs/process_filtered.py``, cached as JSON files in ``data/orthologs/``.
-and cached as JSON files in ``data/orthologs/``.
+and ``data/orthologs/process_filtered.py``, cached as JSON files in the Fuxi
+cache directory (``~/.cache/fuxi/orthologs/``).
 
 Usage::
 
@@ -33,6 +33,8 @@ import logging
 import re
 from pathlib import Path
 from typing import Dict
+
+from core.utils import fuxi_cache_dir
 
 logger = logging.getLogger(__name__)
 
@@ -144,8 +146,8 @@ class OrthologMapper:
         Directory for cached ortholog JSON files.
     """
 
-    def __init__(self, ortholog_cache_dir: str = "data/orthologs"):
-        self.cache_dir = Path(ortholog_cache_dir)
+    def __init__(self, ortholog_cache_dir: str = ""):
+        self.cache_dir = Path(ortholog_cache_dir or fuxi_cache_dir("orthologs"))
         self._mapping_cache: Dict[str, dict] = {}
 
     # ── Public API ────────────────────────────────────────────────────
@@ -241,9 +243,7 @@ class OrthologMapper:
 # ═══════════════════════════════════════════════════════════════════════
 
 
-def convert_species_gene_names(
-    adata, species: str, target: str = "human", cache_dir: str = "data/orthologs"
-):
+def convert_species_gene_names(adata, species: str, target: str = "human", cache_dir: str = ""):
     """Convert gene names in *adata* from *species* identifiers to *target*.
 
     Convenience wrapper around :class:`OrthologMapper`.

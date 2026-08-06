@@ -147,6 +147,7 @@ from core.utils._path import (  # noqa: F401
     _DATA_ROOT_CACHE,
     _REPO_ROOT_CACHE,
     data_root,
+    fuxi_cache_dir,
     is_wsl,
     repo_root,
     wsl_to_win,

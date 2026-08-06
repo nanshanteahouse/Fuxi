@@ -25,6 +25,8 @@ import time
 import urllib.request
 from functools import lru_cache
 
+from core.utils import fuxi_cache_dir
+
 
 @lru_cache(maxsize=1)
 def _query_available_models(api_base: str, api_key: str) -> list[str]:
@@ -82,10 +84,7 @@ def ai_query(
     if getattr(cfg, "ai_cache_responses", False):
         import hashlib
 
-        cache_dir = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "..", "cache", "ai_responses"
-        )
-        os.makedirs(cache_dir, exist_ok=True)
+        cache_dir = fuxi_cache_dir("ai_responses")
         cache_key = hashlib.sha256(
             f"{cfg.model}:{system_prompt}:{user_prompt}".encode("utf-8")
         ).hexdigest()

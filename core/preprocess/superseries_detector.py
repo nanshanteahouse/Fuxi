@@ -21,7 +21,7 @@ Three detection strategies, tried in order:
 
 Strategy 3 is only executed if the caller explicitly enables it, because
 it requires internet access and adds ~2s latency.  Results from the NCBI
-API are cached for 24 hours in ``~/.fuxi/cache/ncbi_{accession}.json``.
+API are cached for 24 hours in ``~/.cache/fuxi/ncbi/ncbi_{accession}.json``.
 """
 
 import gzip
@@ -33,6 +33,8 @@ from datetime import datetime, timezone
 from typing import Optional
 from urllib.error import URLError
 from urllib.request import Request, urlopen
+
+from core.utils import fuxi_cache_dir
 
 # ── Constants ─────────────────────────────────────────────────────────
 
@@ -46,7 +48,7 @@ _SERIES_TYPE_RE = re.compile(
     r"!Series_type\s*=\s*(.*)",
     re.IGNORECASE,
 )
-_CACHE_DIR = os.path.expanduser("~/.fuxi/cache")
+_CACHE_DIR = fuxi_cache_dir("ncbi")
 _CACHE_TTL_SECONDS = 86400  # 24 hours
 
 

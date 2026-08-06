@@ -102,3 +102,6 @@ global.yaml
 projects/**/config_*_resolved.yaml
 results/config_*_resolved.yaml
 manuscript/
+
+# ── Pipeline-managed caches (now unified under ~/.cache/fuxi/) ──
+rna/data/

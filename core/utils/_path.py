@@ -59,3 +59,17 @@ def wsl_to_win(path: str) -> str:
     if path.startswith("/mnt/") and len(path) > 5:
         return f"{path[5]}:/{path[6:]}"
     return path
+
+
+def fuxi_cache_dir(*sub: str) -> str:
+    """Return a directory under the unified Fuxi cache root (~/.cache/fuxi).
+
+    All pipeline-managed caches (AI responses, ortholog mappings, NCBI
+    lookups) live under one root so they stay out of the repo and share a
+    single cleanup target. Sub-paths are joined in order; the directory is
+    created on first call.
+    """
+    cache_root = os.path.join(os.path.expanduser("~"), ".cache", "fuxi")
+    path = os.path.join(cache_root, *sub) if sub else cache_root
+    os.makedirs(path, exist_ok=True)
+    return path
