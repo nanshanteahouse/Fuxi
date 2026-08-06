@@ -408,7 +408,7 @@ def plot_heatmap(top_df, cfg, log):
         va="bottom",
     )
 
-    path = os.path.join(fig_dir, "tf_activity_heatmap.png")
+    path = os.path.join(fig_dir, "tf_activity_heatmap")
     save_figure(
         fig,
         path,

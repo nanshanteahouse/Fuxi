@@ -143,7 +143,7 @@ def _pca_plot(adata, contrast_col, figure_dir, log, cfg=None):
             bbox_inches="tight",
         )
         plt.close(fig)
-        log.info("PCA plot saved: 04_pca.png")
+        log.info("PCA plot saved: 04_pca")
 
     except Exception as e:
         log.warning("PCA plot failed: %s", e)
@@ -199,7 +199,7 @@ def _sample_distance_heatmap(adata, contrast_col, figure_dir, log, cfg=None):
             bbox_inches="tight",
         )
         plt.close(fig)
-        log.info("Sample distance heatmap saved: 04_sample_heatmap.png")
+        log.info("Sample distance heatmap saved: 04_sample_heatmap")
 
     except Exception as e:
         log.warning("Sample distance heatmap failed: %s", e)
@@ -283,7 +283,7 @@ def _de_heatmap(adata, sig_df, contrast_col, figure_dir, log, cfg=None):
             bbox_inches="tight",
         )
         plt.close(g.fig)
-        log.info("DE heatmap saved: 04_de_heatmap.png")
+        log.info("DE heatmap saved: 04_de_heatmap")
 
     except Exception as e:
         log.warning("DE heatmap failed: %s", e)
@@ -383,7 +383,7 @@ def _top_genes_boxplot(adata, sig_df, contrast_col, figure_dir, log, cfg=None):
             bbox_inches="tight",
         )
         plt.close(fig)
-        log.info("Top gene boxplots saved: 04_top_genes_boxplot.png")
+        log.info("Top gene boxplots saved: 04_top_genes_boxplot")
 
     except Exception as e:
         log.warning("Top gene boxplots failed: %s", e)

@@ -49,7 +49,7 @@ def spatial_cell_type_plot(adata, cfg, log):
         )
         save_figure(
             None,
-            os.path.join(fig_dir, "spatial_cell_type.png"),
+            os.path.join(fig_dir, "spatial_cell_type"),
             cfg=cfg,
             bbox_inches="tight",
         )
@@ -127,7 +127,7 @@ def spatial_gene_plots(adata, cfg, log):
         fig.tight_layout()
         save_figure(
             fig,
-            os.path.join(fig_dir, "spatial_marker_genes.png"),
+            os.path.join(fig_dir, "spatial_marker_genes"),
             cfg=cfg,
             bbox_inches="tight",
         )

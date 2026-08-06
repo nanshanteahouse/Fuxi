@@ -366,7 +366,7 @@ def _volcano_plot(results_df, alpha, treatment, baseline, figure_dir, log, cfg=N
         ax.set_title(f"Volcano Plot: {treatment} vs {baseline}")
         ax.legend(loc="upper right")
 
-        vol_path = os.path.join(figure_dir, "02_volcano.png")
+        vol_path = os.path.join(figure_dir, "02_volcano")
         save_figure(fig, vol_path, cfg=cfg, bbox_inches="tight")
         plt.close(fig)
         log.info("Volcano plot saved: %s", vol_path)
@@ -421,7 +421,7 @@ def _ma_plot(results_df, alpha, treatment, baseline, figure_dir, log, cfg=None):
         ax.set_xscale("log")
         ax.set_title(f"MA Plot: {treatment} vs {baseline}")
 
-        ma_path = os.path.join(figure_dir, "02_ma_plot.png")
+        ma_path = os.path.join(figure_dir, "02_ma_plot")
         save_figure(fig, ma_path, cfg=cfg, bbox_inches="tight")
         plt.close(fig)
         log.info("MA plot saved: %s", ma_path)

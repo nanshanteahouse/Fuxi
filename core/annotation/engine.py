@@ -1670,17 +1670,15 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
 
     adata.obs["annot_label"] = adata.obs["cell_type"].astype(str)
 
-    safe_plot(sc.pl.umap, adata, cfg=CFG, color="cell_type", show=False, save="celltype_umap.pdf")
-    safe_plot(
-        sc.pl.umap, adata, cfg=CFG, color="annot_label", show=False, save="annot_label_umap.pdf"
-    )
+    safe_plot(sc.pl.umap, adata, cfg=CFG, color="cell_type", show=False, save="celltype_umap")
+    safe_plot(sc.pl.umap, adata, cfg=CFG, color="annot_label", show=False, save="annot_label_umap")
     safe_plot(
         sc.pl.umap,
         adata,
         cfg=CFG,
         color="annot_confidence",
         show=False,
-        save="annot_confidence_umap.pdf",
+        save="annot_confidence_umap",
     )
     safe_plot(
         sc.pl.umap,
@@ -1688,7 +1686,7 @@ def run_unified_annotation(adata, CFG, logger):  # noqa: N803
         cfg=CFG,
         color="cell_category",
         show=False,
-        save="cell_category_umap.png",
+        save="cell_category_umap",
     )
 
     # ── j. Cell metadata export ───────────────────────────────────────────

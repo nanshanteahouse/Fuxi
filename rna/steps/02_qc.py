@@ -348,7 +348,7 @@ def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, cfg, log):
             dpi=cfg.plot.figure_dpi,
         )
         plt.close(_fig)
-        log.info("  Plot saved: nFeature_distribution.png")
+        log.info("  Plot saved: nFeature_distribution")
     except Exception as e:
         log.warning("nFeature distribution plot failed: %s", e)
 
@@ -408,7 +408,7 @@ def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, cfg, log):
             dpi=cfg.plot.figure_dpi,
         )
         plt.close(_fig)
-        log.info("  Plot saved: nCount_vs_nFeature.png")
+        log.info("  Plot saved: nCount_vs_nFeature")
     except Exception as e:
         log.warning("nCount vs nFeature scatter plot failed: %s", e)
 
@@ -444,7 +444,7 @@ def _plot_qc_diagnostics(adata, thresholds, fig_dir, mode_label, cfg, log):
             dpi=cfg.plot.figure_dpi,
         )
         plt.close(_fig)
-        log.info("  Plot saved: pct_mito_distribution.png")
+        log.info("  Plot saved: pct_mito_distribution")
     except Exception as e:
         log.warning("pct_mito distribution plot failed: %s", e)
 
@@ -523,7 +523,7 @@ def _plot_nfeature_kde(adata, fig_dir, mode_label, cfg, log):
             dpi=cfg.plot.figure_dpi,
         )
         plt.close(_fig)
-        log.info("  Plot saved: nFeature_KDE_density.png (%s)", assessment)
+        log.info("  Plot saved: nFeature_KDE_density (%s)", assessment)
     except Exception as e:
         log.warning("nFeature KDE plot failed: %s", e)
         log.warning("pct_mito distribution plot failed: %s", e)

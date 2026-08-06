@@ -872,7 +872,7 @@ def main():
                             dpi=cfg.plot.figure_dpi,
                             bbox_inches="tight",
                         )
-                        log.info("    Plot saved: umap_grid_n%d_r%.1f.png", n, res)
+                        log.info("    Plot saved: umap_grid_n%d_r%.1f", n, res)
                     plt.close(fig)
                 except Exception as e:
                     log.warning("    Single-param UMAP plot save failed: %s", e)

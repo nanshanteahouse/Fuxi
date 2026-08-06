@@ -218,7 +218,7 @@ def _pca_comparison(x_before, x_after, obs, batch_col, figure_dir, log, cfg=None
 
         fig.tight_layout()
 
-        comparison_path = os.path.join(figure_dir, "05_pca_comparison.png")
+        comparison_path = os.path.join(figure_dir, "05_pca_comparison")
         save_figure(fig, comparison_path, cfg=cfg, bbox_inches="tight")
         log.info("Saved: %s", comparison_path)
 

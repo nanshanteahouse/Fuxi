@@ -175,7 +175,7 @@ def run_nhood_enrichment(adata, cfg, log):
     try:
         sq.gr.nhood_enrichment(adata, cluster_key=group_col)
         sq.pl.nhood_enrichment(adata, cluster_key=group_col, show=False)
-        fig_path = os.path.join(cfg.figure_dir, "06_spatial_de", "nhood_enrichment_heatmap.png")
+        fig_path = os.path.join(cfg.figure_dir, "06_spatial_de", "nhood_enrichment_heatmap")
         os.makedirs(os.path.dirname(fig_path), exist_ok=True)
         save_figure(None, fig_path, cfg=cfg, bbox_inches="tight")
         plt.close()
@@ -203,7 +203,7 @@ def run_co_occurrence(adata, cfg, log):
     try:
         sq.gr.co_occurrence(adata, cluster_key=group_col)
         sq.pl.co_occurrence(adata, cluster_key=group_col, show=False)
-        fig_path = os.path.join(cfg.figure_dir, "06_spatial_de", "co_occurrence_plot.png")
+        fig_path = os.path.join(cfg.figure_dir, "06_spatial_de", "co_occurrence_plot")
         os.makedirs(os.path.dirname(fig_path), exist_ok=True)
         save_figure(None, fig_path, cfg=cfg, bbox_inches="tight")
         plt.close()
@@ -223,7 +223,7 @@ def run_interaction_matrix(adata, cfg, log):
     try:
         sq.gr.interaction_matrix(adata, cluster_key=group_col)
         sq.pl.interaction_matrix(adata, cluster_key=group_col, show=False)
-        fig_path = os.path.join(cfg.figure_dir, "06_spatial_de", "interaction_matrix_heatmap.png")
+        fig_path = os.path.join(cfg.figure_dir, "06_spatial_de", "interaction_matrix_heatmap")
         os.makedirs(os.path.dirname(fig_path), exist_ok=True)
         save_figure(None, fig_path, cfg=cfg, bbox_inches="tight")
         plt.close()

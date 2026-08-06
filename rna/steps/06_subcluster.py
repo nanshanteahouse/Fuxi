@@ -349,7 +349,6 @@ def _ai_subcluster_annotation(sub, cfg, args, log):
                 save=f"sub_{safe_cell_type}_umap_ai",
                 title=f"{args.cell_type} — AI subcluster",
                 cfg=cfg,
-                fmt="png",
             )
 
     except Exception as e:
@@ -464,7 +463,6 @@ def main():
                 save=f"sub_{safe_cell_type}_cell_subtype_umap",
                 title=f"{args.cell_type} — cell_subtype (step05)",
                 cfg=cfg,
-                fmt="png",
             )
             log.info("Saved pre-subcluster cell_subtype UMAP for %s", safe_cell_type)
         else:
@@ -682,7 +680,6 @@ def main():
         save=f"sub_{safe_cell_type}_leiden_umap",
         title=f"{args.cell_type} — leiden",
         cfg=cfg,
-        fmt="png",
     )
 
     # Multi-resolution comparison

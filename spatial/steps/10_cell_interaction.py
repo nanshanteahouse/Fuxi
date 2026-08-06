@@ -99,7 +99,7 @@ def plot_spatial_heatmap(top_df, cfg, log):
     cbar.set_label("N interactions")
 
     fig.tight_layout()
-    path = os.path.join(fig_dir, "cci_spatial_heatmap.png")
+    path = os.path.join(fig_dir, "cci_spatial_heatmap")
     save_figure(fig, path, cfg=cfg, bbox_inches="tight")
     plt.close(fig)
     log.info("Saved: %s", path)
@@ -157,7 +157,7 @@ def plot_spatial_dotplot(top_df, cfg, log):
     ax.set_title(f"Top {n_interactions} Spatial CCI ({score_col})")
 
     fig.tight_layout()
-    path = os.path.join(fig_dir, "cci_spatial_dotplot.png")
+    path = os.path.join(fig_dir, "cci_spatial_dotplot")
     save_figure(fig, path, cfg=cfg, bbox_inches="tight")
     plt.close(fig)
     log.info("Saved: %s", path)

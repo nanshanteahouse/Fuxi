@@ -78,6 +78,7 @@ def _build_minimal_step06_config(
         },
         "plot": {
             "figure_dpi": 72,
+            "figure_format": "pdf",  # explicit project override (global.yaml defaults to png)
             "palette": {
                 "categorical": "tab20",
                 "dotplot_fill": "YlOrRd",
@@ -463,11 +464,17 @@ class TestStep06Subprocess:
             f"Step 06 exited {result.returncode}. See stdout/stderr above."
         )
 
-        # ── Verify the pre-subcluster subtype UMAP PDF exists ──────────
-        pdf = (
-            tmp_path / "results" / "figures" / "06_subcluster" / "sub_Type_0_cell_subtype_umap.pdf"
+        # ── Verify the pre-subcluster subtype UMAP exists (format from config) ──
+        fig_path = (
+            tmp_path
+            / "results"
+            / "figures"
+            / "06_subcluster"
+            / f"sub_Type_0_cell_subtype_umap.{cfg_dict['plot']['figure_format']}"
         )
-        assert pdf.exists(), f"expected cell_subtype UMAP PDF at {pdf} — not produced by step 06"
+        assert fig_path.exists(), (
+            f"expected cell_subtype UMAP at {fig_path} — not produced by step 06"
+        )
 
     @pytest.mark.skipif(
         _skip_slow(),
@@ -503,11 +510,18 @@ class TestStep06Subprocess:
             f"Step 06 exited {result.returncode}. See stdout/stderr above."
         )
 
-        # ── Verify the skip path produced no subtype UMAP PDF ──────────
-        pdf = (
-            tmp_path / "results" / "figures" / "06_subcluster" / "sub_Type_0_cell_subtype_umap.pdf"
+        # ── Verify the skip path produced no subtype UMAP (any format) ──
+        _fmt = cfg_dict["plot"]["figure_format"]
+        no_subtype_fig = (
+            tmp_path
+            / "results"
+            / "figures"
+            / "06_subcluster"
+            / f"sub_Type_0_cell_subtype_umap.{_fmt}"
         )
-        assert not pdf.exists(), f"subtype UMAP PDF must NOT exist without cell_subtype: {pdf}"
+        assert not no_subtype_fig.exists(), (
+            f"subtype UMAP must NOT exist without cell_subtype: {no_subtype_fig}"
+        )
 
 
 # ── Test: writeback in-place (function-level, Item 1.3) ─────────────────

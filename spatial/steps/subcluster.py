@@ -294,7 +294,7 @@ def main():
         fig.tight_layout()
         save_figure(
             fig,
-            os.path.join(fig_dir, f"umap_sub_{safe_cell_type}_resolutions.pdf"),
+            os.path.join(fig_dir, f"umap_sub_{safe_cell_type}_resolutions"),
             cfg=cfg,
             bbox_inches="tight",
         )

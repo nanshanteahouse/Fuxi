@@ -69,7 +69,7 @@ def plot_composition(adata, group_col, stage_col, stage_order, fig_dir, table_di
         bbox_inches="tight",
     )
     plt.close(fig)
-    log.info("  Composition plot saved: composition_by_stage_%s.png", group_col)
+    log.info("  Composition plot saved: composition_by_stage_%s", group_col)
 
     # 导出 CSV
     ct_pivot.to_csv(os.path.join(table_dir, f"composition_by_stage_{group_col}.csv"))

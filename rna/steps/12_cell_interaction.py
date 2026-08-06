@@ -109,7 +109,7 @@ def plot_heatmap(top_df, cfg, log):
         cbar.set_label("N interactions")
 
         fig.tight_layout()
-        path = os.path.join(fig_dir, "interaction_heatmap.png")
+        path = os.path.join(fig_dir, "interaction_heatmap")
         save_figure(fig, path, cfg=cfg, bbox_inches="tight")
         plt.close(fig)
         log.info("Saved: %s", path)
@@ -162,7 +162,7 @@ def plot_heatmap(top_df, cfg, log):
 
     fig.suptitle(f"Top {len(top_df)} CCI Interactions", fontsize=12)
     fig.tight_layout()
-    path = os.path.join(fig_dir, "interaction_heatmap.png")
+    path = os.path.join(fig_dir, "interaction_heatmap")
     save_figure(fig, path, cfg=cfg, bbox_inches="tight")
     plt.close(fig)
     log.info("Saved: %s", path)
@@ -240,7 +240,7 @@ def plot_dotplot(top_df, cfg, log):
     cbar.set_label(score_col)
 
     fig.tight_layout()
-    path = os.path.join(fig_dir, "interaction_dotplot.png")
+    path = os.path.join(fig_dir, "interaction_dotplot")
     save_figure(fig, path, cfg=cfg, bbox_inches="tight")
     plt.close(fig)
     log.info("Saved: %s", path)

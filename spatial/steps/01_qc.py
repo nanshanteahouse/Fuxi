@@ -363,7 +363,7 @@ def _plot_qc_diagnostics(adata, thresholds, output_dir, log, cfg=None):
             fig, os.path.join(output_dir, "nFeature_distribution"), cfg=cfg, fmt=_fmt, dpi=_dpi
         )
         plt.close(fig)
-        log.info("  Plot saved: nFeature_distribution.png")
+        log.info("  Plot saved: nFeature_distribution")
     except Exception as e:
         log.warning("nFeature distribution plot failed: %s", e)
 
@@ -411,7 +411,7 @@ def _plot_qc_diagnostics(adata, thresholds, output_dir, log, cfg=None):
             fig, os.path.join(output_dir, "nCount_vs_nFeature"), cfg=cfg, fmt=_fmt, dpi=_dpi
         )
         plt.close(fig)
-        log.info("  Plot saved: nCount_vs_nFeature.png")
+        log.info("  Plot saved: nCount_vs_nFeature")
     except Exception as e:
         log.warning("nCount vs nFeature scatter plot failed: %s", e)
 
@@ -440,7 +440,7 @@ def _plot_qc_diagnostics(adata, thresholds, output_dir, log, cfg=None):
             fig, os.path.join(output_dir, "pct_mito_distribution"), cfg=cfg, fmt=_fmt, dpi=_dpi
         )
         plt.close(fig)
-        log.info("  Plot saved: pct_mito_distribution.png")
+        log.info("  Plot saved: pct_mito_distribution")
     except Exception as e:
         log.warning("pct_mito distribution plot failed: %s", e)
 

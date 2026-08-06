@@ -335,9 +335,11 @@ def validate_harmony_preservation(
     return results
 
 
-def plot_diagnosis_report(report: BatchDiagnosisReport, save_path: str) -> None:
+def plot_diagnosis_report(report: BatchDiagnosisReport, save_path: str, cfg=None) -> None:
     """Cramer's V heatmap + Gini barplot + recommendation panel."""
     import matplotlib.pyplot as plt
+
+    from core.utils import save_figure
 
     if not report.column_diagnoses:
         logger.info("No diagnoses to plot.")
@@ -404,6 +406,6 @@ def plot_diagnosis_report(report: BatchDiagnosisReport, save_path: str) -> None:
     )
 
     fig.tight_layout()
-    fig.savefig(save_path, dpi=150, bbox_inches="tight")
+    save_figure(fig, save_path, cfg=cfg, bbox_inches="tight")
     plt.close(fig)
     logger.info("Diagnosis report saved to %s", save_path)

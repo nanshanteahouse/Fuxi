@@ -8,6 +8,8 @@ import os
 import numpy as np
 import pandas as pd
 
+from core.utils import save_figure
+
 
 def run_pseudobulk_de(adata, cfg, log):
     """Run pseudobulk DE analysis using decoupler + PyDESeq2.
@@ -258,9 +260,9 @@ def run_pseudobulk_de(adata, cfg, log):
 
             fig_path = os.path.join(
                 fig_dir,
-                f"pseudobulk_volcano_{ct}.png",
+                f"pseudobulk_volcano_{ct}",
             )
-            fig.savefig(fig_path, bbox_inches="tight", dpi=150)
+            save_figure(fig, fig_path, cfg=cfg, bbox_inches="tight")
             plt.close(fig)
             log.info("Volcano saved: %s", fig_path)
         except Exception as e:

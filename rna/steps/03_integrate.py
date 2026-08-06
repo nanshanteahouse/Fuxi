@@ -445,8 +445,8 @@ def main():
                     log.warning("[batch-diagnosis] %s", w)
                 if cfg.integration.diagnose_report:
                     os.makedirs(fig_dir, exist_ok=True)
-                    report_path = os.path.join(fig_dir, "batch_diagnosis.pdf")
-                    plot_diagnosis_report(report, report_path)
+                    report_path = os.path.join(fig_dir, "batch_diagnosis")
+                    plot_diagnosis_report(report, report_path, cfg=cfg)
                     log.info("  Diagnosis report saved to %s", report_path)
         except Exception as e:
             log.warning("Batch diagnosis failed (%s) — continuing without diagnosis", e)
