@@ -19,6 +19,7 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import scanpy as sc
 
 from core.utils import resolve_config, safe_plot, save_figure, setup_logger
@@ -119,6 +120,44 @@ def main():
     adata = sc.read(input_path)
     log.info("Loaded: %s — %d cells", input_path, adata.n_obs)
 
+    # 轻量绘图对象（参照 04_cluster 的 plot_step04_figures 模式）：
+    # 分层降采样保留稀有簇可见性；raw 只留 marker 基因，避免全基因副本
+    marker_genes = []
+    for genes in cfg.marker.marker_dict.values():
+        marker_genes.extend([g for g in genes if g in adata.raw.var_names][:2])
+    marker_genes = list(dict.fromkeys(marker_genes))
+
+    if adata.n_obs > 20_000:
+        _rng = np.random.default_rng(0)
+        _strat = "cell_type" if "cell_type" in adata.obs else "leiden"
+        _codes = pd.Categorical(adata.obs[_strat]).codes
+        _parts = []
+        for _code in np.unique(_codes):
+            _sel = np.where(_codes == _code)[0]
+            _n = len(_sel)
+            if _n <= 500:
+                _parts.append(_sel)
+            else:
+                _cap = 500 if _n <= 50_000 else 1000
+                _parts.append(_rng.choice(_sel, min(_cap, _n), replace=False))
+        _idx = np.concatenate(_parts)
+        if len(_idx) > 20_000:
+            _idx = _rng.choice(_idx, 20_000, replace=False)
+        import anndata as _ad
+
+        plot_adata = _ad.AnnData(
+            X=adata[_idx].X,
+            obs=adata.obs.iloc[_idx],
+            var=adata.var.copy(),
+            obsm={"X_umap": adata.obsm["X_umap"][_idx]},
+        )
+        if marker_genes:
+            _raw_sel = adata.raw[_idx][:, marker_genes]
+            plot_adata.raw = _ad.AnnData(X=_raw_sel.X, var=_raw_sel.var)
+        log.info("  Stratified downsample to %d cells for UMAP plots", plot_adata.n_obs)
+    else:
+        plot_adata = adata
+
     fig_dir = os.path.join(cfg.figure_dir, "10_exploratory")
     os.makedirs(fig_dir, exist_ok=True)
     sc.settings.figdir = fig_dir
@@ -151,7 +190,7 @@ def main():
     if qc_metrics:
         safe_plot(
             sc.pl.umap,
-            adata,
+            plot_adata,
             color=qc_metrics,
             show=False,
             save="qc_umap",
@@ -159,12 +198,10 @@ def main():
             ncols=3,
             cfg=cfg,
         )
+        plt.close("all")
 
     # 3. UMAP: 标记基因
-    all_markers = []
-    for genes in cfg.marker.marker_dict.values():
-        all_markers.extend([g for g in genes if g in adata.raw.var_names][:2])
-    all_markers = list(dict.fromkeys(all_markers))  # deduplicate preserving order
+    all_markers = marker_genes
     if all_markers:
         n_markers = len(all_markers)
         batch_size = 12
@@ -172,7 +209,7 @@ def main():
             batch = all_markers[batch_start : batch_start + batch_size]
             safe_plot(
                 sc.pl.umap,
-                adata,
+                plot_adata,
                 color=batch,
                 use_raw=True,
                 show=False,
@@ -181,6 +218,7 @@ def main():
                 ncols=4,
                 cfg=cfg,
             )
+            plt.close("all")
 
     # 4. 标记基因 dotplot
     if all_markers:
@@ -194,6 +232,7 @@ def main():
             save="marker_dotplot",
             cfg=cfg,
         )
+        plt.close("all")
 
     # 5. 聚类大小统计
     for group_col in ["cell_type", "leiden"]:
@@ -270,13 +309,14 @@ def main():
         # UMAP
         safe_plot(
             sc.pl.umap,
-            adata,
+            plot_adata,
             color=col,
             show=False,
             legend_loc="on data" if len(sizes) < 30 else "right margin",
             save=f"umap_{col}",
             cfg=cfg,
         )
+        plt.close("all")
 
     log.info("Step 10 complete, took %.1fs", time.time() - t0)
 
