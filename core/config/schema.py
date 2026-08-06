@@ -806,6 +806,7 @@ class ExploratorySettings(BaseModel):
 
     composition_test: Literal["none", "sccoda"] = "none"
     sccoda: ScCODAConfig = Field(default_factory=ScCODAConfig)
+    plot_max_cells: int = 20_000
 
 
 # ═══════════════════════════════════════════════════════════════════════

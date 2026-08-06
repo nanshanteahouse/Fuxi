@@ -120,6 +120,31 @@ def main():
     adata = sc.read(input_path)
     log.info("Loaded: %s — %d cells", input_path, adata.n_obs)
 
+    # ── Memory guard: estimate step 10 peak vs budget before heavy work ──
+    _plot_max = cfg.exploratory.plot_max_cells
+    from core.utils import check_memory_guard, estimate_step_peak, resolve_memory_settings
+
+    _mem_policy, _mem_budget, _mem_guard = resolve_memory_settings(cfg)
+    _raw_x = adata.raw.X if adata.raw is not None else adata.X
+    _nnz10 = getattr(_raw_x, "nnz", adata.n_obs * adata.n_vars)
+    _est10 = {
+        10: estimate_step_peak(
+            10,
+            adata.n_obs,
+            adata.n_vars,
+            _nnz10,
+            policy=_mem_policy,
+            budget_bytes=_mem_budget,
+            plot_max_cells=_plot_max,
+        )
+    }
+    if _mem_budget > 0:
+        log.info(
+            "[memory-guard] estimated peaks: "
+            + ", ".join(f"step{s} ~{g:.0f}GB" for s, g in _est10.items())
+        )
+    check_memory_guard(_est10, _mem_budget, _mem_guard, logger_obj=log)
+
     # 轻量绘图对象（参照 04_cluster 的 plot_step04_figures 模式）：
     # 分层降采样保留稀有簇可见性；raw 只留 marker 基因，避免全基因副本
     marker_genes = []
@@ -127,7 +152,7 @@ def main():
         marker_genes.extend([g for g in genes if g in adata.raw.var_names][:2])
     marker_genes = list(dict.fromkeys(marker_genes))
 
-    if adata.n_obs > 20_000:
+    if adata.n_obs > _plot_max:
         _rng = np.random.default_rng(0)
         _strat = "cell_type" if "cell_type" in adata.obs else "leiden"
         _codes = pd.Categorical(adata.obs[_strat]).codes
@@ -141,8 +166,8 @@ def main():
                 _cap = 500 if _n <= 50_000 else 1000
                 _parts.append(_rng.choice(_sel, min(_cap, _n), replace=False))
         _idx = np.concatenate(_parts)
-        if len(_idx) > 20_000:
-            _idx = _rng.choice(_idx, 20_000, replace=False)
+        if len(_idx) > _plot_max:
+            _idx = _rng.choice(_idx, _plot_max, replace=False)
         import anndata as _ad
 
         plot_adata = _ad.AnnData(

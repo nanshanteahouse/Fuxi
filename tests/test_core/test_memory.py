@@ -61,10 +61,19 @@ def test_estimate_step_peak_monotonic() -> None:
     # Bigger input -> bigger estimate, on every step.
     small = (100_000, 20_000, 20_000_000)
     big = (2_000_000, 35_000, 3_500_000_000)
-    for step in (1, 2, 3):
+    for step in (1, 2, 3, 4, 6):
         s = estimate_step_peak(step, *small, policy="balanced", budget_bytes=80 * 2**30)
         b = estimate_step_peak(step, *big, policy="balanced", budget_bytes=80 * 2**30)
         assert b > s, f"step {step}: {s:.1f} -> {b:.1f} not monotonic"
+
+
+def test_estimate_step04_peak_anchors() -> None:
+    # Two-segment fit must bracket the measured runs (110k/620k/1.05M)
+    # and project 1.676M (StressTest) into the <100 GB WSL budget.
+    assert estimate_step_peak(4, 110_000, 4000) == 12.0
+    assert 19.0 <= estimate_step_peak(4, 620_000, 4000) <= 24.0
+    assert 38.0 <= estimate_step_peak(4, 1_050_000, 4000) <= 44.0
+    assert 62.0 <= estimate_step_peak(4, 1_676_000, 4000) <= 75.0
 
 
 def test_estimate_step03_policy_difference() -> None:
@@ -73,6 +82,51 @@ def test_estimate_step03_policy_difference() -> None:
     speed = estimate_step_peak(3, n, g, nnz, policy="speed")
     bal = estimate_step_peak(3, n, g, nnz, policy="balanced")
     assert speed > bal * 2
+
+
+def test_estimate_step06_parent_terms() -> None:
+    # Subset terms drive the estimate; parent read adds a dominant term.
+    sub = estimate_step_peak(6, 100_000, 27_000, 200_000_000)
+    with_parent = estimate_step_peak(
+        6, 100_000, 27_000, 200_000_000, parent_cells=200_000, parent_genes=27_000
+    )
+    assert sub >= 2.5
+    assert with_parent > sub  # full parent read dominates
+
+
+def test_estimate_step10_anchors() -> None:
+    # Calibrated on measured runs (post-OOM-fix, plot_max_cells=20000):
+    #   GSE234963 166.8k x 4.0k, raw nnz 352M -> 7.1 GB measured
+    #   GSE116106 39.3k x 4.0k, raw nnz ~50M -> 2.6 GB measured
+    big = estimate_step_peak(10, 166_822, 4_013, 352_000_000)
+    med = estimate_step_peak(10, 39_300, 4_000, 50_000_000)
+    small = estimate_step_peak(10, 2_300, 4_000, 5_000_000)
+    assert 6.4 < big < 7.9, f"GSE234963 anchor: {big:.1f} GB (measured 7.1)"
+    assert 2.3 < med < 3.3, f"GSE116106 anchor: {med:.1f} GB (measured 2.6)"
+    assert small <= 2.5  # floor at ~2 GB for tiny datasets
+
+
+def test_estimate_step11_scale_invariant() -> None:
+    # Streaming pseudobulk: peak must NOT grow with input size.
+    small = estimate_step_peak(11, 2_300, 33_000, 5_000_000)
+    big = estimate_step_peak(11, 110_000, 33_000, 250_000_000)
+    assert small == big == 1.2
+    assert big < estimate_step_peak(10, 110_000, 4_000, 250_000_000)
+
+
+def test_estimate_step12_grows_with_nnz() -> None:
+    # LIANA reads 05 in full: estimate must grow with the raw matrix.
+    small = estimate_step_peak(12, 2_300, 33_000, 5_000_000)
+    big = estimate_step_peak(12, 110_000, 33_000, 250_000_000)
+    assert small >= 6.0
+    assert big > small
+
+
+def test_estimate_step10_plot_cap_effect() -> None:
+    # Raising plot_max_cells must not lower the estimate (sampling floor).
+    base = estimate_step_peak(10, 300_000, 4_000, 400_000_000, plot_max_cells=20_000)
+    raised = estimate_step_peak(10, 300_000, 4_000, 400_000_000, plot_max_cells=100_000)
+    assert raised >= base
 
 
 def test_check_memory_guard_warn_continues() -> None:

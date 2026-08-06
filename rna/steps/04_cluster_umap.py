@@ -520,6 +520,29 @@ def main():
         return
     log.info("Step 04: Neighbors + UMAP + multi-param grid Leiden clustering")
 
+    # ── Memory guard: estimate step 04 peak vs budget before the full load ──
+    # h5py shape probe is zero-copy (<1s even on 10 GB h5ad); the formula
+    # itself is calibrated on measured 110k/620k/1.05M/1.676M runs.
+    from core.utils import check_memory_guard, estimate_step_peak, resolve_memory_settings
+
+    input_path = cfg.integrated_h5ad
+    _mem_policy, _mem_budget, _mem_guard = resolve_memory_settings(cfg)
+    _n_cells = 0
+    try:
+        import h5py
+
+        with h5py.File(input_path, "r") as _h5:
+            _n_cells = int(_h5["X"].shape[0])
+    except Exception:
+        pass
+    if _n_cells > 0:
+        _est = {
+            4: estimate_step_peak(4, _n_cells, 4000, policy=_mem_policy, budget_bytes=_mem_budget)
+        }
+        if _mem_budget > 0:
+            log.info("[memory-guard] estimated step 04 peak: ~%.0f GB", _est[4])
+        check_memory_guard(_est, _mem_budget, _mem_guard, logger_obj=log)
+
     # ── 输入 ──
     input_path = cfg.integrated_h5ad
     log.info("Loaded: %s", input_path)
