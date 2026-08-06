@@ -942,7 +942,6 @@ def _cmd_list_papers(
 # Slug generation lives in core.paper.slug.
 # Old _JOURNAL_ABBREVS dict and _build_slug_local removed — Plan A migration
 # replaced {author}{year}_{journal} with {author}{year}_{topic}.
-# See notes/slug-migrationPlan if you need the historical context.
 
 
 def _select_datasets_interactive(

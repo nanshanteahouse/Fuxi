@@ -34,7 +34,7 @@ _LEVEL_ORDER = {"low": 1, "medium": 2, "high": 3, "gold": 4}
 # gates (species + threshold) but are broadly expressed, so forcing them into
 # the HVG set wastes a slot without adding cluster-separation signal.
 # B2M (MHC-I light chain) was observed expressed in 38/38 validation datasets
-# (see notes/research/2026-08-03_marker_claim_audit.md).  This list is a
+# in the KB audit.  This list is a
 # conservative denylist for the *forced-HVG* use case only; the genes remain
 # valid markers for annotation/scoring.
 _UBIQUITOUS_DENYLIST: frozenset[str] = frozenset({"B2M"})
