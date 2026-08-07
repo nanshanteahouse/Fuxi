@@ -113,7 +113,7 @@ Fuxi — RNA-seq pipeline step list
 # scRNA-seq full workflow (13 steps, from scratch to cell-cell interaction)
 python core/run_pipeline.py --modality rna --config projects/rna/{dataset_id}/config_{dataset_id}.yaml
 
-# scATAC-seq full workflow (14 steps)
+# scATAC-seq full workflow (13 steps)
 python core/run_pipeline.py --modality atac --config projects/atac/{dataset_id}/config_{dataset_id}.yaml
 
 # Spatial transcriptomics full workflow (11 steps)
@@ -142,7 +142,7 @@ The terminal shows real-time progress with timing for each step:
 [run] Step timing summary:
   [00]    45.2s  Load raw data → 00_raw.h5ad
   ...
-  [Total] 1845.3s  14 steps total
+  [Total] 1845.3s  13 steps total
 ```
 
 ### 3.3 Checkpoints and resume
@@ -583,12 +583,13 @@ Since spatial CCI already enforces physical proximity via `cci_spatial_distance`
 
 ## 5. scATAC-seq pipeline in detail
 
-The scATAC-seq pipeline has 14 steps (numbered 00–13), with data flowing sequentially:
+The scATAC-seq pipeline has 13 steps (numbered 00–12), with data flowing sequentially:
 
 ```
 Raw data → 00_load → 01_qc → 02_process → 03_cluster
-         → 04_annotate → 05_marker_peaks → 06_motif
-         → 07_trajectory → 08_enrichment → 09_integrate
+         → 04_peaks → 05_annotate → 06_subcluster
+         → 07_marker_peaks → 08_motif → 09_trajectory
+         → 10_enrichment → 11_exploratory → 12_integrate
 ```
 
 ### Step 00: Data loading
@@ -627,27 +628,43 @@ Supports three formats:
 
 Same multi-parameter grid search strategy as the RNA pipeline (iterating `n_neighbors` × `resolution`), with Pareto elbow-based auto-selection in spectral embedding space.
 
-### Step 04: AI chromatin state annotation
+### Step 04: Post-clustering peak calling
 
-**Input**: `03_clustered.h5ad` | **Output**: `04_annotated.h5ad`
+**Input**: `03_clustered.h5ad` | **Output**: `04_peaks.h5ad`
+
+1. Calls MACS3 per cluster (leiden), producing an independent peak set for each cluster
+2. Builds a new peak-by-cell matrix and computes FRiP enrichment scores
+3. This output becomes the primary input for downstream annotation and differential accessibility
+
+### Step 05: AI chromatin state annotation
+
+**Input**: `04_peaks.h5ad` | **Output**: `05_annotated.h5ad`
 
 1. Computes differentially accessible peaks per cluster (marker regions)
 2. Sends top peaks and their associated nearby genes to an LLM
 3. The LLM infers cell types / chromatin states based on the gene associations of open chromatin regions
 4. AI responses are automatically cached to disk (SHA256 deduplication) — re-runs don't incur additional API calls
 
-### Steps 05–08: Downstream analysis
+### Step 06: Subcluster analysis (placeholder)
+
+Not yet implemented (reserved for future per-cell-type subdivision).
+
+### Steps 07–10: Downstream analysis
 
 | Step | Content | Output |
 |------|---------|--------|
-| Step 05 | Differential peak accessibility per cell type | `marker_peaks.csv` |
-| Step 06 | TF binding motif enrichment (CIS-BP database) | `motif_enrichment_{cell_type}.csv` |
-| Step 07 | ATAC pseudotime trajectory analysis | `07_trajectory.h5ad` |
-| Step 08 | GO/KEGG enrichment on peak-associated genes | `enrichment_*.csv` |
+| Step 07 | Differential peak accessibility per cell type | `marker_peaks.csv` |
+| Step 08 | TF binding motif enrichment (CIS-BP database) | `motif_results.csv` |
+| Step 09 | ATAC pseudotime trajectory analysis | `09_trajectory.h5ad` |
+| Step 10 | GO/KEGG enrichment on peak-associated genes | `enrichment_*.csv` |
 
-### Step 09: RNA+ATAC integration
+### Step 11: Exploratory analysis (placeholder)
 
-**Input**: ATAC `04_annotated.h5ad` + RNA h5ad (auto-discovered) | **Output**: `09_integrated.h5ad`
+Not yet implemented.
+
+### Step 12: RNA+ATAC integration
+
+**Input**: ATAC `05_annotated.h5ad` + RNA h5ad (auto-discovered) | **Output**: `12_integrated.h5ad`
 
 If you have paired multiome data (RNA-seq + ATAC-seq from the same cells):
 1. Auto-discovers RNA results under the same dataset
@@ -655,7 +672,27 @@ If you have paired multiome data (RNA-seq + ATAC-seq from the same cells):
 3. Constructs a MuData multi-modal object (`rna` + `atac` modalities)
 4. Runs joint PCA
 
-> 💡 For **multiome datasets**, the preprocessor automatically generates both RNA and ATAC configs. Run both pipelines separately, then run ATAC Step 09 for automatic integration.
+> 💡 For **multiome datasets**, the preprocessor automatically generates both RNA and ATAC configs. Run both pipelines separately, then run ATAC Step 12 for automatic integration.
+
+### Key ATAC config fields
+
+| Field | Default | Description |
+|------|---------|-------------|
+| `atac.blacklist_bed` | `""` | ENCODE blacklist BED path; when set, MACS3 peak calling (01_qc pooled + 04_peaks per-cluster) excludes those regions. Empty = disabled |
+| `atac.use_pseudo_replicates` | `true` | Reproducible-peak verification: 04_peaks builds a `pseudo_replicate` column (deterministic split-half per leiden cluster) and passes `replicate` + `replicate_qvalue` to per-cluster MACS3 (verified working on SnapATAC2 2.9; obs values must be strings). `false` restores the old call |
+| `atac.marker_peaks_method` | `"quick"` | 07_marker_peaks DA method: `"quick"` = `snap.tl.marker_regions`; `"bpc"` = pseudobulk + log-TP10K + depth-stratified background matching + Wilcoxon/BH-FDR (`core/atac_utils/da.py`). Both modes emit the same CSV schema |
+| `atac.spectral_sample_size` | `null` | Nyström approximation threshold; `null` (default) = disabled (full spectral embedding in 02_process). Set an int to enable when cells exceed it |
+| `atac.terminal_cell_types` | `[]` | 09_trajectory diffusion-DPT terminal types: empty = explicit skip (`uns['trajectory'].status='skipped'`, no fake pseudotime); non-empty = DPT rooted at the median of the 1% cells farthest from all terminal-type centroids |
+| `atac.max_blacklist_ratio` | `0.05` | ⚠️ retained but **not implemented** (needs per-fragment blacklist overlap; TODO) |
+
+### Memory guard (`execution.memory`)
+
+ATAC steps 01_qc / 02_process / 03_cluster / 04_peaks use the same memory estimation + guard rails as RNA: `execution.memory.{policy, budget, guard}` is checked after each load (`core/utils/_memory.py` registers atac estimators for steps 1/2/4; step 3 is unregistered → warn + 0.0, never gates). guard=`warn` logs / `block` raises over budget / `off` skips. Steps also emit `[perf]` lines via `monitor_performance` (`perf_report.json` is written by the runner).
+
+### Step 09 trajectory behaviour (A/B)
+
+- **A (no `terminal_cell_types` configured)**: no fake `pseudotime=0`, no misleading UMAP; `uns['trajectory'] = {status: 'skipped', reason: 'no terminal_cell_types configured'}`; checkpoint still written to keep the chain alive.
+- **B (configured)**: `sc.pp.neighbors(use_rep='X_spectral')` → `sc.tl.diffmap(n_comps=15)` → root selection (median of the 1% cells farthest from all terminal-type centroids in diffmap space) → `sc.tl.dpt(n_dcs=10)` (scanpy 1.12 uses `uns['iroot']`; `root_user` removed) → `obs['pseudotime']` + UMAP coloring. Failures (missing cell_type / no matching terminal type / scanpy errors) degrade to A.
 
 ---
 

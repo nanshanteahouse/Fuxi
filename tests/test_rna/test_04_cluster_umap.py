@@ -102,14 +102,14 @@ def _make_step04_state(n: int = 60, n_genes: int = 40, seed: int = 7) -> tuple[A
 
 def _make_config(tmp_path, integrated_name="03_integrated.h5ad") -> MagicMock:
     cfg = MagicMock()
-    cfg.integrated_h5ad = str(tmp_path / integrated_name)
+    cfg.rna_integrated_h5ad = str(tmp_path / integrated_name)
     cfg.cluster_h5ad = str(tmp_path / "04_clustered.h5ad")
     return cfg
 
 
 def _write_step03(cfg, step03: AnnData) -> None:
-    os.makedirs(os.path.dirname(cfg.integrated_h5ad), exist_ok=True)
-    step03.write_h5ad(cfg.integrated_h5ad)
+    os.makedirs(os.path.dirname(cfg.rna_integrated_h5ad), exist_ok=True)
+    step03.write_h5ad(cfg.rna_integrated_h5ad)
 
 
 # ── Tests ──────────────────────────────────────────────────────────────
@@ -274,7 +274,7 @@ class TestIncrementalWrite:
         assert not os.path.exists(cfg.cluster_h5ad), (
             "corrupt 04 copy must be deleted on failure (mode A)"
         )
-        assert os.path.exists(cfg.integrated_h5ad), "03 source must survive"
+        assert os.path.exists(cfg.rna_integrated_h5ad), "03 source must survive"
 
     def test_incremental_io_false_uses_full_safe_write(self, tmp_path) -> None:
         """incremental_io=False → full safe_write fallback (escape hatch)."""
@@ -295,7 +295,7 @@ class TestIncrementalWrite:
         # MagicMock auto-creates attributes; use a plain namespace that genuinely
         # LACKS incremental_io to simulate a pre-T2 config.
         cfg = types.SimpleNamespace(
-            integrated_h5ad=str(tmp_path / "03_integrated.h5ad"),
+            rna_integrated_h5ad=str(tmp_path / "03_integrated.h5ad"),
             cluster_h5ad=str(tmp_path / "04_clustered.h5ad"),
         )
         _write_step03(cfg, _make_step04_state()[0])

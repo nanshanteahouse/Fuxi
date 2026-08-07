@@ -165,9 +165,9 @@ class TestStep04Config:
         cfg = Config.model_validate(cfg_dict)
 
         # Check checkpoint paths resolve correctly
-        assert cfg.integrated_h5ad.endswith("03_integrated.h5ad")
+        assert cfg.rna_integrated_h5ad.endswith("03_integrated.h5ad")
         assert cfg.cluster_h5ad.endswith("04_clustered.h5ad")
-        assert cfg.h5ad_dir in cfg.integrated_h5ad
+        assert cfg.h5ad_dir in cfg.rna_integrated_h5ad
         assert cfg.h5ad_dir in cfg.cluster_h5ad
 
         # Check clustering settings survived

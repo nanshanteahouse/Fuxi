@@ -3,7 +3,7 @@
 Usage:
     selector = StepSelector(modality="rna")
     selector.steps = [("00", "00_load.py", "Load raw data → 00_raw.h5ad"), ...]
-    selector.checkpoints = ["00_raw.h5ad", "01_doublet.h5ad", ...]
+    selector.checkpoints = ["00_raw.h5ad", "01_filtered.h5ad", ...]
     selector.update_checkpoint_status([True, False, True, ...])
 """
 

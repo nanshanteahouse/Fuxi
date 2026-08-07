@@ -79,7 +79,7 @@ Fuxi 使用 SnapATAC2 的 `import_fragments` 将这些片段组合成 AnnData �
 
 **MACS3 峰调用**：将所有细胞合并为 pseudobulk，用 MACS3 搜索"信号显著高于背景"的区域定义为峰。这一步将数据从"每个切割事件"转为**峰×细胞矩阵（peak-by-cell matrix）**。
 
-**Scrublet**：在峰×细胞矩阵上运行（详见 [RNA 双细胞检测](05_双细胞检测.md)），识别异常切割计数的细胞。
+**Scrublet**：在峰×细胞矩阵上运行（详见 [RNA 双细胞检测](05_双细胞检测.md)），识别异常切割计数的细胞。双细胞检测已并入本步骤（不再有独立的 Scrublet 步骤），输出 `01_filtered.h5ad`。
 
 ### Step 02：IDF 选择 + 谱嵌入 + KNN
 
@@ -90,19 +90,28 @@ Fuxi 使用 SnapATAC2 的 `import_fragments` 将这些片段组合成 AnnData �
 
 至此，ATAC 数据已从原始的碎片信息处理成和 RNA 类似的"降维后细胞×特征"结构。
 
-### Step 03-04：聚类 + 注释
+### Step 03：聚类
 
-聚类采用相同的网格搜索策略遍历参数组合（见 [RNA 聚类](08_降维与聚类.md)），区别在于在谱嵌入空间而非 PCA 空间运行。
+聚类采用相同的网格搜索策略遍历参数组合（见 [RNA 聚类](08_降维与聚类.md)），区别在于在谱嵌入空间而非 PCA 空间运行。输出 `03_clustered.h5ad`。
 
-注释使用 AI 模式：将每个聚类的标记峰映射到附近基因，发往 LLM（详见[附录 D](D_AI注释系统详解.md)）。例如 LLM 看到"Cluster 2 的标记峰位于 RHO 启动子区域"，若组织是视网膜，就可推断该聚类可能是视杆细胞。
+### Step 04：聚类后峰 calling
 
-### Step 05-08：下游分析
+对每个聚类（leiden）独立调用 MACS3，生成 per-cluster 峰集，构建新的峰×细胞矩阵并计算 FRiP，输出 `04_peaks.h5ad`。该输出成为后续注释与差异可及性分析的主要输入。
 
-- **Step 05 — 标记峰**：类似 RNA 的差异表达，但比较峰可及性而非基因表达。
-- **Step 06 — 基序富集**：在标记峰中搜索转录因子的结合基序（motif）。如果一群细胞的开放峰富集了某个 TF 的基序，说明该 TF 的调控活跃。这比 RNA 推断 TF 活性更直接——RNA 只能看 TF 本身的 mRNA 量，ATAC 能看到 TF 的结合位置是否开放。
-- **Step 07-08**：伪时间轨迹 + 富集分析，与 [RNA 流程](12_轨迹分析.md)原理一致。
+### Step 05：AI 注释
 
-### Step 09：RNA+ATAC 整合（多组学）
+注释使用 AI 模式：将每个聚类的标记峰映射到附近基因，发往 LLM（详见[附录 D](D_AI注释系统详解.md)）。例如 LLM 看到"Cluster 2 的标记峰位于 RHO 启动子区域"，若组织是视网膜，就可推断该聚类可能是视杆细胞。输出 `05_annotated.h5ad`。
+
+### Step 06-10：下游分析
+
+- **Step 06 — 亚聚类**（占位，暂未实现）
+- **Step 07 — 标记峰**：类似 RNA 的差异表达，但比较峰可及性而非基因表达，输出 `marker_peaks.csv`。
+- **Step 08 — 基序富集**：在标记峰中搜索转录因子的结合基序（motif），输出 `motif_results.csv`。如果一群细胞的开放峰富集了某个 TF 的基序，说明该 TF 的调控活跃。这比 RNA 推断 TF 活性更直接——RNA 只能看 TF 本身的 mRNA 量，ATAC 能看到 TF 的结合位置是否开放。
+- **Step 09 — 伪时间轨迹**：输出 `09_trajectory.h5ad`，与 [RNA 流程](12_轨迹分析.md)原理一致。
+- **Step 10 — 富集分析**：峰关联基因的 GO/KEGG 富集，输出 `enrichment_*.csv`。
+- **Step 11 — 探索性分析**（占位，暂未实现）
+
+### Step 12：RNA+ATAC 整合（多组学）
 
 如果一个样本同时有 scRNA-seq 和 scATAC-seq 数据，Fuxi 构建多组学数据对象（MuData），回答：**"表达基因 Y 的细胞，它的 Y 基因启动子是开放的吗？"**
 
@@ -117,7 +126,7 @@ Fuxi 使用 SnapATAC2 的 `import_fragments` 将这些片段组合成 AnnData �
 ### 聚类 UMAP（Step 03）
 ATAC 的 UMAP 通常看起来比 RNA 分离更不明显，因为数据更稀疏。不要让"看起来分不开"的 UMAP 迷惑——这是 ATAC 数据的固有特性。
 
-### 基序富集热图（Step 06）
+### 基序富集热图（Step 08）
 最有生物学洞察力的输出之一。例如标记峰中富集 CRX 基序→强烈暗示该群细胞是光感受器。注意这是基序富集，不是 TF 表达，两者结合解读最佳。
 
 > 具体参数和命令见 [Pipeline 使用指南](../pipeline_guide_zh-CN.md#5-scatac-seq-管线详解)

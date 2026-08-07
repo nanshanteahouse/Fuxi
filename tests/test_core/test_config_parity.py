@@ -203,7 +203,7 @@ class TestConfigDefaults:
         assert cfg.atac.max_fragments == 50000
         assert cfg.atac.min_tsse == 7.0
         assert cfg.atac.n_features == 50000
-        assert cfg.atac.use_macs3 is True
+        assert cfg.atac.use_pseudo_replicates is True
 
     def test_spatial_defaults(self) -> None:
         """Spatial defaults."""

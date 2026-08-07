@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Step 13: RNA+ATAC integration via muon (optional)
+Step 12: RNA+ATAC integration via muon (optional)
 ===================================================
   - Reads ATAC annotated AnnData + RNA AnnData
   - Matches common cells
   - Builds MuData object with muon
 
 Input:  05_annotated.h5ad + cfg.rna_h5ad
-Output: 13_integrated.h5ad
+Output: 12_integrated.h5ad
 """
 
 import argparse
@@ -30,11 +30,11 @@ def main():
     args = args_parser.parse_args()
 
     cfg = resolve_config(args.config)
-    log = setup_logger("13_integrate", os.path.join(cfg.log_dir, "13_integrate.log"))
-    log.info("Step 13: RNA+ATAC integration")
+    log = setup_logger("12_integrate", os.path.join(cfg.log_dir, "12_integrate.log"))
+    log.info("Step 12: RNA+ATAC integration")
 
-    if os.path.exists(cfg.integrated_h5ad):
-        log.info("Skip: %s exists.", cfg.integrated_h5ad)
+    if os.path.exists(cfg.atac_integrated_h5ad):
+        log.info("Skip: %s exists.", cfg.atac_integrated_h5ad)
         return
 
     if not cfg.has_rna_data():
@@ -77,14 +77,14 @@ def main():
 
         mu.pp.pca(mdata, n_comps=min(30, mdata.n_obs - 1))
 
-        safe_write(mdata, cfg.integrated_h5ad, cfg=cfg)
+        safe_write(mdata, cfg.atac_integrated_h5ad, cfg=cfg)
         log.info("Saved integrated MuData.")
     except Exception as e:
         log.warning("Integration failed: %s", e)
     finally:
         gc.collect()
 
-    log.info("Step 13 complete, took %.1fs", time.time() - t0)
+    log.info("Step 12 complete, took %.1fs", time.time() - t0)
 
 
 if __name__ == "__main__":

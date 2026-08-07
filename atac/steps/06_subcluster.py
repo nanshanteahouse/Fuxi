@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Step 07: Subcluster analysis (placeholder)"""
+"""Step 06: Subcluster analysis (placeholder)"""
 
 import argparse
 import os
@@ -17,8 +17,8 @@ def main():
     p.add_argument("--config", required=True)
     a = p.parse_args()
     cfg = resolve_config(a.config)
-    log = setup_logger("07_subcluster", os.path.join(cfg.log_dir, "07_subcluster.log"))
-    log.info("Step 07: Subcluster analysis (placeholder)")
+    log = setup_logger("06_subcluster", os.path.join(cfg.log_dir, "06_subcluster.log"))
+    log.info("Step 06: Subcluster analysis (placeholder)")
     log.info("Not yet implemented. Done %.1fs", time.time() - t0)
 
 

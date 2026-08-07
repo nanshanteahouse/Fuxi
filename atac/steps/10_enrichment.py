@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Step 11: GO/KEGG enrichment on marker peak-associated regions
+Step 10: GO/KEGG enrichment on marker peak-associated regions
 ===============================================================
-  - Reads marker_peaks.csv from step 05
+  - Reads marker_peaks.csv from step 07
   - Peak-to-gene mapping via nearest TSS (pybedtools)
   - Enrichr over-representation analysis per group
 
-Input:  marker_peaks.csv (from step 08)
+Input:  marker_peaks.csv (from step 07)
 Output: enrichment_results.csv
 """
 
@@ -159,18 +159,18 @@ def main():
     args = args_parser.parse_args()
 
     cfg = resolve_config(args.config)
-    log = setup_logger("11_enrichment", os.path.join(cfg.log_dir, "11_enrichment.log"))
-    log.info("Step 11: GO/KEGG enrichment")
+    log = setup_logger("10_enrichment", os.path.join(cfg.log_dir, "10_enrichment.log"))
+    log.info("Step 10: GO/KEGG enrichment")
 
     marker_csv = os.path.join(cfg.table_dir, "marker_peaks.csv")
     if not os.path.exists(marker_csv):
-        log.warning("marker_peaks.csv not found. Run Step 05 first.")
+        log.warning("marker_peaks.csv not found. Run Step 07 first.")
         return
 
     markers_df = pd.read_csv(marker_csv)
     log.info("Loaded: %d rows", len(markers_df))
 
-    table_dir = os.path.join(cfg.table_dir, "08_enrichment")
+    table_dir = os.path.join(cfg.table_dir, "10_enrichment")
     os.makedirs(table_dir, exist_ok=True)
 
     all_results = []
@@ -232,7 +232,7 @@ def main():
         log.info("Saved enrichment_results.csv (%d rows)", len(combined))
 
         try:
-            atac_fig_dir = os.path.join(cfg.figure_dir, "08_enrichment")
+            atac_fig_dir = os.path.join(cfg.figure_dir, "10_enrichment")
             os.makedirs(atac_fig_dir, exist_ok=True)
             top = combined.sort_values("Adjusted P-value").head(20)
             fig, ax = plt.subplots(figsize=(10, 6))
@@ -255,7 +255,7 @@ def main():
         pd.DataFrame().to_csv(os.path.join(table_dir, "enrichment_results.csv"), index=False)
 
     gc.collect()
-    log.info("Step 11 complete, took %.1fs", time.time() - t0)
+    log.info("Step 10 complete, took %.1fs", time.time() - t0)
 
 
 if __name__ == "__main__":

@@ -50,12 +50,37 @@ class TestModalityStep0Shared:
         assert v > 0.0
 
 
+class TestAtacStepEstimators:
+    """ATAC-specific estimators registered in batch 3 (steps 1/2/4)."""
+
+    @pytest.mark.parametrize("step", [1, 2, 4])
+    def test_atac_step_positive(self, step: int) -> None:
+        v = estimate_step_peak(step, 100_000, 50_000, modality="atac")
+        assert v > 0.0
+
+    def test_atac_step1_grows_with_cells(self) -> None:
+        small = estimate_step_peak(1, 10_000, 50_000, modality="atac")
+        large = estimate_step_peak(1, 1_000_000, 50_000, modality="atac")
+        assert large > small
+
+    def test_atac_step2_dense_float64_dominates(self) -> None:
+        # 100k x 50k float64 X = 40 GB + obsm + KNN
+        v = estimate_step_peak(2, 100_000, 50_000, modality="atac")
+        assert v > 40.0
+
+    def test_atac_step4_larger_than_step1(self) -> None:
+        # per-cluster peak union ~1.5x pooled -> step 4 > step 1 at same size
+        v1 = estimate_step_peak(1, 100_000, 0, modality="atac")
+        v4 = estimate_step_peak(4, 100_000, 0, modality="atac")
+        assert v4 >= v1
+
+
 class TestModalityUnknownStep:
     """Unknown (modality, step) pairs -> 0.0 + warning, never RNA reuse."""
 
     @pytest.mark.parametrize(
         ("modality", "step"),
-        [("atac", 4), ("atac", 13), ("spatial", 5), ("bulk", 3), ("metis", 0)],
+        [("atac", 3), ("atac", 13), ("spatial", 5), ("bulk", 3), ("metis", 0)],
     )
     def test_unknown_returns_zero_with_warning(self, modality: str, step: int, caplog) -> None:
         with caplog.at_level(logging.WARNING, logger="core.utils._memory"):

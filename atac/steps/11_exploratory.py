@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Step 12: Exploratory analysis (placeholder)"""
+"""Step 11: Exploratory analysis (placeholder)"""
 
 import argparse
 import os
@@ -17,8 +17,8 @@ def main():
     p.add_argument("--config", required=True)
     a = p.parse_args()
     cfg = resolve_config(a.config)
-    log = setup_logger("12_exploratory", os.path.join(cfg.log_dir, "12_exploratory.log"))
-    log.info("Step 12: Exploratory analysis (placeholder)")
+    log = setup_logger("11_exploratory", os.path.join(cfg.log_dir, "11_exploratory.log"))
+    log.info("Step 11: Exploratory analysis (placeholder)")
     log.info("Not yet implemented. Done %.1fs", time.time() - t0)
 
 

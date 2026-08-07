@@ -69,6 +69,10 @@ class DataInputConfig(BaseModel):
     h5_file_pattern: str = "*filtered_feature_bc_matrix.h5"
     h5_dir: str = ""
     fragment_file: str = ""
+    # Fragments.tsv sort order. 10x files are typically position-sorted
+    # (chr, start) — set False for those; SnapATAC2 requires barcode-sorted
+    # input when True (default matches snap's expectation for sorted files).
+    sorted_by_barcode: bool = True
     # ── Preprocessed (embedded metadata columns) format ──
     file_pattern: str = "*.tsv.gz"
     separator: str = ""  # empty = auto-detect (tab vs comma)
@@ -665,20 +669,20 @@ class ATACConfig(BaseModel):
     genome: str = "hg38"
     chrom_sizes: str = ""
     blacklist_bed: str = ""
-    tss_bed: str = ""
+    # TODO(batch 6): max_blacklist_ratio 为细胞级黑名单比例，需 fragment-level
+    # overlap 自算；当前未实现（仅保留字段）。
+    max_blacklist_ratio: float = 0.05
     min_fragments: int = 1000
     max_fragments: int = 50000
     min_tsse: float = 7.0
-    max_blacklist_ratio: float = 0.05
-    min_peak_region_fragments: int = 300
     peak_qval: float = 0.05
-    peak_width: int = 500
-    use_macs3: bool = True
+    use_pseudo_replicates: bool = True
     n_features: int = 50000
     n_spectral: int = 30
+    spectral_sample_size: Optional[int] = None
     marker_peaks_log2fc: float = 0.5
     marker_peaks_fdr: float = 0.05
-    motif_db: str = "JASPAR2024"
+    marker_peaks_method: Literal["quick", "bpc"] = "quick"
     terminal_cell_types: List[str] = Field(default_factory=list)
     max_cells: Optional[int] = None
     harmony_use_harmony: bool = False
@@ -1085,15 +1089,11 @@ class Config(BaseModel):
         return os.path.join(self.h5ad_dir, "02_qc.h5ad")
 
     @property
-    def doublet_h5ad(self) -> str:
-        return os.path.join(self.h5ad_dir, "01_doublet.h5ad")
-
-    @property
     def norm_h5ad(self) -> str:
         return os.path.join(self.h5ad_dir, "03_normalized.h5ad")
 
     @property
-    def integrated_h5ad(self) -> str:
+    def rna_integrated_h5ad(self) -> str:
         return os.path.join(self.h5ad_dir, "03_integrated.h5ad")
 
     @property
@@ -1115,23 +1115,27 @@ class Config(BaseModel):
     # ── ATAC: checkpoint 路径 ──
     @property
     def filtered_h5ad(self) -> str:
-        return os.path.join(self.h5ad_dir, "02_filtered.h5ad")
+        return os.path.join(self.h5ad_dir, "01_filtered.h5ad")
 
     @property
     def processed_h5ad(self) -> str:
-        return os.path.join(self.h5ad_dir, "03_processed.h5ad")
+        return os.path.join(self.h5ad_dir, "02_processed.h5ad")
 
     @property
     def clustered_h5ad(self) -> str:
-        return os.path.join(self.h5ad_dir, "04_clustered.h5ad")
+        return os.path.join(self.h5ad_dir, "03_clustered.h5ad")
 
     @property
     def trajectory_h5ad(self) -> str:
-        return os.path.join(self.h5ad_dir, "10_trajectory.h5ad")
+        return os.path.join(self.h5ad_dir, "09_trajectory.h5ad")
 
     @property
     def peak_h5ad(self) -> str:
-        return os.path.join(self.h5ad_dir, "05_peaks.h5ad")
+        return os.path.join(self.h5ad_dir, "04_peaks.h5ad")
+
+    @property
+    def atac_integrated_h5ad(self) -> str:
+        return os.path.join(self.h5ad_dir, "12_integrated.h5ad")
 
     # ── Spatial: checkpoint paths ──
     @property

@@ -481,7 +481,7 @@ def _write_cluster_h5ad(adata, cfg, log):
     if getattr(cfg, "incremental_io", True):
         import shutil
 
-        shutil.copy2(cfg.integrated_h5ad, cfg.cluster_h5ad)
+        shutil.copy2(cfg.rna_integrated_h5ad, cfg.cluster_h5ad)
         try:
             from core.utils import write_h5ad_incremental
 
@@ -524,41 +524,8 @@ def main():
     # n_cells prefers the step-00 load_meta (persisted by the runner into
     # results/perf_report.json — filtering only shrinks, so it is a
     # conservative upper bound); falls back to a zero-copy h5py shape probe.
-    from core.utils import check_memory_guard, estimate_step_peak, resolve_memory_settings
 
-    input_path = cfg.integrated_h5ad
-    _mem_policy, _mem_budget, _mem_guard = resolve_memory_settings(cfg)
-    _n_cells = 0
-    try:
-        import json as _json
-        import os as _os
-
-        _pr_path = _os.path.join(cfg.results_dir, "perf_report.json")
-        if _os.path.isfile(_pr_path):
-            with open(_pr_path) as _f:
-                _lm = (_json.load(_f).get("pipeline", {}) or {}).get("load_meta")
-            if _lm and _lm.get("n_cells"):
-                _n_cells = int(_lm["n_cells"])
-    except Exception:
-        pass
-    if _n_cells <= 0:
-        try:
-            import h5py
-
-            with h5py.File(input_path, "r") as _h5:
-                _n_cells = int(_h5["X"].shape[0])
-        except Exception:
-            pass
-    if _n_cells > 0:
-        _est = {
-            4: estimate_step_peak(4, _n_cells, 4000, policy=_mem_policy, budget_bytes=_mem_budget)
-        }
-        if _mem_budget > 0:
-            log.info("[memory-guard] estimated step 04 peak: ~%.0f GB", _est[4])
-        check_memory_guard(_est, _mem_budget, _mem_guard, logger_obj=log)
-
-    # ── 输入 ──
-    input_path = cfg.integrated_h5ad
+    input_path = cfg.rna_integrated_h5ad
     log.info("Loaded: %s", input_path)
     adata = sc.read(input_path)
     log.info("  shape: %s", adata.shape)

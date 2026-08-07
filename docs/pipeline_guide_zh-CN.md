@@ -113,7 +113,7 @@ Fuxi — RNA-seq pipeline step list
 # scRNA-seq 全流程（13 步，从数据加载到细胞互作分析）
 python core/run_pipeline.py --modality rna --config projects/rna/{数据集ID}/config_{数据集ID}.yaml
 
-# scATAC-seq 全流程（14 步）
+# scATAC-seq 全流程（13 步）
 python core/run_pipeline.py --modality atac --config projects/atac/{数据集ID}/config_{数据集ID}.yaml
 
 # 空间转录组全流程（11 步）
@@ -142,7 +142,7 @@ python core/run_pipeline.py --modality bulk --config projects/bulk/{数据集ID}
 [run] Step timing summary:
   [00]    45.2s  Load raw data → 00_raw.h5ad
   ...
-  [Total] 1845.3s  14 steps total
+  [Total] 1845.3s  13 steps total
 ```
 
 ### 3.3 检查点与断点续跑
@@ -628,27 +628,43 @@ scATAC-seq 管线包含 14 个步骤（编号 00-13），数据依次流转：
 
 与 RNA 管线相同的多参数网格搜索策略（遍历 `n_neighbors` × `resolution`），在谱嵌入空间中以 Pareto 拐点算法自动选择最优聚类。
 
-### Step 04：AI 染色质状态注释
+### Step 04：聚类后峰 calling
 
-**输入**：`03_clustered.h5ad` | **输出**：`04_annotated.h5ad`
+**输入**：`03_clustered.h5ad` | **输出**：`04_peaks.h5ad`
+
+1. 逐聚类（leiden）调用 MACS3，为每个聚类生成独立的峰集
+2. 构建新的峰-细胞矩阵并计算 FRiP 富集分数
+3. 该步骤输出成为后续注释、差异可及性分析的主要输入
+
+### Step 05：AI 染色质状态注释
+
+**输入**：`04_peaks.h5ad` | **输出**：`05_annotated.h5ad`
 
 1. 计算每个聚类的差异可及性峰（marker regions）
 2. 将 top 峰及其邻近基因发送给大语言模型（LLM）
 3. LLM 基于染色质开放区域的基因关联推断细胞类型/染色质状态
 4. AI 响应自动磁盘缓存（SHA256 去重），重复运行不额外调用 API
 
-### Step 05-08：下游分析
+### Step 06：亚聚类分析（占位）
+
+暂未实现（用于未来按细胞类型细分）。
+
+### Step 07-10：下游分析
 
 | 步骤 | 内容 | 输出 |
 |------|------|------|
-| Step 05 | 差异可及性峰 per 细胞类型 | `marker_peaks.csv` |
-| Step 06 | TF 结合基序富集（CIS-BP 数据库） | `motif_enrichment_{细胞类型}.csv` |
-| Step 07 | ATAC 伪时间轨迹分析 | `07_trajectory.h5ad` |
-| Step 08 | 峰关联基因的 GO/KEGG 富集 | `enrichment_*.csv` |
+| Step 07 | 差异可及性峰 per 细胞类型 | `marker_peaks.csv` |
+| Step 08 | TF 结合基序富集（CIS-BP 数据库） | `motif_results.csv` |
+| Step 09 | ATAC 伪时间轨迹分析 | `09_trajectory.h5ad` |
+| Step 10 | 峰关联基因的 GO/KEGG 富集 | `enrichment_*.csv` |
 
-### Step 09：RNA+ATAC 整合
+### Step 11：探索性分析（占位）
 
-**输入**：ATAC `04_annotated.h5ad` + RNA h5ad（自动发现） | **输出**：`09_integrated.h5ad`
+暂未实现。
+
+### Step 12：RNA+ATAC 整合
+
+**输入**：ATAC `05_annotated.h5ad` + RNA h5ad（自动发现） | **输出**：`12_integrated.h5ad`
 
 如果你有配对的多组学数据（同一批细胞的 RNA-seq + ATAC-seq）：
 1. 自动发现同数据集下的 RNA 结果文件
@@ -656,7 +672,27 @@ scATAC-seq 管线包含 14 个步骤（编号 00-13），数据依次流转：
 3. 构建 MuData 多模态对象（`rna` + `atac` 两个 modality）
 4. 运行联合 PCA
 
-> 💡 对于**多组学（multiome）数据集**，预处理脚本会自动生成 RNA 和 ATAC 两份配置。先分别跑完 RNA 和 ATAC 管线，再跑 ATAC Step 09 即可自动整合。
+> 💡 对于**多组学（multiome）数据集**，预处理脚本会自动生成 RNA 和 ATAC 两份配置。先分别跑完 RNA 和 ATAC 管线，再跑 ATAC Step 12 即可自动整合。
+
+### ATAC 关键配置字段
+
+| 字段 | 默认 | 说明 |
+|------|------|------|
+| `atac.blacklist_bed` | `""` | ENCODE blacklist BED 路径；非空时 macs3（01_qc pooled + 04_peaks per-cluster）峰调用排除该区域。空串不启用 |
+| `atac.use_pseudo_replicates` | `true` | 伪重复峰验证：04_peaks per-cluster macs3 按 leiden 分组二分构造 `pseudo_replicate`，传 `replicate` + `replicate_qvalue` 调用（SnapATAC2 2.9 实测可用，obs 值须为字符串）；`false` 回退旧行为 |
+| `atac.marker_peaks_method` | `"quick"` | 07_marker_peaks 差异可及性方法：`"quick"` = `snap.tl.marker_regions`；`"bpc"` = pseudobulk + log-TP10K + 深度分层背景匹配 + Wilcoxon/BH-FDR（`core/atac_utils/da.py`）。两种模式输出同构 CSV |
+| `atac.spectral_sample_size` | `null` | Nyström 近似阈值；`null`（默认）= 禁用（02_process 全量谱嵌入），设整数值且细胞数超过时启用 |
+| `atac.terminal_cell_types` | `[]` | 09_trajectory diffusion DPT 的终末细胞类型：空列表 = 显式 skip（写 `uns['trajectory'].status='skipped'`，不造假 pseudotime）；非空时以距终末簇质心最远的 1% 细胞中位为 root 计算 DPT |
+| `atac.max_blacklist_ratio` | `0.05` | ⚠️ 保留但**未实现**（需 fragment-level overlap 自算，TODO） |
+
+### 内存 guard（execution.memory）
+
+ATAC 步骤 01_qc / 02_process / 03_cluster / 04_peaks 已接入 RNA 同款内存估算与 guard：`execution.memory.{policy, budget, guard}` 三件套在每步加载后估算峰值（`core/utils/_memory.py` 注册了 atac step 1/2/4 估算器，step 3 未注册 → warn + 0.0 不 gate），guard=`warn` 记日志 / `block` 超预算抛错 / `off` 跳过。步骤内同时接入 `monitor_performance`（`[perf]` 日志行；`perf_report.json` 由 runner 统一落盘）。
+
+### Step 09 轨迹行为（A/B）
+
+- **A（未配置 `terminal_cell_types`）**：不写伪 `pseudotime=0`，不产误导 UMAP；`uns['trajectory'] = {status: 'skipped', reason: 'no terminal_cell_types configured'}`，仍写 checkpoint 保持链路。
+- **B（已配置）**：`sc.pp.neighbors(use_rep='X_spectral')` → `sc.tl.diffmap(n_comps=15)` → root 选择（diffmap 空间距所有终末簇质心最远 1% 细胞的中位）→ `sc.tl.dpt(n_dcs=10)`（scanpy 1.12 用 `uns['iroot']`，`root_user` 已移除）→ `obs['pseudotime']` + UMAP 着色。依赖失败（无 cell_type / 无匹配终末类型 / scanpy 异常）自动降级为 A。
 
 ---
 

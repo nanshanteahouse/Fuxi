@@ -11,7 +11,7 @@ Fuxi is a unified monorepo for single-cell multi-omics analysis — scRNA-seq (S
 | Modality | Engine | Steps | Status |
 |----------|--------|:-----:|:------:|
 | `rna` | Scanpy 1.10+ | 13 (00-12) | Production |
-| `atac` | Snapatac2 2.9 | 14 (00-13) | Production |
+| `atac` | Snapatac2 2.9 | 13 (00-12) | Production |
 | `spatial` | Squidpy 1.8+ | 11 (00-10) | Production |
 | `bulk` | PyDESeq2 | 5 (+1) | Beta |
 
@@ -63,8 +63,8 @@ fuxi/
 │   ├── utils/             # RNA-specific utilities (hierarchy, evidence_fusion, etc.)
 │   └── ortholog.py        # Cross-species gene mapping
 │
-├── atac/                  # scATAC-seq module (14 steps)
-│   └── steps/             # 00_load → 13_integrate
+├── atac/                  # scATAC-seq module (13 steps)
+│   └── steps/             # 00_load → 12_integrate
 │
 ├── spatial/               # Spatial transcriptomics module (11 steps)
 │   └── steps/             # 00_load → 10_cell_interaction

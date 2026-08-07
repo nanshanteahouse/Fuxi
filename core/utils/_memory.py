@@ -474,6 +474,42 @@ def _estimate_step00_peak(
     return raw_csr + write_staging + obs + 1.0
 
 
+# ── ATAC (SnapATAC2) estimators ──
+# Step 1 — 01_qc: backed fragment load -> filter_cells -> pooled MACS3 ->
+#   peak-by-cell matrix -> Scrublet.  The fragment adata is loaded backed
+#   (lazy), so the resident peak is dominated by the peak-matrix build +
+#   MACS3 workspace.  Conservative assumptions (no ATAC dataset calibrated
+#   yet): ~50 nnz/cell in the peak matrix, ~200k peaks, ~120B per polars
+#   peak-table row, plus a 1.5 GB base covering the backed load + MACS3
+#   temp workspace + Scrublet.
+def _estimate_atac_step01_peak(n_cells: int) -> float:
+    peak_csr = n_cells * 50 * 12 / 1e9
+    peak_table = 200_000 * 120 / 1e9
+    return max(2.0, peak_csr + peak_table + 1.5)
+
+
+# Step 2 — 02_process: fully in-memory.  X is cast to float64
+#   (n_cells x n_features x 8B) for the spectral backend, plus the spectral
+#   obsm (n_cells x n_spectral x 8B) and the KNN graph (sparse).
+#   n_features defaults to the pipeline default 50k when the caller cannot
+#   supply the real value.
+def _estimate_atac_step02_peak(n_cells: int, n_genes: int = 0) -> float:
+    n_feat = n_genes or 50_000
+    x_f64 = n_cells * n_feat * 8 / 1e9
+    spectral = n_cells * 30 * 8 / 1e9
+    knn = n_cells * 15 * 4 * 2 / 1e9
+    return max(4.0, x_f64 + spectral + knn + 2.0)
+
+
+# Step 4 — 04_peaks: import_fragments (backed) + per-cluster MACS3 +
+#   merged peak matrix.  The per-cluster peak union is ~1.5x the step-1
+#   pooled peak set; same sparse-matrix model + base.
+def _estimate_atac_step04_peak(n_cells: int) -> float:
+    peak_csr = n_cells * 50 * 12 / 1e9
+    peak_table = int(200_000 * 1.5) * 120 / 1e9
+    return max(3.0, peak_csr + peak_table + 2.0)
+
+
 _STEP_ESTIMATORS: dict[str, dict[int, tuple[Callable[..., float], frozenset[str]]]] = {
     "rna": {
         0: (
@@ -500,7 +536,10 @@ _STEP_ESTIMATORS: dict[str, dict[int, tuple[Callable[..., float], frozenset[str]
         0: (
             _estimate_step00_peak,
             frozenset({"n_cells", "n_genes", "nnz", "budget_bytes", "concat_factor"}),
-        )
+        ),
+        1: (_estimate_atac_step01_peak, frozenset({"n_cells"})),
+        2: (_estimate_atac_step02_peak, frozenset({"n_cells", "n_genes"})),
+        4: (_estimate_atac_step04_peak, frozenset({"n_cells"})),
     },
     "spatial": {
         0: (

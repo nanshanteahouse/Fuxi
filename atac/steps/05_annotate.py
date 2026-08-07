@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Step 06: AI-assisted chromatin state annotation
+Step 05: AI-assisted chromatin state annotation
 =================================================
-  - Reads clustered AnnData
+  - Reads post-clustering peak matrix (04_peaks.h5ad) with clustered metadata
   - Computes marker regions per cluster
   - AI annotation with disk caching to avoid redundant LLM calls
 
-Input:  04_clustered.h5ad
+Input:  04_peaks.h5ad
 Output: 05_annotated.h5ad
 """
 
@@ -29,17 +29,27 @@ def main():
     args = args_parser.parse_args()
 
     cfg = resolve_config(args.config)
-    log = setup_logger("06_annotate", os.path.join(cfg.log_dir, "06_annotate.log"))
-    log.info("Step 06: Chromatin state annotation")
+    log = setup_logger("05_annotate", os.path.join(cfg.log_dir, "05_annotate.log"))
+    log.info("Step 05: Chromatin state annotation")
 
     if os.path.exists(cfg.annotated_h5ad):
         log.info("Skip: %s exists.", cfg.annotated_h5ad)
         return
 
     # In-memory mode for pandas compatibility
-    data = snap.read(cfg.clustered_h5ad)
+    data = snap.read(cfg.peak_h5ad)
     if data.isbacked:
         data = data.to_memory()
+    # Drop cells that had no matching cluster upstream (import_fragments
+    # superset vs post-filter clustered) — they carry leiden="unassigned".
+    if "leiden" in data.obs:
+        n_unassigned = int((data.obs["leiden"].astype(str) == "unassigned").sum())
+        if n_unassigned > 0:
+            data = data[data.obs["leiden"].astype(str) != "unassigned"].copy()
+            log.info("Removed %d unassigned cells → %d cells", n_unassigned, data.n_obs)
+        if data.n_obs == 0:
+            log.error("All cells are unassigned; nothing to annotate.")
+            sys.exit(1)
     log.info(
         "Loaded: %d cells, %d clusters",
         data.n_obs,
@@ -116,7 +126,7 @@ def main():
     )
 
     safe_write(data, cfg.annotated_h5ad, cfg=cfg, compression_override=None)
-    log.info("Step 06 complete, took %.1fs", time.time() - t0)
+    log.info("Step 05 complete, took %.1fs", time.time() - t0)
 
 
 if __name__ == "__main__":

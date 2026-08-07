@@ -14,6 +14,7 @@ addopts = "-v --tb=short"
 markers = [
     "smoke: fast gate-keeping test (no data, no network, <3s each)",
     "integration: end-to-end tests using synthetic fixtures (slower, opt-in via -m integration)",
+    "slow: long-running synthetic pipeline smoke tests (opt-in via -m slow)"
 ]
 asyncio_mode = "auto"
 filterwarnings = [

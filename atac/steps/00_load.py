@@ -11,7 +11,6 @@ Output: 00_raw.h5ad
 """
 
 import argparse
-import gzip
 import os
 import sys
 import time
@@ -21,58 +20,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 import numpy as np
 import snapatac2 as snap
 
+from core.atac_utils.chrom_sizes import HG38_CHROM_SIZES, auto_chrom_sizes  # noqa: E402
 from core.utils import resolve_config, safe_write, setup_logger, validate_adata
 
-HG38_CHROM_SIZES = {
-    "chr1": 248956422,
-    "chr2": 242193529,
-    "chr3": 198295559,
-    "chr4": 190214555,
-    "chr5": 181538259,
-    "chr6": 170805979,
-    "chr7": 159345973,
-    "chr8": 145138636,
-    "chr9": 138394717,
-    "chr10": 133797422,
-    "chr11": 135086622,
-    "chr12": 133275309,
-    "chr13": 114364328,
-    "chr14": 107043718,
-    "chr15": 101991189,
-    "chr16": 90338345,
-    "chr17": 83257441,
-    "chr18": 80373285,
-    "chr19": 58617616,
-    "chr20": 64444167,
-    "chr21": 46709983,
-    "chr22": 50818468,
-    "chrX": 156040895,
-    "chrY": 57227415,
-    "chrM": 16569,
-}
 _N_STANDARD_CHROMS = len(HG38_CHROM_SIZES)
-
-
-def auto_chrom_sizes(fragment_file: str) -> dict:
-    """Auto-detect chromosome sizes from fragment file with early exit
-    once all standard chromosomes have been seen."""
-    chrom_max = {}
-    chroms_found = set()
-    with gzip.open(fragment_file, "rt") as f:
-        for line in f:
-            parts = line.strip().split("\t")
-            if len(parts) < 3:
-                continue
-            c, end = parts[0], int(parts[2])
-            if c in HG38_CHROM_SIZES:
-                chrom_max[c] = HG38_CHROM_SIZES[c]
-                chroms_found.add(c)
-                # Early exit once all standard chromosomes are found
-                if len(chroms_found) >= _N_STANDARD_CHROMS:
-                    break
-            elif c not in chrom_max or end > chrom_max[c]:
-                chrom_max[c] = end + 10000
-    return chrom_max
 
 
 def main():

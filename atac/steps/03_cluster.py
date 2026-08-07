@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Step 04: Multi-param Leiden + UMAP
+Step 03: Multi-param Leiden + UMAP
 =====================================
   - Grid search over n_neighbors × resolutions
   - Each KNN graph shared across all resolutions (no redundant recomputation)
   - Silhouette score for quality evaluation (sampled for large datasets)
   - Stores only the selected best combination in obsm / obs
 
-Input:  03_processed.h5ad
-Output: 04_clustered.h5ad
+Input:  02_processed.h5ad
+Output: 03_clustered.h5ad
 """
 
 import argparse
@@ -24,7 +24,15 @@ from sklearn.metrics import silhouette_score
 
 from core.cluster.grid_search import grid_search_clustering, select_best_params
 from core.config.schema import SILHOUETTE_SAMPLE_THRESHOLD
-from core.utils import resolve_config, safe_write, setup_logger
+from core.utils import (
+    check_memory_guard,
+    estimate_step_peak,
+    monitor_performance,
+    resolve_config,
+    resolve_memory_settings,
+    safe_write,
+    setup_logger,
+)
 
 # ---------------------------------------------------------------------------
 #  ATAC-specific callables for the shared grid_search_clustering interface
@@ -128,25 +136,29 @@ def _evaluate_n_neighbor_atac(data, n, resolutions, cfg, log):
     return (n, summary_rows, umap_coords, leiden_cols)
 
 
-def main():
-    t0 = time.time()
-    args_parser = argparse.ArgumentParser()
-    args_parser.add_argument("--config", default="../config.py")
-    args = args_parser.parse_args()
-
-    cfg = resolve_config(args.config)
-    log = setup_logger("04_cluster", os.path.join(cfg.log_dir, "04_cluster.log"))
-    log.info("Step 04: Multi-param Leiden + UMAP")
-
-    if os.path.exists(cfg.clustered_h5ad):
-        log.info("Skip: %s exists.", cfg.clustered_h5ad)
-        return
-
+def _run_step(cfg, log, t0):
+    """Core step 03 body — extracted for the perf wrapper."""
     # Read in backed mode then materialize to memory
     data = snap.read(cfg.processed_h5ad)
     if data.isbacked:
         data = data.to_memory()
     log.info("Loaded: %d cells, vars: %d", data.n_obs, data.n_vars)
+
+    # ── Memory guard: estimate step-03 peak vs budget before the grid
+    #    sweep (in-memory object + per-worker copies).  No ATAC estimator
+    #    is registered for step 3 -> warning + 0.0 (never blocks).
+    try:
+        _policy, _budget, _guard = resolve_memory_settings(cfg)
+        _est = {
+            3: estimate_step_peak(
+                3, data.n_obs, data.n_vars, modality="atac", policy=_policy, budget_bytes=_budget
+            )
+        }
+        if _budget > 0:
+            log.info("[memory-guard] estimated step 03 peak: ~%.0f GB", _est[3])
+        check_memory_guard(_est, _budget, _guard, logger_obj=log)
+    except Exception as e:
+        log.warning("[memory-guard] step 03 estimation skipped: %s", e)
 
     # Clean up any stray leiden columns from previous partial runs
     for col in list(data.obs.columns):
@@ -236,7 +248,25 @@ def main():
         }
 
     safe_write(data, cfg.clustered_h5ad, cfg=cfg, compression_override=None)
-    log.info("Step 04 complete, took %.1fs", time.time() - t0)
+    log.info("Step 03 complete, took %.1fs", time.time() - t0)
+
+
+def main():
+    t0 = time.time()
+    args_parser = argparse.ArgumentParser()
+    args_parser.add_argument("--config", default="../config.py")
+    args = args_parser.parse_args()
+
+    cfg = resolve_config(args.config)
+    log = setup_logger("03_cluster", os.path.join(cfg.log_dir, "03_cluster.log"))
+    log.info("Step 03: Multi-param Leiden + UMAP")
+
+    if os.path.exists(cfg.clustered_h5ad):
+        log.info("Skip: %s exists.", cfg.clustered_h5ad)
+        return
+
+    with monitor_performance("03_cluster", log=log):
+        _run_step(cfg, log, t0)
 
 
 if __name__ == "__main__":

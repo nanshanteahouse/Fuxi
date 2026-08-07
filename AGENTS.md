@@ -91,7 +91,7 @@ python core/preprocess/preprocessor.py --gse <GSE_ID> --data-root $FUXI_DATA_ROO
 | Module | Location |
 |--------|----------|
 | RNA steps | `rna/steps/` (13 steps: 00_load → 12_cell_interaction) |
-| ATAC steps | `atac/steps/` (14 steps: 00_load → 13_integrate) |
+| ATAC steps | `atac/steps/` (13 steps: 00_load → 12_integrate) |
 | Spatial steps | `spatial/steps/` (11 steps: 00_load → 10_cell_interaction) |
 | Bulk steps | `bulk/steps/` (5+1 steps: 00_load → 04_exploratory, optional 05_batch) | PyDESeq2 |
 | Shared core | `core/` — sub-packages: ai/, annotation/, cluster/, config/, interaction/, kb/, paper/, pipeline/, preprocess/, utils/ |
