@@ -210,6 +210,208 @@ def _concat_mtx_batched(adatas: list, batch: int, log):
     return adatas[0]
 
 
+def _unique_columns_keep_first(columns, log=None):
+    """Dedup column names keeping the first occurrence.
+
+    Mirrors ``expr.columns.duplicated(keep="first")`` in the preprocessed
+    branch — the first occurrence wins, later duplicates are dropped.
+    """
+    seen = set()
+    out = []
+    n_dup = 0
+    for c in columns:
+        if c in seen:
+            n_dup += 1
+            continue
+        seen.add(c)
+        out.append(c)
+    if n_dup and log is not None:
+        log.warning("Duplicate gene names: %d — keeping first occurrence", n_dup)
+    return out
+
+
+def _classify_preprocessed_columns(sample: pd.DataFrame) -> list:
+    """Three-metric metadata/expression column classification.
+
+    Returns one of ``"M"`` (metadata) / ``"E"`` (expression) per column of
+    ``sample``: numeric ratio → sparsity → small-int cardinality → unique
+    ratio.  Logic is byte-for-byte the preprocessed branch's auto-detection
+    (numeric ratio < 0.5 → meta; >80% zeros → expression; small-int
+    categorical → meta; low-cardinality numeric → meta).
+    """
+    n_sampled = len(sample)
+    classifications = []
+    for col in sample.columns:
+        numeric = pd.to_numeric(sample[col], errors="coerce")
+        numeric_ratio = numeric.notna().sum() / n_sampled
+        if numeric_ratio < 0.5:
+            classifications.append("M")
+        else:
+            non_na = numeric.dropna()
+            zero_frac = (non_na == 0).sum() / len(non_na) if len(non_na) > 0 else 0
+            if zero_frac > 0.8:
+                classifications.append("E")
+                continue
+            is_small_int = False
+            if len(non_na) > 0:
+                if all(v == int(v) for v in non_na):
+                    rng = non_na.max() - non_na.min()
+                    if rng < 50:
+                        is_small_int = True
+            if is_small_int:
+                classifications.append("M")
+            else:
+                unique_ratio = numeric.nunique() / n_sampled
+                if unique_ratio < 0.5:
+                    classifications.append("M")
+                else:
+                    classifications.append("E")
+    return classifications
+
+
+def _detect_preprocessed_boundary(file_list, sep, log) -> int:
+    """Auto-detect the metadata/expression boundary from the first file.
+
+    Reads only the first 100 rows for classification, then derives ``meta_cols``
+    (the first expression-column position).  Error paths are identical to the
+    previous inline logic.
+    """
+    log.info("Auto-detecting meta/expr boundary from %s ...", os.path.basename(file_list[0]))
+    try:
+        sample = pd.read_csv(file_list[0], sep=sep, nrows=100)
+    except Exception as e:
+        log.error("Failed to read sample from %s: %s", file_list[0], e)
+        sys.exit(1)
+
+    n_sampled = len(sample)
+    if n_sampled < 2:
+        log.error("Sample has %d rows — too few to detect boundary", n_sampled)
+        sys.exit(1)
+
+    classifications = _classify_preprocessed_columns(sample)
+    meta_cols = 0
+    for i, c in enumerate(classifications):
+        if c == "E":
+            meta_cols = i
+            break
+
+    log.info(
+        "Column classification: %d meta + %d expression",
+        meta_cols,
+        len(classifications) - meta_cols,
+    )
+
+    if meta_cols < 1:
+        if all(c == "E" for c in classifications):
+            log.error(
+                "All columns classified as expression — this looks like a pure count matrix. "
+                "Use data_format='csv_matrix' instead."
+            )
+        else:
+            log.error(
+                "Auto-detection: first column is expression data. "
+                "Use data_format='csv_matrix' for count matrices."
+            )
+        sys.exit(1)
+
+    if meta_cols >= sample.shape[1] - 2:
+        log.error(
+            "%d metadata columns leaves only %d expression columns — doesn't look ",
+            "like a gene expression matrix.",
+            meta_cols,
+            sample.shape[1] - meta_cols,
+        )
+        sys.exit(1)
+
+    log.info(
+        "Detected: %d metadata cols, %d expression cols (~%d genes)",
+        meta_cols,
+        sample.shape[1] - meta_cols,
+        sample.shape[1] - meta_cols,
+    )
+    return meta_cols
+
+
+def _build_preprocessed_sparse(file_list, sep, meta_cols, log, chunksize=None):
+    """Memory-bounded sparse build for the preprocessed branch.
+
+    Replaces the old dense build (concat of all expression frames → dense
+    ``expr.values.astype(float32)`` → ``csr_matrix``; measured 29.4 GiB peak
+    at 32k cells) with a chunked by-name assembly:
+
+    * the union gene order is read from file headers only (``nrows=0``),
+      reproducing ``pd.concat(axis=0)`` order-of-first-appearance;
+    * each file is streamed in row-chunks; every chunk is re-aligned to the
+      final gene order BY NAME (missing columns → NaN, metis G6) and turned
+      into a float32 CSR slice;
+    * per-file chunk CSRs are vstacked, then the file CSRs — only the output
+      sparse matrix plus a bounded chunk block ever live in memory.
+
+    NaN is preserved and exact-0.0 dropped (``csr_matrix(dense)`` semantics).
+    The old ``ignore_index=True`` row numbering is reproduced by streaming
+    files in order, so duplicate barcodes get the same ``_{i}`` suffixes.
+    """
+    # ── header-only column union (pd.concat order-of-first-appearance) ──
+    first_columns = list(pd.read_csv(file_list[0], sep=sep, nrows=0).columns)
+    combined_columns = list(first_columns)
+    seen = set(first_columns)
+    for fpath in file_list[1:]:
+        for c in pd.read_csv(fpath, sep=sep, nrows=0).columns:
+            if c not in seen:
+                seen.add(c)
+                combined_columns.append(c)
+
+    meta_names = combined_columns[:meta_cols]
+    expr_final = _unique_columns_keep_first(combined_columns[meta_cols:], log)
+    n_genes = len(expr_final)
+
+    # ~10M cells×genes (~200 MB) of dense per chunk → chunksize by width.
+    if chunksize is None:
+        chunksize = max(256, min(100_000, int(10_000_000 // max(n_genes, 1))))
+
+    file_csrs = []
+    meta_blocks = []
+    for fpath in file_list:
+        log.info("Loading %s ...", os.path.basename(fpath))
+        chunk_csrs = []
+        for chunk in pd.read_csv(fpath, sep=sep, chunksize=chunksize):
+            expr_block = chunk.reindex(columns=expr_final)
+            chunk_csrs.append(sp.csr_matrix(expr_block.values.astype(np.float32)))
+            meta_blocks.append(chunk.reindex(columns=meta_names))
+        if len(chunk_csrs) == 1:
+            file_csrs.append(chunk_csrs[0])
+        elif len(chunk_csrs) > 1:
+            file_csrs.append(sp.vstack(chunk_csrs, format="csr"))
+        else:
+            file_csrs.append(sp.csr_matrix((0, n_genes), dtype=np.float32))
+
+    if len(file_csrs) == 1:
+        x = file_csrs[0]
+    else:
+        x = sp.vstack(file_csrs, format="csr")
+    log.info("Combined shape: %s", (x.shape[0], x.shape[1]))
+
+    meta = (
+        pd.concat(meta_blocks, axis=0, ignore_index=True)
+        if meta_blocks
+        else pd.DataFrame(columns=meta_names)
+    )
+    del meta_blocks
+
+    barcodes = meta.iloc[:, 0].values.astype(str)
+    if not pd.Index(barcodes).is_unique:
+        log.warning("Barcodes not unique — appending row index")
+        barcodes = [f"{bc}_{i}" for i, bc in enumerate(barcodes)]
+
+    adata = sc.AnnData(X=x)
+    adata.obs_names = barcodes
+    adata.var_names = [str(c) for c in expr_final]
+    for col_idx in range(1, meta_cols):
+        col_name = str(meta.columns[col_idx]).strip()
+        adata.obs[col_name] = meta.iloc[:, col_idx].values
+    return adata
+
+
 def _load_multi_sample_10x_mtx(cfg, log):
     """Load multiple 10X MTX sample dirs matched by ``mtx_dir_pattern``.
 
@@ -738,125 +940,10 @@ def main():
                 sep = "\t"
 
         # ── Auto-detect metadata/expression boundary ──
-        log.info("Auto-detecting meta/expr boundary from %s ...", os.path.basename(file_list[0]))
-        try:
-            sample = pd.read_csv(file_list[0], sep=sep, nrows=100)
-        except Exception as e:
-            log.error("Failed to read sample from %s: %s", file_list[0], e)
-            sys.exit(1)
+        meta_cols = _detect_preprocessed_boundary(file_list, sep, log)
 
-        n_sampled = len(sample)
-        if n_sampled < 2:
-            log.error("Sample has %d rows — too few to detect boundary", n_sampled)
-            sys.exit(1)
-
-        # Three-metric classification: numeric ratio → sparsity → cardinality
-        classifications = []
-        for col in sample.columns:
-            numeric = pd.to_numeric(sample[col], errors="coerce")
-            numeric_ratio = numeric.notna().sum() / n_sampled
-            if numeric_ratio < 0.5:
-                classifications.append("M")  # mostly non-numeric → metadata
-            else:
-                non_na = numeric.dropna()
-                # Step 1: Sparsity check — if >80% of values are zero, it's expression
-                zero_frac = (non_na == 0).sum() / len(non_na) if len(non_na) > 0 else 0
-                if zero_frac > 0.8:
-                    classifications.append("E")  # sparse numeric → expression
-                    continue
-                # Step 2: Small-integer categorical metadata (e.g. cluster labels)
-                is_small_int = False
-                if len(non_na) > 0:
-                    if all(v == int(v) for v in non_na):
-                        rng = non_na.max() - non_na.min()
-                        if rng < 50:
-                            is_small_int = True
-                if is_small_int:
-                    classifications.append("M")  # integer-coded meta
-                else:
-                    # Step 3: Cardinality — high-cardinality numeric = expression
-                    unique_ratio = numeric.nunique() / n_sampled
-                    if unique_ratio < 0.5:
-                        classifications.append("M")  # low-cardinality meta
-                    else:
-                        classifications.append("E")  # expression
-        meta_cols = 0
-        for i, c in enumerate(classifications):
-            if c == "E":
-                meta_cols = i
-                break
-
-        log.info(
-            "Column classification: %d meta + %d expression",
-            meta_cols,
-            len(classifications) - meta_cols,
-        )
-
-        if meta_cols < 1:
-            # Check if truly no metadata or all metadata
-            if all(c == "E" for c in classifications):
-                log.error(
-                    "All columns classified as expression — this looks like a pure count matrix. "
-                    "Use data_format='csv_matrix' instead."
-                )
-            else:
-                log.error(
-                    "Auto-detection: first column is expression data. "
-                    "Use data_format='csv_matrix' for count matrices."
-                )
-            sys.exit(1)
-
-        if meta_cols >= sample.shape[1] - 2:
-            log.error(
-                "%d metadata columns leaves only %d expression columns — doesn't look ",
-                "like a gene expression matrix.",
-                meta_cols,
-                sample.shape[1] - meta_cols,
-            )
-            sys.exit(1)
-
-        log.info(
-            "Detected: %d metadata cols, %d expression cols (~%d genes)",
-            meta_cols,
-            sample.shape[1] - meta_cols,
-            sample.shape[1] - meta_cols,
-        )
-
-        # ── Load and concat all files ──
-        all_dfs = []
-        for fpath in file_list:
-            log.info("Loading %s ...", os.path.basename(fpath))
-            all_dfs.append(pd.read_csv(fpath, sep=sep))
-
-        combined = pd.concat(all_dfs, axis=0, ignore_index=True)
-        log.info("Combined shape: %s", combined.shape)
-        del all_dfs
-
-        # ── Separate metadata and expression ──
-        meta = combined.iloc[:, :meta_cols].copy()
-        expr = combined.iloc[:, meta_cols:]
-
-        # Make gene names unique
-        if expr.columns.duplicated().any():
-            dup_count = expr.columns.duplicated().sum()
-            log.warning("Duplicate gene names: %d — keeping first occurrence", dup_count)
-            expr = expr.loc[:, ~expr.columns.duplicated(keep="first")]
-
-        # Build AnnData
-        barcodes = meta.iloc[:, 0].values.astype(str)
-        if not pd.Index(barcodes).is_unique:
-            log.warning("Barcodes not unique — appending row index")
-            barcodes = [f"{bc}_{i}" for i, bc in enumerate(barcodes)]
-
-        x = expr.values.astype(np.float32)
-        adata = sc.AnnData(X=sp.csr_matrix(x))
-        adata.obs_names = barcodes
-        adata.var_names = expr.columns.astype(str)
-
-        # Remaining metadata columns → obs
-        for col_idx in range(1, meta_cols):
-            col_name = str(meta.columns[col_idx]).strip()
-            adata.obs[col_name] = meta.iloc[:, col_idx].values
+        # ── Load + build sparse (chunked, memory-bounded) ──
+        adata = _build_preprocessed_sparse(file_list, sep, meta_cols, log)
 
         # Apply meta_columns renaming if configured
         if cfg.sample_meta.meta_columns:
