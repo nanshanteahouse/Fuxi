@@ -95,6 +95,19 @@ def _resolve_accelerator(cfg) -> str:
     return "auto"
 
 
+def _resolve_label_col(ref_adata, log) -> str | None:
+    """Pick the reference's cell-type label column, tolerating aliases.
+
+    Seurat-derived references commonly store the label under ``CellType``
+    (or ``celltype``/``cell_types``) rather than scanpy's ``cell_type``.
+    Returns ``None`` when no usable label column exists."""
+    for candidate in ("cell_type", "CellType", "celltype", "cell_types", "leiden"):
+        if candidate in ref_adata.obs:
+            log.info("Reference cell-type label column: '%s'", candidate)
+            return candidate
+    return None
+
+
 def _resolve_rna_ref(cfg, log):
     """Resolve the scRNA reference h5ad path.
 
@@ -299,7 +312,17 @@ def _extract_counts(adata, log):
 
 def _run_reference_estimation(models, ref_counts, accelerator, cfg, log):
     """RegressionModel reference estimation → inf_aver (gene × cell-type)."""
-    labels_key = "cell_type" if "cell_type" in ref_counts.obs else "leiden"
+    labels_key = _resolve_label_col(ref_counts, log) or "leiden"
+    n_before = ref_counts.n_obs
+    labeled = ref_counts.obs[labels_key].notna()
+    if not labeled.all():
+        ref_counts = ref_counts[labeled].copy()
+        log.warning(
+            "Dropped %d reference cells with missing '%s' label (%d remain)",
+            n_before - ref_counts.n_obs,
+            labels_key,
+            ref_counts.n_obs,
+        )
     batch_key = "sample" if "sample" in ref_counts.obs else None
     max_epochs = int(_cfg_val(cfg, "spatial", "deconv_ref_max_epochs", 500))
     n_samples = int(_cfg_val(cfg, "spatial", "deconv_ref_n_samples", 1000))
@@ -544,15 +567,15 @@ def main():
         ref_adata.n_vars,
         ref_path,
     )
-    label_col = "cell_type" if "cell_type" in ref_adata.obs else "leiden"
-    if label_col not in ref_adata.obs:
+    label_col = _resolve_label_col(ref_adata, log)
+    if label_col is None:
         _finish_failed(
             adata,
             cfg,
             log,
             output_path,
             method,
-            reason="reference lacks obs['cell_type']/obs['leiden']",
+            reason="reference lacks a cell-type label column (cell_type/CellType/leiden)",
         )
 
     accelerator = _resolve_accelerator(cfg)

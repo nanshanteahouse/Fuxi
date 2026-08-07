@@ -2,8 +2,8 @@
 """
 Step 03: Normalization + HVG selection + spatial neighbor graph
 ==================================================================
-Phase 1: Library-size normalize + log1p
-Phase 2: Store raw counts in adata.raw
+Phase 1: Store raw counts in adata.raw (BEFORE any transformation)
+Phase 2: Library-size normalize + log1p
 Phase 3: HVG selection with fallback chain + forced gene inclusion
 Phase 4: Build spatial neighbor graph via sq.gr.spatial_neighbors()
 Phase 5: PCA on HVGs
@@ -239,16 +239,16 @@ def main():
     adata = sc.read(input_path)
     log.info("Loaded: %s — %d spots × %d genes", input_path, adata.n_obs, adata.n_vars)
 
-    # ═══ Phase 1: Normalization ═══
+    # ═══ Phase 1: Store raw counts (before any transformation) ═══
+    adata.raw = adata.copy()
+    log.info("  Raw counts stored in adata.raw")
+
+    # ═══ Phase 2: Normalization ═══
     log.info("Normalizing to target sum=%.0f...", cfg.normalization.normalize_target_sum)
     sc.pp.normalize_total(adata, target_sum=cfg.normalization.normalize_target_sum)
     log.info("  Normalization complete")
     sc.pp.log1p(adata)
     log.info("  log1p transformation applied")
-
-    # ═══ Phase 2: Store raw counts ═══
-    adata.raw = adata.copy()
-    log.info("  Raw counts stored in adata.raw")
 
     # ═══ Phase 3: Highly variable genes ═══
     flavors = []
