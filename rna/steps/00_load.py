@@ -134,7 +134,7 @@ def _run_ambient_correction(adata, cfg, log):
         log.info("Running CellBender ambient RNA removal...")
         log.warning("CellBender GPU training not yet implemented — Phase 2 scope")
         # Phase 1: write pass-through until GPU training is wired
-        safe_write(ambient_pth, adata=adata, file_type="h5ad")
+        safe_write(adata, ambient_pth, cfg=cfg)
         log.info("Ambient-corrected data written to %s", ambient_pth)
 
     elif method == "soupx":
@@ -146,7 +146,7 @@ def _run_ambient_correction(adata, cfg, log):
         log.info("Running SoupX ambient RNA removal...")
         log.warning("SoupX ambient estimation not yet implemented — Phase 2 scope")
         # Phase 1: write pass-through until SoupX estimation is wired
-        safe_write(ambient_pth, adata=adata, file_type="h5ad")
+        safe_write(adata, ambient_pth, cfg=cfg)
         log.info("Ambient-corrected data written to %s", ambient_pth)
 
     else:
