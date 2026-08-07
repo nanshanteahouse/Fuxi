@@ -25,6 +25,7 @@ run_pipeline.py — Fuxi (伏羲) 统一管线主控
 
 import argparse
 import cProfile
+import json
 import logging
 import os
 import runpy
@@ -765,6 +766,25 @@ def main():
                     else 0.0
                 )
                 _perf_report.checkpoint_mib = round(ckpt_size, 1)
+
+                # ── Merge load_meta written by step 00 into pipeline layer ──
+                # Step 00 writes <results_dir>/.load_meta.tmp.json after saving
+                # 00_raw.h5ad; consume it here (before save_json) so downstream
+                # steps can pre-read real nnz/n_cells from perf_report.json.
+                if num == "00":
+                    _load_meta_path = os.path.join(CFG.results_dir, ".load_meta.tmp.json")
+                    if os.path.exists(_load_meta_path):
+                        try:
+                            with open(_load_meta_path) as _lmf:
+                                _load_meta = json.load(_lmf)
+                            pipeline_summary.pipeline_info["load_meta"] = _load_meta
+                        except (OSError, ValueError) as _lme:
+                            print(f"[run] Warning: failed to read load_meta: {_lme}")
+                        finally:
+                            try:
+                                os.unlink(_load_meta_path)
+                            except OSError:
+                                pass
 
             pipeline_summary.add_step(num, desc, _perf_report)
             # Per-step persistence: save perf_report after every step so

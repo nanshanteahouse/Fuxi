@@ -376,24 +376,56 @@ class PerformanceSummary:
             mem_per_1k = summary["max_peak_rss_mib"] / (n_cells_total / 1000)
             mem_line = f"[mem] Memory reference: ~{mem_per_1k:.2f} MiB per 1k cells at {n_genes_val:,} genes"
             print(f"{_b}{_pad(mem_line, total_w - 2)}{_b}")
-            est = self._estimate_memory(summary["max_peak_rss_mib"], n_cells_total, n_genes_val)
+            est = self._estimate_memory(
+                summary["max_peak_rss_mib"],
+                n_cells_total,
+                n_genes_val,
+                load_meta=(data.get("pipeline", {}) or {}).get("load_meta"),
+            )
             parts = []
             for k, v in est.items():
                 parts.append(f"{k} x {n_genes_val:,}: ~{v:.1f} GiB")
             est_line = "    -> " + "  ".join(parts)
             print(f"{_b}{_pad(est_line, total_w - 2)}{_b}")
-            print(f"{_b}{_pad('(linear estimate, actual varies)', total_w - 2)}{_b}")
+            if (data.get("pipeline", {}) or {}).get("load_meta"):
+                print(f"{_b}{_pad('(model-based, from load_meta)', total_w - 2)}{_b}")
+            else:
+                print(f"{_b}{_pad('(linear estimate, actual varies)', total_w - 2)}{_b}")
 
         print(bot)
 
     @staticmethod
-    def _estimate_memory(peak_rss_mib: float, n_cells: int, n_genes: int) -> dict[str, float]:
+    def _estimate_memory(
+        peak_rss_mib: float, n_cells: int, n_genes: int, load_meta: Optional[dict] = None
+    ) -> dict[str, float]:
         """Estimate memory requirements at scale based on current measurement.
+
+        With ``load_meta`` (from perf_report.json pipeline layer, written by
+        step 00) the estimate is model-based: target nnz is scaled by cell
+        count at constant density and fed through ``estimate_step_peak``.
+        Without it, falls back to the legacy per-cell-gene linear model.
 
         Returns estimated GiB for 50k/100k/200k/500k cells at same gene density.
         """
         if n_cells == 0 or n_genes == 0:
             return {}
+        if load_meta:
+            from core.utils._memory import estimate_step_peak
+
+            _nnz = int(load_meta.get("nnz", 0) or 0)
+            _cf = float(load_meta.get("concat_factor", 1.0) or 1.0)
+            out: dict[str, float] = {}
+            for _label, _target in (
+                ("50k", 50_000),
+                ("100k", 100_000),
+                ("200k", 200_000),
+                ("500k", 500_000),
+            ):
+                _scaled_nnz = int(_nnz * (_target / n_cells)) if n_cells else _nnz
+                out[_label] = round(
+                    estimate_step_peak(0, _target, n_genes, _scaled_nnz, concat_factor=_cf), 1
+                )
+            return out
         per_cell_gene_mib = peak_rss_mib / (n_cells * n_genes)
         return {
             "50k": round(50_000 * n_genes * per_cell_gene_mib / 1024, 1),

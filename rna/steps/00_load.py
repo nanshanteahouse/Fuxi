@@ -15,6 +15,7 @@ Step 00: 加载原始 scRNA-seq 数据
 
 import argparse
 import gzip
+import json
 import os
 import shutil
 import sys
@@ -1112,6 +1113,33 @@ def main():
             )
         check_memory_guard(_est, _mem_budget, _mem_guard, logger_obj=log)
 
+        # ── Informational: 01-12 peak estimates from the pre-scan nnz ──
+        # Not gating anything — only log so operators can plan the rest of
+        # the pipeline against the true (pre-scan) matrix shape.
+        try:
+            from core.utils import estimate_step_peak
+
+            _all_est = [
+                (
+                    s,
+                    estimate_step_peak(
+                        s,
+                        _n_cells,
+                        _n_genes,
+                        _nnz,
+                        policy=_mem_policy,
+                        budget_bytes=_mem_budget,
+                        concat_factor=_concat,
+                    ),
+                )
+                for s in range(1, 13)
+            ]
+            log.info(
+                "[mem-est] step-00 pre-scan: " + "  ".join(f"s{s} ~{g:.1f}GB" for s, g in _all_est)
+            )
+        except Exception:
+            log.warning("Failed to print step 01-12 estimates", exc_info=True)
+
     # ── 3 种加载方式 ──────────────────────────────────────────────
     if cfg.data_format == "10X_mtx":
         if cfg.data_input.mtx_dir_pattern:
@@ -1495,6 +1523,29 @@ def main():
             compression_opts=raw_compression_opts,
         )
     log.info("Step 00 complete, took %.1fs", time.time() - t0)
+
+    # ── Persist load metadata for downstream memory guards ──
+    # The runner merges this into perf_report.json's pipeline layer so
+    # steps 01-12 can pre-read the REAL nnz/n_cells BEFORE loading the
+    # h5ad (zero-copy, no h5py open). n_cells reflects the written file
+    # (post filter/downsample); nnz is the pre-filter upper bound.
+    try:
+        _load_meta = {
+            "n_cells": int(n_keep),
+            "n_genes": int(adata.n_vars),
+            "nnz": int(adata.X.nnz)
+            if hasattr(adata.X, "nnz")
+            else int(adata.n_obs * adata.n_vars),
+            "format": cfg.data_format,
+        }
+        if "sample" in adata.obs:
+            _load_meta["n_samples"] = int(adata.obs["sample"].nunique())
+        _meta_path = os.path.join(cfg.results_dir, ".load_meta.tmp.json")
+        with open(_meta_path, "w") as _f:
+            json.dump(_load_meta, _f)
+        log.info("load_meta written to %s", _meta_path)
+    except Exception:
+        log.warning("Failed to persist load_meta", exc_info=True)
 
 
 if __name__ == "__main__":
