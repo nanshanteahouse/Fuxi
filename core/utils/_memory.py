@@ -8,11 +8,13 @@ provides the single entry point ``execution.memory.{policy, budget, guard}``:
 - ``estimate_step_peak(...)``   -> per-step peak RSS estimates (GB)
 - ``check_memory_guard(...)``   -> warn / block / off before a run starts
 
-Peak formulas are calibrated against measured runs (step 01: 155k cells
- @ 2.8 GB; step 02: 1.05M cells @ 33 GB, 1.68M cells @ 35 GB; step 04:
- 110k @ 12 GB, 620k @ 21 GB, 1.05M @ 40.5 GB, 1.676M @ <100 GB (run
- OK on a 100 GB budget); step 06: subcluster subsets 2.5k-61k cells;
- step 07: 9 runs from 2.3k to 1.05M cells, RSS 1.8-16.3 GB).
+Peak formulas are calibrated against measured runs (step 00: 5 datasets
+ 1.2M cells @ 34.11 GiB, 70.5k @ 7.49 GiB, 51k @ 3.42 GiB, 32k @ 2.14 GiB,
+ 137.5k @ 3.76 GiB; step 01: 155k cells @ 2.8 GB; step 02: 1.05M cells
+ @ 33 GB, 1.68M cells @ 35 GB; step 04: 110k @ 12 GB, 620k @ 21 GB,
+ 1.05M @ 40.5 GB, 1.676M @ <100 GB (run OK on a 100 GB budget); step
+ 06: subcluster subsets 2.5k-61k cells; step 07: 9 runs from 2.3k to
+ 1.05M cells, RSS 1.8-16.3 GB).
 """
 
 from __future__ import annotations
@@ -427,6 +429,41 @@ def _estimate_step12_wall(
     return load + perm + lr + 8.0
 
 
+# Step 00 — raw load (post-T8/T1b rework).  The load builds ONE output CSR
+#   (nnz×12B: float32 data + int64 indices) plus the chunked-write staging
+#   (T2 block-bounded: one block ≲ 500k rows) plus the obs DataFrame
+#   (~536 B/cell) and a 1.0 GiB base.  ``concat_factor`` covers union-var
+#   growth: 1.0 for single-file loads, ~1.3 for multi-file merges
+#   (identical gene sets take the in-place fast path, so 1.3 is a
+#   conservative bound on near-1.0 reality — metis G11).  Calibrated on
+#   the 5 T8/T1b measured datasets (runner peak_rss_mib / time -v):
+#     Lobe_Neurons 28×10X_h5 1.204M c / 2.801e9 nnz -> 34.11 GiB (est 43.6)
+#     Multiome     10×10X_h5  70.5k c / 0.426e9 nnz ->  7.49 GiB (est  8.6)
+#     GSE173180    csv_table  50.9k c / 0.108e9 nnz ->  3.42 GiB (est  3.6)
+#     GSE202735    preproc    32.1k c / 0.053e9 nnz ->  2.14 GiB (est  2.9)
+#     GSE239410    MTX-mmread 137.5k c / 0.156e9 nnz -> 3.76 GiB (est  4.1)
+#   StressTest 83×10X_h5 1.973M c / 4.468e9 nnz -> est 68.2 GiB (<100 GB,
+#   metis G8).  write_staging = 1.5 GB keeps the 5 anchors in bracket.
+def _estimate_step00_peak(
+    n_cells: int,
+    n_genes: int,
+    nnz: int,
+    budget_bytes: int = 0,
+    concat_factor: float = 1.0,
+) -> float:
+    """Estimated peak RSS (GB) for step 00 (raw load).
+
+    ``nnz`` is the *raw input* non-zero count (summed over all input files);
+    ``concat_factor`` is 1.0 for single-file loads and ~1.3 for multi-file
+    merges (union-var growth).  The output CSR (12 B/nnz) is the dominant
+    term; the T2 block-bounded write adds a fixed ~1.5 GB staging; the obs
+    frame adds ~536 B/cell; 1.0 GiB covers scanpy/pandas/python base."""
+    raw_csr = nnz * 12 * concat_factor / 1e9  # resident merged CSR
+    write_staging = 1.5  # one chunked-write block + h5py buffers
+    obs = n_cells * 536 / 1e9
+    return raw_csr + write_staging + obs + 1.0
+
+
 def estimate_step_peak(
     step: int,
     n_cells: int,
@@ -438,6 +475,7 @@ def estimate_step_peak(
     parent_cells: int = 0,
     parent_genes: int = 0,
     plot_max_cells: int = 20_000,
+    concat_factor: float = 1.0,
 ) -> float:
     """Estimated peak RSS (GB) for a pipeline step.
 
@@ -445,6 +483,8 @@ def estimate_step_peak(
     full gene count / subset nnz); ``parent_cells`` / ``parent_genes``
     describe the parent 05_annotated object whose full read dominates the
     loading phase."""
+    if step == 0:
+        return _estimate_step00_peak(n_cells, n_genes, nnz, budget_bytes, concat_factor)
     if step == 1:
         return _estimate_step01_peak(n_cells, n_genes, nnz, budget_bytes)
     if step == 2:

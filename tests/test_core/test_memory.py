@@ -61,7 +61,7 @@ def test_estimate_step_peak_monotonic() -> None:
     # Bigger input -> bigger estimate, on every step.
     small = (100_000, 20_000, 20_000_000)
     big = (2_000_000, 35_000, 3_500_000_000)
-    for step in (1, 2, 3, 4, 6):
+    for step in (0, 1, 2, 3, 4, 6):
         s = estimate_step_peak(step, *small, policy="balanced", budget_bytes=80 * 2**30)
         b = estimate_step_peak(step, *big, policy="balanced", budget_bytes=80 * 2**30)
         assert b > s, f"step {step}: {s:.1f} -> {b:.1f} not monotonic"
@@ -74,6 +74,45 @@ def test_estimate_step04_peak_anchors() -> None:
     assert 19.0 <= estimate_step_peak(4, 620_000, 4000) <= 24.0
     assert 38.0 <= estimate_step_peak(4, 1_050_000, 4000) <= 44.0
     assert 62.0 <= estimate_step_peak(4, 1_676_000, 4000) <= 75.0
+
+
+def test_estimate_step00_anchors() -> None:
+    # Calibrated on the 5 T8/T1b measured step-00 runs (runner peak_rss_mib
+    # / time -v) after the T1b in-place CSR assembly landed:
+    #   Li2026_Lobe_Neurons 28×10X_h5 1.204M c / 2.801e9 nnz -> 34.11 GiB
+    #   Li2026_Multiome     10×10X_h5  70.5k c / 0.426e9 nnz ->  7.49 GiB
+    #   GSE173180          csv_table  50.9k c / 0.108e9 nnz ->  3.42 GiB
+    #   GSE202735          preproc    32.1k c / 0.053e9 nnz ->  2.14 GiB
+    #   GSE239410          MTX-mmread 137.5k c / 0.156e9 nnz -> 3.76 GiB
+    # The formula is an UPPER-bound planning tool — each bracket sits above
+    # its measured peak (concat_factor 1.3 for multi-file union growth).
+    lobe = estimate_step_peak(0, 1_203_724, 36_601, 2_801_279_457, concat_factor=1.3)
+    multi = estimate_step_peak(0, 70_477, 36_601, 426_241_129, concat_factor=1.3)
+    gse173180 = estimate_step_peak(0, 50_954, 19_808, 108_412_096)
+    gse202735 = estimate_step_peak(0, 32_073, 38_144, 52_600_000)
+    gse239410 = estimate_step_peak(0, 137_490, 32_520, 155_934_193)
+    stress = estimate_step_peak(0, 1_973_127, 36_601, 4_468_159_696, concat_factor=1.3)
+    # brackets in GiB (estimator returns decimal GB)
+    assert 35.0 <= lobe / 1.073741824 <= 45.0, f"Lobe: {lobe:.2f} GB"
+    assert 7.0 <= multi / 1.073741824 <= 10.0, f"Multiome: {multi:.2f} GB"
+    assert 3.5 <= gse173180 / 1.073741824 <= 6.0, f"GSE173180: {gse173180:.2f} GB"
+    assert 2.5 <= gse202735 / 1.073741824 <= 4.5, f"GSE202735: {gse202735:.2f} GB"
+    assert 3.5 <= gse239410 / 1.073741824 <= 5.5, f"GSE239410: {gse239410:.2f} GB"
+    assert stress / 1.073741824 < 100.0, (
+        f"StressTest: {stress:.2f} GB (must stay < 100 GB, metis G8)"
+    )
+
+
+def test_estimate_step00_returns_positive() -> None:
+    # Regression: step 0 used to return 0.0 (dispatcher fell through).
+    assert estimate_step_peak(0, 100_000, 20_000, 20_000_000) > 0.0
+
+
+def test_estimate_step00_positive_cf_effect() -> None:
+    # concat_factor must push the estimate UP (union-var growth).
+    base = estimate_step_peak(0, 100_000, 20_000, 100_000_000)
+    multi = estimate_step_peak(0, 100_000, 20_000, 100_000_000, concat_factor=1.3)
+    assert multi > base
 
 
 def test_estimate_step03_policy_difference() -> None:

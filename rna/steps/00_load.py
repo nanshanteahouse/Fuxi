@@ -913,6 +913,150 @@ def _filter_downsample_mask(obs, cfg, log) -> np.ndarray:
     return combined
 
 
+def _preflight_step00_meta(cfg, log):
+    """Metadata-only pre-scan feeding the step-00 memory guard.
+
+    Reads ONLY file headers / h5 dataset shapes — never the expression
+    matrix — so the guard can run before the heavy load (metis G7).
+    Returns ``(n_cells, n_genes, nnz, concat_factor)`` or ``None`` when the
+    format has no cheap metadata probe (the guard is silently skipped, so
+    existing runs are unaffected unless ``execution.memory.guard=block``)."""
+    import glob as glob_mod
+
+    fmt = cfg.data_format
+
+    if fmt == "10X_h5":
+        import h5py
+
+        h5_dir = getattr(cfg.data_input, "h5_dir", "") or cfg.data_dir
+        files = sorted(glob_mod.glob(os.path.join(h5_dir, cfg.data_input.h5_file_pattern)))
+        if not files:
+            return None  # the load branch reports the missing-file error
+        n_cells = nnz = n_genes = 0
+        for fp in files:
+            try:
+                with h5py.File(fp, "r") as f:
+                    m = f["matrix"]
+                    nnz += int(m["data"].shape[0])  # zero-copy shape read
+                    n_cells += int(m["indptr"].shape[0]) - 1
+                    n_genes = max(n_genes, int(m["features"]["name"].shape[0]))
+            except Exception:
+                return None  # let the real load report the corrupt file
+        return n_cells, n_genes, nnz, 1.3 if len(files) > 1 else 1.0
+
+    if fmt == "10X_mtx":
+        if getattr(cfg.data_input, "mtx_dir_pattern", None):
+            return None  # multi-sample MTX: no single cheap probe (dead branch)
+        for name in (
+            cfg.data_input.mtx_prefix + "matrix.mtx",
+            cfg.data_input.mtx_prefix + "matrix.mtx.gz",
+        ):
+            path = os.path.join(cfg.data_input.mtx_dir, name)
+            if os.path.exists(path):
+                info = _mtx_header_info(path)
+                if info:
+                    n_genes, n_cells, nnz = info  # MTX is genes×cells
+                    return n_cells, n_genes, nnz, 1.0
+        return None
+
+    if fmt == "csv_matrix":
+        matrix_file = cfg.data_input.matrix_file
+        base = matrix_file[:-3] if matrix_file.endswith(".gz") else matrix_file
+        ext = os.path.splitext(base)[1].lower()
+        if ext in (".csv", ".tsv", ".txt"):
+            # table: header-only read → n_cells; line count → n_genes;
+            # nnz estimated from a bounded density sample (cheap).
+            sep = getattr(cfg.data_input, "csv_sep", None)
+            if not sep:
+                try:
+                    peek = pd.read_csv(matrix_file, sep=None, engine="python", nrows=1)
+                    sep = "\t" if len(peek.columns) > 1 else ","
+                except Exception:
+                    sep = "\t"
+            try:
+                header = pd.read_csv(matrix_file, index_col=0, sep=sep, nrows=0)
+                n_cells = max(len(header.columns), 1)
+                n_genes = max(_count_text_lines(matrix_file) - 1, 1)
+                density = _sample_table_density(matrix_file, sep)
+                return n_cells, n_genes, int(n_cells * n_genes * density), 1.0
+            except Exception:
+                return None
+        info = _mtx_header_info(matrix_file)  # MTX-mmread sub-branch
+        if info:
+            n_genes, n_cells, nnz = info
+            return n_cells, n_genes, nnz, 1.0
+        return None
+
+    if fmt == "preprocessed":
+        sep = cfg.data_input.separator or "\t"
+        pattern = getattr(cfg.data_input, "file_pattern", "") or "*.tsv.gz"
+        files = sorted(glob_mod.glob(os.path.join(cfg.data_dir, pattern)))
+        if not files:
+            return None
+        n_cells = n_genes = 0
+        density_total = 0.0
+        for fp in files:
+            try:
+                header = pd.read_csv(fp, sep=sep, nrows=0)
+                n_genes = max(n_genes, len(header.columns) - 1)  # minus barcode col
+                rows = max(_count_text_lines(fp) - 1, 0)
+                n_cells += rows
+                density_total += _sample_table_density(fp, sep) * rows
+            except Exception:
+                return None
+        density = density_total / n_cells if n_cells else 0.0
+        return n_cells, n_genes, int(n_cells * n_genes * density), 1.0
+
+    return None  # h5ad / unknown formats: no metadata probe
+
+
+def _mtx_header_info(path):
+    """Parse rows/cols/nnz from a (possibly .gz) MatrixMarket header."""
+    import gzip as _gzip
+
+    opener = _gzip.open if str(path).endswith(".gz") else open
+    try:
+        with opener(path, "rt") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("%"):
+                    continue
+                parts = line.split()
+                if len(parts) >= 3 and parts[0].isdigit():
+                    return int(parts[0]), int(parts[1]), int(parts[2])
+    except Exception:
+        return None
+    return None
+
+
+def _count_text_lines(path):
+    """Count lines of a (possibly .gz) text file; used for cheap row counts."""
+    import gzip as _gzip
+
+    opener = _gzip.open if str(path).endswith(".gz") else open
+    try:
+        with opener(path, "rt") as f:
+            return sum(1 for _ in f)
+    except Exception:
+        return 0
+
+
+def _sample_table_density(path, sep, max_rows: int = 200):
+    """Non-zero fraction over a bounded table sample (upper-bound nnz)."""
+    try:
+        df = pd.read_csv(path, index_col=0, sep=sep, nrows=max_rows)
+        vals = df.values
+        if vals.dtype == object:
+            vals = df.apply(pd.to_numeric, errors="coerce").values
+        v32 = vals.astype(np.float32)
+        n = v32.size
+        if n == 0:
+            return 0.0
+        return float(np.count_nonzero(~np.isnan(v32) & (v32 != 0))) / n
+    except Exception:
+        return 0.0
+
+
 def main():
     t0 = time.time()
     args_parser = argparse.ArgumentParser()
@@ -927,6 +1071,34 @@ def main():
     if os.path.exists(cfg.raw_h5ad):
         log.info("Skip: %s already exists. Delete it to force reload.", cfg.raw_h5ad)
         return
+
+    # ── Memory guard: metadata-only pre-scan → estimate step-00 peak ──
+    # Reads ONLY file headers / h5 shapes (never X) so the guard runs before
+    # the heavy load, mirroring 01_doublet.  Default guard is "warn" —
+    # existing runs are unaffected unless execution.memory.guard=block.
+    from core.utils import check_memory_guard, estimate_step_peak, resolve_memory_settings
+
+    _mem_policy, _mem_budget, _mem_guard = resolve_memory_settings(cfg)
+    _meta = _preflight_step00_meta(cfg, log)
+    if _meta is not None:
+        _n_cells, _n_genes, _nnz, _concat = _meta
+        _est = {
+            0: estimate_step_peak(
+                0,
+                _n_cells,
+                _n_genes,
+                _nnz,
+                policy=_mem_policy,
+                budget_bytes=_mem_budget,
+                concat_factor=_concat,
+            )
+        }
+        if _mem_budget > 0:
+            log.info(
+                "[memory-guard] estimated peaks: "
+                + ", ".join(f"step{s} ~{g:.0f}GB" for s, g in _est.items())
+            )
+        check_memory_guard(_est, _mem_budget, _mem_guard, logger_obj=log)
 
     # ── 3 种加载方式 ──────────────────────────────────────────────
     if cfg.data_format == "10X_mtx":
