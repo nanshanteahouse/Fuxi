@@ -436,13 +436,16 @@ def _estimate_step12_wall(
 #   measured step-00 datasets (runner peak_rss_mib / time -v):
 #     Lobe_Neurons 28×10X_h5 1.204M c / 2.801e9 nnz -> 34.11 GiB
 #       est 34.24 at cf=1.0 (+0.4%) / 43.63 at cf=1.3 (+27.9%)
-#     Multiome     10×10X_h5  70.5k c / 0.426e9 nnz ->  7.49 GiB (est  8.6)
+#     Multiome     10×10X_h5  70.5k c / 0.426e9 nnz ->  7.49 GiB
+#       est 7.13 at cf=1.0 (-4.8% — accepted guard tolerance; old cf=1.3
+#       est was 8.6)
 #     GSE173180    csv_table  50.9k c / 0.108e9 nnz ->  3.42 GiB (est  3.6)
 #     GSE202735    preproc    32.1k c / 0.053e9 nnz ->  2.14 GiB (est  2.9)
 #     GSE239410    MTX-mmread 137.5k c / 0.156e9 nnz -> 3.76 GiB (est  4.1)
 #   StressTest 83×10X_h5 1.973M c / 4.468e9 nnz -> 51.61 GiB measured;
 #     est 53.25 at cf=1.0 (+3.2%) / 68.23 at cf=1.3 (+32.2%; metis G8 <100GB).
-#   write_staging = 1.5 GB keeps the 6 anchors in bracket.
+#   write_staging = 1.5 GB keeps the 6 anchors in bracket (Multiome is the
+#   one deliberately-slightly-under anchor, documented above).
 def _estimate_step00_peak(
     n_cells: int,
     n_genes: int,

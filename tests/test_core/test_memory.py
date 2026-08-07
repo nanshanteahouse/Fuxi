@@ -85,12 +85,14 @@ def test_estimate_step00_anchors() -> None:
     #   GSE202735          preproc    32.1k c / 0.053e9 nnz ->  2.14 GiB
     #   GSE239410          MTX-mmread 137.5k c / 0.156e9 nnz -> 3.76 GiB
     #   StressTest         83×10X_h5  1.973M c / 4.468e9 nnz -> 51.61 GiB
-    # The formula is an UPPER-bound planning tool — each bracket sits above
-    # its measured peak.  Multi-file datasets with IDENTICAL gene sets take
-    # the T1b in-place fast path (no var-union growth) so the preflight now
-    # feeds concat_factor=1.0 (Lobe est 34.24 GiB = +0.4%; StressTest est
-    # 53.25 GiB = +3.2%); the conservative 1.3 is reserved for differing
-    # gene sets (batched outer join, var union grows).
+    # The formula is an UPPER-bound planning tool — each bracket sits at/near
+    # its measured peak, with one deliberate exception: Li2026_Multiome (the
+    # cf=1.0 estimate, 7.13 GiB, sits 4.8% BELOW its 7.49 GiB measured peak —
+    # accepted as guard tolerance, cf. _memory.py).  Multi-file datasets with
+    # IDENTICAL gene sets take the T1b in-place fast path (no var-union growth)
+    # so the preflight now feeds concat_factor=1.0 (Lobe est 34.24 GiB = +0.4%;
+    # StressTest est 53.25 GiB = +3.2%); the conservative 1.3 is reserved for
+    # differing gene sets (batched outer join, var union grows).
     lobe = estimate_step_peak(0, 1_203_724, 36_601, 2_801_279_457, concat_factor=1.0)
     multi = estimate_step_peak(0, 70_477, 36_601, 426_241_129, concat_factor=1.0)
     gse173180 = estimate_step_peak(0, 50_954, 19_808, 108_412_096)
@@ -99,7 +101,9 @@ def test_estimate_step00_anchors() -> None:
     stress = estimate_step_peak(0, 1_973_127, 36_601, 4_468_159_696, concat_factor=1.0)
     # brackets in GiB (estimator returns decimal GB)
     assert 33.5 <= lobe / 1.073741824 <= 35.5, f"Lobe: {lobe:.2f} GB"
-    assert 7.0 <= multi / 1.073741824 <= 10.0, f"Multiome: {multi:.2f} GB"
+    # cf=1.0 -> 7.13 GiB; measured 7.49 GiB is slightly above (deliberate,
+    # guard tolerance)
+    assert 7.0 <= multi / 1.073741824 <= 8.0, f"Multiome: {multi:.2f} GB"
     assert 3.5 <= gse173180 / 1.073741824 <= 6.0, f"GSE173180: {gse173180:.2f} GB"
     assert 2.5 <= gse202735 / 1.073741824 <= 4.5, f"GSE202735: {gse202735:.2f} GB"
     assert 3.5 <= gse239410 / 1.073741824 <= 5.5, f"GSE239410: {gse239410:.2f} GB"
