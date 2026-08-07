@@ -412,6 +412,76 @@ def _build_preprocessed_sparse(file_list, sep, meta_cols, log, chunksize=None):
     return adata
 
 
+def _csv_chunk_to_float32(chunk: pd.DataFrame) -> np.ndarray:
+    """Per-block float32 coercion of a genes×cells chunk, transposed.
+
+    Mirrors the old branch's whole-file ``astype(np.float32)`` conversion on a
+    chunk of the genes×cells table: fully-numeric blocks take the exact fast
+    path.  Object blocks (a non-numeric cell anywhere) are coerced per column
+    with ``pd.to_numeric(errors="coerce")`` so the offending cell becomes NaN
+    — the old whole-file ``astype`` raised ValueError on such cells; the plan
+    mandates NaN instead (no crash).
+    """
+
+    vals = chunk.values
+    if vals.dtype == object:
+        vals = chunk.apply(pd.to_numeric, errors="coerce").values
+    return vals.T.astype(np.float32)
+
+
+def _build_csv_matrix_sparse(matrix_file, sep, decimal, log, chunksize=None):
+    """Memory-bounded chunked sparse build for the csv_matrix table branch.
+
+    The table file is genes×cells (first column = gene names, header row = cell
+    barcodes).  The old build read the WHOLE file into one dense DataFrame and
+    materialized a full cells×genes dense transpose before ``force_csr``
+    (measured 24.7 GiB peak at 50,954 cells / GSE173180).  This build streams
+    gene-blocks instead:
+
+    * a header-only peek (``nrows=0``) sizes the block so a dense block holds
+      ≲10M elements (mirrors ``_build_preprocessed_sparse``);
+    * each ``pd.read_csv(..., chunksize=...)`` block is a genes×cells slice
+      transposed per-chunk into a cells×genes float32 CSR slice;
+    * slices are ``sp.hstack``-ed — peak memory is one block's dense transpose
+      plus the accumulated sparse output, never a full dense transpose.
+
+    Semantics replicated from the old branch:
+    * header/meta handling — ``index_col=0``, default header row (cell
+      barcodes become obs_names, the gene-name column becomes var_names);
+    * the ``csv_decimal != "."`` re-read is applied by passing ``decimal=`` to
+      every chunk read (equivalent to the old branch's second read, which
+      overwrote the first);
+    * NaN preserved, exact-0.0 dropped (``csr_matrix(dense)`` semantics);
+    * obs_names/var_names order and dtype float32 identical to the old build.
+    """
+    if chunksize is None:
+        header = pd.read_csv(matrix_file, index_col=0, sep=sep, nrows=0)
+        n_cells = max(len(header.columns), 1)
+        chunksize = max(256, min(100_000, int(10_000_000 // n_cells)))
+
+    blocks = []
+    var_names = []
+    obs_names = None
+    for chunk in pd.read_csv(
+        matrix_file, index_col=0, sep=sep, decimal=decimal, chunksize=chunksize
+    ):
+        if obs_names is None:
+            obs_names = chunk.columns
+        var_names.extend(chunk.index.astype(str))
+        blocks.append(sp.csr_matrix(_csv_chunk_to_float32(chunk)))
+
+    if obs_names is None:
+        # header-only file: the chunked reader yields a 0-row chunk with columns
+        obs_names = pd.read_csv(matrix_file, index_col=0, sep=sep, nrows=0).columns
+
+    x = blocks[0] if len(blocks) == 1 else sp.hstack(blocks, format="csr")
+    log.info("CSV shape: %s", (x.shape[1], x.shape[0]))
+    adata = sc.AnnData(X=x)
+    adata.var_names = list(var_names)
+    adata.obs_names = obs_names.astype(str)
+    return adata
+
+
 def _load_multi_sample_10x_mtx(cfg, log):
     """Load multiple 10X MTX sample dirs matched by ``mtx_dir_pattern``.
 
@@ -757,14 +827,10 @@ def main():
                     sep = "	"
                     log.info("Fallback to tab separator")
             decimal = getattr(cfg.data_input, "csv_decimal", ".")
-            df = pd.read_csv(cfg.data_input.matrix_file, index_col=0, sep=sep)
-            if decimal != ".":
-                df = pd.read_csv(cfg.data_input.matrix_file, index_col=0, sep=sep, decimal=decimal)
-            log.info("CSV shape: %s", df.shape)
-            # Transpose to AnnData convention: cells × genes
-            adata = sc.AnnData(X=df.values.T.astype(np.float32))
-            adata.var_names = df.index.astype(str)
-            adata.obs_names = df.columns.astype(str)
+            # Chunked sparse build (memory-bounded): stream gene-blocks, per-block
+            # float32 transpose into cells×genes CSR, then hstack — never a full
+            # dense transpose (old build peaked 24.7 GiB @ 50,954 cells).
+            adata = _build_csv_matrix_sparse(cfg.data_input.matrix_file, sep, decimal, log)
             # Load metadata if barcodes/features files provided
             if cfg.data_input.barcodes_file and os.path.exists(cfg.data_input.barcodes_file):
                 metadata = pd.read_csv(cfg.data_input.barcodes_file, index_col=0, sep=sep)
