@@ -542,6 +542,47 @@ def main():
     _set_zscore_dtype(cfg)
     _install_zscore_patch()
 
+    # ── Pre-read memory guard: use load_meta persisted by step 00 ──
+    # Step 00 writes real nnz/n_cells into perf_report.json's pipeline layer.
+    # Read it BEFORE opening the h5ad (zero-copy) so step 01/02/03 peaks are
+    # checked against the true matrix shape, not an estimate.
+    import json as _json
+
+    _pre_est = None
+    _perf_report_path = os.path.join(cfg.results_dir, "perf_report.json")
+    if os.path.exists(_perf_report_path):
+        try:
+            with open(_perf_report_path) as _prf:
+                _pr_data = _json.load(_prf)
+            _lm = (_pr_data.get("pipeline", {}) or {}).get("load_meta")
+            if _lm and _lm.get("nnz"):
+                from core.utils import (
+                    check_memory_guard,
+                    estimate_step_peak,
+                    resolve_memory_settings,
+                )
+
+                _mpolicy, _mbudget, _mguard = resolve_memory_settings(cfg)
+                _pre_est = {
+                    s: estimate_step_peak(
+                        s,
+                        int(_lm["n_cells"]),
+                        int(_lm["n_genes"]),
+                        int(_lm["nnz"]),
+                        policy=_mpolicy,
+                        budget_bytes=_mbudget,
+                    )
+                    for s in (1, 2, 3)
+                }
+                if _mbudget > 0:
+                    log.info(
+                        "[memory-guard] pre-read peaks (from load_meta): "
+                        + ", ".join(f"step{s} ~{g:.0f}GB" for s, g in _pre_est.items())
+                    )
+                check_memory_guard(_pre_est, _mbudget, _mguard, logger_obj=log)
+        except Exception:
+            log.warning("Failed to read load_meta from %s", _perf_report_path, exc_info=True)
+
     # Use backed mode — only load one sample group into memory at a time.
     # The raw_h5ad for large datasets (1M+ cells) occupies ~56 GiB uncompressed;
     # backed='r' keeps it on disk and reads only the requested indices.
