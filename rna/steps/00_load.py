@@ -878,7 +878,7 @@ def main():
                 cfg.data_input.mtx_dir,
                 var_names="gene_symbols",
                 prefix=cfg.data_input.mtx_prefix,
-                cache=True,
+                cache=False,
                 gex_only=False,
             )
             log.info("Loading complete: %d cells × %d genes", adata.n_obs, adata.n_vars)
