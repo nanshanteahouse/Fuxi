@@ -21,8 +21,9 @@ import matplotlib
 import numpy as np
 import pandas as pd
 import scanpy as sc
+import scipy.sparse as sparse
 
-from core.utils import resolve_config, safe_write, save_figure, setup_logger
+from core.utils import resolve_config, safe_write, save_figure, setup_logger, timed_substep
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -61,7 +62,185 @@ def compute_qc_metrics(adata, cfg, log):
         log.info(
             "  [snRNA-seq mode] Mitochondrial reads reflect cytoplasmic residue, not cell stress."
         )
-    log.info("  Median complexity:   %.3f", adata.obs["log_genes_per_umi"].median())
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════════════
+#  Ambient RNA Decontamination (optional — CellBender / SoupX)
+# ══════════════════════════════════════════════════════════════════════════════
+
+
+def _decontamination_method(cfg):
+    """Read ``cfg.spatial.decontamination`` (``none`` | ``cellbender`` | ``soupx``).
+
+    Backward-compatible read: the schema field lands in a later wave, so any
+    config that predates it (or lacks ``cfg.spatial``) resolves to ``"none"`` —
+    opt-in, zero behaviour change for existing configs.
+    """
+    spatial_cfg = getattr(cfg, "spatial", None)
+    if spatial_cfg is None:
+        return "none"
+    return getattr(spatial_cfg, "decontamination", "none") or "none"
+
+
+def _apply_decontaminated_counts(adata, x_clean, log):
+    """Swap ``X`` for the decontaminated matrix, preserving the original counts.
+
+    The pre-decontamination matrix is kept in ``layers['raw']`` and as
+    ``adata.raw`` so downstream QC metrics are computed on the clean counts
+    while the original stays available for audits.
+    """
+    x_clean = sparse.csr_matrix(x_clean)
+    if x_clean.shape != adata.shape:
+        raise ValueError(
+            f"Decontaminated counts shape {x_clean.shape} does not match adata shape {adata.shape}"
+        )
+    if "raw" not in adata.layers:
+        adata.layers["raw"] = adata.X.copy()
+    adata.raw = adata.copy()
+    adata.X = x_clean
+    log.info("  X replaced with decontaminated counts (original preserved in layers['raw'])")
+
+
+def _run_cellbender_on_counts(adata, cfg, log):
+    """Run the real ``cellbender remove-background`` CLI and load its output.
+
+    CellBender ships as a command-line tool (no stable in-process API), so we
+    shell out. The raw h5ad is a supported input format; the output h5 is
+    loaded back with the package's own ``anndata_from_h5`` downstream loader.
+    Isolated in its own function so tests can mock the invocation — real GPU
+    training (RTX 3090) is intentionally not exercised in unit tests.
+    """
+    import subprocess
+
+    from cellbender.remove_background.downstream import anndata_from_h5
+
+    from core.utils._optional import gpu_available_nvidia_smi
+
+    in_file = cfg.raw_h5ad
+    out_file = os.path.join(cfg.h5ad_dir, "01_qc_cellbender.h5")
+    expected_cells = int(getattr(cfg.spatial, "decontamination_expected_cells", 0) or 0)
+
+    cmd = ["cellbender", "remove-background", "--input", in_file, "--output", out_file]
+    if expected_cells > 0:
+        cmd += ["--expected-cells", str(expected_cells)]
+    if gpu_available_nvidia_smi():
+        cmd += ["--cuda"]
+    log.info("  Running: %s", " ".join(cmd))
+
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        raise RuntimeError(f"cellbender remove-background failed: {proc.stderr[-500:]}")
+
+    cb = anndata_from_h5(out_file, analyzed_barcodes_only=True)
+    return cb.X
+
+
+def _decontaminate_cellbender(adata, cfg, log):
+    """CellBender ambient removal on raw counts (GPU). Returns an uns metadata dict."""
+    from core.utils._optional import require_cellbender
+
+    try:
+        require_cellbender()
+    except ImportError as exc:
+        log.warning("CellBender not installed — skipping ambient decontamination (%s)", exc)
+        return {"status": "skipped", "method": "cellbender", "reason": str(exc)}
+
+    log.info(
+        "Running CellBender ambient RNA removal (%d spots × %d genes)...",
+        adata.n_obs,
+        adata.n_vars,
+    )
+    try:
+        x_clean = _run_cellbender_on_counts(adata, cfg, log)
+    except Exception as exc:
+        log.warning("CellBender failed — keeping original counts (%s)", exc)
+        return {"status": "failed", "method": "cellbender", "reason": str(exc)}
+
+    _apply_decontaminated_counts(adata, x_clean, log)
+    return {"status": "completed", "method": "cellbender"}
+
+
+def _run_soupx_on_counts(adata, cfg, log):
+    """Run SoupX (soupx-python) ambient estimation and return corrected counts.
+
+    SoupX operates on genes×droplets (``tod``) / genes×cells (``toc``) matrices.
+    Visium has no dedicated empty-droplet set in the loaded object, so the same
+    matrix is used for both; the ambient profile is estimated from the whole
+    spot set. Returns a cells×genes sparse matrix.
+    """
+    import soupx
+
+    log.info("  Running SoupX ambient estimation...")
+    tod = sparse.csr_matrix(adata.X.T)  # genes × spots
+    toc = sparse.csr_matrix(adata.X.T)
+    channel = soupx.SoupChannel(tod=tod, toc=toc, metaData=pd.DataFrame(index=adata.obs_names))
+    channel = soupx.autoEstCont(channel, verbose=False)
+    corrected = soupx.adjustCounts(channel, roundToInt=True)  # genes × cells
+    return corrected.T  # cells × genes
+
+
+def _decontaminate_soupx(adata, cfg, log):
+    """SoupX ambient removal. Returns an uns metadata dict."""
+    from core.utils._optional import require_soupx
+
+    try:
+        require_soupx()
+    except ImportError as exc:
+        log.warning("SoupX not installed — skipping ambient decontamination (%s)", exc)
+        return {"status": "skipped", "method": "soupx", "reason": str(exc)}
+
+    log.info(
+        "Running SoupX ambient RNA removal (%d spots × %d genes)...", adata.n_obs, adata.n_vars
+    )
+    try:
+        x_clean = _run_soupx_on_counts(adata, cfg, log)
+    except Exception as exc:
+        log.warning("SoupX failed — keeping original counts (%s)", exc)
+        return {"status": "failed", "method": "soupx", "reason": str(exc)}
+
+    _apply_decontaminated_counts(adata, x_clean, log)
+    return {"status": "completed", "method": "soupx"}
+
+
+def run_decontamination(adata, cfg, log):
+    """Optional ambient-RNA decontamination, executed before QC filtering.
+
+    ``cfg.spatial.decontamination``:
+      - ``"none"`` (default) — no-op, existing QC flow untouched;
+      - ``"cellbender"`` — CellBender remove-background on counts (GPU);
+      - ``"soupx"``      — SoupX ambient subtraction.
+
+    Missing tools degrade to a logged skip instead of crashing. Records the
+    before/after spot & gene counts and writes ``adata.uns['decontamination']``.
+    """
+    method = _decontamination_method(cfg)
+    if method == "none":
+        return
+
+    n_spots, n_genes = adata.n_obs, adata.n_vars
+    if method == "cellbender":
+        meta = _decontaminate_cellbender(adata, cfg, log)
+    elif method == "soupx":
+        meta = _decontaminate_soupx(adata, cfg, log)
+    else:
+        log.warning("Unknown decontamination method '%s' — skipping", method)
+        return
+
+    adata.uns["decontamination"] = meta
+    if meta["status"] == "completed":
+        log.info(
+            "  Decontamination (%s): spots %d → %d, genes %d → %d",
+            meta["method"],
+            n_spots,
+            adata.n_obs,
+            n_genes,
+            adata.n_vars,
+        )
+    else:
+        log.info(
+            "  Decontamination (%s): %s — continuing with original counts", method, meta["status"]
+        )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -587,6 +766,9 @@ def main():
 
     adata = sc.read(input_path)
     log.info("Loaded: %s — %d spots × %d genes", input_path, adata.n_obs, adata.n_vars)
+
+    with timed_substep("Ambient decontamination (optional)", log=log):
+        run_decontamination(adata, cfg, log)
 
     compute_qc_metrics(adata, cfg, log)
 
