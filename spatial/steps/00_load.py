@@ -136,11 +136,31 @@ def _load_multi_slide_seurat(cfg, log: logging.Logger) -> sc.AnnData:
     else:
         adata = sc.concat(adatas, join="outer", fill_value=0)
         if sp.issparse(adata.X):
-            adata.X = adata.X.tocsr()
             adata.X = _widen_csr_index_dtype(adata.X.tocsr())
     if all("spatial" in a.obsm for a in adatas):
         adata.obsm["spatial"] = np.vstack([a.obsm["spatial"] for a in adatas])
     log.info("Loaded: %d spots × %d genes", adata.n_obs, adata.n_vars)
+    return adata
+
+
+def _maybe_map_symbols(adata: sc.AnnData, cfg, log: logging.Logger) -> sc.AnnData:
+    """ENSG → gene-symbol var_names when ``spatial.symbol_mapping`` is set.
+
+    The retina KB (and most downstream annotation/marker logic) matches on
+    HGNC symbols, so GSE235583-style ENSG counts must be converted to be
+    annotatable.  Original IDs are preserved in ``var['ensembl_id']``;
+    unmapped/duplicate genes are dropped (mirrors ``ensure_gene_symbols``)."""
+    if not getattr(cfg.spatial, "symbol_mapping", False):
+        return adata
+    if not any(str(v).startswith("ENSG") for v in adata.var_names):
+        log.info("symbol_mapping enabled but var_names already symbols — skip")
+        return adata
+    from core.interaction import ensure_gene_symbols
+
+    log.info("symbol_mapping: converting ENSG var_names → gene symbols (mygene)...")
+    adata.var["ensembl_id"] = adata.var_names.astype(str)
+    adata = ensure_gene_symbols(adata, log=log, species=cfg.species)
+    log.info("  %d genes after symbol mapping", adata.n_vars)
     return adata
 
 
@@ -243,6 +263,7 @@ def main():
     elif cfg.data_format == "seurat_csv":
         log.info("Loading Seurat CSV (wide counts + md table)")
         adata = _load_multi_slide_seurat(cfg, log)
+        adata = _maybe_map_symbols(adata, cfg, log)
 
     else:
         log.error(
