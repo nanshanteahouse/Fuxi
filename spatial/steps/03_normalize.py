@@ -7,9 +7,18 @@ Phase 2: Store raw counts in adata.raw
 Phase 3: HVG selection with fallback chain + forced gene inclusion
 Phase 4: Build spatial neighbor graph via sq.gr.spatial_neighbors()
 Phase 5: PCA on HVGs
+Phase 6: Optional multi-slide Harmony batch integration (method='harmony')
+Phase 7: Checkpoint write (03_processed.h5ad) — BEFORE any plotting
+Phase 8: Harmony comparison plot (after checkpoint)
 
 Input:  02_image.h5ad (or 01_qc.h5ad if Step 02 was skipped)
 Output: 03_processed.h5ad
+
+Integration is opt-in and off by default for spatial (read via
+``getattr(cfg.integration, 'method', 'none')`` — RNA-style enum, spatial
+default 'none'). It runs only when method=='harmony' AND the obs batch_key
+(default 'sample', the column added by spatial 00_load for merged slides)
+has >= 2 unique values (multi-slide). Single-slide data skips.
 """
 
 import argparse
@@ -23,7 +32,182 @@ import scanpy as sc
 import scipy.sparse
 import squidpy as sq
 
-from core.utils import resolve_config, safe_write, setup_logger
+from core.utils import (
+    gpu_harmony,
+    resolve_config,
+    resolve_device,
+    safe_write,
+    save_figure,
+    setup_logger,
+    timed_substep,
+)
+
+
+def _scan_collinearity_warnings(harmony_result) -> list[str]:
+    """Extract perfectly-collinear warnings from a harmony run result.
+
+    harmonypy itself does not expose a warnings channel in this version, so
+    the scan is attribute-safe: a ``report`` object carrying a ``warnings``
+    list is scanned when present; otherwise the guard no-ops.
+
+    Ref: notes/engineering/2026-07-15_cross_batch_critical_fixes.md (T3).
+    """
+    report = getattr(harmony_result, "report", None)
+    warnings_list = getattr(report, "warnings", None) or []
+    return [w for w in warnings_list if "perfectly collinear" in str(w).lower()]
+
+
+def _effective_n_pcs(n_pcs_use: int, n_embedding_dims: int) -> int:
+    """Cap a requested n_pcs at the actual embedding width (min() guard).
+
+    Integration backends may emit fewer dims than ``cfg.pca.n_pcs_use`` (e.g. a
+    reduced-dim corrected embedding). Downstream PCA/neighbor consumers must
+    never slice beyond ``obsm[...].shape[1]``.
+
+    Ref: notes/engineering/2026-07-28_n_pcs_use_scvi_dimension_mismatch.md.
+    """
+    return min(n_pcs_use, n_embedding_dims)
+
+
+def _log_integrated_shape(adata, cfg, log, backend: str) -> None:
+    """Log the corrected embedding shape and apply the n_pcs min() guard."""
+    n_integrated = adata.obsm["X_integrated"].shape[1]
+    n_pcs_use = getattr(cfg.pca, "n_pcs_use", 30)
+    if n_integrated < n_pcs_use:
+        log.warning(
+            "X_integrated has %d dims < cfg.pca.n_pcs_use=%d — downstream PCA/neighbor ",
+            "n_pcs capped to min(%d, %d)=%d",
+            n_integrated,
+            n_pcs_use,
+            n_pcs_use,
+            n_integrated,
+            _effective_n_pcs(n_pcs_use, n_integrated),
+        )
+    log.info("Harmony complete (%s), output shape: %s", backend, adata.obsm["X_integrated"].shape)
+
+
+def _integrate_harmony(adata, cfg, log) -> None:
+    """GPU-first multi-slide Harmony batch correction with collinearity guard.
+
+    Runs only when ``cfg.integration.method == 'harmony'`` AND the obs
+    ``batch_key`` has >= 2 unique values (multi-slide). Single-slide data
+    skips with a log.info and X_pca remains the primary representation.
+
+    Collinearity guard (CPU path): the harmonypy run result's report is
+    scanned for "perfectly collinear" warnings; when found the corrected
+    embedding is NOT applied and ``uns['harmony_skipped']`` is recorded.
+    """
+    batch_key = getattr(cfg.integration, "batch_key", "sample")
+    if batch_key not in adata.obs:
+        log.info("batch_key '%s' not in obs — skipping Harmony integration", batch_key)
+        return
+    n_batches = adata.obs[batch_key].nunique()
+    if n_batches < 2:
+        log.info(
+            "Single slide (obs['%s'] has %d unique value) — skipping Harmony",
+            batch_key,
+            n_batches,
+        )
+        return
+    if "X_pca" not in adata.obsm:
+        log.warning("obsm['X_pca'] missing — skipping Harmony integration")
+        return
+
+    device = getattr(cfg.execution, "device", "auto")
+    random_state = getattr(cfg.execution, "random_seed", 0)
+    max_iter = getattr(cfg.integration, "max_iter", 20)
+    # Harmony runs on the PCA embedding (obsm['X_pca']) — never on raw counts
+    # (use_raw guard: adata.raw / adata.X stay untouched).
+
+    # ── GPU path (rapids-singlecell) — no run report exposed ──
+    if resolve_device(device, log):
+        try:
+            with timed_substep("Harmony (GPU)", log=log):
+                gpu_harmony(
+                    adata,
+                    key=batch_key,
+                    output_key="X_integrated",
+                    log=log,
+                    device=device,
+                    random_state=random_state,
+                    max_iter_harmony=max_iter,
+                )
+            _log_integrated_shape(adata, cfg, log, backend="GPU")
+            return
+        except Exception as e:
+            log.warning("GPU Harmony failed (%s) — falling back to CPU", e)
+
+    # ── CPU path (harmonypy) — run report available → collinearity guard ──
+    try:
+        import harmonypy as hm
+    except ImportError:
+        log.warning(
+            "harmonypy not installed — skipping Harmony integration (install fuxi[rna])",
+        )
+        return
+    try:
+        with timed_substep("Harmony (CPU)", log=log):
+            ho = hm.run_harmony(
+                adata.obsm["X_pca"],
+                adata.obs,
+                vars_use=[batch_key],
+                random_state=random_state,
+                max_iter_harmony=max_iter,
+            )
+        collinear = _scan_collinearity_warnings(ho)
+        if collinear:
+            log.error(
+                "[collinearity-guard] Harmony ABORTED — batch_key '%s' perfectly ",
+                "collinear with biology",
+                batch_key,
+            )
+            for w in collinear[:3]:
+                log.error("  %s", w)
+            adata.uns["harmony_skipped"] = {
+                "reason": "collinearity",
+                "warnings": collinear,
+            }
+            return
+        adata.obsm["X_integrated"] = ho.Z_corr
+        _log_integrated_shape(adata, cfg, log, backend="CPU")
+    except Exception as e:
+        log.warning("Harmony correction failed (%s) — continuing with raw PCA", e)
+        adata.obsm["X_integrated"] = adata.obsm["X_pca"].copy()
+
+
+def _plot_harmony_comparison(adata, cfg, log) -> None:
+    """Draw PCA-before vs Harmony-after comparison (checkpoint already written)."""
+    import matplotlib.pyplot as plt
+
+    batch_key = getattr(cfg.integration, "batch_key", "sample")
+    fig_dir = os.path.join(cfg.figure_dir, "03_normalize")
+    os.makedirs(fig_dir, exist_ok=True)
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    sc.pl.embedding(
+        adata,
+        basis="X_pca",
+        color=batch_key,
+        ax=axes[0],
+        show=False,
+        title="PCA (before Harmony)",
+    )
+    sc.pl.embedding(
+        adata,
+        basis="X_integrated",
+        color=batch_key,
+        ax=axes[1],
+        show=False,
+        title="Harmony-corrected",
+    )
+    fig.tight_layout()
+    save_figure(
+        fig,
+        os.path.join(fig_dir, "harmony_comparison"),
+        cfg=cfg,
+        dpi=cfg.plot.figure_dpi,
+    )
+    plt.close(fig)
+    log.info("  Harmony comparison plot saved")
 
 
 def main():
@@ -153,8 +337,29 @@ def main():
     )
     log.info("  PCA complete: %d components stored", cfg.pca.n_pcs_use)
 
-    # ── Save ────────────────────────────────────────────────────────────
+    # ═══ Phase 6: Multi-slide batch integration (optional, Harmony) ═══
+    # RNA-style enum read via getattr (spatial default 'none'): the integration
+    # config wiring for spatial lands in a later wave — until then a missing
+    # method means no integration, keeping existing behaviour unchanged.
+    integration_method = getattr(cfg.integration, "method", "none")
+    if integration_method == "harmony":
+        _integrate_harmony(adata, cfg, log)
+    elif integration_method != "none":
+        log.info(
+            "Integration method '%s' not supported by spatial Step 03 — skipping",
+            integration_method,
+        )
+
+    # ═══ Phase 7: Checkpoint-before-plot (hard convention) ═══
+    # safe_write MUST precede any comparison plotting so that all computed
+    # results survive a plot-stage crash (OOM / rendering failure).
+    # Ref: notes/engineering/2026-07-30_checkpoint_before_plot.md
     safe_write(adata, output_path, cfg=cfg)
+
+    # ═══ Phase 8: Harmony comparison plot (after checkpoint) ═══
+    if integration_method == "harmony" and "X_integrated" in adata.obsm:
+        _plot_harmony_comparison(adata, cfg, log)
+
     log.info("Step 03 complete, took %.1fs", time.time() - t0)
 
 
