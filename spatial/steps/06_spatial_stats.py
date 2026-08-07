@@ -3,8 +3,8 @@
 Step 06: DE + SVG + nhood enrichment + co-occurrence
 ========================================================================
   1. Per-cluster DE (Wilcoxon rank-sum) — marker_genes_per_group.csv
-  2. Spatially variable genes via Moran's I (sq.gr.spatial_autocorr)
-  3. Export SVG rankings
+  2. Spatially variable genes on the FULL gene set (Moran's I, sq.gr.spatial_autocorr)
+  3. Export SVG rankings (svg_rankings.csv)
   4. Nhood enrichment (sq.gr.nhood_enrichment) — heatmap + CSV
   5. Co-occurrence (sq.gr.co_occurrence) — distance plot
   6. Interaction matrix (sq.gr.interaction_matrix) — heatmap
@@ -19,9 +19,12 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+import anndata as ad
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import scanpy as sc
+import scipy.sparse as sp
 import squidpy as sq
 
 from core.utils import resolve_config, safe_plot, safe_write, save_figure, setup_logger
@@ -60,9 +63,59 @@ def run_de_per_cluster(adata, cfg, log):
     return marker_df
 
 
+def _log1p_normalize_counts(x, cfg):
+    """normalize_total + log1p a raw-count matrix, keeping sparsity.
+
+    ``sc.pp.normalize_total`` requires an AnnData wrapper; do it directly on the
+    sparse/dense matrix so full-gene counts never densify (memory bound)."""
+    target_sum = getattr(getattr(cfg, "normalization", None), "normalize_target_sum", 1e4)
+    row_sum = x.sum(axis=1)
+    row_sum = np.asarray(row_sum).ravel()
+    row_sum[row_sum == 0] = 1.0  # avoid div-by-zero on all-zero rows
+    scale = target_sum / row_sum
+    if sp.issparse(x):
+        norm = sp.diags(scale).dot(x)
+        norm = norm.tocsr()
+        norm.data = np.log1p(norm.data)
+    else:
+        norm = np.log1p(x * scale[:, None])
+    return norm
+
+
+def _full_gene_matrix(adata, cfg, log):
+    """Return ``(X, var_names, source)`` for Moran's I on the FULL gene set.
+
+    SVG screening must cover all genes — not just the HVG subset in adata.X.
+    Prefer ``adata.raw`` (full gene set stored by 03_normalize before HVG
+    subsetting).  Raw counts (max > 50) are ``normalize_total`` + ``log1p``'d
+    first so Moran's I runs on the same transform as the existing X path.
+    Falls back to ``adata.X`` with a warning when raw is missing.
+    """
+    if adata.raw is not None and adata.raw.X is not None:
+        x = adata.raw.X
+        var_names = adata.raw.var_names
+        source = "raw"
+        log.info("  SVG on full-gene adata.raw (%d genes)", x.shape[1])
+    else:
+        x = adata.X
+        var_names = adata.var_names
+        source = "X"
+        log.warning(
+            "  adata.raw is None — SVG on adata.X (HVG subset, %d genes); ",
+            "full-gene screening requires adata.raw",
+            x.shape[1],
+        )
+
+    # Raw counts → log1p-normalize (same treatment the X path already got).
+    if x.max() > 50:
+        log.info("  Raw counts detected (max=%.0f) — normalize_total + log1p", x.max())
+        x = _log1p_normalize_counts(x, cfg)
+    return x, var_names, source
+
+
 def run_spatial_autocorr(adata, cfg, log):
-    """Compute Moran's I spatial autocorrelation for SVGs."""
-    log.info("Spatial autocorrelation (Moran's I)...")
+    """Compute Moran's I spatial autocorrelation for SVGs on the FULL gene set."""
+    log.info("Spatial autocorrelation (Moran's I, full-gene)...")
 
     # Ensure spatial connectivity graph exists
     if "spatial_connectivities" not in adata.obsp:
@@ -84,9 +137,18 @@ def run_spatial_autocorr(adata, cfg, log):
         log.error("Cannot compute SVGs — no spatial graph available")
         return None
 
+    x_full, var_names, source = _full_gene_matrix(adata, cfg, log)
+
+    # Run Moran's I on a temp AnnData holding the full-gene matrix so the
+    # HVG-subset adata.X is untouched; sparse X keeps memory bounded.
+    tmp = ad.AnnData(X=x_full)
+    tmp.var_names = var_names
+    tmp.obs_names = adata.obs_names
+    tmp.obsp["spatial_connectivities"] = adata.obsp["spatial_connectivities"]
+
     try:
         sq.gr.spatial_autocorr(
-            adata,
+            tmp,
             mode="moran",
             n_perms=100,
             n_jobs=cfg.execution.n_jobs,
@@ -97,12 +159,13 @@ def run_spatial_autocorr(adata, cfg, log):
 
     # Extract Moran's I results
     moran_key = "moranI"
-    if moran_key in adata.uns:
-        moran_df = adata.uns[moran_key].copy()
+    if moran_key in tmp.uns:
+        moran_df = tmp.uns[moran_key].copy()
+        adata.uns[moran_key] = moran_df  # surface for downstream steps
         if isinstance(moran_df, pd.DataFrame):
             svg_csv = os.path.join(cfg.table_dir, "svg_rankings.csv")
             moran_df.to_csv(svg_csv)
-            log.info("SVG rankings saved: %s (%d genes)", svg_csv, len(moran_df))
+            log.info("SVG rankings saved: %s (%d full-gene entries)", svg_csv, len(moran_df))
 
             # Top SVGs
             n_sig = (moran_df["pval_sim"] < 0.05).sum() if "pval_sim" in moran_df.columns else 0
@@ -110,6 +173,15 @@ def run_spatial_autocorr(adata, cfg, log):
             if n_sig > 0:
                 top_svg = moran_df.head(5).index.tolist()
                 log.info("  Top 5 SVGs: %s", top_svg)
+
+            n_top = min(cfg.spatial.svg_n_top, len(moran_df))
+            adata.uns["svg"] = {
+                "n_genes_tested": len(moran_df),
+                "method": "moran",
+                "n_top": n_top,
+                "moran_percentile": getattr(cfg.spatial, "moran_percentile", 90),
+                "source": source,
+            }
             return moran_df
     else:
         log.warning("No 'moranI' key in adata.uns — spatial_autocorr may not have run")
@@ -257,6 +329,11 @@ def main():
     if cfg.spatial.run_autocorr:
         moran_df = run_spatial_autocorr(adata, cfg, log)
         if moran_df is not None:
+            # checkpoint-before-plot: persist SVG h5ad BEFORE the top-SVG plot
+            svg_h5ad = os.path.join(cfg.h5ad_dir, "06_svg.h5ad")
+            safe_write(adata, svg_h5ad, cfg=cfg)
+            log.info("SVG h5ad saved: %s", svg_h5ad)
+
             plot_top_svg(adata, moran_df, cfg, log)
 
             # Subset to top SVGs for downstream analysis
