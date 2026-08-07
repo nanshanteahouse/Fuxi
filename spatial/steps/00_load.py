@@ -26,6 +26,18 @@ import scipy.sparse as sp
 from core.utils import resolve_config, safe_write, setup_logger
 
 
+def _widen_csr_index_dtype(x_csr: sp.csr_matrix) -> sp.csr_matrix:
+    """Keep CSR index arrays dtype-consistent (both int64).
+
+    scipy >= 1.18 rejects mixed index dtypes (e.g. int64 ``indptr`` with int32
+    ``indices``) in in-place ops like ``eliminate_zeros``.  The seurat_csv
+    loader widens ``indptr`` for large merged slides, so ``indices`` must follow
+    to keep the matrix internally consistent."""
+    x_csr.indices = x_csr.indices.astype(np.int64)
+    x_csr.indptr = x_csr.indptr.astype(np.int64)
+    return x_csr
+
+
 def _load_seurat_csv(counts_file: str, md_file: str, log: logging.Logger) -> sc.AnnData:
     """Load a Seurat wide-format counts table + metadata CSV into AnnData.
 
@@ -44,7 +56,7 @@ def _load_seurat_csv(counts_file: str, md_file: str, log: logging.Logger) -> sc.
     counts = pd.read_csv(counts_file, index_col=0)
     log.info("  counts: %d genes × %d spots", counts.shape[0], counts.shape[1])
     x_csr = sp.csr_matrix(counts.values.T.astype(np.float32))
-    x_csr.indptr = x_csr.indptr.astype(np.int64)
+    x_csr = _widen_csr_index_dtype(x_csr)
     adata = sc.AnnData(X=x_csr)
     adata.var_names = counts.index.astype(str)
     adata.obs_names = counts.columns.astype(str)
@@ -115,7 +127,7 @@ def _load_multi_slide_seurat(cfg, log: logging.Logger) -> sc.AnnData:
     )
     if identical:
         x_stack = sp.vstack([a.X for a in adatas], format="csr")
-        x_stack.indptr = x_stack.indptr.astype(np.int64)
+        x_stack = _widen_csr_index_dtype(x_stack)
         adata = sc.AnnData(
             X=x_stack,
             obs=pd.concat([a.obs for a in adatas], axis=0),
@@ -125,7 +137,7 @@ def _load_multi_slide_seurat(cfg, log: logging.Logger) -> sc.AnnData:
         adata = sc.concat(adatas, join="outer", fill_value=0)
         if sp.issparse(adata.X):
             adata.X = adata.X.tocsr()
-            adata.X.indptr = adata.X.indptr.astype(np.int64)
+            adata.X = _widen_csr_index_dtype(adata.X.tocsr())
     if all("spatial" in a.obsm for a in adatas):
         adata.obsm["spatial"] = np.vstack([a.obsm["spatial"] for a in adatas])
     log.info("Loaded: %d spots × %d genes", adata.n_obs, adata.n_vars)
