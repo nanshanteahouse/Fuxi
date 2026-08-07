@@ -64,7 +64,7 @@ def safe_write(
         compression_override: 显式覆盖 — 优先级高于 cfg.h5ad_compression。
             用于 SnapATAC2 兼容写（compression_override=None 写未压缩文件）。
         step_alias: 步别名（如 "integrated"）— 在 cfg.per_step_h5ad_compression 中查找压缩配置。
-            优先级高于 compression_override 和 cfg.h5ad_compression。
+            优先级低于 compression_override，高于 cfg.h5ad_compression。
         delta_only: 若为 True 且目标文件已存在（且 adata 是 AnnData），则改走
             write_h5ad_incremental in-place 追加 obs/obsm/obsp/uns——不重写 X，
             append 的 key 一律覆盖。目标不存在或 MuData 时回退全量路径。
@@ -72,16 +72,19 @@ def safe_write(
             adata.write(compression_opts=...)。仅当 compression 为 gzip 系列时生效。
             None 时回退 cfg.h5ad_compression_opts（与 compression 同源解析）。
     """
-    # Resolution order: per_step_h5ad_compression > compression_override > cfg.h5ad_compression > default
-    if step_alias is not None and cfg is not None:
-        per_step_cfg = getattr(cfg, "per_step_h5ad_compression", {})
-        step_compression = per_step_cfg.get(step_alias)
-        if step_compression is not None:
-            compression = step_compression
+    # Resolution order: compression_override > per-step (step_alias present in
+    # per_step_h5ad_compression) > cfg.h5ad_compression > caller default. The
+    # per-step value must NOT be clobbered by the global cfg fallback.
     if compression_override is not None:
         compression = compression_override
-    elif cfg is not None:
-        compression = getattr(cfg, "h5ad_compression", compression)
+    else:
+        step_compression = None
+        if step_alias is not None and cfg is not None:
+            step_compression = getattr(cfg, "per_step_h5ad_compression", {}).get(step_alias)
+        if step_compression is not None:
+            compression = step_compression
+        elif cfg is not None:
+            compression = getattr(cfg, "h5ad_compression", compression)
     # Compression level: explicit arg > cfg.h5ad_compression_opts (gzip only)
     if compression_opts is None and cfg is not None:
         compression_opts = getattr(cfg, "h5ad_compression_opts", None)

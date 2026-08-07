@@ -908,7 +908,7 @@ class Config(BaseModel):
     # ═══════════════════════════════════════════════════════════════════
     h5ad_compression: str = "gzip"
     per_step_h5ad_compression: dict[str, str] = Field(
-        default_factory=lambda: {"integrated": "gzip"}
+        default_factory=lambda: {"integrated": "gzip", "raw": "zstd"}
     )
     h5ad_compression_opts: Optional[int] = Field(
         default=None,
