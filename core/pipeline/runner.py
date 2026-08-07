@@ -620,6 +620,32 @@ def main():
             "last_run_timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
             "partial": True,  # set to False at end of full run
         }
+        # load_meta (persisted by step 00 into .load_meta.tmp.json and merged
+        # by the runner) must survive subsequent single-step runs — filtering
+        # only shrinks the matrix, so the step-00 upper bound stays valid for
+        # all downstream memory guards.
+        _lm = _prev_info.get("load_meta")
+        if _lm:
+            pipeline_summary.pipeline_info["load_meta"] = _lm
+        # ensure the freshly-loaded load_meta is persisted even if the current
+        # run has no step 00 (e.g. --step 4 after a full run)
+        _tmp_lm = os.path.join(CFG.results_dir, ".load_meta.tmp.json")
+        if os.path.isfile(_tmp_lm):
+            try:
+                import json as _json
+
+                with open(_tmp_lm) as _f:
+                    _lm_tmp = _json.load(_f)
+                if _lm_tmp:
+                    pipeline_summary.pipeline_info["load_meta"] = _lm_tmp
+            except Exception:
+                pass
+            finally:
+                try:
+                    os.unlink(_tmp_lm)
+                except OSError:
+                    pass
+
     else:
         pipeline_summary = None
     # ── Execute steps ────────────────────────────────────────────────

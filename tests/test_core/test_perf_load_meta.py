@@ -45,6 +45,34 @@ def test_load_existing_without_load_meta_is_empty(tmp_path):
     assert "load_meta" not in loaded.pipeline_info
 
 
+def test_runner_rebuild_keeps_load_meta(tmp_path):
+    # The runner rebuilds pipeline_info on every run (keeping only timestamps
+    # + load_meta); regression test for load_meta being dropped after a
+    # single-step run (e.g. --step 4 after a full run).
+    lm = {"n_cells": 70_477, "n_genes": 36_601, "nnz": 426_241_129, "format": "10X_h5"}
+    s = _summary_with_load_meta(lm)
+    p = tmp_path / "perf_report.json"
+    s.save_json(str(p))
+
+    loaded = PerformanceSummary.load_existing(str(p))
+    assert loaded is not None
+    rebuilt = {"modality": "rna", "config_path": "x.yaml", "n_jobs": 4}
+    rebuilt["first_run_timestamp"] = loaded.pipeline_info.get("first_run_timestamp", "t0")
+    rebuilt["last_run_timestamp"] = "t1"
+    rebuilt["partial"] = True
+    _lm = loaded.pipeline_info.get("load_meta")
+    if _lm:
+        rebuilt["load_meta"] = _lm
+    assert rebuilt["load_meta"] == lm
+
+    # and the fresh summary persists it back
+    s2 = PerformanceSummary()
+    s2.pipeline_info = rebuilt
+    s2.save_json(str(p))
+    reloaded = PerformanceSummary.load_existing(str(p))
+    assert reloaded.pipeline_info["load_meta"] == lm
+
+
 def test_estimate_memory_model_branch_uses_estimate_step_peak():
     lm = {"n_cells": 70_477, "n_genes": 36_601, "nnz": 426_241_129, "format": "10X_h5"}
     est = PerformanceSummary._estimate_memory(7000.0, 70_477, 36_601, load_meta=lm)
