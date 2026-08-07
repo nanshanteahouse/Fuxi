@@ -302,10 +302,8 @@ class PerformanceSummary:
         # Column widths
         c_step = 6
         c_wall = 8
-        c_cpu = 8
         c_mem = 8
         c_cells = 7
-
         # Dynamic description width: auto-size from descriptions, capped at 60
         desc_max = max(
             (_display_width((s["step"].split(" ", 1) + [""])[1]) for s in steps_list),
@@ -313,8 +311,7 @@ class PerformanceSummary:
         )
         c_desc = max(26, min(60, desc_max))
 
-        total_w = c_step + c_desc + c_wall + c_cpu + c_mem + c_cells + 7  # borders
-
+        total_w = c_step + c_desc + c_wall + c_mem + c_cells + 6  # borders
         # Pipeline header
         if modality or config_path:
             meta_parts = []
@@ -332,13 +329,13 @@ class PerformanceSummary:
 
         _b = "│"
 
-        top = f"┌{_h(c_step)}┬{_h(c_desc)}┬{_h(c_wall)}┬{_h(c_cpu)}┬{_h(c_mem)}┬{_h(c_cells)}┐"
-        sep = f"├{_h(c_step)}┼{_h(c_desc)}┼{_h(c_wall)}┼{_h(c_cpu)}┼{_h(c_mem)}┼{_h(c_cells)}┤"
+        top = f"┌{_h(c_step)}┬{_h(c_desc)}┬{_h(c_wall)}┬{_h(c_mem)}┬{_h(c_cells)}┐"
+        sep = f"├{_h(c_step)}┼{_h(c_desc)}┼{_h(c_wall)}┼{_h(c_mem)}┼{_h(c_cells)}┤"
         header = (
             f"{_b}{'Step':<{c_step}}{_b}{'Description':<{c_desc}}{_b}"
-            f"{'Wall':<{c_wall}}{_b}{'CPU':<{c_cpu}}{_b}{'Mem(MiB)':<{c_mem}}{_b}{'Cells':<{c_cells}}{_b}"
+            f"{'Wall':<{c_wall}}{_b}{'Mem(MiB)':<{c_mem}}{_b}{'Cells':<{c_cells}}{_b}"
         )
-        bot_sep = f"├{_h(c_step)}┴{_h(c_desc)}┼{_h(c_wall)}┼{_h(c_cpu)}┼{_h(c_mem)}┼{_h(c_cells)}┤"
+        bot_sep = f"├{_h(c_step)}┴{_h(c_desc)}┼{_h(c_wall)}┼{_h(c_mem)}┼{_h(c_cells)}┤"
         bot = f"└{_h(total_w - 2)}┘"
 
         print(top)
@@ -351,7 +348,6 @@ class PerformanceSummary:
             print(
                 f"{_b}{_pad(step_label, c_step)}{_b}{_pad(_truncate(desc, c_desc), c_desc)}{_b}"
                 f"{_pad(f'{s["wall_sec"]:.1f}s', c_wall, '>')}{_b}"
-                f"{_pad(f'{s["cpu_sec"]:.1f}s', c_cpu, '>')}{_b}"
                 f"{_pad(f'{s["peak_rss_mib"]:,.0f}', c_mem, '>')}{_b}"
                 f"{_pad(cells_str, c_cells, '>')}{_b}"
             )
@@ -366,7 +362,7 @@ class PerformanceSummary:
         if summary.get("max_peak_rss_step"):
             peak_str += f" ({summary['max_peak_rss_step']})"
         left_w = c_step + 1 + c_desc  # merged left cell width
-        right_w = c_wall + 1 + c_cpu + 1 + c_mem + 1 + c_cells  # merged right cell width
+        right_w = c_wall + 1 + c_mem + 1 + c_cells  # merged right cell width
         print(f"{_b}{_pad(total_str, left_w)}{_b}{_pad(peak_str, right_w)}{_b}")
 
         # Memory reference estimates
