@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Step 07: Pseudotime trajectory analysis for spatial transcriptomics
+Step 08: Pseudotime trajectory analysis for spatial transcriptomics
 ======================================================================
   - PAGA graph abstraction
   - Diffusion pseudotime (DPT)
   - Optional: CellRank for fate mapping
 
 Input:  05_annotated.h5ad
-Output: 07_trajectory.h5ad
+Output: 08_trajectory.h5ad
 """
 
 import argparse
@@ -30,10 +30,10 @@ def main():
     args = args_parser.parse_args()
 
     cfg = resolve_config(args.config)
-    log = setup_logger("07_trajectory", os.path.join(cfg.log_dir, "07_trajectory.log"))
-    log.info("Step 07: Trajectory analysis (PAGA + DPT)")
+    log = setup_logger("08_trajectory", os.path.join(cfg.log_dir, "08_trajectory.log"))
+    log.info("Step 08: Trajectory analysis (PAGA + DPT)")
 
-    output_path = os.path.join(cfg.h5ad_dir, "07_trajectory.h5ad")
+    output_path = os.path.join(cfg.h5ad_dir, "08_trajectory.h5ad")
     if os.path.exists(output_path):
         log.info("Skip: %s already exists.", output_path)
         return
@@ -65,12 +65,12 @@ def main():
         log.info("  PAGA complete")
 
         # PAGA plot
-        safe_plot(sc.pl.paga, adata, show=False, save="_07_paga", threshold=0.1, cfg=cfg)
+        safe_plot(sc.pl.paga, adata, show=False, save="_08_paga", threshold=0.1, cfg=cfg)
         safe_plot(
             sc.pl.paga_compare,
             adata,
             show=False,
-            save="_07_paga_compare",
+            save="_08_paga_compare",
             legend_fontsize=8,
             cfg=cfg,
         )
@@ -126,7 +126,7 @@ def main():
         log.warning("DPT failed: %s", e)
 
     # ── 3. Visualizations ────────────────────────────────────────────────
-    sc.settings.figdir = os.path.join(cfg.figure_dir, "07_trajectory")
+    sc.settings.figdir = os.path.join(cfg.figure_dir, "08_trajectory")
     os.makedirs(sc.settings.figdir, exist_ok=True)
     sc.settings.autoshow = False
 
@@ -136,13 +136,13 @@ def main():
 
     for var in plot_vars:
         try:
-            safe_plot(sc.pl.umap, adata, color=var, show=False, save=f"_07_{var}", cfg=cfg)
+            safe_plot(sc.pl.umap, adata, color=var, show=False, save=f"_08_{var}", cfg=cfg)
         except Exception:
             pass
 
     # ── Save ─────────────────────────────────────────────────────────────
     safe_write(adata, output_path, cfg=cfg)
-    log.info("Step 07 complete, took %.1fs", time.time() - t0)
+    log.info("Step 08 complete, took %.1fs", time.time() - t0)
 
 
 if __name__ == "__main__":

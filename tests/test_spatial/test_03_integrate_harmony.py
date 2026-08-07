@@ -120,6 +120,9 @@ def _make_cfg(
 
     # Spatial neighbor settings
     cfg.spatial = MagicMock()
+    cfg.spatial.integration_method = (
+        method  # spatial-scoped read (overrides shared integration.method)
+    )
     cfg.spatial.neighbors_n = 6
     cfg.spatial.neighbors_radius = 0
 

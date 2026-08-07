@@ -15,7 +15,7 @@ Input:  02_image.h5ad (or 01_qc.h5ad if Step 02 was skipped)
 Output: 03_processed.h5ad
 
 Integration is opt-in and off by default for spatial (read via
-``getattr(cfg.integration, 'method', 'none')`` — RNA-style enum, spatial
+``getattr(cfg.spatial, 'integration_method', ...)`` — spatial-scoped enum,
 default 'none'). It runs only when method=='harmony' AND the obs batch_key
 (default 'sample', the column added by spatial 00_load for merged slides)
 has >= 2 unique values (multi-slide). Single-slide data skips.
@@ -338,10 +338,12 @@ def main():
     log.info("  PCA complete: %d components stored", cfg.pca.n_pcs_use)
 
     # ═══ Phase 6: Multi-slide batch integration (optional, Harmony) ═══
-    # RNA-style enum read via getattr (spatial default 'none'): the integration
-    # config wiring for spatial lands in a later wave — until then a missing
+    # Spatial-scoped read first (schema default 'none'); falls back to the
+    # shared RNA-style enum for backward compatibility — a missing spatial
     # method means no integration, keeping existing behaviour unchanged.
-    integration_method = getattr(cfg.integration, "method", "none")
+    integration_method = getattr(
+        cfg.spatial, "integration_method", getattr(cfg.integration, "method", "none")
+    )
     if integration_method == "harmony":
         _integrate_harmony(adata, cfg, log)
     elif integration_method != "none":

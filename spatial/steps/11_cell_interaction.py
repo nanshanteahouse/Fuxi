@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Step 10: Spatial Cell-Cell Interaction (CCI) analysis via LIANA+ bivariate metrics
+Step 11: Spatial Cell-Cell Interaction (CCI) analysis via LIANA+ bivariate metrics
 ====================================================================================
 Spatial bivariate ligand-receptor co-expression analysis using local spatial metrics
 (Cosine, Jaccard, Pearson, Spearman) and global Moran's R with permutation testing.
@@ -10,10 +10,10 @@ Method:
 
 Input:  05_annotated.h5ad (requires spatial_connectivities in obsp + cell_type column)
 Output:
-  {table_dir}/10_cell_interaction/cci_spatial_interactions.csv    — full interaction scores
-  {table_dir}/10_cell_interaction/cci_spatial_top.csv             — top N significant pairs
-  {figure_dir}/10_cell_interaction/cci_spatial_heatmap.png        — spatial interaction heatmap
-  {figure_dir}/10_cell_interaction/cci_spatial_dotplot.png        — top interactions dotplot
+  {table_dir}/11_cell_interaction/cci_spatial_interactions.csv    — full interaction scores
+  {table_dir}/11_cell_interaction/cci_spatial_top.csv             — top N significant pairs
+  {figure_dir}/11_cell_interaction/cci_spatial_heatmap.png        — spatial interaction heatmap
+  {figure_dir}/11_cell_interaction/cci_spatial_dotplot.png        — top interactions dotplot
 
 Dependencies: pip install liana>=1.0.0
 """
@@ -40,7 +40,7 @@ matplotlib.use("Agg")
 
 def export_spatial_results(lr_res, top_df, cfg, log):
     """Save spatial CCI interaction tables to CSV."""
-    table_dir = os.path.join(cfg.table_dir, "10_cell_interaction")
+    table_dir = os.path.join(cfg.table_dir, "11_cell_interaction")
     os.makedirs(table_dir, exist_ok=True)
 
     path = os.path.join(table_dir, "cci_spatial_interactions.csv")
@@ -59,7 +59,7 @@ def export_spatial_results(lr_res, top_df, cfg, log):
 
 def plot_spatial_heatmap(top_df, cfg, log):
     """Heatmap showing Moran's R scores for top LR interactions."""
-    fig_dir = os.path.join(cfg.figure_dir, "10_cell_interaction")
+    fig_dir = os.path.join(cfg.figure_dir, "11_cell_interaction")
     os.makedirs(fig_dir, exist_ok=True)
 
     # Bivariate output: ligand, receptor, morans -- no source/target columns
@@ -107,7 +107,7 @@ def plot_spatial_heatmap(top_df, cfg, log):
 
 def plot_spatial_dotplot(top_df, cfg, log):
     """Dotplot of top LR pairs with global Moran's R or similarity scores."""
-    fig_dir = os.path.join(cfg.figure_dir, "10_cell_interaction")
+    fig_dir = os.path.join(cfg.figure_dir, "11_cell_interaction")
     os.makedirs(fig_dir, exist_ok=True)
 
     # Determine value column for color
@@ -175,8 +175,8 @@ def main():
     args = args_parser.parse_args()
 
     cfg = resolve_config(args.config)
-    log = setup_logger("10_cci", os.path.join(cfg.log_dir, "10_cci.log"))
-    log.info("Step 10: Spatial Cell-Cell Interaction (CCI) via LIANA+ bivariate")
+    log = setup_logger("11_cci", os.path.join(cfg.log_dir, "11_cci.log"))
+    log.info("Step 11: Spatial Cell-Cell Interaction (CCI) via LIANA+ bivariate")
 
     # ── Gate check ──────────────────────────────────────────────────────
     if not getattr(cfg.cci, "run", True):
@@ -302,7 +302,7 @@ def main():
     plot_spatial_heatmap(top_df, cfg, log)
     plot_spatial_dotplot(top_df, cfg, log)
 
-    log.info("Step 10 complete, took %.1fs", time.time() - t0)
+    log.info("Step 11 complete, took %.1fs", time.time() - t0)
 
 
 if __name__ == "__main__":

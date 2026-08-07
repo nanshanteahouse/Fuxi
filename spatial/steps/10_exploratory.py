@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Step 09: Exploratory analysis for spatial transcriptomics
+Step 10: Exploratory analysis for spatial transcriptomics
 =============================================================
   1. Spatial scatter plots (cell types on tissue)
   2. Gene expression spatial maps (top markers + SVGs)
@@ -33,7 +33,7 @@ def spatial_cell_type_plot(adata, cfg, log):
         log.warning("No '%s' column — skipping spatial cell type plot", group_col)
         return
 
-    fig_dir = os.path.join(cfg.figure_dir, "09_exploratory")
+    fig_dir = os.path.join(cfg.figure_dir, "10_exploratory")
     os.makedirs(fig_dir, exist_ok=True)
 
     try:
@@ -44,7 +44,7 @@ def spatial_cell_type_plot(adata, cfg, log):
             shape=None,
             size=1.5,
             show=False,
-            save="_09_spatial_celltype",
+            save="_10_spatial_celltype",
             cfg=cfg,
         )
         save_figure(
@@ -61,7 +61,7 @@ def spatial_cell_type_plot(adata, cfg, log):
 
 def spatial_gene_plots(adata, cfg, log):
     """Plot top marker genes on spatial coordinates."""
-    fig_dir = os.path.join(cfg.figure_dir, "09_exploratory")
+    fig_dir = os.path.join(cfg.figure_dir, "10_exploratory")
     os.makedirs(fig_dir, exist_ok=True)
 
     # Priority: SVGs > DE top markers > configured markers
@@ -179,8 +179,8 @@ def main():
     args = args_parser.parse_args()
 
     cfg = resolve_config(args.config)
-    log = setup_logger("09_exploratory", os.path.join(cfg.log_dir, "09_exploratory.log"))
-    log.info("Step 09: Exploratory spatial analysis")
+    log = setup_logger("10_exploratory", os.path.join(cfg.log_dir, "10_exploratory.log"))
+    log.info("Step 10: Exploratory spatial analysis")
 
     # ── Napari interactive viewer (optional) ──
     # Load the most complete data available
@@ -213,18 +213,18 @@ def main():
     spatial_neighbors_summary(adata, cfg, log)
 
     # ── 5. UMAP summary plots ──
-    sc.settings.figdir = os.path.join(cfg.figure_dir, "09_exploratory")
+    sc.settings.figdir = os.path.join(cfg.figure_dir, "10_exploratory")
     os.makedirs(sc.settings.figdir, exist_ok=True)
     sc.settings.autoshow = False
 
     for col in ["cell_type", "leiden", "total_counts", "n_genes_by_counts"]:
         if col in adata.obs:
             try:
-                safe_plot(sc.pl.umap, adata, color=col, show=False, save=f"_09_{col}", cfg=cfg)
+                safe_plot(sc.pl.umap, adata, color=col, show=False, save=f"_10_{col}", cfg=cfg)
             except Exception as e:
                 log.warning("UMAP plot failed: %s", e)
 
-    log.info("Step 09 complete, took %.1fs", time.time() - t0)
+    log.info("Step 10 complete, took %.1fs", time.time() - t0)
 
 
 if __name__ == "__main__":

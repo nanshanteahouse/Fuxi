@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Step 12: Gene Regulatory Network (GRN) analysis for spatial transcriptomics
+Step 13: Gene Regulatory Network (GRN) analysis for spatial transcriptomics
 =============================================================================
 Pseudobulk aggregation per cell_type across spots → CollecTRI regulons → ULM activity inference → heatmap + tables.
 
@@ -351,8 +351,8 @@ def main():
     args_parser.add_argument("--config", default="../config.py")
     args = args_parser.parse_args()
     cfg = resolve_config(args.config)
-    log = setup_logger("12_grn", os.path.join(cfg.log_dir, "12_grn.log"))
-    log.info("Step 12: GRN regulatory network analysis (spatial)")
+    log = setup_logger("13_grn", os.path.join(cfg.log_dir, "13_grn.log"))
+    log.info("Step 13: GRN regulatory network analysis (spatial)")
 
     if not getattr(cfg.grn, "run", True):
         log.info("GRN disabled - skipping")
@@ -422,7 +422,7 @@ def main():
     plot_heatmap(top_df, cfg, log)
 
     elapsed = time.time() - t0
-    log.info("Step 12 complete (took %.1fs).", elapsed)
+    log.info("Step 13 complete (took %.1fs).", elapsed)
 
 
 if __name__ == "__main__":

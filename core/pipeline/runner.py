@@ -179,17 +179,18 @@ SPATIAL_STEPS = [
     ("03", "03_normalize.py", "Normalize + HVG + spatial graph -> 03_processed.h5ad"),
     ("04", "04_cluster.py", "PCA + UMAP + Leiden clustering -> 04_clustered.h5ad"),
     ("05", "05_annotate.py", "Cell type annotation (AI / score_genes) -> 05_annotated.h5ad"),
-    ("06", "06_spatial_stats.py", "DE + SVG + nhood enrichment + co-occurrence -> CSVs + figures"),
-    ("07", "07_trajectory.py", "Pseudotime analysis -> 07_trajectory.h5ad"),
-    ("08", "08_enrichment.py", "GO/KEGG enrichment -> enrichment CSVs"),
-    ("09", "09_exploratory.py", "Spatial visualization -> figures + CSVs"),
+    ("06", "06_deconvolve.py", "cell2location spot deconvolution -> 06_deconvolved.h5ad"),
+    ("07", "07_spatial_stats.py", "DE + SVG + nhood enrichment + co-occurrence -> CSVs + figures"),
+    ("08", "08_trajectory.py", "Pseudotime analysis -> 08_trajectory.h5ad"),
+    ("09", "09_enrichment.py", "GO/KEGG enrichment -> enrichment CSVs"),
+    ("10", "10_exploratory.py", "Spatial visualization -> figures + CSVs"),
     (
-        "10",
-        "10_cell_interaction.py",
+        "11",
+        "11_cell_interaction.py",
         "CCI spatial cell-cell interaction (LIANA+) -> tables + figures",
     ),
-    ("11", "subcluster.py", "Conditional subclustering per cell type -> 05_sub_{type}.h5ad"),
-    ("12", "grn.py", "Conditional GRN analysis via decoupler -> TF activity CSV + heatmap"),
+    ("12", "12_subcluster.py", "Conditional subclustering per cell type -> 05_sub_{type}.h5ad"),
+    ("13", "13_grn.py", "Conditional GRN analysis via decoupler -> TF activity CSV + heatmap"),
 ]
 
 SPATIAL_CHECKPOINT_FILES = [
@@ -199,16 +200,17 @@ SPATIAL_CHECKPOINT_FILES = [
     "03_processed.h5ad",  # step 03
     "04_clustered.h5ad",  # step 04
     "05_annotated.h5ad",  # step 05
-    "05_annotated.h5ad",  # step 06
-    "05_annotated.h5ad",  # step 07
-    "05_annotated.h5ad",  # step 08
-    "05_annotated.h5ad",  # step 09
-    "05_annotated.h5ad",  # step 10
-    "05_annotated.h5ad",  # step 11 (subcluster reads 05_annotated)
-    "05_annotated.h5ad",  # step 12 (GRN reads 05_annotated)
+    "06_deconvolved.h5ad",  # step 06 (deconvolution output)
+    "06_svg.h5ad",  # step 07 (spatial_stats SVG output)
+    "08_trajectory.h5ad",  # step 08
+    "05_annotated.h5ad",  # step 09 (enrichment, CSV-only placeholder)
+    "05_annotated.h5ad",  # step 10 (exploratory placeholder)
+    "05_annotated.h5ad",  # step 11 (CCI placeholder)
+    "05_annotated.h5ad",  # step 12 (subcluster reads 05_annotated)
+    "05_annotated.h5ad",  # step 13 (GRN reads 05_annotated)
 ]
 
-SPATIAL_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5}
+SPATIAL_STEPS_WRITE_CHECKPOINT = {0, 1, 2, 3, 4, 5, 6}
 
 # Sentinel 完成度标记 — Spatial 暂无（后续推广时按 RNA 约定补充）。
 SPATIAL_SENTINEL_FILES: dict[int, str] = {}
@@ -364,13 +366,14 @@ def _get_step_dependency(step: int, steps, checkpoints, modality: str = "rna") -
     if modality == "spatial":
         deps = {
             5: checkpoints[3],  # annotate reads clustered
-            6: checkpoints[5],  # spatial_de reads annotated
-            7: checkpoints[5],  # trajectory reads annotated
-            8: checkpoints[6],  # enrichment reads DE CSVs
-            9: checkpoints[5],  # exploratory reads annotated
-            10: checkpoints[5],  # CCI reads 05_annotated
-            11: checkpoints[5],  # subcluster reads 05_annotated
-            12: checkpoints[5],  # GRN reads 05_annotated
+            6: checkpoints[5],  # deconvolve reads annotated
+            7: checkpoints[6],  # spatial_stats runs after deconvolution
+            8: checkpoints[5],  # trajectory reads annotated
+            9: checkpoints[7],  # enrichment reads DE CSVs (step 07 output)
+            10: checkpoints[7],  # exploratory reads 06_svg.h5ad
+            11: checkpoints[7],  # CCI gated on spatial_stats output
+            12: checkpoints[5],  # subcluster reads 05_annotated
+            13: checkpoints[5],  # GRN reads 05_annotated
         }
         return deps.get(step, checkpoints[step - 1] if step > 0 else "")
     if modality == "bulk":

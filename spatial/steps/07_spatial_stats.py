@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Step 06: DE + SVG + nhood enrichment + co-occurrence
+Step 07: DE + SVG + nhood enrichment + co-occurrence
 ========================================================================
   1. Per-cluster DE (Wilcoxon rank-sum) — marker_genes_per_group.csv
   2. Spatially variable genes on the FULL gene set (Moran's I, sq.gr.spatial_autocorr)
@@ -199,7 +199,7 @@ def plot_top_svg(adata, moran_df, cfg, log):
     if not top_genes:
         return
 
-    fig_dir = os.path.join(cfg.figure_dir, "06_spatial_de")
+    fig_dir = os.path.join(cfg.figure_dir, "07_spatial_de")
     os.makedirs(fig_dir, exist_ok=True)
 
     try:
@@ -247,7 +247,7 @@ def run_nhood_enrichment(adata, cfg, log):
     try:
         sq.gr.nhood_enrichment(adata, cluster_key=group_col)
         sq.pl.nhood_enrichment(adata, cluster_key=group_col, show=False)
-        fig_path = os.path.join(cfg.figure_dir, "06_spatial_de", "nhood_enrichment_heatmap")
+        fig_path = os.path.join(cfg.figure_dir, "07_spatial_de", "nhood_enrichment_heatmap")
         os.makedirs(os.path.dirname(fig_path), exist_ok=True)
         save_figure(None, fig_path, cfg=cfg, bbox_inches="tight")
         plt.close()
@@ -275,7 +275,7 @@ def run_co_occurrence(adata, cfg, log):
     try:
         sq.gr.co_occurrence(adata, cluster_key=group_col)
         sq.pl.co_occurrence(adata, cluster_key=group_col, show=False)
-        fig_path = os.path.join(cfg.figure_dir, "06_spatial_de", "co_occurrence_plot")
+        fig_path = os.path.join(cfg.figure_dir, "07_spatial_de", "co_occurrence_plot")
         os.makedirs(os.path.dirname(fig_path), exist_ok=True)
         save_figure(None, fig_path, cfg=cfg, bbox_inches="tight")
         plt.close()
@@ -295,7 +295,7 @@ def run_interaction_matrix(adata, cfg, log):
     try:
         sq.gr.interaction_matrix(adata, cluster_key=group_col)
         sq.pl.interaction_matrix(adata, cluster_key=group_col, show=False)
-        fig_path = os.path.join(cfg.figure_dir, "06_spatial_de", "interaction_matrix_heatmap")
+        fig_path = os.path.join(cfg.figure_dir, "07_spatial_de", "interaction_matrix_heatmap")
         os.makedirs(os.path.dirname(fig_path), exist_ok=True)
         save_figure(None, fig_path, cfg=cfg, bbox_inches="tight")
         plt.close()
@@ -311,8 +311,8 @@ def main():
     args = args_parser.parse_args()
 
     cfg = resolve_config(args.config)
-    log = setup_logger("06_spatial_de", os.path.join(cfg.log_dir, "06_spatial_de.log"))
-    log.info("Step 06: DE + SVG + nhood enrichment + co-occurrence")
+    log = setup_logger("07_spatial_de", os.path.join(cfg.log_dir, "07_spatial_de.log"))
+    log.info("Step 07: DE + SVG + nhood enrichment + co-occurrence")
 
     input_path = os.path.join(cfg.h5ad_dir, "05_annotated.h5ad")
     if not os.path.exists(input_path):
@@ -368,7 +368,7 @@ def main():
                 g for g in top_per_group["names"].unique().tolist() if g in adata.var_names
             ][:9]
             if top_genes:
-                fig_dir = os.path.join(cfg.figure_dir, "06_spatial_de")
+                fig_dir = os.path.join(cfg.figure_dir, "07_spatial_de")
                 os.makedirs(fig_dir, exist_ok=True)
                 fig, axes = plt.subplots(
                     max(1, (len(top_genes) + 2) // 3),
@@ -417,7 +417,7 @@ def main():
         safe_write(adata, svg_h5ad, cfg=cfg)
         log.info("SVG h5ad saved: %s", svg_h5ad)
 
-    log.info("Step 06 complete, took %.1fs", time.time() - t0)
+    log.info("Step 07 complete, took %.1fs", time.time() - t0)
 
 
 if __name__ == "__main__":

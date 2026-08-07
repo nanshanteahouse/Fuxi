@@ -1,4 +1,4 @@
-"""TDD RED-phase tests for full-gene SVG in ``spatial/steps/06_spatial_stats.py``.
+"""TDD RED-phase tests for full-gene SVG in ``spatial/steps/07_spatial_stats.py``.
 
 Branch under test (plan ``.omo/plans/spatial-pipeline-rewrite-phase2.md``
 todo 9): the Moran's I SVG screening MUST run on the **full gene set** drawn
@@ -39,8 +39,8 @@ _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-_STEP_PATH = os.path.join(_REPO_ROOT, "spatial", "steps", "06_spatial_stats.py")
-_spec = importlib.util.spec_from_file_location("spatial.steps._06_svg_full_gene_test", _STEP_PATH)
+_STEP_PATH = os.path.join(_REPO_ROOT, "spatial", "steps", "07_spatial_stats.py")
+_spec = importlib.util.spec_from_file_location("spatial.steps._07_svg_full_gene_test", _STEP_PATH)
 assert _spec is not None and _spec.loader is not None, f"Could not load {_STEP_PATH}"
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)

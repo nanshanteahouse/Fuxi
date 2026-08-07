@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Spatial subcluster: conditional subclustering of a selected cell type
+Step 12: Spatial subcluster — conditional subclustering of a selected cell type
 ======================================================================
   Ported from rna/steps/06_subcluster.py to spatial transcriptomics.
 
@@ -90,7 +90,7 @@ def main():
 
     cfg = resolve_config(args.config)
     log = setup_logger("subcluster", os.path.join(cfg.log_dir, "subcluster.log"))
-    log.info("Spatial subcluster step")
+    log.info("Step 12: Spatial subcluster")
     log.info("Cell type: %s", args.cell_type)
 
     if args.cell_type is None and not cfg.marker.subcluster_types:

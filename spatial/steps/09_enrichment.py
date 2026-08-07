@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Step 08: GO/KEGG enrichment analysis
+Step 09: GO/KEGG enrichment analysis
 ========================================
-  Reads marker_genes_per_group.csv from Step 06.
+  Reads marker_genes_per_group.csv from Step 07.
   Runs ORA (Enrichr) and/or Pre-ranked GSEA via gseapy.
 
   Reuses core enrichment logic from the RNA pipeline.
 
-Input:  marker_genes_per_group.csv (Step 06 output)
-Output: 08_enrichment/ directory with CSVs + bubble plots
+Input:  marker_genes_per_group.csv (Step 07 output)
+Output: 09_enrichment/ directory with CSVs + bubble plots
 """
 
 import argparse
@@ -32,8 +32,8 @@ def main():
     args = args_parser.parse_args()
 
     cfg = resolve_config(args.config)
-    log = setup_logger("08_enrichment", os.path.join(cfg.log_dir, "08_enrichment.log"))
-    log.info("Step 08: GO/KEGG enrichment analysis")
+    log = setup_logger("09_enrichment", os.path.join(cfg.log_dir, "09_enrichment.log"))
+    log.info("Step 09: GO/KEGG enrichment analysis")
 
     if not cfg.enrichment.run:
         log.info("Enrichment analysis disabled (run_enrichment=False)")
@@ -43,7 +43,7 @@ def main():
     marker_path = os.path.join(cfg.table_dir, "marker_genes_per_group.csv")
     if not os.path.exists(marker_path):
         log.error("Marker gene file not found: %s", marker_path)
-        log.error("Run Step 06 (06_spatial_de.py) first.")
+        log.error("Run Step 07 (07_spatial_de.py) first.")
         sys.exit(1)
 
     marker_df = pd.read_csv(marker_path)
@@ -101,8 +101,8 @@ def main():
                 log.warning("GSEA enrichment not available")
 
     # ── Save results ──
-    table_dir = os.path.join(cfg.table_dir, "08_enrichment")
-    fig_dir = os.path.join(cfg.figure_dir, "08_enrichment")
+    table_dir = os.path.join(cfg.table_dir, "09_enrichment")
+    fig_dir = os.path.join(cfg.figure_dir, "09_enrichment")
     os.makedirs(table_dir, exist_ok=True)
     os.makedirs(fig_dir, exist_ok=True)
 
@@ -219,7 +219,7 @@ def main():
                 total_relevant / total_all * 100,
             )
 
-    log.info("Step 08 complete, took %.1fs", time.time() - t0)
+    log.info("Step 09 complete, took %.1fs", time.time() - t0)
 
 
 if __name__ == "__main__":
