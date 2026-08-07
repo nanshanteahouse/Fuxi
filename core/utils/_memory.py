@@ -14,7 +14,15 @@ Peak formulas are calibrated against measured runs (step 00: 6 datasets
   @ 2.8 GB; step 02: 1.05M cells @ 33 GB, 1.68M cells @ 35 GB; step 04:
   110k @ 12 GB, 620k @ 21 GB, 1.05M @ 40.5 GB, 1.676M @ <100 GB (run OK on
   a 100 GB budget); step 06: subcluster subsets 2.5k-61k cells; step 07: 9
-  runs from 2.3k to 1.05M cells, RSS 1.8-16.3 GB).
+  |  runs from 2.3k to 1.05M cells, RSS 1.8-16.3 GB).
+
+``estimate_step_peak`` is modality-aware: pass ``modality=`` to select a
+step-number namespace. Registered estimators: ``rna`` (steps 0-12), and a
+shared modality-agnostic step-0 estimator for ``atac`` / ``spatial`` /
+``bulk`` (raw-file -> sparse matrix -> h5ad load model, calibrated on 6
+RNA datasets). Unknown (modality, step) pairs return 0.0 with a logger
+warning — never silently reuse another modality's formula (step numbers
+collide across modalities).
 """
 
 from __future__ import annotations
@@ -22,7 +30,7 @@ from __future__ import annotations
 import logging
 import math
 import re
-from typing import Any
+from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
@@ -466,6 +474,49 @@ def _estimate_step00_peak(
     return raw_csr + write_staging + obs + 1.0
 
 
+_STEP_ESTIMATORS: dict[str, dict[int, tuple[Callable[..., float], frozenset[str]]]] = {
+    "rna": {
+        0: (
+            _estimate_step00_peak,
+            frozenset({"n_cells", "n_genes", "nnz", "budget_bytes", "concat_factor"}),
+        ),
+        1: (_estimate_step01_peak, frozenset({"n_cells", "n_genes", "nnz", "budget_bytes"})),
+        2: (_estimate_step02_peak, frozenset({"n_cells", "nnz", "budget_bytes"})),
+        3: (_estimate_step03_peak, frozenset({"n_cells", "n_genes", "nnz", "policy"})),
+        4: (_estimate_step04_peak, frozenset({"n_cells"})),
+        5: (_estimate_step05_peak, frozenset({"n_cells", "n_genes", "nnz", "approximation"})),
+        6: (
+            _estimate_step06_peak,
+            frozenset({"n_cells", "n_genes", "nnz", "parent_cells", "parent_genes"}),
+        ),
+        7: (_estimate_step07_peak, frozenset({"n_cells", "n_genes", "nnz", "approximation"})),
+        8: (_estimate_step08_peak, frozenset({"n_cells", "n_genes", "nnz", "parent_genes"})),
+        9: (_estimate_step09_peak, frozenset({"n_cells", "n_genes", "nnz"})),
+        10: (_estimate_step10_peak, frozenset({"n_cells", "n_genes", "nnz", "plot_max_cells"})),
+        11: (_estimate_step11_peak, frozenset()),
+        12: (_estimate_step12_peak, frozenset({"nnz"})),
+    },
+    "atac": {
+        0: (
+            _estimate_step00_peak,
+            frozenset({"n_cells", "n_genes", "nnz", "budget_bytes", "concat_factor"}),
+        )
+    },
+    "spatial": {
+        0: (
+            _estimate_step00_peak,
+            frozenset({"n_cells", "n_genes", "nnz", "budget_bytes", "concat_factor"}),
+        )
+    },
+    "bulk": {
+        0: (
+            _estimate_step00_peak,
+            frozenset({"n_cells", "n_genes", "nnz", "budget_bytes", "concat_factor"}),
+        )
+    },
+}
+
+
 def estimate_step_peak(
     step: int,
     n_cells: int,
@@ -478,56 +529,42 @@ def estimate_step_peak(
     parent_genes: int = 0,
     plot_max_cells: int = 20_000,
     concat_factor: float = 1.0,
+    modality: str = "rna",
 ) -> float:
     """Estimated peak RSS (GB) for a pipeline step.
 
     For step 06 the first three arguments describe the *subset* (cells /
     full gene count / subset nnz); ``parent_cells`` / ``parent_genes``
     describe the parent 05_annotated object whose full read dominates the
-    loading phase."""
-    if step == 0:
-        return _estimate_step00_peak(n_cells, n_genes, nnz, budget_bytes, concat_factor)
-    if step == 1:
-        return _estimate_step01_peak(n_cells, n_genes, nnz, budget_bytes)
-    if step == 2:
-        return _estimate_step02_peak(n_cells, nnz, budget_bytes)
-    if step == 3:
-        return _estimate_step03_peak(n_cells, n_genes, nnz, policy)
-    if step == 4:
-        return _estimate_step04_peak(n_cells)
-    if step == 5:
-        return _estimate_step05_peak(n_cells, n_genes, nnz, approximation)
-    if step == 6:
-        return _estimate_step06_peak(
-            n_cells,
-            n_genes,
-            nnz,
-            parent_cells=parent_cells,
-            parent_genes=parent_genes,
+    loading phase.
+
+    ``modality`` selects the step-number namespace (step numbers collide
+    across modalities): "rna" (0-12) is the default; atac/spatial/bulk
+    register only a shared step-0 estimator.  Unknown (modality, step)
+    pairs return 0.0 with a warning — never silently reuse another
+    modality's formula."""
+    est = _STEP_ESTIMATORS.get(modality, {}).get(step)
+    if est is None:
+        logger.warning(
+            "no memory estimator for modality=%s step=%d (returning 0.0)",
+            modality,
+            step,
         )
-    if step == 7:
-        return _estimate_step07_peak(n_cells, n_genes, nnz, approximation=approximation)
-    if step == 8:
-        return _estimate_step08_peak(
-            n_cells,
-            n_genes,
-            nnz,
-            parent_genes=parent_genes,
-        )
-    if step == 9:
-        return _estimate_step09_peak(n_cells, n_genes, nnz)
-    if step == 10:
-        return _estimate_step10_peak(
-            n_cells,
-            n_genes,
-            nnz,
-            plot_max_cells=plot_max_cells,
-        )
-    if step == 11:
-        return _estimate_step11_peak()
-    if step == 12:
-        return _estimate_step12_peak(nnz)
-    return 0.0
+        return 0.0
+    func, takes = est  # (estimator, set of accepted kwarg names)
+    kwargs = {
+        "n_cells": n_cells,
+        "n_genes": n_genes,
+        "nnz": nnz,
+        "policy": policy,
+        "budget_bytes": budget_bytes,
+        "approximation": approximation,
+        "parent_cells": parent_cells,
+        "parent_genes": parent_genes,
+        "plot_max_cells": plot_max_cells,
+        "concat_factor": concat_factor,
+    }
+    return func(**{k: v for k, v in kwargs.items() if k in takes})
 
 
 # ═══════════════════════════════════════════════════════════════════════
