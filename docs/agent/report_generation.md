@@ -139,7 +139,8 @@ Work log / weekly summary       → logs/             recent_work_summary_YYYY-M
 
 ### 边界说明
 
-- **supplements/ 排除**：`notes/supplements/`（论文附表）为使用者单独维护区域——
-  不增删、不改动、不纳入索引逐条登记，根 INDEX 仅保留入口。
+- **supplements/ 排除**：论文附表（附件素材）存于 `projects/papers/<PMID>/supplements/`
+  （与论文 XML/insights 同处，由 `core/paper/registry.py` 管理）——不增删、不改动、
+  不纳入 notes 索引；notes 内仅保留相关历史报告。
 - **notes/ 永不提交**：整个 `notes/` 目录被 gitignore，属私有内容；**严禁** `git add notes/`
   或以任何形式把 notes/ 文件带进 commit / PR / push（详见 AGENTS.md「Notes are private — never commit」）。

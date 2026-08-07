@@ -5,12 +5,11 @@ core/registry.py — 五域统一论文登记表 (Master Registry)
 数据模型 & YAML I/O & 查询 API
 ================================
 
-统一管理五个区域的论文引用：
-  1. projects/papers/           — 论文 XML / insights 解读
+统一管理四个区域的论文引用：
+  1. projects/papers/           — 论文 XML / insights 解读 / 附表（<PMID>/supplements/）
   2. projects/{rna,atac,spatial}/ — 管线运行产物
-  3. notes/supplements/         — 论文附表
-  4. $FUXI_DATA_ROOT/           — GSE 原始数据
-  5. core/kb/                   — 专家注释知识库
+  3. $FUXI_DATA_ROOT/           — GSE 原始数据
+  4. core/kb/                   — 专家注释知识库
 
 用法:
     from core.registry import load_master_registry, MasterRegistry
@@ -358,15 +357,16 @@ class MasterRegistry(BaseModel):
 
     def find_orphan_supplements(
         self,
-        supplements_root: str = "notes/supplements",
+        papers_root: str = "projects/papers",
     ) -> list[str]:
-        if not os.path.isdir(supplements_root):
+        """Return PMIDs whose supplements/ subdir exists but has no registry paper."""
+        if not os.path.isdir(papers_root):
             return []
         known_pmids = {p.pmid for p in self.papers if p.pmid}
         orphans: list[str] = []
-        for entry in sorted(os.listdir(supplements_root)):
-            entry_path = os.path.join(supplements_root, entry)
-            if not os.path.isdir(entry_path):
+        for entry in sorted(os.listdir(papers_root)):
+            supp_dir = os.path.join(papers_root, entry, "supplements")
+            if not os.path.isdir(supp_dir):
                 continue
             if entry not in known_pmids:
                 orphans.append(entry)
@@ -727,7 +727,7 @@ def _print_report(registry: MasterRegistry, verbose: bool = False) -> None:
     if supp_orphans:
         print("\n\u26a0\ufe0f  孤儿附表（目录存在但无对应论文 PMID）:")
         for pmid_dir in supp_orphans:
-            print(f"  - notes/supplements/{pmid_dir}/")
+            print(f"  - projects/papers/{pmid_dir}/supplements/")
 
     if verbose:
         findings = registry.verify()
