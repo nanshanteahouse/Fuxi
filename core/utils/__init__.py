@@ -164,3 +164,7 @@ from core.utils._validation import (  # noqa: F401
     validate_adata,
     validate_pipeline_state,
 )
+from core.utils._write_chunked import (  # noqa: F401
+    resolve_block_size,
+    write_csr_chunked,
+)

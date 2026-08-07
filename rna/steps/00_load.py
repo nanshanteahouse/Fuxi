@@ -729,6 +729,112 @@ def _load_multi_sample_10x_h5(cfg, log):
     return adata
 
 
+def _raw_h5ad_compression(cfg):
+    """Resolve the step-00 raw-write compression — mirrors safe_write's
+    ``step_alias="raw"`` resolution: ``per_step_h5ad_compression["raw"]``
+    ("zstd" by schema default) > ``cfg.h5ad_compression`` > "gzip".
+    Returns ``(compression, opts)``; opts only apply to the gzip family.
+    """
+    compression = getattr(cfg, "per_step_h5ad_compression", {}).get("raw")
+    if compression is None:
+        compression = getattr(cfg, "h5ad_compression", "gzip")
+    opts = getattr(cfg, "h5ad_compression_opts", None)
+    if opts is not None and not compression.startswith("gzip"):
+        opts = None
+    return compression, opts
+
+
+def _filter_downsample_mask(obs, cfg, log) -> np.ndarray:
+    """Combined filter + downsample cell mask for the final on-write path.
+
+    Replicates the EXACT selection semantics — incl. the RNG draw order — of
+    ``core.downsample.filter_by_config`` (L163-193) then ``downsample_by_config``
+    (L196-234): filter first (``sample_keep`` isin on "sample", then ``obs_filter``
+    via ``obs.eval`` with the per-row eval fallback), then the downsample RNG over
+    the FILTERED cell count with a fresh ``RandomState(seed)``. Returns a bool mask
+    of length ``len(obs)`` (kept cells in original order) so the chunked writer can
+    drop cells during the block-wise write (metis G4).
+    """
+    n = len(obs)
+    m1 = np.ones(n, dtype=bool)
+    # ── filter mask ── (core/downsample.py filter_by_config L163-193)
+    sample_keep = getattr(cfg.downsample, "sample_keep", None) or []
+    obs_filter = getattr(cfg.downsample, "obs_filter", None) or ""
+    if sample_keep:
+        m1 &= obs["sample"].isin(sample_keep).to_numpy()
+        log.info("sample_keep filter: %d → %d cells", n, int(m1.sum()))
+    if obs_filter:
+        n_before = int(m1.sum())
+        sub = obs[m1]  # eval must see the already-filtered population (order!)
+        mask = sub.eval(obs_filter)
+        if not isinstance(mask, pd.Series):
+            mask = sub.apply(lambda row: eval(obs_filter, {"__builtins__": {}}, dict(row)), axis=1)
+        m1[m1] &= np.asarray(mask.values, dtype=bool)
+        log.info("obs_filter filter: %d → %d cells", n_before, int(m1.sum()))
+    # ── downsample mask ── (core/downsample.py downsample_by_config L196-234)
+    target = getattr(cfg, "downsample_target", None)
+    n_f = int(m1.sum())
+    if target is None or target >= n_f:
+        return m1
+    strategy = getattr(cfg, "downsample_strategy", "stratified")
+    seed = getattr(cfg, "downsample_random_seed", 42)
+    max_per = getattr(cfg, "downsample_max_per_sample", 5000)
+    sample_key = "sample" if "sample" in obs.columns else None
+    if sample_key is None:  # core/downsample._check_sample_col candidate order
+        for cand in ["Sample", "samples", "batch", "Batch", "stage", "Stage"]:
+            if cand in obs.columns:
+                sample_key = cand
+                log.info("Using '%s' as group column ('sample' not found)", cand)
+                break
+    if sample_key is None:
+        sample_key = "sample"
+    rng = np.random.RandomState(seed)
+    f_pos = np.where(m1)[0]
+    f_obs = obs.iloc[f_pos]
+    counts = f_obs[sample_key].value_counts()
+    log.info("Downsampling: target=%d, strategy=%s, seed=%d", target, strategy, seed)
+    if strategy == "random":  # core/downsample.downsample_random L30-41
+        idx = rng.choice(n_f, size=target, replace=False)
+        idx.sort()
+    elif strategy in ("stratified", "max_per_sample"):  # L44-85 / L88-122
+        per_sample = None
+        if strategy == "stratified":
+            fractions = counts / n_f
+            per_sample = (fractions * target).astype(int)
+            remainder = target - int(per_sample.sum())
+            if remainder > 0:
+                order = np.argsort((fractions * target) - per_sample)[::-1]
+                per_sample.iloc[order[:remainder]] += 1
+        parts = []
+        for sample_name in counts.index:
+            s_idx = np.where(f_obs[sample_key].values == sample_name)[0]
+            cap = (
+                min(int(per_sample[sample_name]), len(s_idx))
+                if per_sample is not None
+                else min(max_per, len(s_idx))
+            )
+            if cap < len(s_idx):
+                parts.append(rng.choice(s_idx, size=cap, replace=False))
+            else:
+                parts.append(s_idx)
+        idx = np.concatenate(parts)
+        idx.sort()
+    else:
+        log.warning("Unknown downsample strategy '%s', skipping downsample", strategy)
+        return m1
+    m2 = np.zeros(n_f, dtype=bool)
+    m2[idx] = True
+    combined = np.zeros(n, dtype=bool)
+    combined[f_pos[m2]] = True
+    log.info(
+        "Downsampled: %d → %d cells (%.1f%%)",
+        n_f,
+        int(combined.sum()),
+        100 * int(combined.sum()) / n_f,
+    )
+    return combined
+
+
 def main():
     t0 = time.time()
     args_parser = argparse.ArgumentParser()
@@ -1089,20 +1195,43 @@ def main():
     if cfg.ambient.run and cfg.data_format in ("10X_h5", "10X_mtx"):
         _run_ambient_correction(adata, cfg, log)
 
-    # ── 可选细胞过滤 + 降采样（config-driven） ──
-    from core.downsample import downsample_by_config, filter_by_config
+    # ── 可选细胞过滤 + 降采样（config-driven, 写时过滤, 无整矩阵拷贝）──
+    # Selection semantics replicate core/downsample.py exactly; the chunked
+    # writer drops cells during the block-wise write (metis G4).
+    from anndata.utils import make_index_unique
 
-    adata = filter_by_config(adata, cfg, log)
-    adata = downsample_by_config(adata, cfg, log)
+    from core.utils import safe_write, write_csr_chunked
+
+    cell_mask = _filter_downsample_mask(adata.obs, cfg, log)
+    n_keep = int(cell_mask.sum())
 
     # ── 保存 ──
     log.info("Saving to %s...", cfg.raw_h5ad)
-    from core.utils import safe_write
+    raw_compression, raw_compression_opts = _raw_h5ad_compression(cfg)
 
-    if not adata.obs_names.is_unique:
-        log.warning("Observation names not unique, calling make_unique()")
-        adata.obs_names_make_unique()
-    safe_write(adata, cfg.raw_h5ad, cfg=cfg)
+    if n_keep == adata.n_obs:
+        # No-op filter/downsample → unchanged write path (identical output).
+        if not adata.obs_names.is_unique:
+            log.warning("Observation names not unique, calling make_unique()")
+            adata.obs_names_make_unique()
+        safe_write(adata, cfg.raw_h5ad, cfg=cfg, step_alias="raw")
+    else:
+        # Filter/downsample applied ON WRITE via the cell mask — no full-matrix
+        # copies; X and obs are both sliced, index-aligned.
+        out_obs = adata.obs[cell_mask].copy()
+        if not out_obs.index.is_unique:
+            log.warning("Observation names not unique, calling make_unique()")
+            out_obs.index = make_index_unique(out_obs.index)
+        write_csr_chunked(
+            cfg.raw_h5ad,
+            adata.X,
+            cell_mask=cell_mask,
+            n_obs=n_keep,
+            obs=out_obs,
+            var=adata.var.copy(),
+            compression=raw_compression,
+            compression_opts=raw_compression_opts,
+        )
     log.info("Step 00 complete, took %.1fs", time.time() - t0)
 
 
