@@ -627,14 +627,106 @@ def _load_multi_sample_10x_mtx(cfg, log):
     return adata
 
 
+def _extract_sample_name(fname, suffix):
+    """Replicate the step-00 sample-name extraction from the pattern suffix."""
+    sample_name = os.path.basename(fname)
+    if suffix and sample_name.endswith(suffix):
+        sample_name = sample_name[: -len(suffix)].rstrip("_")
+    elif suffix:
+        alt = suffix.lstrip("_")
+        if alt and sample_name.endswith(alt):
+            sample_name = sample_name[: -len(alt)].rstrip("_")
+    else:
+        sample_name = os.path.splitext(sample_name)[0]
+    return sample_name
+
+
+def _read_10x_h5_meta(h5_file):
+    """Cheap metadata read of a 10x v3 feature-barcode h5 — no X materialized.
+
+    Mirrors scanpy's read (gex_only=True + var_names_make_unique) so the fast
+    path assembles X in place with byte-identical obs/var.
+    """
+    import h5py
+
+    with h5py.File(h5_file, "r") as f:
+        m = f["matrix"]
+        nnz = int(m["indptr"][-1])
+        obs_index = m["barcodes"][:].astype(str)
+        names = m["features"]["name"][:].astype(str)
+        gene_ids = m["features"]["id"][:].astype(str)
+        feature_types = m["features"]["feature_type"][:].astype(str)
+        genomes = m["features"]["genome"][:].astype(str)
+        extras = {
+            k: v[:].astype(bool if v.dtype.kind == "b" else str)
+            for k, v in m["features"].items()
+            if isinstance(v, h5py.Dataset)
+            and k not in ("name", "feature_type", "id", "gene_id", "_all_tag_keys")
+        }
+
+    n_obs = len(obs_index)
+    gex = feature_types == "Gene Expression"  # gex_only=True (scanpy default)
+    names, gene_ids, feature_types, genomes = (
+        a[gex] for a in (names, gene_ids, feature_types, genomes)
+    )
+    extras = {k: v[gex] for k, v in extras.items()}
+    if len(names) != len(set(names)):  # anndata var_names_make_unique (join='-')
+        counts = {}
+        uniq = []
+        for n in names:
+            c = counts.get(n, 0)
+            counts[n] = c + 1
+            uniq.append(n if c == 0 else f"{n}-{c}")
+        names = uniq
+
+    var = {"gene_ids": gene_ids, "feature_types": feature_types, "genome": genomes, **extras}
+    return n_obs, nnz, list(names), obs_index, pd.DataFrame(var, index=names)
+
+
+def _assemble_csr_inplace(meta, n_vars):
+    """Stream per-file X into one preallocated CSR — no vstack transient.
+
+    Only ONE per-file matrix + the preallocated output live at any moment →
+    peak ≈ 1× output + 1× largest file. The returned csr shares the arrays.
+    """
+    import gc
+    import warnings as _warn
+
+    total_nnz = sum(nnz for _, _, nnz in meta)
+    n_obs = sum(n for _, n, _ in meta)
+    idx_dtype = sp.get_index_dtype(maxval=max(total_nnz, n_vars))  # vstack parity
+    data = np.empty(total_nnz, dtype=np.float32)
+    indices = np.empty(total_nnz, dtype=idx_dtype)
+    indptr = np.zeros(n_obs + 1, dtype=idx_dtype)
+
+    row = 0
+    off = 0
+    for h5_file, n_obs_i, _ in meta:
+        with _warn.catch_warnings():
+            _warn.simplefilter("ignore", UserWarning)
+            a = sc.read_10x_h5(h5_file)
+        x = a.X.tocsr() if not sp.isspmatrix_csr(a.X) else a.X
+        end = off + x.nnz
+        data[off:end] = x.data
+        indices[off:end] = x.indices
+        # cast to int64: per-file indptr is int32, but the global offset can
+        # exceed int32 max at 2.8e9 nnz (numpy raises on int32+big-int add)
+        indptr[row : row + n_obs_i] = x.indptr[:-1].astype(np.int64) + off
+        row += n_obs_i
+        off = end
+        del a, x
+        _ = gc.collect()
+    indptr[-1] = off
+    return sp.csr_matrix((data, indices, indptr), shape=(n_obs, n_vars))
+
+
 def _load_multi_sample_10x_h5(cfg, log):
     """Load multiple 10X_h5 files matched by ``h5_file_pattern``.
 
-    Fast path (identical gene sets in EXACT order) sparse-vstacks per-file X
-    matrices — O(nnz), no concat re-alignment.  Otherwise falls back to a
-    batched tree merge (outer join) with ``batch = mtx_concat_batch`` when
-    configured > 0, else 10.
-
+    PASS 1 reads cheap metadata (shape/nnz/barcodes/features) via h5py — no X
+    is materialized.  Identical gene sets (EXACT order) take PASS 2: each
+    file's X is streamed into one preallocated CSR so peak ≈ 1× merged matrix
+    (vs ~2× for ``sp.vstack``); differing sets use a batched outer-join tree.
     Per-file obs_names get their ``-{i}`` suffix BEFORE any grouping because
     ``sc.concat`` without ``index_unique`` errors on duplicate obs_names.
     """
@@ -658,50 +750,29 @@ def _load_multi_sample_10x_h5(cfg, log):
     n_total = len(h5_files)
     log.info("Loading from 10X HDF5 (multi-file): %d files", n_total)
 
-    gene_sets = []
-    adatas = []
+    gene_sets, meta, obs_frames, var0 = [], [], [], None
     for i, h5_file in enumerate(h5_files):
         fname = os.path.basename(h5_file)
         log.info("  [%d/%d] %s — loading...", i + 1, n_total, fname)
         try:
-            # Suppress scanpy's internal UserWarning about non-unique var_names
-            # (we handle dedup ourselves with var_names_make_unique)
-            with _warn.catch_warnings():
-                _warn.simplefilter("ignore", UserWarning)
-                a = sc.read_10x_h5(h5_file)
+            n_obs, nnz, var_names, obs_index, var_df = _read_10x_h5_meta(h5_file)
         except Exception as e:
             log.error("Failed to load 10X_h5 file '%s': %s", fname, e)
             sys.exit(1)
-        if a.var_names.duplicated().any():
-            a.var_names_make_unique()
-        # Suffix per file BEFORE any grouping: sc.concat errors on dup obs_names
-        a.obs_names = [f"{bc}-{i}" for bc in a.obs_names]
-
-        sample_name = os.path.basename(h5_file)
-        if suffix and sample_name.endswith(suffix):
-            sample_name = sample_name[: -len(suffix)].rstrip("_")
-        elif suffix:
-            alt = suffix.lstrip("_")
-            if alt and sample_name.endswith(alt):
-                sample_name = sample_name[: -len(alt)].rstrip("_")
-        else:
-            sample_name = os.path.splitext(sample_name)[0]
-        a.obs["sample"] = sample_name
-
-        gene_sets.append(list(a.var_names))
-        log.info(
-            "  [%d/%d] %s — %d cells × %d genes",
-            i + 1,
-            n_total,
-            fname,
-            a.n_obs,
-            a.n_vars,
+        sample_name = _extract_sample_name(fname, suffix)
+        obs = pd.DataFrame(
+            {"sample": [sample_name] * n_obs}, index=[f"{b}-{i}" for b in obs_index]
         )
-        adatas.append(a)
+        var0 = var_df if i == 0 else var0
+        gene_sets.append(var_names)
+        log.info(
+            "  [%d/%d] %s — %d cells × %d genes", i + 1, n_total, fname, n_obs, len(var_names)
+        )
+        meta.append((h5_file, n_obs, nnz))
+        obs_frames.append(obs)
 
-    first_genes = gene_sets[0]
     # ORDERED list equality — set equality would silently misalign the vstack
-    identical = all(gs == first_genes for gs in gene_sets[1:])
+    identical = all(gs == gene_sets[0] for gs in gene_sets[1:])
     log.info(
         "Gene sets %s across %d files",
         "identical — vstack fast path" if identical else "differ — batched outer-join",
@@ -709,22 +780,29 @@ def _load_multi_sample_10x_h5(cfg, log):
     )
 
     if identical:
-        x_stack = sp.vstack([a.X for a in adatas], format="csr")
-        adata = sc.AnnData(
-            X=x_stack,
-            obs=pd.concat([a.obs for a in adatas], axis=0),
-            var=adatas[0].var.copy(),
-        )
+        x_stack = _assemble_csr_inplace(meta, len(gene_sets[0]))
+        adata = sc.AnnData(X=x_stack, obs=pd.concat(obs_frames, axis=0), var=var0.copy())
         log.info("Merge complete (vstack): %d cells × %d genes", adata.n_obs, adata.n_vars)
     else:
         batch = cfg.data_input.mtx_concat_batch
         if not batch or batch <= 0:
             batch = 10
         log.info("Batched outer-join concat (batch=%d)...", batch)
+        adatas = []
+        for i, h5_file in enumerate(h5_files):
+            with _warn.catch_warnings():
+                _warn.simplefilter("ignore", UserWarning)
+                a = sc.read_10x_h5(h5_file)
+            if a.var_names.duplicated().any():
+                a.var_names_make_unique()
+            a.obs_names = [f"{bc}-{i}" for bc in a.obs_names]
+            a.obs["sample"] = _extract_sample_name(os.path.basename(h5_file), suffix)
+            adatas.append(a)
         adata = _concat_mtx_batched(adatas, batch, log)
         log.info("Merge complete (outer join): %d cells × %d genes", adata.n_obs, adata.n_vars)
+        del adatas
 
-    del adatas
+    del meta, obs_frames, gene_sets
     _ = gc.collect()
     return adata
 

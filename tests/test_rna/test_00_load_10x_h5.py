@@ -24,6 +24,7 @@ from __future__ import annotations
 import importlib
 import os
 import sys
+import warnings
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -369,3 +370,158 @@ class TestFailFast:
             _mod._load_multi_sample_10x_h5(_make_cfg(str(d), pattern="*.h5"), log)
         msg = " ".join(str(a) for a in log.error.call_args.args)
         assert "*.h5" in msg
+
+
+# ═════════════════════════════════════════════════════════════════════
+#  In-place CSR assembly (T1b) — identical-gene-set fast path
+# ═════════════════════════════════════════════════════════════════════
+
+
+def _oracle_vstack(xs):
+    """Reference CSR for the fast path: per-file dense arrays, vstacked."""
+    return sp.vstack([sp.csr_matrix(x.astype(np.float32)) for x in xs], format="csr")
+
+
+class TestInPlaceAssembly:
+    def test_multi_file_csr_equals_oracle_arrays(self, tmp_path: Path) -> None:
+        x0 = _rand_counts(60, 5, len(GENES_A))
+        x1 = _rand_counts(61, 7, len(GENES_A))
+        x2 = _rand_counts(62, 3, len(GENES_A))
+        _write_sample_files(
+            tmp_path,
+            [
+                ("sampleA.h5", GENES_A, x0),
+                ("sampleB.h5", GENES_A, x1),
+                ("sampleC.h5", GENES_A, x2),
+            ],
+        )
+        new = _mod._load_multi_sample_10x_h5(
+            _make_cfg(str(tmp_path / "h5")), _make_capturing_log()
+        )
+        ref = _oracle_vstack([x0, x1, x2])
+        # direct CSR equality — per-row sorted, no re-sort needed
+        assert np.array_equal(new.X.data, ref.data, equal_nan=True)
+        assert np.array_equal(new.X.indices, ref.indices)
+        assert np.array_equal(new.X.indptr, ref.indptr)
+        assert np.array_equal(new.X.toarray(), ref.toarray(), equal_nan=True)
+
+    def test_indptr_offsets_across_file_boundaries(self, tmp_path: Path) -> None:
+        # crafted: file0 has an empty row; boundary must jump by file0 total nnz
+        x0 = np.array(
+            [
+                [1, 0, 2, 0],  # row0 nnz 2
+                [0, 0, 0, 0],  # row1 nnz 0 (empty)
+                [3, 0, 0, 4],  # row2 nnz 2
+            ],
+            dtype=np.float32,
+        )
+        x1 = np.array([[5, 0, 0, 0], [0, 6, 0, 0]], dtype=np.float32)
+        _write_sample_files(
+            tmp_path, [("sampleA.h5", GENES_A[:4], x0), ("sampleB.h5", GENES_A[:4], x1)]
+        )
+        new = _mod._load_multi_sample_10x_h5(
+            _make_cfg(str(tmp_path / "h5")), _make_capturing_log()
+        )
+        x = new.X
+        # merged 5 rows; file0 rows 0-2 then file1 rows 3-4
+        assert list(x.indptr) == [0, 2, 2, 4, 5, 6]
+        assert x.indptr[3] == 4  # boundary start == file0 total nnz
+        ref = _oracle_vstack([x0, x1])
+        assert np.array_equal(x.indptr, ref.indptr)
+
+    def test_single_file_edge(self, tmp_path: Path) -> None:
+        x0 = _rand_counts(70, 8, len(GENES_A))
+        _write_sample_files(tmp_path, [("sampleA.h5", GENES_A, x0)])
+        new = _mod._load_multi_sample_10x_h5(
+            _make_cfg(str(tmp_path / "h5")), _make_capturing_log()
+        )
+        ref = _oracle_vstack([x0])
+        assert new.n_obs == x0.shape[0]
+        assert new.n_vars == x0.shape[1]
+        assert np.array_equal(new.X.data, ref.data, equal_nan=True)
+        assert np.array_equal(new.X.indices, ref.indices)
+        assert np.array_equal(new.X.indptr, ref.indptr)
+
+    def test_empty_rows_edge(self, tmp_path: Path) -> None:
+        # all rows of file1 are zero → indptr must still advance correctly
+        x0 = _rand_counts(80, 3, len(GENES_A))
+        x1 = np.zeros((4, len(GENES_A)), dtype=np.float32)
+        _write_sample_files(tmp_path, [("sampleA.h5", GENES_A, x0), ("sampleB.h5", GENES_A, x1)])
+        new = _mod._load_multi_sample_10x_h5(
+            _make_cfg(str(tmp_path / "h5")), _make_capturing_log()
+        )
+        ref = _oracle_vstack([x0, x1])
+        assert np.array_equal(new.X.data, ref.data, equal_nan=True)
+        assert np.array_equal(new.X.indices, ref.indices)
+        assert np.array_equal(new.X.indptr, ref.indptr)
+        assert list(new.X.indptr[3:]) == [ref.nnz] * 5  # all-zero block
+
+    def test_dtypes_float32_int32(self, tmp_path: Path) -> None:
+        x0 = _rand_counts(90, 5, len(GENES_A))
+        x1 = _rand_counts(91, 7, len(GENES_A))
+        _write_sample_files(tmp_path, [("sampleA.h5", GENES_A, x0), ("sampleB.h5", GENES_A, x1)])
+        new = _mod._load_multi_sample_10x_h5(
+            _make_cfg(str(tmp_path / "h5")), _make_capturing_log()
+        )
+        assert new.X.data.dtype == np.float32
+        assert new.X.indices.dtype == np.int32
+        assert new.X.indptr.dtype == np.int32
+
+    def test_read_10x_h5_meta_parity_with_scanpy(self, tmp_path: Path) -> None:
+        # duplicate gene to exercise var_names_make_unique replication
+        genes = GENES_A[:5] + [GENES_A[2]]
+        x = _rand_counts(92, 6, len(genes))
+        d = tmp_path / "h5"
+        d.mkdir()
+        _write_10x_h5(
+            d / "s0.h5",
+            genes,
+            [f"ENSG{i:05d}" for i in range(len(genes))],
+            [f"BC{i:03d}" for i in range(6)],
+            x,
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            a = sc.read_10x_h5(str(d / "s0.h5"))
+        if a.var_names.duplicated().any():
+            a.var_names_make_unique()
+        n_obs, nnz, var_names, obs_index, var_df = _mod._read_10x_h5_meta(str(d / "s0.h5"))
+        assert n_obs == a.n_obs
+        assert nnz == a.X.nnz
+        assert list(var_names) == list(a.var_names)
+        assert list(obs_index) == list(a.obs.index)
+        assert list(var_df.index) == list(a.var_names)
+        assert list(var_df.columns) == list(a.var.columns)
+        for c in a.var.columns:
+            assert list(var_df[c]) == list(a.var[c])
+
+    def test_assemble_csr_inplace_equals_vstack(self, tmp_path: Path) -> None:
+        x0 = _rand_counts(93, 4, len(GENES_A))
+        x1 = _rand_counts(94, 6, len(GENES_A))
+        files = _write_sample_files(
+            tmp_path, [("sampleA.h5", GENES_A, x0), ("sampleB.h5", GENES_A, x1)]
+        )
+        meta = []
+        for fp in files:
+            n_obs, nnz, *_ = _mod._read_10x_h5_meta(fp)
+            meta.append((fp, n_obs, nnz))
+        out = _mod._assemble_csr_inplace(meta, len(GENES_A))
+        ref = _oracle_vstack([x0, x1])
+        assert np.array_equal(out.data, ref.data, equal_nan=True)
+        assert np.array_equal(out.indices, ref.indices)
+        assert np.array_equal(out.indptr, ref.indptr)
+        assert out.data.dtype == np.float32
+        assert out.indices.dtype == np.int32
+        assert out.indptr.dtype == np.int32
+
+    def test_indptr_add_handles_int32_overflow(self) -> None:
+        # regression (T1b QA): per-file indptr is int32, but the global offset
+        # exceeds int32 max at 2.8e9 nnz — the naive ``x.indptr[:-1] + off``
+        # form raises OverflowError on numpy 2; the int64 cast must not.
+        x = sp.csr_matrix(np.array([[1, 0], [0, 2]], dtype=np.float32))
+        assert x.indptr.dtype == np.int32
+        big_off = 2_150_585_452  # > int32 max
+        vals = x.indptr[:-1].astype(np.int64) + big_off
+        assert list(vals) == [big_off, big_off + 1]
+        with pytest.raises(OverflowError):
+            _ = x.indptr[:-1] + big_off  # the pre-fix form, as a guard
