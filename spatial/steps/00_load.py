@@ -5,21 +5,131 @@ Step 00: Load raw spatial transcriptomics data
 Supports:
   1. 10X Visium (SpaceRanger output) — sq.read.visium()
   2. Generic h5ad with spatial coordinates in obsm['spatial']
+  3. Seurat wide CSV (counts.csv.gz genes×spots + md.csv.gz) — seurat_csv
 
 Input:  Raw data directory or .h5ad file
 Output: 00_raw.h5ad (with spatial coordinates + image in uns)
 """
 
 import argparse
+import logging
 import os
 import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+import numpy as np
+import pandas as pd
 import scanpy as sc
 import scipy.sparse as sp
 
 from core.utils import resolve_config, safe_write, setup_logger
+
+
+def _load_seurat_csv(counts_file: str, md_file: str, log: logging.Logger) -> sc.AnnData:
+    """Load a Seurat wide-format counts table + metadata CSV into AnnData.
+
+    ``counts_file`` is a genes×spots wide CSV (rows = ENSG gene IDs, columns = spot
+    barcodes ``cell_N_M``) and ``md_file`` the Seurat metadata table (index = spot
+    IDs, including ``pixel_x``/``pixel_y``).  Returns an AnnData with X = spots×genes
+    CSR float32 (int64 indptr), ``obsm['spatial']`` from the pixel coordinates,
+    obs = the full md table (column order/dtypes preserved), and var_names left as
+    the raw ENSG IDs (symbol mapping happens downstream in 06_deconvolve).
+
+    Behaviour is pinned by ``tests/test_spatial/test_00_load_seurat_csv.py`` (oracle
+    parity): NaN preserved, exact zeros dropped (csr dense semantics), obs equal to
+    ``pd.read_csv(md_file, index_col=0)`` under ``assert_frame_equal``.
+    """
+    log.info("Loading Seurat counts CSV: %s", os.path.basename(counts_file))
+    counts = pd.read_csv(counts_file, index_col=0)
+    log.info("  counts: %d genes × %d spots", counts.shape[0], counts.shape[1])
+    x_csr = sp.csr_matrix(counts.values.T.astype(np.float32))
+    x_csr.indptr = x_csr.indptr.astype(np.int64)
+    adata = sc.AnnData(X=x_csr)
+    adata.var_names = counts.index.astype(str)
+    adata.obs_names = counts.columns.astype(str)
+    md = pd.read_csv(md_file, index_col=0)
+    log.info("  metadata: %d columns × %d spots", md.shape[1], md.shape[0])
+    adata.obs = md
+    adata.obsm["spatial"] = md[["pixel_x", "pixel_y"]].to_numpy()
+    return adata
+
+
+def _load_multi_slide_seurat(cfg, log: logging.Logger) -> sc.AnnData:
+    """Load one or more Seurat CSV slides and merge into a single AnnData.
+
+    Multi-slide: ``CFG.spatial.samples`` (back-compat ``getattr`` — the schema field
+    lands in Wave 3) lists per-sample directories under ``cfg.data_dir``, each holding
+    ``counts.csv.gz`` + ``md.csv.gz``; an obs ``sample`` column distinguishes slides.
+    Without ``samples`` a single slide is auto-discovered from ``counts.csv.gz`` +
+    ``md.csv.gz`` directly in ``data_dir`` (no sample column — obs stays exactly the
+    md table).  Missing files abort with a clear error.
+    """
+    data_dir = cfg.data_dir
+    samples = list(getattr(cfg.spatial, "samples", None) or [])
+    if samples:
+        pairs = [
+            (
+                name,
+                os.path.join(data_dir, name, "counts.csv.gz"),
+                os.path.join(data_dir, name, "md.csv.gz"),
+            )
+            for name in samples
+        ]
+        log.info("Seurat CSV multi-slide: %d sample(s) under %s", len(pairs), data_dir)
+    else:
+        pairs = [
+            (
+                os.path.basename(os.path.normpath(data_dir)),
+                os.path.join(data_dir, "counts.csv.gz"),
+                os.path.join(data_dir, "md.csv.gz"),
+            )
+        ]
+        log.info("Seurat CSV single-slide auto-discovered under %s", data_dir)
+
+    for _name, counts_file, md_file in pairs:
+        for f in (counts_file, md_file):
+            if not os.path.exists(f):
+                log.error("Seurat CSV file not found: %s", f)
+                sys.exit(1)
+
+    if len(pairs) == 1 and not samples:
+        # Single slide, no sample column — obs is exactly the md table.
+        adata = _load_seurat_csv(pairs[0][1], pairs[0][2], log)
+        log.info("Loaded: %d spots × %d genes", adata.n_obs, adata.n_vars)
+        return adata
+
+    adatas = []
+    for i, (name, counts_file, md_file) in enumerate(pairs):
+        log.info("  [%d/%d] sample '%s'", i + 1, len(pairs), name)
+        a = _load_seurat_csv(counts_file, md_file, log)
+        a.obs["sample"] = name
+        adatas.append(a)
+
+    gene_sets = [list(a.var_names) for a in adatas]
+    identical = all(gs == gene_sets[0] for gs in gene_sets[1:])
+    log.info(
+        "Gene sets %s across %d slides",
+        "identical — vstack fast path" if identical else "differ — outer-join concat",
+        len(adatas),
+    )
+    if identical:
+        x_stack = sp.vstack([a.X for a in adatas], format="csr")
+        x_stack.indptr = x_stack.indptr.astype(np.int64)
+        adata = sc.AnnData(
+            X=x_stack,
+            obs=pd.concat([a.obs for a in adatas], axis=0),
+            var=adatas[0].var.copy(),
+        )
+    else:
+        adata = sc.concat(adatas, join="outer", fill_value=0)
+        if sp.issparse(adata.X):
+            adata.X = adata.X.tocsr()
+            adata.X.indptr = adata.X.indptr.astype(np.int64)
+    if all("spatial" in a.obsm for a in adatas):
+        adata.obsm["spatial"] = np.vstack([a.obsm["spatial"] for a in adatas])
+    log.info("Loaded: %d spots × %d genes", adata.n_obs, adata.n_vars)
+    return adata
 
 
 def main():
@@ -118,9 +228,14 @@ def main():
                     "Set CFG.spatial.platform appropriately."
                 )
 
+    elif cfg.data_format == "seurat_csv":
+        log.info("Loading Seurat CSV (wide counts + md table)")
+        adata = _load_multi_slide_seurat(cfg, log)
+
     else:
         log.error(
-            "Unknown data_format for spatial: '%s'. Supported: 'visium', 'h5ad'", cfg.data_format
+            "Unknown data_format for spatial: '%s'. Supported: 'visium', 'h5ad', 'seurat_csv'",
+            cfg.data_format,
         )
         sys.exit(1)
 
