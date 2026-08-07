@@ -657,6 +657,32 @@ class SpatialConfig(BaseModel):
     svg_n_top: int = 2000
     run_segmentation: bool = False
 
+    # Phase-2 (2026-08): multi-slide loading / deconvolution / domains.
+    # Defaults mirror the getattr(...) fallbacks in spatial/steps/*.
+    samples: List[str] = Field(
+        default_factory=list
+    )  # multi-slide samples (00_load seurat_csv branch reads counts/md per sample dir)
+    decontamination: str = "none"  # none|cellbender|soupx (01_qc)
+    decontamination_expected_cells: int = 0  # CellBender --expected-cells (0=auto)
+    integration_method: str = "none"  # spatial-specific batch integration (none|harmony; overrides shared IntegrationSettings.method)
+    domain_method: str = (
+        "leiden_spatial"  # none|leiden_spatial|stagate (04_cluster spatial domains)
+    )
+    domain_resolution: float = 1.0  # spatial-domain leiden resolution
+    domain_n_neighbors: int = 10  # STAGATE neighbor count
+    stagate_rad_cutoff: float = 150.0  # STAGATE spatial-network radius
+    deconv_method: str = "cell2location"  # 06_deconvolve (none|cell2location)
+    deconv_max_epochs: int = 30000
+    deconv_batch_size: int = 256
+    deconv_n_cells_per_location: int = 8
+    deconv_detection_alpha: float = 20.0
+    deconv_n_factors: int = 0  # >0 enables NMF tissue zones
+    deconv_ref_max_epochs: int = 500  # reference RegressionModel training epochs
+    deconv_ref_n_samples: int = 1000  # reference posterior samples
+    deconv_ref_batch_size: int = 2500
+    svg_method: str = "moran"  # moran default (SPARK-X is R-only, py3.14 unavailable; reserved)
+    symbol_mapping: bool = False  # 00_load ENSG→symbol mygene mapping (optional)
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # Sub-model 19 — ATACConfig

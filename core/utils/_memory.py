@@ -510,6 +510,38 @@ def _estimate_atac_step04_peak(n_cells: int) -> float:
     return max(3.0, peak_csr + peak_table + 2.0)
 
 
+# ── Spatial (Squidpy) estimators ──
+# Step 3 — 03_normalize: raw CSR resident + HVG/PCA working set + sparse
+#   spatial neighbor graph.  Arpack PCA (always used) densifies only the
+#   HVG subset, so the dense factor is capped below RNA step-03's speed path.
+def _estimate_spatial_step03_peak(
+    n_cells: int, n_genes: int, nnz: int, policy: str = "speed"
+) -> float:
+    raw_csr = nnz * 12 / 1e9  # resident normalized CSR
+    hvg_factor = 0.10 if policy in ("balanced", "memory") else 0.25
+    dense_pca = n_cells * n_genes * 4 * hvg_factor / 1e9
+    graph = n_cells * 6 * 12 / 1e9  # sparse spatial neighbor graph
+    return max(4.0, raw_csr * 0.95 + dense_pca + graph + 2.0)
+
+
+# Step 6 — 06_deconvolve (cell2location): peak = RNA reference read
+#   (parent_cells/parent_genes, dense f32 lognorm) + spatial spot matrix
+#   (cell2location densifies spot counts into torch tensors) + training
+#   overhead (model params + gradients over the ~30 cell-type signatures).
+def _estimate_spatial_step06_peak(
+    n_cells: int,
+    n_genes: int,
+    nnz: int,
+    parent_cells: int = 0,
+    parent_genes: int = 0,
+) -> float:
+    ref_read = parent_cells * (parent_genes or n_genes) * 4 / 1e9
+    spot_dense = n_cells * n_genes * 4 / 1e9
+    spot_sparse = nnz * 12 / 1e9
+    train = n_genes * 30 * 4 * 2 / 1e9  # params + gradients
+    return max(8.0, ref_read + max(spot_dense, spot_sparse) + train + 3.0)
+
+
 _STEP_ESTIMATORS: dict[str, dict[int, tuple[Callable[..., float], frozenset[str]]]] = {
     "rna": {
         0: (
@@ -545,7 +577,12 @@ _STEP_ESTIMATORS: dict[str, dict[int, tuple[Callable[..., float], frozenset[str]
         0: (
             _estimate_step00_peak,
             frozenset({"n_cells", "n_genes", "nnz", "budget_bytes", "concat_factor"}),
-        )
+        ),
+        3: (_estimate_spatial_step03_peak, frozenset({"n_cells", "n_genes", "nnz", "policy"})),
+        6: (
+            _estimate_spatial_step06_peak,
+            frozenset({"n_cells", "n_genes", "nnz", "parent_cells", "parent_genes"}),
+        ),
     },
     "bulk": {
         0: (
