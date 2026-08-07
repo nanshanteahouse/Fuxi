@@ -77,27 +77,33 @@ def test_estimate_step04_peak_anchors() -> None:
 
 
 def test_estimate_step00_anchors() -> None:
-    # Calibrated on the 5 T8/T1b measured step-00 runs (runner peak_rss_mib
+    # Calibrated on the 6 measured step-00 runs (runner peak_rss_mib
     # / time -v) after the T1b in-place CSR assembly landed:
     #   Li2026_Lobe_Neurons 28×10X_h5 1.204M c / 2.801e9 nnz -> 34.11 GiB
     #   Li2026_Multiome     10×10X_h5  70.5k c / 0.426e9 nnz ->  7.49 GiB
     #   GSE173180          csv_table  50.9k c / 0.108e9 nnz ->  3.42 GiB
     #   GSE202735          preproc    32.1k c / 0.053e9 nnz ->  2.14 GiB
     #   GSE239410          MTX-mmread 137.5k c / 0.156e9 nnz -> 3.76 GiB
+    #   StressTest         83×10X_h5  1.973M c / 4.468e9 nnz -> 51.61 GiB
     # The formula is an UPPER-bound planning tool — each bracket sits above
-    # its measured peak (concat_factor 1.3 for multi-file union growth).
-    lobe = estimate_step_peak(0, 1_203_724, 36_601, 2_801_279_457, concat_factor=1.3)
-    multi = estimate_step_peak(0, 70_477, 36_601, 426_241_129, concat_factor=1.3)
+    # its measured peak.  Multi-file datasets with IDENTICAL gene sets take
+    # the T1b in-place fast path (no var-union growth) so the preflight now
+    # feeds concat_factor=1.0 (Lobe est 34.24 GiB = +0.4%; StressTest est
+    # 53.25 GiB = +3.2%); the conservative 1.3 is reserved for differing
+    # gene sets (batched outer join, var union grows).
+    lobe = estimate_step_peak(0, 1_203_724, 36_601, 2_801_279_457, concat_factor=1.0)
+    multi = estimate_step_peak(0, 70_477, 36_601, 426_241_129, concat_factor=1.0)
     gse173180 = estimate_step_peak(0, 50_954, 19_808, 108_412_096)
     gse202735 = estimate_step_peak(0, 32_073, 38_144, 52_600_000)
     gse239410 = estimate_step_peak(0, 137_490, 32_520, 155_934_193)
-    stress = estimate_step_peak(0, 1_973_127, 36_601, 4_468_159_696, concat_factor=1.3)
+    stress = estimate_step_peak(0, 1_973_127, 36_601, 4_468_159_696, concat_factor=1.0)
     # brackets in GiB (estimator returns decimal GB)
-    assert 35.0 <= lobe / 1.073741824 <= 45.0, f"Lobe: {lobe:.2f} GB"
+    assert 33.5 <= lobe / 1.073741824 <= 35.5, f"Lobe: {lobe:.2f} GB"
     assert 7.0 <= multi / 1.073741824 <= 10.0, f"Multiome: {multi:.2f} GB"
     assert 3.5 <= gse173180 / 1.073741824 <= 6.0, f"GSE173180: {gse173180:.2f} GB"
     assert 2.5 <= gse202735 / 1.073741824 <= 4.5, f"GSE202735: {gse202735:.2f} GB"
     assert 3.5 <= gse239410 / 1.073741824 <= 5.5, f"GSE239410: {gse239410:.2f} GB"
+    assert 52.0 <= stress / 1.073741824 <= 55.0, f"StressTest: {stress:.2f} GB"
     assert stress / 1.073741824 < 100.0, (
         f"StressTest: {stress:.2f} GB (must stay < 100 GB, metis G8)"
     )

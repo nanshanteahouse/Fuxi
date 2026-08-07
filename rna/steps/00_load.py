@@ -926,23 +926,35 @@ def _preflight_step00_meta(cfg, log):
     fmt = cfg.data_format
 
     if fmt == "10X_h5":
-        import h5py
-
         h5_dir = getattr(cfg.data_input, "h5_dir", "") or cfg.data_dir
         files = sorted(glob_mod.glob(os.path.join(h5_dir, cfg.data_input.h5_file_pattern)))
         if not files:
             return None  # the load branch reports the missing-file error
+        # Reuse the load path's cheap metadata reader (features + barcodes,
+        # never X) so the preflight sees byte-identical gene sets to the T1
+        # fast-path check — ORDERED list equality, never set equality.
         n_cells = nnz = n_genes = 0
+        gene_sets = []
         for fp in files:
             try:
-                with h5py.File(fp, "r") as f:
-                    m = f["matrix"]
-                    nnz += int(m["data"].shape[0])  # zero-copy shape read
-                    n_cells += int(m["indptr"].shape[0]) - 1
-                    n_genes = max(n_genes, int(m["features"]["name"].shape[0]))
+                n_obs, nnz_i, var_names, _obs_idx, _var_df = _read_10x_h5_meta(fp)
             except Exception:
                 return None  # let the real load report the corrupt file
-        return n_cells, n_genes, nnz, 1.3 if len(files) > 1 else 1.0
+            n_cells += n_obs
+            nnz += nnz_i
+            n_genes = max(n_genes, len(var_names))
+            gene_sets.append(var_names)
+        # Identical gene sets take the in-place CSR fast path (T1b) with NO
+        # var-union growth -> concat_factor 1.0 (≤3.2% conservative on the
+        # measured anchors); differing sets (batched outer join) grow the var
+        # union -> keep the conservative 1.3.  Anything not provably
+        # identical defaults to 1.3 (metis G2/G11).
+        if len(files) > 1:
+            identical = all(gs == gene_sets[0] for gs in gene_sets[1:])
+            concat = 1.0 if identical else 1.3
+        else:
+            concat = 1.0
+        return n_cells, n_genes, nnz, concat
 
     if fmt == "10X_mtx":
         if getattr(cfg.data_input, "mtx_dir_pattern", None):

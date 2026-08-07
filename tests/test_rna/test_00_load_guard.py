@@ -109,7 +109,7 @@ def test_preflight_10x_h5_single_file(tmp_path: Path) -> None:
     assert concat == 1.0  # single-file → no union-var growth
 
 
-def test_preflight_10x_h5_multi_file_concat(tmp_path: Path) -> None:
+def test_preflight_10x_h5_multi_file_identical(tmp_path: Path) -> None:
     d = tmp_path / "h5"
     d.mkdir()
     _write_10x_h5(d / "s1.h5", n_cells=50, n_genes=12, seed=1)
@@ -119,10 +119,21 @@ def test_preflight_10x_h5_multi_file_concat(tmp_path: Path) -> None:
     n_cells, n_genes, nnz, concat = meta
     assert n_cells == 120
     assert n_genes == 12
-    assert concat == 1.3  # multi-file merge → union-var growth bound
+    assert concat == 1.0  # identical gene sets -> in-place fast path, no union growth
     assert nnz > 0
+
+
+def test_preflight_10x_h5_multi_file_differing(tmp_path: Path) -> None:
+    d = tmp_path / "h5"
+    d.mkdir()
+    _write_10x_h5(d / "s1.h5", n_cells=50, n_genes=12, seed=1)
+    _write_10x_h5(d / "s2.h5", n_cells=70, n_genes=14, seed=2)  # s2 adds g12,g13
+    meta = _mod._preflight_step00_meta(_make_h5_cfg(str(d)), _make_logger())
+    assert meta is not None
+    n_cells, n_genes, nnz, concat = meta
     assert n_cells == 120
-    assert concat == 1.3  # multi-file merge → union-var growth bound
+    assert n_genes == 14  # max over files
+    assert concat == 1.3  # differing gene sets -> batched outer join (union growth)
     assert nnz > 0
 
 
