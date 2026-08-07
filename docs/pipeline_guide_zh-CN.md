@@ -116,7 +116,7 @@ python core/run_pipeline.py --modality rna --config projects/rna/{数据集ID}/c
 # scATAC-seq 全流程（13 步）
 python core/run_pipeline.py --modality atac --config projects/atac/{数据集ID}/config_{数据集ID}.yaml
 
-# 空间转录组全流程（11 步）
+# 空间转录组全流程（14 步）
 python core/run_pipeline.py --modality spatial --config projects/spatial/{数据集ID}/config_{数据集ID}.yaml
 
 # 运行 Bulk RNA-seq 全流程
@@ -556,10 +556,10 @@ CFG.cci_adjacency_types = []      # 连接类型白名单（空 = 全部放行�
 - **局部指标**：空间加权的余弦相似度——检测在相邻 spot 中配体和受体基因是否协同表达
 - **全局指标**：Moran's R 及置换 p-value——评估配体-受体对的空间自相关显著性
 - **输出**：
-  - `tables/10_cell_interaction/cci_spatial_interactions.csv`
-  - `tables/10_cell_interaction/cci_spatial_top.csv`
-  - `figures/10_cell_interaction/cci_spatial_heatmap.png` — ligand×receptor 热图（Moran's R）
-  - `figures/10_cell_interaction/cci_spatial_dotplot.png` — top LR 对条形图
+  - `tables/11_cell_interaction/cci_spatial_interactions.csv`
+  - `tables/11_cell_interaction/cci_spatial_top.csv`
+  - `figures/11_cell_interaction/cci_spatial_heatmap.png` — ligand×receptor 热图（Moran's R）
+  - `figures/11_cell_interaction/cci_spatial_dotplot.png` — top LR 对条形图
 
 **空间专属配置参数：**
 
@@ -698,13 +698,14 @@ ATAC 步骤 01_qc / 02_process / 03_cluster / 04_peaks 已接入 RNA 同款内�
 
 ## 6. 空间转录组管线详解
 
-空间转录组管线包含 11 个步骤（编号 00-10），针对 10X Visium 数据设计（可扩展至其他平台）：
+空间转录组管线包含 14 个步骤（编号 00-13），针对 10X Visium 数据设计（可扩展至其他平台）：
 
 ```
 原始数据 → 00_load → 01_qc → 02_image → 03_normalize
-         → 04_cluster → 05_annotate → 06_spatial_de
-         → 07_trajectory → 08_enrichment → 09_exploratory
-         → 10_cell_interaction
+         → 04_cluster → 05_annotate → 06_deconvolve
+         → 07_spatial_de → 08_trajectory → 09_enrichment
+         → 10_exploratory → 11_cell_interaction
+         → 12_subcluster → 13_grn
 ```
 
 详细的空间管线运行报告（含遇到的实际问题与修复方法），见 `notes/suggestions/spatial_<GSE_ID>.md`。
@@ -720,12 +721,13 @@ ATAC 步骤 01_qc / 02_process / 03_cluster / 04_peaks 已接入 RNA 同款内�
 
 ### 输入格式
 
-支持两种数据格式：
+支持三种数据格式：
 
 | 格式 | 配置 | 输入 |
 |------|------|------|
 | 10X Visium 目录 | `CFG.data_format = "visium"` | 包含 `filtered_feature_bc_matrix.h5` + `spatial/` 的目录 |
 | 预构建 h5ad | `CFG.data_format = "h5ad"` | 含 `obsm['spatial']` 坐标和 `uns['spatial']` 图像的 `.h5ad` |
+| Seurat CSV 导出 | `CFG.data_format = "seurat_csv"` | 宽格式 `counts.csv.gz`（基因×spot，ENSG 行）+ 含 `pixel_x`/`pixel_y` 的 `md.csv.gz`；多切片用 `CFG.spatial.samples` |
 
 ### Step 00：数据加载
 
@@ -821,33 +823,46 @@ CFG.rna_marker_logfc_min = 0.0      # 0 = 仅正向 LFC
 
 > 💡 这是**标记列表迁移**，而非单细胞粒度的标签迁移。它利用 scRNA 管线已完成计算的差异表达结果来辅助空间 cluster 注释。零新增依赖。
 
-### Step 06：空间 DE + 空间可变基因
+### Step 06：spot 反卷积
 
-**输入**：`05_annotated.h5ad` | **输出**：`marker_genes_per_group.csv`、`svg_rankings.csv`、`06_svg.h5ad`
+**输入**：`05_annotated.h5ad` + scRNA 参考 | **输出**：`06_deconvolved.h5ad`、`proportions.csv`、`tissue_zone_composition.csv`
+
+使用 **cell2location** 估算每个 spot 的细胞类型组成（当 `CFG.execution.device = "gpu"` 时 GPU 加速）：
+
+- 从 `CFG.rna_ref`（h5ad 路径或自动发现的项目）构建 scRNA 参考模型（`RegressionModel`）
+- 自动统一基因 ID（必要时通过 mygene 做 ENSG → symbol 映射）
+- 训练空间 `Cell2location` 模型推断每个 spot 的细胞丰度
+- 将 spot × 细胞类型比例矩阵写入 `obsm['deconv_proportions']` + `proportions.csv`
+- 可选 NMF 组织区室分解（`CFG.spatial.deconv_n_factors > 0`）→ `obs['tissue_zone']` + `tissue_zone_composition.csv`
+- 反卷积关闭时（`CFG.spatial.deconv_method = "none"`）干净跳过，在 `uns` 记录状态而非写假数据
+
+
+### Step 07：空间 DE + 空间可变基因
+
+**输入**：`06_deconvolved.h5ad` | **输出**：`marker_genes_per_group.csv`、`svg_rankings.csv`、`06_svg.h5ad`
 
 - 逐 cluster 差异表达（Wilcoxon 秩和检验）
-- 空间自相关 Moran's I 检测空间可变基因（SVG）
-- Top SVG 空间散点图
-- SVG 标记写入 `adata.var['spatially_variable']`
+- 空间自相关 Moran's I 检测空间可变基因（SVG），在全基因 raw counts 上计算
 
-### Step 07：轨迹分析
 
-**输入**：`05_annotated.h5ad` | **输出**：`07_trajectory.h5ad`
+### Step 08：轨迹分析
+
+**输入**：`05_annotated.h5ad` | **输出**：`08_trajectory.h5ad`
 
 - 在空间 cluster 上构建 PAGA 图
 - 扩散伪时间（DPT）
 - 通过标记基因或细胞类型识别起始根细胞
 
-### Step 08：GO/KEGG 富集
+### Step 09：GO/KEGG 富集
 
-**输入**：Step 05 产出的 `marker_genes_per_group.csv` | **输出**：富集 CSV + 气泡图
+**输入**：Step 07 产出的 `marker_genes_per_group.csv` | **输出**：富集 CSV + 气泡图
 
 复用 RNA 管线的富集引擎：
 - ORA（过表达分析）通过 Enrichr API
 - 预排序 GSEA（本地计算）
 - 支持 200+ 基因集库（GO、KEGG、Reactome、MSigDB Hallmark 等）
 
-### Step 09：探索性分析
+### Step 10：探索性分析
 
 **输入**：`05_annotated.h5ad` + `06_svg.h5ad` | **输出**：图表 + CSV 表格
 

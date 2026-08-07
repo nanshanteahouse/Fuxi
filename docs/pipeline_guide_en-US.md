@@ -116,7 +116,7 @@ python core/run_pipeline.py --modality rna --config projects/rna/{dataset_id}/co
 # scATAC-seq full workflow (13 steps)
 python core/run_pipeline.py --modality atac --config projects/atac/{dataset_id}/config_{dataset_id}.yaml
 
-# Spatial transcriptomics full workflow (11 steps)
+# Spatial transcriptomics full workflow (14 steps)
 python core/run_pipeline.py --modality spatial --config projects/spatial/{dataset_id}/config_{dataset_id}.yaml
 
 # Run the full bulk RNA-seq pipeline
@@ -555,10 +555,10 @@ The spatial pipeline additionally provides **spatially-constrained LR co-express
 - **Local metric**: Spatially-weighted cosine similarity — detects whether ligand and receptor genes are co-expressed in neighboring spots
 - **Global metric**: Moran's R with permutation p-values — evaluates the spatial autocorrelation significance of each LR pair
 - **Output**:
-  - `tables/10_cell_interaction/cci_spatial_interactions.csv`
-  - `tables/10_cell_interaction/cci_spatial_top.csv`
-  - `figures/10_cell_interaction/cci_spatial_heatmap.png` — ligand×receptor heatmap (Moran's R)
-  - `figures/10_cell_interaction/cci_spatial_dotplot.png` — top LR pair bar chart
+  - `tables/11_cell_interaction/cci_spatial_interactions.csv`
+  - `tables/11_cell_interaction/cci_spatial_top.csv`
+  - `figures/11_cell_interaction/cci_spatial_heatmap.png` — ligand×receptor heatmap (Moran's R)
+  - `figures/11_cell_interaction/cci_spatial_dotplot.png` — top LR pair bar chart
 
 **Spatial-specific config fields:**
 
@@ -698,13 +698,14 @@ ATAC steps 01_qc / 02_process / 03_cluster / 04_peaks use the same memory estima
 
 ## 6. Spatial transcriptomics pipeline in detail
 
-The spatial transcriptomics pipeline has 11 steps (numbered 00-10), designed for 10X Visium data (and extensible to other platforms):
+The spatial transcriptomics pipeline has 14 steps (numbered 00-13), designed for 10X Visium data (and extensible to other platforms):
 
 ```
 Raw data → 00_load → 01_qc → 02_image → 03_normalize
-         → 04_cluster → 05_annotate → 06_spatial_de
-         → 07_trajectory → 08_enrichment → 09_exploratory
-         → 10_cell_interaction
+         → 04_cluster → 05_annotate → 06_deconvolve
+         → 07_spatial_de → 08_trajectory → 09_enrichment
+         → 10_exploratory → 11_cell_interaction
+         → 12_subcluster → 13_grn
 ```
 
 For a detailed pipeline report including real-world issues and fixes, see `notes/suggestions/spatial_<GSE_ID>.md`.
@@ -720,12 +721,13 @@ For a detailed pipeline report including real-world issues and fixes, see `notes
 
 ### Input format
 
-Two data formats are supported:
+Three data formats are supported:
 
 | Format | Config | Input |
 |--------|--------|-------|
 | 10X Visium directory | `CFG.data_format = "visium"` | Directory containing `filtered_feature_bc_matrix.h5` + `spatial/` |
 | Pre-built h5ad | `CFG.data_format = "h5ad"` | `.h5ad` with `obsm['spatial']` coordinates and `uns['spatial']` images |
+| Seurat CSV export | `CFG.data_format = "seurat_csv"` | Wide-format `counts.csv.gz` (genes × spots, ENSG rows) + `md.csv.gz` with `pixel_x`/`pixel_y`; multi-slide via `CFG.spatial.samples` |
 
 ### Step 00: Data loading
 
@@ -821,33 +823,45 @@ How it works:
 
 > 💡 This is **marker-list transfer**, not cell-to-cell label transfer. It leverages the scRNA pipeline's already-computed differential expression results to inform spatial cluster annotation. Zero new dependencies required.
 
-### Step 06: Spatial DE + SVG
+### Step 06: Spot deconvolution
 
-**Input**: `05_annotated.h5ad` | **Output**: `marker_genes_per_group.csv`, `svg_rankings.csv`, `06_svg.h5ad`
+**Input**: `05_annotated.h5ad` + scRNA reference | **Output**: `06_deconvolved.h5ad`, `proportions.csv`, `tissue_zone_composition.csv`
+
+Estimates per-spot cell-type composition using **cell2location** (GPU-accelerated when `CFG.execution.device = "gpu"`):
+
+- Builds a scRNA reference model (`RegressionModel`) from `CFG.rna_ref` (h5ad path or auto-discovered project)
+- Gene IDs are harmonized automatically (ENSG → symbol via mygene when needed)
+- Trains a spatial `Cell2location` model to infer per-spot cell abundance
+- Writes spot × cell-type proportion matrix to `obsm['deconv_proportions']` + `proportions.csv`
+- Optional NMF tissue-zone decomposition (`CFG.spatial.deconv_n_factors > 0`) → `obs['tissue_zone']` + `tissue_zone_composition.csv`
+- Skipped cleanly when deconvolution is disabled (`CFG.spatial.deconv_method = "none"`), recording status in `uns` rather than writing fake data
+
+### Step 07: Spatial DE + SVG
+
+**Input**: `06_deconvolved.h5ad` | **Output**: `marker_genes_per_group.csv`, `svg_rankings.csv`, `06_svg.h5ad`
 
 - Per-cluster differential expression (Wilcoxon rank-sum)
-- Moran's I spatial autocorrelation for spatially variable genes (SVG)
-- Top SVG spatial scatter plots
-- SVM markers marked in `adata.var['spatially_variable']`
+- Moran's I spatial autocorrelation for spatially variable genes (SVG), computed on full-gene raw counts
 
-### Step 07: Trajectory analysis
 
-**Input**: `05_annotated.h5ad` | **Output**: `07_trajectory.h5ad`
+### Step 08: Trajectory analysis
+
+**Input**: `05_annotated.h5ad` | **Output**: `08_trajectory.h5ad`
 
 - PAGA graph construction on spatial clusters
 - Diffusion pseudotime (DPT)
 - Root cell identification by marker genes or cell type
 
-### Step 08: GO/KEGG enrichment
+### Step 09: GO/KEGG enrichment
 
-**Input**: `marker_genes_per_group.csv` from Step 05 | **Output**: Enrichment CSVs + bubble plots
+**Input**: `marker_genes_per_group.csv` from Step 07 | **Output**: Enrichment CSVs + bubble plots
 
 Reuses the RNA pipeline's enrichment engine:
 - ORA (over-representation analysis) via Enrichr API
 - Pre-ranked GSEA (local computation)
 - Supports 200+ gene set libraries (GO, KEGG, Reactome, MSigDB Hallmark, etc.)
 
-### Step 09: Exploratory analysis
+### Step 10: Exploratory analysis
 
 **Input**: `05_annotated.h5ad` + `06_svg.h5ad` | **Output**: Figures + CSV tables
 
