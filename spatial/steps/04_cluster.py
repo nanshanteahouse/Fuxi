@@ -11,12 +11,15 @@ Step 04: Neighbors + UMAP + multi-param grid Leiden clustering
   - UMAP min_dist × spread sweep with select_best_umap_params
   - Auto-select best params via composite scoring
   - Generate UMAP visualizations
+  - Optional spatial-domain labels: leiden_spatial on spatial_connectivities
+    (default, zero-dep) / STAGATE deep model (optional GPU)
 
 Input:  03_processed.h5ad
 Output: 04_clustered.h5ad
 """
 
 import argparse
+import importlib.util
 import os
 import sys
 import time
@@ -31,7 +34,210 @@ from sklearn.metrics import silhouette_score
 from core.cluster.evaluation import select_best_umap_params
 from core.cluster.grid_search import grid_search_clustering, select_best_params
 from core.config.schema import SILHOUETTE_SAMPLE_THRESHOLD
-from core.utils import resolve_config, safe_plot, safe_write, save_figure, setup_logger
+from core.utils import (
+    resolve_config,
+    safe_plot,
+    safe_write,
+    save_figure,
+    setup_logger,
+    timed_substep,
+)
+
+
+def _effective_n_pcs(n_pcs_use: int, n_embedding_dims: int) -> int:
+    """Cap a requested n_pcs at the actual embedding width (min() guard).
+
+    The STAGATE deep-model embedding may emit fewer dims than
+    ``cfg.pca.n_pcs_use``. Neighbor consumers must never request more PCs than
+    the embedding actually provides.
+
+    Ref: notes/engineering/2026-07-28_n_pcs_use_scvi_dimension_mismatch.md.
+    """
+    return min(n_pcs_use, n_embedding_dims)
+
+
+def _require_stagate(feature: str = "STAGATE spatial-domain detection") -> None:
+    """Lazily check if STAGATE is importable (mirrors core.utils._optional gates).
+
+    Raises ``ImportError`` with an install hint when STAGATE is missing. The
+    caller treats this as a soft signal: log a warning and fall back to the
+    zero-dependency ``leiden_spatial`` path instead of crashing.
+    """
+    if importlib.util.find_spec("STAGATE") is None:
+        raise ImportError(
+            f"STAGATE is required for {feature}. ",
+            "Install with: pip install STAGATE (GPU recommended).",
+        )
+
+
+def _run_stagate_domains(adata, cfg, log) -> dict:
+    """Run STAGATE on the spatial graph and produce 'spatial_domain' labels.
+
+    STAGATE is an optional GPU deep model (torch). It embeds spots with the
+    spatial neighbor graph + normalized expression, then the embedding is
+    clustered with Leiden to yield domain labels. Only invoked after
+    ``_require_stagate()`` passes; any failure is surfaced as an exception and
+    the caller falls back to ``leiden_spatial``.
+
+    Returns the ``uns['spatial_domain']`` metadata dict.
+    """
+    _require_stagate()  # defensive: the caller already gated
+    import STAGATE
+
+    resolution = getattr(cfg.spatial, "domain_resolution", 1.0)
+    with timed_substep("Spatial domain: STAGATE (GPU)", log=log):
+        STAGATE.Cal_Spatial_Net(
+            adata,
+            rad_cutoff=getattr(cfg.spatial, "stagate_rad_cutoff", 150),
+        )
+        STAGATE.train_STAGATE(
+            adata,
+            alpha=0,
+            num_threads=getattr(cfg.execution, "n_jobs", 4),
+            device="cuda" if getattr(cfg.execution, "device", "cpu") == "gpu" else "cpu",
+        )
+
+    embedding_key = "STAGATE"
+    if embedding_key not in adata.obsm:
+        raise RuntimeError(f"STAGATE training finished without obsm['{embedding_key}'] embedding")
+
+    # n_pcs min() guard: the embedding may be narrower than cfg.pca.n_pcs_use
+    n_pcs = _effective_n_pcs(getattr(cfg.pca, "n_pcs_use", 50), adata.obsm[embedding_key].shape[1])
+    sc.pp.neighbors(
+        adata,
+        n_neighbors=getattr(cfg.spatial, "domain_n_neighbors", 10),
+        n_pcs=n_pcs,
+        use_rep=embedding_key,
+        random_state=cfg.execution.random_seed,
+    )
+    sc.tl.leiden(
+        adata,
+        resolution=resolution,
+        key_added="spatial_domain",
+        random_state=cfg.execution.random_seed,
+        flavor=getattr(cfg.clustering, "leiden_flavor", "igraph"),
+        directed=False,
+        n_iterations=cfg.clustering.leiden_n_iterations,
+    )
+    return {
+        "method": "stagate",
+        "resolution": resolution,
+        "embedding": embedding_key,
+    }
+
+
+def _run_spatial_domain(adata, cfg, log) -> None:
+    """Optional spatial-domain labels: Leiden on the spatial graph / STAGATE.
+
+    Spatial domains are a *supplementary* label column (``obs['spatial_domain']``
+    + ``uns['spatial_domain']`` metadata). The round-1 multi-metric cluster
+    columns are never modified.
+
+    Dispatch on ``cfg.spatial.domain_method`` (default "leiden_spatial"):
+      - "none"            → no-op (round-1 clustering unchanged)
+      - "leiden_spatial"  → Leiden on ``obsp['spatial_connectivities']`` at
+        ``domain_resolution`` (zero extra dependencies)
+      - "stagate"         → optional GPU deep model; if not importable, log a
+        warning and fall back to ``leiden_spatial`` (never crashes)
+
+    checkpoint-before-plot hard convention: ``safe_write`` of the domain-bearing
+    checkpoint MUST precede any spatial-domain plotting.
+    """
+    method = getattr(cfg.spatial, "domain_method", "leiden_spatial")
+    resolution = getattr(cfg.spatial, "domain_resolution", 1.0)
+
+    if method == "none":
+        log.info("Spatial domain detection disabled (domain_method='none')")
+        return
+
+    if "spatial_connectivities" not in adata.obsp:
+        log.warning(
+            "spatial_connectivities missing in obsp — cannot run spatial-domain ",
+            "clustering (%s). Run Step 03 with spatial neighbors enabled.",
+            method,
+        )
+        adata.uns["spatial_domain"] = {
+            "method": "none",
+            "reason": "spatial_connectivities missing",
+        }
+        return
+
+    def _leiden_on_spatial():
+        sc.tl.leiden(
+            adata,
+            resolution=resolution,
+            key_added="spatial_domain",
+            adjacency=adata.obsp["spatial_connectivities"],
+            random_state=cfg.execution.random_seed,
+            flavor=getattr(cfg.clustering, "leiden_flavor", "igraph"),
+            directed=False,
+            n_iterations=cfg.clustering.leiden_n_iterations,
+        )
+
+    fallback_reason = None
+    if method == "stagate":
+        try:
+            _require_stagate()
+        except ImportError as e:
+            log.warning("STAGATE unavailable (%s) — falling back to leiden_spatial", e)
+            method = "leiden_spatial"
+            fallback_reason = "stagate unavailable"
+
+    if method == "leiden_spatial":
+        with timed_substep("Spatial domain: Leiden on spatial_connectivities", log=log):
+            _leiden_on_spatial()
+        if fallback_reason is not None:
+            adata.uns["spatial_domain"] = {"method": "leiden_spatial", "reason": fallback_reason}
+        else:
+            adata.uns["spatial_domain"] = {
+                "method": "leiden_spatial",
+                "resolution": resolution,
+                "graph": "spatial_connectivities",
+            }
+    elif method == "stagate":
+        try:
+            adata.uns["spatial_domain"] = _run_stagate_domains(adata, cfg, log)
+        except Exception as e:
+            log.warning("STAGATE run failed (%s) — falling back to leiden_spatial", e)
+            with timed_substep("Spatial domain: Leiden on spatial_connectivities", log=log):
+                _leiden_on_spatial()
+            adata.uns["spatial_domain"] = {
+                "method": "leiden_spatial",
+                "reason": "stagate run failed",
+            }
+    else:
+        log.warning("Unknown domain_method=%r — skipping spatial-domain detection", method)
+        return
+
+    # ── checkpoint-before-plot hard convention ──
+    output_path = os.path.join(cfg.h5ad_dir, "04_clustered.h5ad")
+    try:
+        safe_write(adata, output_path, cfg=cfg)
+        log.info("Checkpoint saved with spatial_domain: %s", output_path)
+    except Exception as e:
+        log.error("Spatial-domain checkpoint save failed: %s", e)
+
+    # ── Spatial-domain UMAP visualization ──
+    fig_dir = os.path.join(cfg.figure_dir, "04_cluster")
+    try:
+        safe_plot(
+            sc.pl.umap,
+            adata,
+            color="spatial_domain",
+            show=False,
+            title=(f"Spatial domains ({adata.uns['spatial_domain'].get('method', method)})"),
+            cfg=cfg,
+        )
+        save_figure(
+            None,
+            os.path.join(fig_dir, "spatial_domains"),
+            cfg=cfg,
+            dpi=cfg.plot.figure_dpi,
+            bbox_inches="tight",
+        )
+        plt.close()
+    except Exception as e:
+        log.warning("Spatial-domain plot save failed: %s", e)
 
 
 def main():
@@ -325,6 +531,11 @@ def main():
             umap_col,
         )
 
+    # ── Spatial domain detection (optional, supplementary label) ──
+    # domain_method ∈ {none, leiden_spatial, stagate}. Spatial domains are a
+    # complement to — never a replacement for — the round-1 cluster column.
+    with timed_substep("Spatial domain detection", log=log):
+        _run_spatial_domain(adata, cfg, log)
     # ── UMAP parameter sweep (min_dist \u00d7 spread) ──
     min_dist_grid = getattr(cfg.clustering, "param_grid_min_dist", [0.3])
     spread_grid = getattr(cfg.clustering, "param_grid_spread", [1.0])
