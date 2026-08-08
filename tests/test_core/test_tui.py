@@ -295,6 +295,56 @@ class TestPipelineScreen:
         pass
 
 
+class TestPipelineExitCodes:
+    """Exit-code → tracker-status mapping for the pipeline runner screen."""
+
+    def test_status_for_exit_code(self):
+        from core.tui.screens.pipeline import _status_for_exit_code
+
+        assert _status_for_exit_code(0) == "completed"
+        assert _status_for_exit_code(2) == "skipped"
+        assert _status_for_exit_code(1) == "failed"
+        assert _status_for_exit_code(None) == "failed"
+
+    def test_run_steps_marks_skipped_on_exit_2(self):
+        from core.pipeline.runner import MODALITY_MAP
+        from core.tui.screens.pipeline import PipelineRunnerScreen
+        from core.tui.widgets.progress import ProgressTracker
+        from core.tui.widgets.step_selector import StepSelector
+
+        async def check():
+            async with FuxiTUI().run_test(size=(80, 24)) as pilot:
+                await pilot.press("ctrl+p")
+                screen = pilot.app.screen
+                assert type(screen) is PipelineRunnerScreen
+
+                # Set up screen state (watch_config_path only touches filesystem
+                # when the path exists, so a dummy path keeps the test hermetic)
+                screen.modality = "rna"
+                screen.h5ad_dir = "/nonexistent"
+                screen.config_path = "/nonexistent/config_rna.yaml"
+
+                # Prepare the progress tracker (mirrors action_run_selected_steps)
+                mod = MODALITY_MAP["rna"]
+                labels = [f"{step[0]} {step[1]}" for step in mod["steps"]]
+                tracker = screen.query_one("#progress_tracker", ProgressTracker)
+                tracker.set_total_steps(len(mod["steps"]), labels)
+
+                # Select step 0
+                selector = screen.query_one("#step_selector", StepSelector)
+                selector._toggle_selection(0)
+
+                async def _fake_run_step(**kwargs):
+                    yield {"type": "exit", "data": 2}
+
+                with patch("core.tui.screens.pipeline.run_step", new=_fake_run_step):
+                    await screen._run_steps([0])
+
+                assert tracker._statuses[0] == "skipped"
+
+        _run(check())
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # TestResultsScreen
 # ══════════════════════════════════════════════════════════════════════════

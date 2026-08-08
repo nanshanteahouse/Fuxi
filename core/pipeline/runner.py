@@ -479,13 +479,6 @@ def main():
         help="(Step 04 only) Re-render summary figures from the saved checkpoint without re-clustering",
     )
     parser.add_argument(
-        "--annotate-method",
-        type=str,
-        choices=["auto", "unified"],
-        default="auto",
-        help="(RNA only) Annotation method: auto=AI, unified=KB-based",
-    )
-    parser.add_argument(
         "--in-process",
         action="store_true",
         default=False,

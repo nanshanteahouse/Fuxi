@@ -24,6 +24,15 @@ from core.tui.widgets.progress import ProgressTracker
 from core.tui.widgets.step_selector import StepSelector
 
 
+def _status_for_exit_code(exit_code: int | None) -> str:
+    """Map a step exit code to tracker status: 0 → completed, 2 → skipped, else → failed."""
+    if exit_code == 0:
+        return "completed"
+    if exit_code == 2:
+        return "skipped"
+    return "failed"
+
+
 class PipelineRunnerScreen(Screen):
     """Screen for running pipeline steps with step selection, log output, and progress tracking."""
 
@@ -39,7 +48,6 @@ class PipelineRunnerScreen(Screen):
     config_path = reactive("", init=False)
     h5ad_dir = reactive("", init=False)
     cell_type = reactive("", init=False)
-    annotate_method = reactive("", init=False)
     run_active = reactive(False, init=False)
 
     def __init__(self, **kwargs) -> None:
@@ -306,15 +314,20 @@ class PipelineRunnerScreen(Screen):
 
                 # Run the step
                 try:
-                    step_succeeded = await self._run_single_step(step_idx)
+                    exit_code = await self._run_single_step(step_idx)
+                    status = _status_for_exit_code(exit_code)
+                    tracker.set_step_status(step_idx, status)
 
-                    if step_succeeded:
-                        tracker.set_step_status(step_idx, "completed")
+                    if status == "completed":
                         log_panel.write_line(
                             f"\n✓ Step {step_name} completed successfully.", "stdout"
                         )
+                    elif status == "skipped":
+                        log_panel.write_line(
+                            f"\n⏭ Step {step_name} skipped (no-op without required options).",
+                            "stdout",
+                        )
                     else:
-                        tracker.set_step_status(step_idx, "failed")
                         log_panel.write_line(f"\n✗ Step {step_name} failed.", "stderr")
 
                         # Ask user if they want to continue
@@ -353,41 +366,33 @@ class PipelineRunnerScreen(Screen):
             # Update checkpoint status after run
             self._update_checkpoint_status()
 
-    async def _run_single_step(self, step_idx: int) -> bool:
+    async def _run_single_step(self, step_idx: int) -> int | None:
         """Run a single step and stream its output to the log panel.
 
-        Parameters
-        ----------
-        step_idx
-            Index of the step to run.
-
-        Returns
-        -------
-        bool
-            True if the step succeeded (exit code 0), False otherwise.
+        Returns the step's raw exit code (0 = completed, 2 = skipped) or
+        None when the backend raised before an exit event was produced.
         """
         log_panel = self.query_one("#log_panel", LogPanel)
 
         try:
+            exit_code: int | None = None
             async for item in run_step(
-                step_idx=step_idx,
+                step_index=step_idx,
                 modality=self.modality,
                 config_path=self.config_path,
                 cell_type=self.cell_type or None,
-                annotate_method=self.annotate_method or None,
             ):
                 if item["type"] in ("stdout", "stderr"):
                     log_panel.write_line(item["data"], item["type"])
                 elif item["type"] == "exit":
-                    return item["data"] == 0
+                    exit_code = item["data"]
+            return exit_code
 
         except asyncio.CancelledError:
             raise
         except Exception as e:
             log_panel.write_line(f"Error running step: {e}", "stderr")
-            return False
-
-        return False
+            return None
 
     def action_stop_run(self) -> None:
         """Stop the currently running pipeline."""

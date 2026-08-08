@@ -4,6 +4,9 @@ Provides:
 - run_step: Run a single step as an async subprocess, yielding output lines.
 - get_checkpoint_status: Detect which steps have completed checkpoints.
 - get_step_dependency: Return the checkpoint file a step depends on.
+
+All step execution delegates to ``core/run_pipeline.py`` so the TUI, CLI and
+MCP share a single orchestration engine (``core.pipeline.runner``).
 """
 
 from __future__ import annotations
@@ -18,7 +21,6 @@ from core.pipeline.runner import (
     _get_step_dependency,
     find_first_incomplete,
 )
-from core.utils import _set_blas_env
 
 # ═══════════════════════════════════════════════════════════════════
 #  Repo root resolution
@@ -46,6 +48,39 @@ def _resolve_repo_root() -> str:
 # ═══════════════════════════════════════════════════════════════════
 
 
+def build_run_command(
+    step_index: int,
+    modality: str,
+    config_path: str,
+    extra_args: list[str] | None = None,
+    *,
+    cell_type: str | None = None,
+) -> list[str]:
+    """Build the ``core/run_pipeline.py`` CLI command for one step.
+
+    Delegating to the CLI entry point makes TUI execution a thin wrapper
+    over the same orchestration engine as CLI/MCP: config validation,
+    BLAS thread limits, modality auto-discovery, perf_report recording
+    and exit-code semantics all come from ``core/pipeline/runner.py``.
+    """
+    repo_root = _resolve_repo_root()
+    cmd = [
+        sys.executable,
+        os.path.join(repo_root, "core", "run_pipeline.py"),
+        "--modality",
+        modality,
+        "--step",
+        str(step_index),
+        "--config",
+        os.path.abspath(config_path),
+    ]
+    if modality == "rna" and step_index == 6 and cell_type:
+        cmd.extend(["--cell-type", cell_type])
+    if extra_args:
+        cmd.extend(extra_args)
+    return cmd
+
+
 async def run_step(
     step_index: int,
     modality: str,
@@ -53,79 +88,60 @@ async def run_step(
     extra_args: list[str] | None = None,
     *,
     cell_type: str | None = None,
-    annotate_method: str | None = None,
 ) -> AsyncIterator[dict]:
     """Run a single pipeline step as an async subprocess.
+
+    Thin wrapper over ``core/run_pipeline.py --step N`` (see
+    :func:`build_run_command`) so TUI behavior matches CLI/MCP.
+    Output streams interleave and are yielded as ``{"type":
+    "stdout"|"stderr", "data": line}`` dicts; the final item is
+    ``{"type": "exit", "data": exit_code}`` (0 = completed, 2 =
+    skipped, other = failed). If the consuming task is cancelled, the
+    child process is terminated and no exit event is yielded.
 
     Parameters
     ----------
     step_index:
         0-based index into the modality's step list.
     modality:
-        One of ``"rna"``, ``"atac"``, ``"spatial"``.
+        One of ``"rna"``, ``"atac"``, ``"spatial"``, ``"bulk"``.
     config_path:
         Absolute or relative path to the YAML config file.
     extra_args:
-        Additional CLI arguments forwarded to the step script.
+        Additional CLI arguments forwarded to ``run_pipeline.py``.
     cell_type:
         (RNA only) Cell type to subcluster — passed as ``--cell-type``
-        to step 06_subcluster.py.
-    annotate_method:
-        (RNA only) Annotation method — passed as ``--annotate-method``
-        to step 05_annotate_major.py.
-
-    Yields
-    ------
-    dict
-        With keys ``type`` (``"stdout"`` | ``"stderr"`` | ``"exit"``)
-        and ``data`` (a decoded text line, or the exit code for
-        ``"exit"`` events).
+        for step 6 (step 06_subcluster.py).
     """
-    repo_root = _resolve_repo_root()
-    mod = MODALITY_MAP[modality]
-    _num, script, _desc = mod["steps"][step_index]
-
-    script_path = os.path.join(repo_root, mod["dir"], "steps", script)
-
-    # ── Build argument list ────────────────────────────────────────
-    args_list = [f"--config={config_path}"]
-
-    # RNA step-specific flags
-    if modality == "rna":
-        if step_index == 6 and cell_type:
-            args_list.extend(["--cell-type", cell_type])
-        if step_index == 5 and annotate_method:
-            args_list.extend(["--annotate-method", annotate_method])
-
-    # User-supplied extra arguments (e.g. --resume, --steps)
-    if extra_args:
-        args_list.extend(extra_args)
-
-    # ── Environment: enforce BLAS thread limits ────────────────────
-    _set_blas_env(4)
-    proc_env = dict(os.environ)
-
-    # ── Launch subprocess ──────────────────────────────────────────
+    cmd = build_run_command(
+        step_index,
+        modality,
+        config_path,
+        extra_args=extra_args,
+        cell_type=cell_type,
+    )
     proc = await asyncio.create_subprocess_exec(
-        sys.executable,
-        script_path,
-        *args_list,
+        *cmd,
+        cwd=_resolve_repo_root(),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        env=proc_env,
     )
-
-    # ── Stream stdout / stderr concurrently ───────────────────────
-    # Interleave lines from both streams so the TUI can show progress
-    # in near-real-time regardless of which pipe produces output.
-    stdout_gen = _tagged_lines("stdout", proc.stdout)
-    stderr_gen = _tagged_lines("stderr", proc.stderr)
-
-    async for item in _interleave(stdout_gen, stderr_gen):
-        yield item
-
-    exit_code = await proc.wait()
-    yield {"type": "exit", "data": exit_code}
+    try:
+        stdout_gen = _tagged_lines("stdout", proc.stdout)
+        stderr_gen = _tagged_lines("stderr", proc.stderr)
+        async for item in _interleave(stdout_gen, stderr_gen):
+            yield item
+        exit_code = await proc.wait()
+        yield {"type": "exit", "data": exit_code}
+    finally:
+        # Never leak the child: on CancelledError / GeneratorExit the
+        # process is terminated (mirrors runner interrupt semantics).
+        if proc.returncode is None:
+            proc.terminate()
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=5)
+            except (asyncio.TimeoutError, ProcessLookupError):
+                proc.kill()
 
 
 async def _tagged_lines(
