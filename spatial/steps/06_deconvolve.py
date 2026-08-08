@@ -461,11 +461,15 @@ def _run_nmf_zones(models, adata, abundance, cfg, log):
         abundance.shape[1],
     )
     with timed_substep("CoLocatedGroupsSklearnNMF", log=log):
+        # alpha=0: cell2location 0.1.5's default alpha=0.1 (L1/L2 ratio 0.5)
+        # collapses every factor to zero on sklearn>=1.5 (regularization scaled
+        # per-feature), yielding an all-NaN composition + single-zone tissue_zone.
         nmf_model = models.CoLocatedGroupsSklearnNMF(
             n_fact=n_factors,
             X_data=abundance.values,
             n_iter=10000,
             random_state=random_state,
+            alpha=0.0,
             var_names=abundance.columns.tolist(),
             obs_names=abundance.index.tolist(),
             fact_names=[f"factor{i}" for i in range(n_factors)],
@@ -474,6 +478,14 @@ def _run_nmf_zones(models, adata, abundance, cfg, log):
         nmf_model.sample2df(node_name="location_factors", ct_node_name="cell_type_factors")
 
     zone = nmf_model.location_factors_df.idxmax(axis=1)
+    n_effective = zone.nunique()
+    if n_effective < 2:
+        log.warning(
+            "NMF tissue zones degenerate (%d effective zone) — skipping tissue_zone assignment",
+            n_effective,
+        )
+        return None
+
     zone.name = "tissue_zone"
     adata.obs["tissue_zone"] = zone.astype("category")
 
