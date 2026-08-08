@@ -485,7 +485,14 @@ def _estimate_step00_peak(
 def _estimate_atac_step01_peak(n_cells: int) -> float:
     peak_csr = n_cells * 50 * 12 / 1e9
     peak_table = 200_000 * 120 / 1e9
-    return max(2.0, peak_csr + peak_table + 1.5)
+    # Calibrated on GSE211077 (231k cells loaded, 10k filtered): measured
+    # 5.6 GiB peak vs 2.0 GiB old estimate.  The base covers the backed
+    # fragment load + MACS3 workspace + Scrublet (dominant fixed cost);
+    # the linear term accounts for in-memory fragment reads.  Estimates
+    # are calibrated on large-sample runs, so small datasets report
+    # conservatively high.
+    frag_read = n_cells * 120 * 12 / 1e9
+    return max(4.0, peak_csr + peak_table + frag_read + 5.0)
 
 
 # Step 2 — 02_process: fully in-memory.  X is cast to float64
@@ -507,7 +514,11 @@ def _estimate_atac_step02_peak(n_cells: int, n_genes: int = 0) -> float:
 def _estimate_atac_step04_peak(n_cells: int) -> float:
     peak_csr = n_cells * 50 * 12 / 1e9
     peak_table = int(200_000 * 1.5) * 120 / 1e9
-    return max(3.0, peak_csr + peak_table + 2.0)
+    # Calibrated on GSE211077 (231k-cell superset, 353k peaks): measured
+    # 6.7 GiB peak vs 3.0 GiB old estimate.  Same fragment-read term as
+    # step 1, plus a higher base for the larger merged peak matrix.
+    frag_read = n_cells * 120 * 12 / 1e9
+    return max(5.0, peak_csr + peak_table + frag_read + 6.0)
 
 
 # ── Spatial (Squidpy) estimators ──
